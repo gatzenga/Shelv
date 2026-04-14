@@ -1,0 +1,82 @@
+import UIKit
+
+actor ImageCacheService {
+    static let shared = ImageCacheService()
+
+    private let memory = NSCache<NSString, UIImage>()
+    private let cacheDir: URL
+    private var inflight: [String: Task<UIImage?, Never>] = [:]
+    private let maxInflight = 12
+
+    private init() {
+        cacheDir = FileManager.default
+            .urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("shelv_covers", isDirectory: true)
+        try? FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
+        memory.countLimit = 150
+        memory.totalCostLimit = 80 * 1024 * 1024
+    }
+
+    func image(url: URL, key: String) async -> UIImage? {
+        if let hit = memory.object(forKey: key as NSString) { return hit }
+
+        if let existing = inflight[key] {
+            let img = await existing.value
+            return img
+        }
+
+        guard inflight.count < maxInflight else { return nil }
+
+        let diskURL = cacheDir.appendingPathComponent(key)
+
+        let task = Task.detached(priority: .utility) { () -> UIImage? in
+            if Task.isCancelled { return nil }
+            if let data = try? Data(contentsOf: diskURL),
+               let img = UIImage(data: data) {
+                return img
+            }
+            if Task.isCancelled { return nil }
+            guard let (data, _) = try? await URLSession.shared.data(from: url),
+                  let img = UIImage(data: data) else { return nil }
+            if Task.isCancelled { return nil }
+            try? data.write(to: diskURL, options: .atomic)
+            return img
+        }
+
+        inflight[key] = task
+        let img = await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+        inflight.removeValue(forKey: key)
+
+        if let img {
+            memory.setObject(img, forKey: key as NSString)
+        }
+
+        return img
+    }
+
+    func clearAll() {
+        memory.removeAllObjects()
+        inflight.values.forEach { $0.cancel() }
+        inflight.removeAll()
+        try? FileManager.default.removeItem(at: cacheDir)
+        try? FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
+    }
+
+    func diskUsageBytes() -> Int {
+        guard let e = FileManager.default.enumerator(
+            at: cacheDir,
+            includingPropertiesForKeys: [.fileSizeKey],
+            options: .skipsHiddenFiles
+        ) else { return 0 }
+        return e.reduce(0) { acc, item in
+            guard let url = item as? URL,
+                  let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize
+            else { return acc }
+            return acc + size
+        }
+    }
+}
