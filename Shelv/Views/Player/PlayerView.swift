@@ -16,6 +16,7 @@ struct PlayerView: View {
     @State private var showQueue: Bool = false
     @State private var artistDestination: Artist?
     @State private var isResolvingArtist = false
+    @State private var artistResolveTask: Task<Void, Never>?
 
     private var currentAlbum: Album? {
         guard let song = player.currentSong, let albumId = song.albumId else { return nil }
@@ -80,19 +81,21 @@ struct PlayerView: View {
 
                 if let artistName = player.currentSong?.artist {
                     Button {
-                        if isResolvingArtist { return }
                         if let found = currentArtist {
                             artistDestination = found
-                        } else {
+                        } else if !isResolvingArtist {
                             isResolvingArtist = true
-                            Task {
+                            artistResolveTask?.cancel()
+                            artistResolveTask = Task {
+                                defer { isResolvingArtist = false }
+                                guard !Task.isCancelled else { return }
                                 if let result = try? await SubsonicAPIService.shared.search(query: artistName),
                                    let found = result.artist?.first(where: {
                                        $0.name.lowercased() == artistName.lowercased()
                                    }) ?? result.artist?.first {
+                                    guard !Task.isCancelled else { return }
                                     artistDestination = found
                                 }
-                                isResolvingArtist = false
                             }
                         }
                     } label: {
@@ -252,14 +255,24 @@ struct PlayerView: View {
         }
         .background(Color(UIColor.systemBackground))
         .ignoresSafeArea(edges: .bottom)
+        .toolbar(.hidden, for: .navigationBar)
+        .onChange(of: player.currentSong?.id) { _, _ in
+            artistDestination = nil
+            artistResolveTask?.cancel()
+            artistResolveTask = nil
+            isResolvingArtist = false
+        }
+        .onDisappear {
+            artistResolveTask?.cancel()
+            artistResolveTask = nil
+        }
         .sheet(isPresented: $showQueue) {
             QueueView()
                 .presentationDetents([.medium, .large])
                 .presentationCornerRadius(24)
                 .tint(accentColor)
         }
-        } // NavigationStack
-        .navigationBarHidden(true)
+        }
     }
 
     private func formatTime(_ seconds: Double) -> String {

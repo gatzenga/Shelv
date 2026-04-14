@@ -11,11 +11,7 @@ struct ContentView: View {
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
-    private var safeAreaBottom: CGFloat {
-        UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .first?.windows.first?.safeAreaInsets.bottom ?? 0
-    }
+    @State private var safeAreaBottom: CGFloat = 0
 
     private var playerBar: some View {
         PlayerBarView()
@@ -68,6 +64,9 @@ struct ContentView: View {
                 .tint(accentColor)
         }
         .onAppear {
+            safeAreaBottom = UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .first?.windows.first?.safeAreaInsets.bottom ?? 0
             if serverStore.servers.isEmpty {
                 showAddServer = true
             }

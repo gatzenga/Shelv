@@ -21,8 +21,7 @@ actor ImageCacheService {
         if let hit = memory.object(forKey: key as NSString) { return hit }
 
         if let existing = inflight[key] {
-            let img = await existing.value
-            return img
+            return await existing.value
         }
 
         guard inflight.count < maxInflight else { return nil }
@@ -52,7 +51,8 @@ actor ImageCacheService {
         inflight.removeValue(forKey: key)
 
         if let img {
-            memory.setObject(img, forKey: key as NSString)
+            let cost = Int(img.size.width * img.size.height * 4)
+            memory.setObject(img, forKey: key as NSString, cost: cost)
         }
 
         return img
@@ -67,16 +67,6 @@ actor ImageCacheService {
     }
 
     func diskUsageBytes() -> Int {
-        guard let e = FileManager.default.enumerator(
-            at: cacheDir,
-            includingPropertiesForKeys: [.fileSizeKey],
-            options: .skipsHiddenFiles
-        ) else { return 0 }
-        return e.reduce(0) { acc, item in
-            guard let url = item as? URL,
-                  let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize
-            else { return acc }
-            return acc + size
-        }
+        FileManager.default.directorySize(at: cacheDir)
     }
 }

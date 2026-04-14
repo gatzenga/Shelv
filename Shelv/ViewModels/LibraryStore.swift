@@ -29,23 +29,13 @@ class LibraryStore: ObservableObject {
     }
 
     nonisolated static func diskCacheSizeBytes() -> Int {
-        guard let e = FileManager.default.enumerator(
-            at: libraryDir,
-            includingPropertiesForKeys: [.fileSizeKey],
-            options: .skipsHiddenFiles
-        ) else { return 0 }
-        return e.reduce(0) { acc, item in
-            guard let url = item as? URL,
-                  let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize
-            else { return acc }
-            return acc + size
-        }
+        FileManager.default.directorySize(at: libraryDir)
     }
 
     private func save<T: Encodable>(_ value: T, name: String, serverID: UUID) {
-        guard let data = try? JSONEncoder().encode(value) else { return }
         let url = Self.diskURL(name: name, serverID: serverID)
         Task.detached(priority: .utility) {
+            guard let data = try? JSONEncoder().encode(value) else { return }
             try? FileManager.default.createDirectory(at: Self.libraryDir, withIntermediateDirectories: true)
             try? data.write(to: url, options: .atomic)
         }

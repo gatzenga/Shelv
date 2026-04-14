@@ -10,6 +10,7 @@ struct AlphabetIndexBar: View {
     @State private var lastSelected = ""
     @State private var throttled = false
     @State private var pendingLetter = ""
+    @State private var throttleTask: Task<Void, Never>?
     private let itemHeight: CGFloat = 14
     private let feedback = UIImpactFeedbackGenerator(style: .light)
 
@@ -39,8 +40,10 @@ struct AlphabetIndexBar: View {
                         throttled = true
                         pendingLetter = ""
                         onSelect(letter)
-                        Task { @MainActor in
+                        throttleTask?.cancel()
+                        throttleTask = Task { @MainActor in
                             try? await Task.sleep(nanoseconds: 40_000_000)
+                            guard !Task.isCancelled else { return }
                             throttled = false
                             if !pendingLetter.isEmpty {
                                 let l = pendingLetter
@@ -51,16 +54,19 @@ struct AlphabetIndexBar: View {
                     }
                 }
                 .onEnded { value in
+                    throttleTask?.cancel()
+                    throttleTask = nil
+                    throttled = false
                     guard !letters.isEmpty else { lastSelected = ""; return }
                     let index = min(max(Int(value.location.y / itemHeight), 0), letters.count - 1)
-                    let letter = letters[index]
-                    pendingLetter = ""
-                    throttled = false
-                    if letter != lastSelected || true {
-                        onSelect(letter)
-                    }
+                    onSelect(letters[index])
                     lastSelected = ""
+                    pendingLetter = ""
                 }
         )
+        .onDisappear {
+            throttleTask?.cancel()
+            throttleTask = nil
+        }
     }
 }
