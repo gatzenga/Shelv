@@ -4,12 +4,14 @@ enum AlbumSortOption: String, CaseIterable {
     case alphabetical = "alphabeticalByName"
     case frequent     = "frequent"
     case newest       = "newest"
+    case year         = "year"
 
     var label: String {
         switch self {
         case .alphabetical: return tr("Name (A–Z)", "Name (A–Z)")
         case .frequent:     return tr("Most Played", "Meist gespielt")
         case .newest:       return tr("Recently Added", "Kürzlich hinzugefügt")
+        case .year:         return tr("Year (newest)", "Jahr (neueste zuerst)")
         }
     }
 }

@@ -101,11 +101,16 @@ class LibraryStore: ObservableObject {
             var result: [Album] = []
             var offset = 0
             let pageSize = 500
+            // "year" ist keine API-Sortieroption (byYear braucht fromYear/toYear) → alphabetisch laden, dann client-seitig sortieren
+            let apiSortBy = sortBy == "year" ? "alphabeticalByName" : sortBy
             while true {
-                let page = try await api.getAllAlbums(size: pageSize, offset: offset, sortBy: sortBy)
+                let page = try await api.getAllAlbums(size: pageSize, offset: offset, sortBy: apiSortBy)
                 result.append(contentsOf: page)
                 if page.count < pageSize { break }
                 offset += pageSize
+            }
+            if sortBy == "year" {
+                result = result.sorted { ($0.year ?? 0) > ($1.year ?? 0) }
             }
             albums = result
             if let id = activeServerID {
@@ -142,7 +147,8 @@ class LibraryStore: ObservableObject {
         isLoadingArtists = false
     }
 
-    func clearCache() {
+    /// Leert nur den Arbeitsspeicher — Disk-Cache bleibt erhalten (für stale-while-revalidate beim nächsten Laden).
+    func resetInMemory() {
         albums = []
         artists = []
         recentlyAdded = []
@@ -153,6 +159,11 @@ class LibraryStore: ObservableObject {
         starredAlbums = []
         starredArtists = []
         playlists = []
+    }
+
+    /// Leert Speicher und Disk-Cache vollständig (z. B. beim Abmelden).
+    func clearCache() {
+        resetInMemory()
         try? FileManager.default.removeItem(at: Self.libraryDir)
     }
 

@@ -96,6 +96,9 @@ struct ContentView: View {
                 playlistSongIds = ids
             }
         }
+        .onChange(of: serverStore.activeServerID) { _, _ in
+            libraryStore.resetInMemory()
+        }
         .onAppear {
             if serverStore.servers.isEmpty {
                 showAddServer = true

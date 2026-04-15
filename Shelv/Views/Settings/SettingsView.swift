@@ -128,7 +128,7 @@ struct SettingsView: View {
                     }
                 }
 
-                Section("Info") {
+                Section(tr("Info", "Info")) {
                     let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "–"
                     let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "–"
                     Text("Shelv \(version) (\(build))")
