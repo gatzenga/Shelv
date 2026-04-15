@@ -6,15 +6,14 @@ actor ImageCacheService {
     private let memory = NSCache<NSString, UIImage>()
     private let cacheDir: URL
     private var inflight: [String: Task<UIImage?, Never>] = [:]
-    private let maxInflight = 12
 
     private init() {
         cacheDir = FileManager.default
             .urls(for: .cachesDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("shelv_covers", isDirectory: true)
         try? FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
-        memory.countLimit = 150
-        memory.totalCostLimit = 80 * 1024 * 1024
+        memory.countLimit = 200
+        memory.totalCostLimit = 100 * 1024 * 1024
     }
 
     func image(url: URL, key: String) async -> UIImage? {
@@ -24,11 +23,9 @@ actor ImageCacheService {
             return await existing.value
         }
 
-        guard inflight.count < maxInflight else { return nil }
-
         let diskURL = cacheDir.appendingPathComponent(key)
 
-        let task = Task.detached(priority: .utility) { () -> UIImage? in
+        let task = Task.detached(priority: .medium) { () -> UIImage? in
             if Task.isCancelled { return nil }
             if let data = try? Data(contentsOf: diskURL),
                let img = UIImage(data: data) {

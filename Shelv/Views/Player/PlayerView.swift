@@ -6,7 +6,6 @@ struct PlayerView: View {
     @EnvironmentObject var libraryStore: LibraryStore
     @Environment(\.dismiss) var dismiss
     @Environment(\.colorScheme) var colorScheme
-    @Environment(\.horizontalSizeClass) var horizontalSizeClass
 
     @AppStorage("themeColor") private var themeColorName = "violet"
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
@@ -39,171 +38,158 @@ struct PlayerView: View {
         return libraryStore.artists.first { $0.name == name }
     }
 
-    private var isRegularWidth: Bool { horizontalSizeClass == .regular }
-    private var artSize: CGFloat { isRegularWidth ? 380 : 280 }
-    private var playButtonSize: CGFloat { isRegularWidth ? 90 : 72 }
-    private var controlSize: CGFloat { isRegularWidth ? 56 : 44 }
+    private var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
+    private var artSize: CGFloat { isPad ? 380 : 280 }
+    private var playButtonSize: CGFloat { isPad ? 96 : 72 }
+    private var controlSize: CGFloat { isPad ? 56 : 44 }
 
     var body: some View {
         NavigationStack {
-        VStack(spacing: 0) {
-            VStack(spacing: 12) {
-                Capsule()
-                    .fill(Color.gray.opacity(0.4))
-                    .frame(width: 40, height: 5)
+            VStack(spacing: 0) {
+                // Drag-Indikator + Dismiss
+                VStack(spacing: isPad ? 10 : 12) {
+                    Capsule()
+                        .fill(Color.gray.opacity(0.4))
+                        .frame(width: 40, height: 5)
 
-                Button { dismiss() } label: {
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(accentColor)
-                        .frame(width: 44, height: 44)
-                        .background(Color.gray.opacity(colorScheme == .dark ? 0.3 : 0.1))
-                        .clipShape(Circle())
+                    Button { dismiss() } label: {
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundStyle(accentColor)
+                            .frame(width: 44, height: 44)
+                            .background(Color.gray.opacity(colorScheme == .dark ? 0.3 : 0.1))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
-            }
-            .padding(.top, 10)
-            .padding(.bottom, 4)
+                .padding(.top, 10)
+                .padding(.bottom, isPad ? 0 : 4)
 
-            Spacer()
+                Spacer()
 
-            AlbumArtView(coverArtId: player.currentSong?.coverArt, size: 600, cornerRadius: 20)
-                .frame(width: artSize, height: artSize)
-                .shadow(color: .black.opacity(0.4), radius: 30, y: 15)
-                .padding(.bottom, 28)
+                // Album Art
+                AlbumArtView(coverArtId: player.currentSong?.coverArt, size: 600, cornerRadius: isPad ? 22 : 20)
+                    .frame(width: artSize, height: artSize)
+                    .shadow(color: .black.opacity(0.4), radius: 30, y: 15)
+                    .padding(.bottom, isPad ? 20 : 28)
 
-            VStack(spacing: 8) {
-                Text(player.currentSong?.title ?? tr("Unknown Title", "Titel unbekannt"))
-                    .font(.title2).bold()
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-                    .padding(.horizontal, 24)
+                // Titel / Künstler / Album
+                VStack(spacing: isPad ? 6 : 8) {
+                    Text(player.currentSong?.title ?? tr("Unknown Title", "Titel unbekannt"))
+                        .font(isPad ? .title : .title2).bold()
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                        .padding(.horizontal, 24)
 
-                if let artistName = player.currentSong?.artist {
-                    Button {
-                        if let found = currentArtist {
-                            artistDestination = found
-                        } else if !isResolvingArtist {
-                            isResolvingArtist = true
-                            artistResolveTask?.cancel()
-                            artistResolveTask = Task {
-                                defer { isResolvingArtist = false }
-                                guard !Task.isCancelled else { return }
-                                if let result = try? await SubsonicAPIService.shared.search(query: artistName),
-                                   let found = result.artist?.first(where: {
-                                       $0.name.lowercased() == artistName.lowercased()
-                                   }) ?? result.artist?.first {
-                                    guard !Task.isCancelled else { return }
-                                    artistDestination = found
+                    if let artistName = player.currentSong?.artist {
+                        Button { resolveArtist(artistName) } label: {
+                            HStack(spacing: 6) {
+                                Text(artistName)
+                                    .font(isPad ? .title2 : .title3)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                if isResolvingArtist {
+                                    ProgressView().scaleEffect(0.7)
                                 }
                             }
                         }
-                    } label: {
-                        HStack(spacing: 6) {
-                            Text(artistName)
-                                .font(.title3)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                            if isResolvingArtist {
-                                ProgressView().scaleEffect(0.7)
-                            }
+                        .buttonStyle(.plain)
+                        .navigationDestination(item: $artistDestination) { artist in
+                            ArtistDetailView(artist: artist)
                         }
                     }
-                    .buttonStyle(.plain)
-                    .navigationDestination(item: $artistDestination) { artist in
-                        ArtistDetailView(artist: artist)
-                    }
-                }
 
-                if let album = currentAlbum {
-                    NavigationLink(destination: AlbumDetailView(album: album)) {
-                        Text(album.name)
+                    if let album = currentAlbum {
+                        NavigationLink(destination: AlbumDetailView(album: album)) {
+                            Text(album.name)
+                                .font(.callout)
+                                .foregroundStyle(.tertiary)
+                                .lineLimit(1)
+                        }
+                        .buttonStyle(.plain)
+                    } else if let albumName = player.currentSong?.album {
+                        Text(albumName)
                             .font(.callout)
                             .foregroundStyle(.tertiary)
                             .lineLimit(1)
                     }
-                    .buttonStyle(.plain)
-                } else if let albumName = player.currentSong?.album {
-                    Text(albumName)
-                        .font(.callout)
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
                 }
-            }
 
-            Spacer()
+                Spacer()
 
-            VStack(spacing: 4) {
-                Slider(
-                    value: (isDragging || player.isSeeking) ? $seekValue : Binding(
-                        get: { player.duration > 0 ? player.currentTime / player.duration : 0 },
-                        set: { _ in }
-                    ),
-                    in: 0...1
-                ) { editing in
-                    if editing {
-                        isDragging = true
-                        player.isSeeking = true
-                        seekValue = player.duration > 0 ? player.currentTime / player.duration : 0
-                    } else {
-                        player.seek(to: seekValue * player.duration)
-                        isDragging = false
-                    }
-                }
-                .tint(accentColor)
-
-                HStack {
-                    Text(formatTime(player.currentTime))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                    Spacer()
-                    Text(formatTime(player.duration))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                }
-            }
-            .padding(.horizontal, isRegularWidth ? 60 : 32)
-            .padding(.bottom, 28)
-
-            HStack(spacing: isRegularWidth ? 44 : 32) {
-                Button { player.previous() } label: {
-                    Image(systemName: "backward.fill")
-                        .font(.system(size: isRegularWidth ? 30 : 24))
-                        .foregroundStyle(.primary)
-                }
-                .buttonStyle(.plain)
-
-                Button { player.togglePlayPause() } label: {
-                    ZStack {
-                        Circle()
-                            .fill(accentColor)
-                            .frame(width: playButtonSize, height: playButtonSize)
-                        if player.isBuffering {
-                            ProgressView()
-                                .tint(.white)
-                                .scaleEffect(1.2)
+                // Seek-Slider
+                VStack(spacing: 4) {
+                    Slider(
+                        value: (isDragging || player.isSeeking) ? $seekValue : Binding(
+                            get: { player.duration > 0 ? player.currentTime / player.duration : 0 },
+                            set: { _ in }
+                        ),
+                        in: 0...1
+                    ) { editing in
+                        if editing {
+                            isDragging = true
+                            player.isSeeking = true
+                            seekValue = player.duration > 0 ? player.currentTime / player.duration : 0
                         } else {
-                            Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                                .font(.system(size: isRegularWidth ? 38 : 30))
-                                .foregroundStyle(.white)
+                            player.seek(to: seekValue * player.duration)
+                            isDragging = false
                         }
                     }
-                    .shadow(color: accentColor.opacity(0.4), radius: 12, y: 6)
-                }
-                .buttonStyle(.plain)
+                    .tint(accentColor)
 
-                Button { player.next() } label: {
-                    Image(systemName: "forward.fill")
-                        .font(.system(size: isRegularWidth ? 30 : 24))
-                        .foregroundStyle(.primary)
+                    HStack {
+                        Text(formatTime(player.currentTime))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                        Spacer()
+                        Text(formatTime(player.duration))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
                 }
-                .buttonStyle(.plain)
-            }
-            .padding(.bottom, 20)
+                .padding(.horizontal, isPad ? 48 : 32)
+                .padding(.bottom, isPad ? 20 : 28)
 
-            GeometryReader { geo in
+                // Prev / Play / Next
+                HStack(spacing: isPad ? 40 : 32) {
+                    Button { player.previous() } label: {
+                        Image(systemName: "backward.fill")
+                            .font(.system(size: isPad ? 28 : 24))
+                            .foregroundStyle(.primary)
+                    }
+                    .buttonStyle(.plain)
+
+                    Button { player.togglePlayPause() } label: {
+                        ZStack {
+                            Circle()
+                                .fill(accentColor)
+                                .frame(width: playButtonSize, height: playButtonSize)
+                            if player.isBuffering {
+                                ProgressView()
+                                    .tint(.white)
+                                    .scaleEffect(1.2)
+                            } else {
+                                Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                                    .font(.system(size: isPad ? 34 : 30))
+                                    .foregroundStyle(.white)
+                            }
+                        }
+                        .shadow(color: accentColor.opacity(0.4), radius: 12, y: 6)
+                    }
+                    .buttonStyle(.plain)
+
+                    Button { player.next() } label: {
+                        Image(systemName: "forward.fill")
+                            .font(.system(size: isPad ? 28 : 24))
+                            .foregroundStyle(.primary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.bottom, isPad ? 36 : 20)
+
+                // AirPlay / Queue / Stop
                 HStack {
                     ZStack {
                         Circle()
@@ -212,7 +198,7 @@ struct PlayerView: View {
                                   : Color.gray.opacity(colorScheme == .dark ? 0.3 : 0.15))
                             .frame(width: controlSize, height: controlSize)
                         AirPlayButton(tintColor: UIColor(accentColor), activeTintColor: UIColor(accentColor))
-                            .frame(width: isRegularWidth ? 32 : 26, height: isRegularWidth ? 32 : 26)
+                            .frame(width: isPad ? 28 : 26, height: isPad ? 28 : 26)
                     }
 
                     Spacer()
@@ -225,7 +211,7 @@ struct PlayerView: View {
                                 .fill(Color.gray.opacity(colorScheme == .dark ? 0.3 : 0.15))
                                 .frame(width: controlSize, height: controlSize)
                             Image(systemName: "list.bullet")
-                                .font(.system(size: isRegularWidth ? 20 : 16))
+                                .font(.system(size: isPad ? 18 : 16))
                                 .foregroundStyle(accentColor)
                         }
                     }
@@ -242,36 +228,54 @@ struct PlayerView: View {
                                 .fill(Color.gray.opacity(colorScheme == .dark ? 0.3 : 0.15))
                                 .frame(width: controlSize, height: controlSize)
                             Image(systemName: "stop.fill")
-                                .font(.system(size: isRegularWidth ? 22 : 18))
+                                .font(.system(size: isPad ? 20 : 18))
                                 .foregroundStyle(accentColor)
                         }
                     }
                     .buttonStyle(.plain)
                 }
-                .padding(.horizontal, isRegularWidth ? 52 : 36)
+                .padding(.horizontal, isPad ? 44 : 36)
+                .padding(.bottom, isPad ? 32 : 40)
             }
-            .frame(height: controlSize)
-            .padding(.bottom, isRegularWidth ? 50 : 40)
+            .background(Color(UIColor.systemBackground))
+            .ignoresSafeArea(edges: .bottom)
+            .toolbar(.hidden, for: .navigationBar)
+            .onChange(of: player.currentSong?.id) { _, _ in
+                artistDestination = nil
+                artistResolveTask?.cancel()
+                artistResolveTask = nil
+                isResolvingArtist = false
+            }
+            .onDisappear {
+                artistResolveTask?.cancel()
+                artistResolveTask = nil
+            }
+            .sheet(isPresented: $showQueue) {
+                QueueView()
+                    .presentationDetents([.medium, .large])
+                    .presentationCornerRadius(24)
+                    .tint(accentColor)
+            }
         }
-        .background(Color(UIColor.systemBackground))
-        .ignoresSafeArea(edges: .bottom)
-        .toolbar(.hidden, for: .navigationBar)
-        .onChange(of: player.currentSong?.id) { _, _ in
-            artistDestination = nil
+    }
+
+    private func resolveArtist(_ artistName: String) {
+        if let found = currentArtist {
+            artistDestination = found
+        } else if !isResolvingArtist {
+            isResolvingArtist = true
             artistResolveTask?.cancel()
-            artistResolveTask = nil
-            isResolvingArtist = false
-        }
-        .onDisappear {
-            artistResolveTask?.cancel()
-            artistResolveTask = nil
-        }
-        .sheet(isPresented: $showQueue) {
-            QueueView()
-                .presentationDetents([.medium, .large])
-                .presentationCornerRadius(24)
-                .tint(accentColor)
-        }
+            artistResolveTask = Task {
+                defer { isResolvingArtist = false }
+                guard !Task.isCancelled else { return }
+                if let result = try? await SubsonicAPIService.shared.search(query: artistName),
+                   let found = result.artist?.first(where: {
+                       $0.name.lowercased() == artistName.lowercased()
+                   }) ?? result.artist?.first {
+                    guard !Task.isCancelled else { return }
+                    artistDestination = found
+                }
+            }
         }
     }
 

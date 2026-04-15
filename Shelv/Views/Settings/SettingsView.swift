@@ -71,10 +71,48 @@ struct SettingsView: View {
                 }
 
                 Section(tr("Links & Contact", "Links & Kontakt")) {
-                    SettingsLinkRow(icon: "chevron.left.forwardslash.chevron.right", label: "GitHub",
-                                   urlString: "https://github.com/GatzeStreicheln/Shelv")
-                    SettingsLinkRow(icon: "envelope", label: tr("Contact", "Kontakt"),
-                                   urlString: "mailto:kontakt@vkugler.ch")
+                    if let url = URL(string: "https://github.com/gatzenga/Shelv") {
+                        Link(destination: url) {
+                            HStack {
+                                Image(systemName: "chevron.left.forwardslash.chevron.right")
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 24)
+                                Text("GitHub")
+                                Spacer()
+                                Image(systemName: "arrow.up.right")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    if let url = URL(string: "https://gatzenga.github.io/Shelv/privacy.html") {
+                        Link(destination: url) {
+                            HStack {
+                                Image(systemName: "hand.raised")
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 24)
+                                Text(tr("Privacy Policy", "Datenschutz"))
+                                Spacer()
+                                Image(systemName: "arrow.up.right")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    if let url = URL(string: "mailto:kontakt@vkugler.ch") {
+                        Link(destination: url) {
+                            HStack {
+                                Image(systemName: "envelope")
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 24)
+                                Text(tr("Contact", "Kontakt"))
+                                Spacer()
+                                Image(systemName: "arrow.up.right")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
                 }
 
                 Section("Info") {
@@ -238,29 +276,6 @@ struct SettingsView: View {
         .contentShape(Rectangle())
         .onTapGesture {
             serverStore.activate(server: server)
-        }
-    }
-}
-
-private struct SettingsLinkRow: View {
-    let icon: String
-    let label: String
-    let urlString: String
-
-    var body: some View {
-        if let url = URL(string: urlString) {
-            Link(destination: url) {
-                HStack {
-                    Image(systemName: icon)
-                        .foregroundStyle(.secondary)
-                        .frame(width: 24)
-                    Text(label)
-                    Spacer()
-                    Image(systemName: "arrow.up.right")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
         }
     }
 }

@@ -40,9 +40,26 @@ struct AlbumArtView: View {
         guard let id = coverArtId,
               let url = SubsonicAPIService.shared.coverArtURL(for: id, size: size)
         else { loading = false; return }
-        let image = await ImageCacheService.shared.image(url: url, key: "\(id)_\(size)")
-        guard !Task.isCancelled else { return }
-        uiImage = image
+
+        let key = "\(id)_\(size)"
+
+        // Bis zu 3 Versuche bei fehlgeschlagenem Laden
+        for attempt in 0..<3 {
+            if attempt > 0 {
+                try? await Task.sleep(for: .milliseconds(Int64(500 * attempt)))
+            }
+            guard !Task.isCancelled else { return }
+
+            let image = await ImageCacheService.shared.image(url: url, key: key)
+            guard !Task.isCancelled else { return }
+
+            if let image {
+                uiImage = image
+                loading = false
+                return
+            }
+        }
+
         loading = false
     }
 

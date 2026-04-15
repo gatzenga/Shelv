@@ -9,6 +9,7 @@ class LibraryStore: ObservableObject {
     @Published var recentlyAdded: [Album] = []
     @Published var recentlyPlayed: [Album] = []
     @Published var frequentlyPlayed: [Album] = []
+    @Published var randomAlbums: [Album] = []
     @Published var isLoadingAlbums: Bool = false
     @Published var isLoadingArtists: Bool = false
     @Published var isLoadingDiscover: Bool = false
@@ -55,14 +56,24 @@ class LibraryStore: ObservableObject {
             async let added    = api.getRecentlyAdded(size: 20)
             async let played   = api.getRecentlyPlayed(size: 20)
             async let frequent = api.getFrequentlyPlayed(size: 20)
-            let (a, p, f) = try await (added, played, frequent)
+            async let random   = api.getAlbumList(type: "random", size: 20)
+            let (a, p, f, r) = try await (added, played, frequent, random)
             recentlyAdded    = a
             recentlyPlayed   = p
             frequentlyPlayed = f
+            randomAlbums     = r
         } catch {
             errorMessage = error.localizedDescription
         }
         isLoadingDiscover = false
+    }
+
+    func refreshRandomAlbums() async {
+        do {
+            randomAlbums = try await api.getAlbumList(type: "random", size: 20)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     func loadAlbums(sortBy: String = "alphabeticalByName") async {
@@ -127,6 +138,7 @@ class LibraryStore: ObservableObject {
         recentlyAdded = []
         recentlyPlayed = []
         frequentlyPlayed = []
+        randomAlbums = []
         try? FileManager.default.removeItem(at: Self.libraryDir)
     }
 }

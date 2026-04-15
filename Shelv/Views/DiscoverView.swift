@@ -9,6 +9,7 @@ struct DiscoverView: View {
     @State private var mixLoading: String?
     @State private var errorMessage: String?
     @State private var showError = false
+    @State private var randomRefreshing = false
 
     var body: some View {
         NavigationStack {
@@ -52,6 +53,7 @@ struct DiscoverView: View {
                             title: tr("Frequently Played", "Häufig gespielt"),
                             albums: libraryStore.frequentlyPlayed
                         )
+                        randomAlbumSection
 
                         Color.clear.frame(height: player.currentSong != nil ? 90 : 16)
                     }
@@ -69,7 +71,7 @@ struct DiscoverView: View {
                 }
             }
             .alert(tr("Error", "Fehler"), isPresented: $showError, presenting: errorMessage) { _ in
-                Button("OK", role: .cancel) {}
+                Button(tr("OK", "OK"), role: .cancel) {}
             } message: { msg in
                 Text(msg)
             }
@@ -77,12 +79,40 @@ struct DiscoverView: View {
     }
 
     @ViewBuilder
-    private func albumSection(title: String, albums: [Album]) -> some View {
+    private var randomAlbumSection: some View {
+        albumSection(title: tr("Random Albums", "Zufällige Alben"), albums: libraryStore.randomAlbums) {
+            Button {
+                randomRefreshing = true
+                Task {
+                    await libraryStore.refreshRandomAlbums()
+                    randomRefreshing = false
+                }
+            } label: {
+                Image(systemName: "shuffle")
+                    .font(.body)
+                    .foregroundStyle(accentColor)
+                    .rotationEffect(.degrees(randomRefreshing ? 360 : 0))
+                    .animation(
+                        randomRefreshing ? .linear(duration: 0.5).repeatForever(autoreverses: false) : .default,
+                        value: randomRefreshing
+                    )
+            }
+            .buttonStyle(.plain)
+            .disabled(randomRefreshing)
+        }
+    }
+
+    @ViewBuilder
+    private func albumSection<T: View>(title: String, albums: [Album], @ViewBuilder trailingButton: () -> T = { EmptyView() }) -> some View {
         if !albums.isEmpty {
             VStack(alignment: .leading, spacing: 10) {
-                Text(title)
-                    .font(.title3).bold()
-                    .padding(.horizontal)
+                HStack {
+                    Text(title)
+                        .font(.title3).bold()
+                    Spacer()
+                    trailingButton()
+                }
+                .padding(.horizontal)
 
                 ScrollView(.horizontal) {
                     HStack(spacing: 14) {
@@ -142,8 +172,8 @@ struct DiscoverView: View {
             let songs: [Song]
             switch type {
             case "newest":   songs = try await SubsonicAPIService.shared.getNewestSongs()
-            case "frequent": songs = try await SubsonicAPIService.shared.getFrequentSongs(limit: 100)
-            default:         songs = try await SubsonicAPIService.shared.getRecentSongs(limit: 100)
+            case "frequent": songs = try await SubsonicAPIService.shared.getFrequentSongs(limit: 50)
+            default:         songs = try await SubsonicAPIService.shared.getRecentSongs(limit: 50)
             }
             player.play(songs: songs.shuffled(), startIndex: 0)
         } catch {

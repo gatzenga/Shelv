@@ -57,7 +57,7 @@ struct AlbumDetailView: View {
                                 player.addToQueue(song)
                                 showToast(tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
                             } label: {
-                                Label(tr("Add to Queue", "Am Ende"), systemImage: "text.badge.plus")
+                                Label(tr("Add to Queue", "Zur Warteschlange"), systemImage: "text.badge.plus")
                             }
                             .tint(accentColor)
 
