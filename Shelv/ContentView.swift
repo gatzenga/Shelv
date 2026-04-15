@@ -1,5 +1,9 @@
 import SwiftUI
 
+extension Notification.Name {
+    static let addSongsToPlaylist = Notification.Name("addSongsToPlaylist")
+}
+
 struct ContentView: View {
     @EnvironmentObject var serverStore: ServerStore
     @EnvironmentObject var libraryStore: LibraryStore
@@ -8,7 +12,9 @@ struct ContentView: View {
     @State private var selectedTab = 0
     @State private var showPlayer = false
     @State private var showAddServer = false
+    @State private var playlistSongIds: [String]? = nil
     @AppStorage("themeColor") private var themeColorName = "violet"
+    @AppStorage("enablePlaylists") private var enablePlaylists = false
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
     private var isRegularWidth: Bool { horizontalSizeClass == .regular }
@@ -32,9 +38,11 @@ struct ContentView: View {
                     LibraryView()
                         .tabItem { Label(tr("Library", "Bibliothek"), systemImage: "books.vertical.fill") }
                         .tag(1)
-                    SearchView()
-                        .tabItem { Label(tr("Search", "Suchen"), systemImage: "magnifyingglass") }
-                        .tag(2)
+                    if enablePlaylists {
+                        PlaylistsView()
+                            .tabItem { Label(tr("Playlists", "Playlists"), systemImage: "music.note.list") }
+                            .tag(2)
+                    }
                     SettingsView()
                         .tabItem { Label(tr("Settings", "Einstellungen"), systemImage: "gearshape.fill") }
                         .tag(3)
@@ -75,10 +83,28 @@ struct ContentView: View {
                 .environmentObject(serverStore)
                 .tint(accentColor)
         }
+        .sheet(item: Binding(
+            get: { playlistSongIds.map { IdentifiableStrings(ids: $0) } },
+            set: { if $0 == nil { playlistSongIds = nil } }
+        )) { wrapper in
+            AddToPlaylistSheet(songIds: wrapper.ids)
+                .environmentObject(libraryStore)
+                .tint(accentColor)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .addSongsToPlaylist)) { note in
+            if let ids = note.object as? [String] {
+                playlistSongIds = ids
+            }
+        }
         .onAppear {
             if serverStore.servers.isEmpty {
                 showAddServer = true
             }
         }
     }
+}
+
+private struct IdentifiableStrings: Identifiable {
+    let id = UUID()
+    let ids: [String]
 }

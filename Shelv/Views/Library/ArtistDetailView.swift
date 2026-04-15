@@ -3,8 +3,10 @@ import SwiftUI
 struct ArtistDetailView: View {
     let artist: Artist
     @EnvironmentObject var player: AudioPlayerService
+    @EnvironmentObject var libraryStore: LibraryStore
     @AppStorage("themeColor") private var themeColorName = "violet"
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
+    @AppStorage("enableFavorites") private var enableFavorites = false
 
     @State private var detail: ArtistDetail?
     @State private var isLoading = true
@@ -55,6 +57,18 @@ struct ArtistDetailView: View {
         .scrollIndicators(.hidden)
         .navigationTitle(artist.name)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if enableFavorites {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        Task { await libraryStore.toggleStarArtist(artist) }
+                    } label: {
+                        Image(systemName: libraryStore.isArtistStarred(artist) ? "heart.fill" : "heart")
+                            .foregroundStyle(libraryStore.isArtistStarred(artist) ? accentColor : .secondary)
+                    }
+                }
+            }
+        }
         .task {
             await loadDetail()
         }

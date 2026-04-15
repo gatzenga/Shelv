@@ -10,6 +10,7 @@ struct DiscoverView: View {
     @State private var errorMessage: String?
     @State private var showError = false
     @State private var randomRefreshing = false
+    @State private var showSearch = false
 
     var body: some View {
         NavigationStack {
@@ -62,6 +63,21 @@ struct DiscoverView: View {
             }
             .scrollIndicators(.hidden)
             .navigationTitle("Shelv")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showSearch = true
+                    } label: {
+                        Image(systemName: "magnifyingglass")
+                    }
+                }
+            }
+            .sheet(isPresented: $showSearch) {
+                SearchView()
+                    .presentationDetents([.large])
+                    .presentationCornerRadius(24)
+                    .tint(accentColor)
+            }
             .refreshable {
                 await libraryStore.loadDiscover()
             }

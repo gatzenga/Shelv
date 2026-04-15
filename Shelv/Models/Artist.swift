@@ -5,8 +5,9 @@ struct Artist: Identifiable, Codable, Hashable {
     let name: String
     let albumCount: Int?
     let coverArt: String?
+    let starred: Date?
 
     enum CodingKeys: String, CodingKey {
-        case id, name, albumCount, coverArt
+        case id, name, albumCount, coverArt, starred
     }
 }

@@ -10,9 +10,13 @@ struct PlayerView: View {
     @AppStorage("themeColor") private var themeColorName = "violet"
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
+    @AppStorage("enableFavorites") private var enableFavorites = false
+    @AppStorage("enablePlaylists") private var enablePlaylists = false
+
     @State private var seekValue: Double = 0
     @State private var isDragging: Bool = false
     @State private var showQueue: Bool = false
+    @State private var showAddToPlaylist = false
     @State private var artistDestination: Artist?
     @State private var isResolvingArtist = false
     @State private var artistResolveTask: Task<Void, Never>?
@@ -29,6 +33,7 @@ struct PlayerView: View {
             duration: nil,
             year: song.year,
             genre: song.genre,
+            starred: nil,
             songs: nil
         )
     }
@@ -204,7 +209,7 @@ struct PlayerView: View {
                 }
                 .padding(.bottom, isPad ? 36 : 20)
 
-                // AirPlay / Queue / Stop
+                // AirPlay / Favorite / Queue / Stop
                 HStack {
                     ZStack {
                         Circle()
@@ -217,6 +222,24 @@ struct PlayerView: View {
                     }
 
                     Spacer()
+
+                    if enableFavorites, let song = player.currentSong {
+                        Button {
+                            Task { await libraryStore.toggleStarSong(song) }
+                        } label: {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.gray.opacity(colorScheme == .dark ? 0.3 : 0.15))
+                                    .frame(width: controlSize, height: controlSize)
+                                Image(systemName: libraryStore.isSongStarred(song) ? "heart.fill" : "heart")
+                                    .font(.system(size: isPad ? 20 : 18))
+                                    .foregroundStyle(libraryStore.isSongStarred(song) ? accentColor : .secondary)
+                            }
+                        }
+                        .buttonStyle(.plain)
+
+                        Spacer()
+                    }
 
                     Button {
                         showQueue = true
@@ -231,6 +254,24 @@ struct PlayerView: View {
                         }
                     }
                     .buttonStyle(.plain)
+
+                    if enablePlaylists {
+                        Spacer()
+
+                        Button {
+                            showAddToPlaylist = true
+                        } label: {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.gray.opacity(colorScheme == .dark ? 0.3 : 0.15))
+                                    .frame(width: controlSize, height: controlSize)
+                                Image(systemName: "music.note.list")
+                                    .font(.system(size: isPad ? 18 : 16))
+                                    .foregroundStyle(accentColor)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
 
                     Spacer()
 
@@ -270,6 +311,13 @@ struct PlayerView: View {
                     .presentationDetents([.medium, .large])
                     .presentationCornerRadius(24)
                     .tint(accentColor)
+            }
+            .sheet(isPresented: $showAddToPlaylist) {
+                if let song = player.currentSong {
+                    AddToPlaylistSheet(songIds: [song.id])
+                        .environmentObject(libraryStore)
+                        .tint(accentColor)
+                }
             }
         }
     }

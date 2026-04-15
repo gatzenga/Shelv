@@ -6,8 +6,11 @@ struct AlbumCardView: View {
     var showArtist: Bool = true
     var showYear: Bool = false
 
+    @EnvironmentObject var libraryStore: LibraryStore
     @AppStorage("themeColor") private var themeColorName = "violet"
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
+    @AppStorage("enableFavorites") private var enableFavorites = false
+    @AppStorage("enablePlaylists") private var enablePlaylists = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -76,6 +79,41 @@ struct AlbumCardView: View {
                 }
             } label: {
                 Label(tr("Add to Queue", "Zur Warteschlange"), systemImage: "text.badge.plus")
+            }
+
+            if enableFavorites || enablePlaylists {
+                Divider()
+                if enableFavorites {
+                    Button {
+                        Task { await libraryStore.toggleStarAlbum(album) }
+                    } label: {
+                        Label(
+                            libraryStore.isAlbumStarred(album)
+                                ? tr("Unfavorite", "Aus Favoriten entfernen")
+                                : tr("Favorite", "Zu Favoriten"),
+                            systemImage: libraryStore.isAlbumStarred(album) ? "heart.slash" : "heart"
+                        )
+                    }
+                }
+                if enablePlaylists {
+                    Button {
+                        Task {
+                            guard let detail = try? await SubsonicAPIService.shared.getAlbum(id: album.id),
+                                  let songs = detail.song, !songs.isEmpty else { return }
+                            // Playlist-Sheet kann aus contextMenu nicht direkt präsentiert werden —
+                            // daher via Notification (einfachste Lösung ohne State-Prop-Drilling)
+                            let ids = songs.map(\.id)
+                            await MainActor.run {
+                                NotificationCenter.default.post(
+                                    name: .addSongsToPlaylist,
+                                    object: ids
+                                )
+                            }
+                        }
+                    } label: {
+                        Label(tr("Add to Playlist…", "Zur Playlist hinzufügen…"), systemImage: "music.note.list")
+                    }
+                }
             }
         } preview: {
             AlbumArtView(coverArtId: album.coverArt, size: 600, cornerRadius: 0)

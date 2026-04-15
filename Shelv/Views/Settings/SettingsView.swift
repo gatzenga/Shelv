@@ -6,6 +6,8 @@ struct SettingsView: View {
     @EnvironmentObject var player: AudioPlayerService
     @AppStorage("appAppearance") private var appAppearance = "system"
     @AppStorage("themeColor") private var themeColorName = "violet"
+    @AppStorage("enableFavorites") private var enableFavorites = false
+    @AppStorage("enablePlaylists") private var enablePlaylists = false
 
     @State private var showAddServer = false
     @State private var editingServer: SubsonicServer?
@@ -53,6 +55,17 @@ struct SettingsView: View {
                         }
                     }
                     .id(themeColorName)
+                }
+
+                Section(tr("Playlists & Favorites", "Playlists & Favoriten")) {
+                    Toggle(isOn: $enableFavorites) {
+                        Label(tr("Favorites", "Favoriten"), systemImage: "heart")
+                    }
+                    .tint(accentColor)
+                    Toggle(isOn: $enablePlaylists) {
+                        Label(tr("Playlists", "Playlists"), systemImage: "music.note.list")
+                    }
+                    .tint(accentColor)
                 }
 
                 Section(tr("Cache", "Cache")) {

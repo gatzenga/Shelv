@@ -144,6 +144,50 @@ struct SearchResult: Decodable {
     let song: [Song]?
 }
 
+struct StarredResult: Decodable {
+    let artist: [Artist]?
+    let album: [Album]?
+    let song: [Song]?
+}
+
+private struct StarredBody: Decodable {
+    let status: String
+    let error: StatusCheck.APIError?
+    let starred2: StarredResult?
+}
+
+private struct PlaylistsBody: Decodable {
+    let status: String
+    let error: StatusCheck.APIError?
+    let playlists: PlaylistsContainer?
+
+    struct PlaylistsContainer: Decodable {
+        let playlist: [Playlist]?
+    }
+}
+
+private struct PlaylistBody: Decodable {
+    let status: String
+    let error: StatusCheck.APIError?
+    let playlist: PlaylistDetail?
+
+    struct PlaylistDetail: Decodable {
+        let id: String
+        let name: String
+        let comment: String?
+        let songCount: Int?
+        let duration: Int?
+        let coverArt: String?
+        let entry: [Song]?
+    }
+}
+
+private struct CreatePlaylistBody: Decodable {
+    let status: String
+    let error: StatusCheck.APIError?
+    let playlist: PlaylistBody.PlaylistDetail?
+}
+
 class SubsonicAPIService: ObservableObject {
     static let shared = SubsonicAPIService()
 
@@ -152,7 +196,11 @@ class SubsonicAPIService: ObservableObject {
 
     private let apiVersion = "1.16.1"
     private let clientName = "Shelv"
-    private let decoder = JSONDecoder()
+    private let decoder: JSONDecoder = {
+        let d = JSONDecoder()
+        d.dateDecodingStrategy = .iso8601
+        return d
+    }()
 
     private init() {}
 
@@ -396,5 +444,95 @@ class SubsonicAPIService: ObservableObject {
             URLQueryItem(name: "id", value: artId),
             URLQueryItem(name: "size", value: "\(size)")
         ])
+    }
+
+    // MARK: - Favorites (star/unstar/getStarred2)
+
+    func getStarred() async throws -> StarredResult {
+        let data = try await fetchData(path: "getStarred2")
+        let body = try decoder.decode(Envelope<StarredBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+        return body.starred2 ?? StarredResult(artist: nil, album: nil, song: nil)
+    }
+
+    func star(songId: String? = nil, albumId: String? = nil, artistId: String? = nil) async throws {
+        var extra: [URLQueryItem] = []
+        if let id = songId   { extra.append(URLQueryItem(name: "id",       value: id)) }
+        if let id = albumId  { extra.append(URLQueryItem(name: "albumId",  value: id)) }
+        if let id = artistId { extra.append(URLQueryItem(name: "artistId", value: id)) }
+        let data = try await fetchData(path: "star", extra: extra)
+        let body = try decoder.decode(Envelope<PingBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+    }
+
+    func unstar(songId: String? = nil, albumId: String? = nil, artistId: String? = nil) async throws {
+        var extra: [URLQueryItem] = []
+        if let id = songId   { extra.append(URLQueryItem(name: "id",       value: id)) }
+        if let id = albumId  { extra.append(URLQueryItem(name: "albumId",  value: id)) }
+        if let id = artistId { extra.append(URLQueryItem(name: "artistId", value: id)) }
+        let data = try await fetchData(path: "unstar", extra: extra)
+        let body = try decoder.decode(Envelope<PingBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+    }
+
+    // MARK: - Playlists
+
+    func getPlaylists() async throws -> [Playlist] {
+        let data = try await fetchData(path: "getPlaylists")
+        let body = try decoder.decode(Envelope<PlaylistsBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+        return body.playlists?.playlist ?? []
+    }
+
+    func getPlaylist(id: String) async throws -> Playlist {
+        let data = try await fetchData(path: "getPlaylist", extra: [
+            URLQueryItem(name: "id", value: id)
+        ])
+        let body = try decoder.decode(Envelope<PlaylistBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+        guard let detail = body.playlist else {
+            throw SubsonicAPIError.apiError(0, "Playlist not found")
+        }
+        var playlist = Playlist(
+            id: detail.id, name: detail.name, comment: detail.comment,
+            songCount: detail.songCount, duration: detail.duration, coverArt: detail.coverArt
+        )
+        playlist.songs = detail.entry ?? []
+        return playlist
+    }
+
+    func createPlaylist(name: String, songIds: [String] = []) async throws -> Playlist {
+        var extra = [URLQueryItem(name: "name", value: name)]
+        extra += songIds.map { URLQueryItem(name: "songId", value: $0) }
+        let data = try await fetchData(path: "createPlaylist", extra: extra)
+        let body = try decoder.decode(Envelope<CreatePlaylistBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+        guard let detail = body.playlist else {
+            throw SubsonicAPIError.apiError(0, "Create playlist failed")
+        }
+        return Playlist(
+            id: detail.id, name: detail.name, comment: detail.comment,
+            songCount: detail.songCount, duration: detail.duration, coverArt: detail.coverArt
+        )
+    }
+
+    func updatePlaylist(id: String, name: String? = nil, comment: String? = nil,
+                        songIdsToAdd: [String] = [], songIndicesToRemove: [Int] = []) async throws {
+        var extra = [URLQueryItem(name: "playlistId", value: id)]
+        if let n = name    { extra.append(URLQueryItem(name: "name",    value: n)) }
+        if let c = comment { extra.append(URLQueryItem(name: "comment", value: c)) }
+        extra += songIdsToAdd.map         { URLQueryItem(name: "songIdToAdd",          value: $0) }
+        extra += songIndicesToRemove.map  { URLQueryItem(name: "songIndexToRemove",     value: "\($0)") }
+        let data = try await fetchData(path: "updatePlaylist", extra: extra)
+        let body = try decoder.decode(Envelope<PingBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+    }
+
+    func deletePlaylist(id: String) async throws {
+        let data = try await fetchData(path: "deletePlaylist", extra: [
+            URLQueryItem(name: "id", value: id)
+        ])
+        let body = try decoder.decode(Envelope<PingBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
     }
 }

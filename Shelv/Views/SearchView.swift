@@ -2,13 +2,18 @@ import SwiftUI
 
 struct SearchView: View {
     @EnvironmentObject var player: AudioPlayerService
+    @EnvironmentObject var libraryStore: LibraryStore
     @AppStorage("themeColor") private var themeColorName = "violet"
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
+    @AppStorage("enableFavorites") private var enableFavorites = false
+    @AppStorage("enablePlaylists") private var enablePlaylists = false
 
     @State private var query = ""
     @State private var result: SearchResult?
     @State private var isSearching = false
     @State private var searchTask: Task<Void, Never>?
+    @State private var showAddToPlaylist = false
+    @State private var playlistSongIds: [String] = []
 
     private var hasResults: Bool {
         !(result?.artist ?? []).isEmpty ||
@@ -73,6 +78,48 @@ struct SearchView: View {
                                             }
                                         }
                                     }
+                                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                        Button {
+                                            Task {
+                                                guard let detail = try? await SubsonicAPIService.shared.getAlbum(id: album.id),
+                                                      let songs = detail.song, !songs.isEmpty else { return }
+                                                await MainActor.run { player.addToQueue(songs) }
+                                            }
+                                        } label: { Image(systemName: "text.badge.plus") }
+                                        .tint(accentColor)
+                                        Button {
+                                            Task {
+                                                guard let detail = try? await SubsonicAPIService.shared.getAlbum(id: album.id),
+                                                      let songs = detail.song, !songs.isEmpty else { return }
+                                                await MainActor.run { player.addPlayNext(songs) }
+                                            }
+                                        } label: { Image(systemName: "text.insert") }
+                                        .tint(.orange)
+                                    }
+                                    .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                                        if enableFavorites {
+                                            Button {
+                                                Task { await libraryStore.toggleStarAlbum(album) }
+                                            } label: {
+                                                Image(systemName: libraryStore.isAlbumStarred(album) ? "heart.slash" : "heart.fill")
+                                            }
+                                            .tint(.pink)
+                                        }
+                                        if enablePlaylists {
+                                            Button {
+                                                Task {
+                                                    guard let detail = try? await SubsonicAPIService.shared.getAlbum(id: album.id),
+                                                          let songs = detail.song, !songs.isEmpty else { return }
+                                                    let ids = songs.map(\.id)
+                                                    await MainActor.run {
+                                                        playlistSongIds = ids
+                                                        showAddToPlaylist = true
+                                                    }
+                                                }
+                                            } label: { Image(systemName: "music.note.list") }
+                                            .tint(.purple)
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -104,6 +151,39 @@ struct SearchView: View {
                                         }
                                     }
                                     .buttonStyle(.plain)
+                                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                        Button {
+                                            player.addToQueue(song)
+                                        } label: {
+                                            Image(systemName: "text.badge.plus")
+                                        }
+                                        .tint(accentColor)
+                                        Button {
+                                            player.addPlayNext(song)
+                                        } label: {
+                                            Image(systemName: "text.insert")
+                                        }
+                                        .tint(.orange)
+                                    }
+                                    .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                                        if enableFavorites {
+                                            Button {
+                                                Task { await libraryStore.toggleStarSong(song) }
+                                            } label: {
+                                                Image(systemName: libraryStore.isSongStarred(song) ? "heart.slash" : "heart.fill")
+                                            }
+                                            .tint(.pink)
+                                        }
+                                        if enablePlaylists {
+                                            Button {
+                                                playlistSongIds = [song.id]
+                                                showAddToPlaylist = true
+                                            } label: {
+                                                Image(systemName: "music.note.list")
+                                            }
+                                            .tint(.purple)
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -135,6 +215,11 @@ struct SearchView: View {
                     guard !Task.isCancelled else { return }
                     await performSearch(query: newValue)
                 }
+            }
+            .sheet(isPresented: $showAddToPlaylist) {
+                AddToPlaylistSheet(songIds: playlistSongIds)
+                    .environmentObject(libraryStore)
+                    .tint(accentColor)
             }
         }
     }

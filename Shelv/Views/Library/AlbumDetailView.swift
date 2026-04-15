@@ -3,10 +3,15 @@ import SwiftUI
 struct AlbumDetailView: View {
     let album: Album
     @EnvironmentObject var player: AudioPlayerService
+    @EnvironmentObject var libraryStore: LibraryStore
     @AppStorage("themeColor") private var themeColorName = "violet"
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
+    @AppStorage("enableFavorites") private var enableFavorites = false
+    @AppStorage("enablePlaylists") private var enablePlaylists = false
 
     @State private var detail: AlbumDetail?
+    @State private var showAddToPlaylist = false
+    @State private var playlistSongIds: [String] = []
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var queueToast = false
@@ -52,12 +57,12 @@ struct AlbumDetailView: View {
                             .padding(.vertical, 4)
                         }
                         .buttonStyle(.plain)
-                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             Button {
                                 player.addToQueue(song)
                                 showToast(tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
                             } label: {
-                                Label(tr("Add to Queue", "Zur Warteschlange"), systemImage: "text.badge.plus")
+                                Image(systemName: "text.badge.plus")
                             }
                             .tint(accentColor)
 
@@ -65,9 +70,28 @@ struct AlbumDetailView: View {
                                 player.addPlayNext(song)
                                 showToast(tr("Plays Next", "Wird als nächstes gespielt"))
                             } label: {
-                                Label(tr("Play Next", "Als nächstes"), systemImage: "text.insert")
+                                Image(systemName: "text.insert")
                             }
                             .tint(.orange)
+                        }
+                        .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                            if enableFavorites {
+                                Button {
+                                    Task { await libraryStore.toggleStarSong(song) }
+                                } label: {
+                                    Image(systemName: libraryStore.isSongStarred(song) ? "heart.slash" : "heart.fill")
+                                }
+                                .tint(.pink)
+                            }
+                            if enablePlaylists {
+                                Button {
+                                    playlistSongIds = [song.id]
+                                    showAddToPlaylist = true
+                                } label: {
+                                    Image(systemName: "music.note.list")
+                                }
+                                .tint(.purple)
+                            }
                         }
                     }
                 }
@@ -95,6 +119,16 @@ struct AlbumDetailView: View {
         .navigationTitle(album.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            if enableFavorites {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        Task { await libraryStore.toggleStarAlbum(album) }
+                    } label: {
+                        Image(systemName: libraryStore.isAlbumStarred(album) ? "heart.fill" : "heart")
+                            .foregroundStyle(libraryStore.isAlbumStarred(album) ? accentColor : .secondary)
+                    }
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Button {
@@ -116,6 +150,17 @@ struct AlbumDetailView: View {
                         Label(tr("Add to Queue", "Zur Warteschlange"), systemImage: "text.badge.plus")
                     }
                     .disabled(detail == nil)
+
+                    if enablePlaylists {
+                        Divider()
+                        Button {
+                            playlistSongIds = detail?.song?.map(\.id) ?? []
+                            showAddToPlaylist = true
+                        } label: {
+                            Label(tr("Add to Playlist…", "Zur Playlist hinzufügen…"), systemImage: "music.note.list")
+                        }
+                        .disabled(detail == nil)
+                    }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                         .symbolRenderingMode(.hierarchical)
@@ -128,6 +173,11 @@ struct AlbumDetailView: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
                     .zIndex(1)
             }
+        }
+        .sheet(isPresented: $showAddToPlaylist) {
+            AddToPlaylistSheet(songIds: playlistSongIds)
+                .environmentObject(libraryStore)
+                .tint(accentColor)
         }
         .task {
             await loadDetail()
