@@ -20,6 +20,14 @@ class ServerStore: ObservableObject {
     }
 
     func activate(server: SubsonicServer) {
+        let seenKey = "shelv_seen_servers"
+        var seen = Set<String>(UserDefaults.standard.stringArray(forKey: seenKey) ?? [])
+        if !seen.contains(server.id.uuidString) {
+            UserDefaults.standard.set(true, forKey: "enableFavorites")
+            UserDefaults.standard.set(true, forKey: "enablePlaylists")
+            seen.insert(server.id.uuidString)
+            UserDefaults.standard.set(Array(seen), forKey: seenKey)
+        }
         activeServerID = server.id
         UserDefaults.standard.set(server.id.uuidString, forKey: activeKey)
         applyToAPIService(server: server)

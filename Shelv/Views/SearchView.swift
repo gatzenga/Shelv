@@ -5,8 +5,8 @@ struct SearchView: View {
     @EnvironmentObject var libraryStore: LibraryStore
     @AppStorage("themeColor") private var themeColorName = "violet"
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
-    @AppStorage("enableFavorites") private var enableFavorites = false
-    @AppStorage("enablePlaylists") private var enablePlaylists = false
+    @AppStorage("enableFavorites") private var enableFavorites = true
+    @AppStorage("enablePlaylists") private var enablePlaylists = true
 
     @State private var query = ""
     @State private var result: SearchResult?

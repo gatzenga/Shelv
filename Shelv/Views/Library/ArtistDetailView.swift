@@ -6,7 +6,7 @@ struct ArtistDetailView: View {
     @EnvironmentObject var libraryStore: LibraryStore
     @AppStorage("themeColor") private var themeColorName = "violet"
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
-    @AppStorage("enableFavorites") private var enableFavorites = false
+    @AppStorage("enableFavorites") private var enableFavorites = true
 
     @State private var detail: ArtistDetail?
     @State private var isLoading = true

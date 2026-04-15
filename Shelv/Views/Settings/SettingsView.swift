@@ -6,8 +6,8 @@ struct SettingsView: View {
     @EnvironmentObject var player: AudioPlayerService
     @AppStorage("appAppearance") private var appAppearance = "system"
     @AppStorage("themeColor") private var themeColorName = "violet"
-    @AppStorage("enableFavorites") private var enableFavorites = false
-    @AppStorage("enablePlaylists") private var enablePlaylists = false
+    @AppStorage("enableFavorites") private var enableFavorites = true
+    @AppStorage("enablePlaylists") private var enablePlaylists = true
 
     @State private var showAddServer = false
     @State private var editingServer: SubsonicServer?

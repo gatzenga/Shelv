@@ -14,7 +14,7 @@ struct ContentView: View {
     @State private var showAddServer = false
     @State private var playlistSongIds: [String]? = nil
     @AppStorage("themeColor") private var themeColorName = "violet"
-    @AppStorage("enablePlaylists") private var enablePlaylists = false
+    @AppStorage("enablePlaylists") private var enablePlaylists = true
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
     private var isRegularWidth: Bool { horizontalSizeClass == .regular }
