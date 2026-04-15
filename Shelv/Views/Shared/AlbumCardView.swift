@@ -100,14 +100,9 @@ struct AlbumCardView: View {
                         Task {
                             guard let detail = try? await SubsonicAPIService.shared.getAlbum(id: album.id),
                                   let songs = detail.song, !songs.isEmpty else { return }
-                            // Playlist-Sheet kann aus contextMenu nicht direkt präsentiert werden —
-                            // daher via Notification (einfachste Lösung ohne State-Prop-Drilling)
                             let ids = songs.map(\.id)
                             await MainActor.run {
-                                NotificationCenter.default.post(
-                                    name: .addSongsToPlaylist,
-                                    object: ids
-                                )
+                                NotificationCenter.default.post(name: .addSongsToPlaylist, object: ids)
                             }
                         }
                     } label: {

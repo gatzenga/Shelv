@@ -12,17 +12,52 @@ A native, album and artist focused iOS and iPadOS client for [Navidrome](https:/
 
 ## Features
 
-- **Browse your library** — Albums and Artists with alphabetical index bar and grid or list layout
-- **Discover** — Recently added, recently played, frequently played, and random albums at a glance
-- **Smart mixes** — One-tap shuffled queues based on newest, most played, or recently played tracks
-- **Full playback control** — Play, pause, seek, skip with shuffle, repeat, AirPlay support and lock screen integration
-- **Smart queue system** — Play Next, Album queue, and a user backlog with drag-to-reorder and swipe-to-delete; shuffle merges all three queues into one mixed list and restores the original order when turned off
-- **Search** — Find artists, albums, and tracks on your server with debounced live results
-- **Cover art** — Memory and disk cached artwork throughout the UI, never blocks the main thread
-- **Multiple servers** — Manage and switch between Subsonic/Navidrome server configurations
-- **Library sync** — Full scan with progress indicator and last-sync timestamp per server
-- **Theming** — Choose an accent color to personalize the interface
-- **Persistent player** — Queue and playback position survive app restarts
+### Library
+- **Albums and Artists** — Browse your full library with an alphabetical index bar; switch between grid and list layout
+- **Quick actions** — Long-press any album or artist in the grid for a context menu (Play, Shuffle, Play Next, Add to Queue); swipe left or right on any row in list view for the same actions
+- **Artist detail** — Dedicated Play and Shuffle buttons on the artist page load all tracks in parallel and start playback immediately
+- **Album detail** — Full tracklist with swipe actions per track: swipe right to play next or add to queue, swipe left to favorite or add to a playlist
+
+### Discover
+- **Shelves** — Recently added, recently played, frequently played, and random albums in horizontal scroll sections
+- **Smart Mixes** — Three one-tap buttons that build a shuffled queue from your newest tracks, most played tracks, or recently played tracks
+- **Random Albums** — A dedicated section with a shuffle button to load a fresh random selection at any time
+
+### Playback
+- **Full player** — Play, pause, seek, previous, next, shuffle, and three repeat modes (Off / All / One)
+- **AirPlay** — Stream to any AirPlay-compatible device directly from the player
+- **Lock screen and media keys** — Full remote control integration via MPRemoteCommandCenter
+- **iPad layout** — Optimised player layout for iPad with larger cover art and controls; mini-player anchored correctly at the bottom via `safeAreaInset`
+
+### Queue
+- **Three-tier queue** — Play Next (highest priority), Album queue (current context), and User Queue (backlog); all unlimited
+- **Reorder and delete** — Drag to reorder or swipe to delete any track in any queue section
+- **Shuffle** — Merges all three queues into one shuffled list; a snapshot preserves the original order so it can be fully restored when shuffle is turned off. When an album or artist is started via Shuffle, the shuffled order itself becomes the reference — disabling shuffle mid-playback keeps the same shuffled sequence without losing any tracks
+- **Persistent state** — Queue, current track, playback position, shuffle state, and repeat mode all survive app restarts
+
+### Favorites *(optional)*
+- Star songs, albums, and artists — synced to the server via the Subsonic API
+- A dedicated Favorites tab in the Library groups starred songs, albums, and artists
+- Favorites can be enabled or disabled in Settings; when disabled, all related UI elements are hidden
+
+### Playlists *(optional)*
+- Add songs or full albums to existing server playlists, or create a new one on the fly
+- Available via context menus, swipe actions, and the full-screen player
+- Playlists can be enabled or disabled in Settings; when disabled, all related UI elements are hidden
+
+### Search
+- Global search across artists, albums, and tracks on your server
+- Debounced live results with task cancellation — no redundant network requests
+
+### Settings
+- **Servers** — Add, edit, and switch between multiple Subsonic/Navidrome servers; run a full library scan with progress indicator and last-sync timestamp per server
+- **Appearance** — Choose between Light, Dark, and System mode; pick one of ten accent colors
+- **Cache** — See the current cover art cache size and clear it with a single tap
+- **Favorites & Playlists** — Toggle each feature on or off independently
+
+### Cover Art
+- Memory and disk cached artwork throughout the UI (NSCache + disk, never blocks the main thread)
+- Automatic retry on failure with linear backoff; concurrent deduplication prevents redundant downloads
 
 ## Requirements
 
@@ -59,11 +94,11 @@ All API communication goes through `SubsonicAPIService.shared` using MD5 token a
 |---|---|---|
 | `playNextQueue` | Highest | Tracks queued via "Play Next" |
 | `queue` | Normal | Current album / playback context |
-| `userQueue` | Lowest | User backlog, max 200 songs |
+| `userQueue` | Lowest | User backlog (unlimited) |
 
 Playback order: `playNextQueue` → `queue[currentIndex+1...]` → `userQueue` (one track at a time, not as a block).
 
-**Shuffle** — When enabled, all three queues are merged into a single shuffled list inside `queue`; `playNextQueue` and `userQueue` are cleared. A snapshot of the pre-shuffle state is saved. When shuffle is disabled, the original order is restored, keeping only the tracks that have not been played yet. Tracks added while shuffle is active (via "Play Next" or "Add to Queue") are inserted at a random position in the shuffled queue and are mirrored into the snapshot so they reappear in the correct section when shuffle is turned off. The queue view shows a single "Shuffled Queue" section while shuffle is active.
+**Shuffle** — When enabled, all three queues are merged into a single shuffled list inside `queue`; `playNextQueue` and `userQueue` are cleared. A snapshot of the pre-shuffle state is saved. When shuffle is disabled, the original order is restored, keeping only the tracks that have not been played yet. Tracks added while shuffle is active are inserted at a random position and mirrored into the snapshot so they reappear in the correct section when shuffle is turned off. When playback is started via the Shuffle action on an album or artist, all tracks are shuffled upfront and the snapshot stores this shuffled order — so disabling shuffle mid-playback restores the same shuffled sequence without losing any tracks.
 
 **Repeat**
 - **Off** — Stops after the last track
