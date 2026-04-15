@@ -4,6 +4,22 @@ import Combine
 import UIKit
 import SwiftUI
 
+enum RepeatMode: String {
+    case off, all, one
+
+    var toggled: RepeatMode {
+        switch self {
+        case .off: return .all
+        case .all: return .one
+        case .one: return .off
+        }
+    }
+
+    var systemImage: String {
+        self == .one ? "repeat.1" : "repeat"
+    }
+}
+
 class AudioPlayerService: ObservableObject {
     static let shared = AudioPlayerService()
 
@@ -18,6 +34,28 @@ class AudioPlayerService: ObservableObject {
     @Published var duration: Double = 0
     @Published var isAirPlayActive: Bool = false
     @Published var isSeeking: Bool = false
+    @Published var isShuffled: Bool = false
+    @Published var repeatMode: RepeatMode = .off
+
+    var hasNextTrack: Bool {
+        !playNextQueue.isEmpty ||
+        currentIndex + 1 < queue.count ||
+        !userQueue.isEmpty ||
+        repeatMode == .all
+    }
+
+    var displayTitle: String {
+        currentSong?.title ?? tr("No Track", "Kein Titel")
+    }
+
+    private var shuffleSnapshot: ShuffleSnapshot?
+
+    private struct ShuffleSnapshot {
+        var playNextQueue: [Song]
+        var queue: [Song]
+        var currentIndex: Int
+        var userQueue: [Song]
+    }
 
     private var player: AVPlayer?
     private var playerItem: AVPlayerItem?
@@ -36,6 +74,8 @@ class AudioPlayerService: ObservableObject {
         static let playNextQueue  = "shelv_player_playNextQueue"
         static let userQueue      = "shelv_player_userQueue"
         static let resumeTime     = "shelv_player_resumeTime"
+        static let isShuffled     = "shelv_player_isShuffled"
+        static let repeatMode     = "shelv_player_repeatMode"
     }
 
     private init() {
@@ -63,6 +103,8 @@ class AudioPlayerService: ObservableObject {
         if let data = try? encoder.encode(playNextQueue) { defaults.set(data, forKey: StateKey.playNextQueue) }
         if let data = try? encoder.encode(userQueue) { defaults.set(data, forKey: StateKey.userQueue) }
         defaults.set(currentTime, forKey: StateKey.resumeTime)
+        defaults.set(isShuffled, forKey: StateKey.isShuffled)
+        defaults.set(repeatMode.rawValue, forKey: StateKey.repeatMode)
     }
 
     private func clearSavedState() {
@@ -72,6 +114,8 @@ class AudioPlayerService: ObservableObject {
         defaults.removeObject(forKey: StateKey.playNextQueue)
         defaults.removeObject(forKey: StateKey.userQueue)
         defaults.removeObject(forKey: StateKey.resumeTime)
+        defaults.removeObject(forKey: StateKey.isShuffled)
+        defaults.removeObject(forKey: StateKey.repeatMode)
     }
 
     private func restoreState() {
@@ -98,6 +142,11 @@ class AudioPlayerService: ObservableObject {
         if let uqData = defaults.data(forKey: StateKey.userQueue),
            let uq = try? decoder.decode([Song].self, from: uqData) {
             userQueue = uq
+        }
+
+        isShuffled = defaults.bool(forKey: StateKey.isShuffled)
+        if let raw = defaults.string(forKey: StateKey.repeatMode) {
+            repeatMode = RepeatMode(rawValue: raw) ?? .off
         }
 
         updateNowPlayingInfo(song: currentSong!)
@@ -159,7 +208,7 @@ class AudioPlayerService: ObservableObject {
 
         cc.nextTrackCommand.isEnabled = true
         cc.nextTrackCommand.addTarget { [weak self] _ in
-            self?.next(); return .success
+            self?.next(triggeredByUser: true); return .success
         }
 
         cc.previousTrackCommand.isEnabled = true
@@ -176,6 +225,8 @@ class AudioPlayerService: ObservableObject {
     }
 
     func play(songs: [Song], startIndex: Int = 0) {
+        shuffleSnapshot = nil
+        isShuffled = false
         queue = songs
         currentIndex = startIndex
         playNextQueue = []
@@ -187,6 +238,8 @@ class AudioPlayerService: ObservableObject {
     }
 
     func playSong(_ song: Song) {
+        shuffleSnapshot = nil
+        isShuffled = false
         queue = [song]
         currentIndex = 0
         playNextQueue = []
@@ -276,7 +329,17 @@ class AudioPlayerService: ObservableObject {
     }
 
     @objc private func itemDidFinishPlaying() {
-        DispatchQueue.main.async { self.next() }
+        DispatchQueue.main.async { self.next(triggeredByUser: false) }
+    }
+
+    private func clearPlaybackState() {
+        teardownPlayer()
+        isPlaying = false
+        isBuffering = false
+        currentSong = nil
+        currentTime = 0
+        duration = 0
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
     }
 
     private func teardownPlayer() {
@@ -319,22 +382,90 @@ class AudioPlayerService: ObservableObject {
     }
 
     func stop() {
-        teardownPlayer()
-        isPlaying = false
-        isBuffering = false
-        currentSong = nil
+        clearPlaybackState()
         queue = []
         currentIndex = 0
         playNextQueue = []
         userQueue = []
-        currentTime = 0
-        duration = 0
         resumeTime = 0
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+        shuffleSnapshot = nil
+        isShuffled = false
         clearSavedState()
     }
 
-    func next() {
+    func playShuffled(songs: [Song]) {
+        guard !songs.isEmpty else { return }
+        let startIndex = Int.random(in: 0..<songs.count)
+        play(songs: songs, startIndex: startIndex)
+        toggleShuffle()
+    }
+
+    func toggleShuffle() {
+        if isShuffled {
+            guard let snap = shuffleSnapshot else {
+                isShuffled = false
+                saveState()
+                return
+            }
+
+            let remainingInQueue: Set<String> = currentIndex + 1 < queue.count
+                ? Set(queue[(currentIndex + 1)...].map { $0.id }) : []
+            let remainingInPN = Set(playNextQueue.map { $0.id })
+            let remainingInUQ = Set(userQueue.map { $0.id })
+            let allRemaining = remainingInQueue.union(remainingInPN).union(remainingInUQ)
+
+            let currentPlayingId = currentSong?.id
+            let restoredQueueSuffix = snap.queue.filter { song in
+                song.id != currentPlayingId && allRemaining.contains(song.id)
+            }
+
+            if let cid = currentPlayingId,
+               let snapIdx = snap.queue.firstIndex(where: { $0.id == cid }) {
+                queue = [snap.queue[snapIdx]] + restoredQueueSuffix
+            } else {
+                queue = (currentSong.map { [$0] } ?? []) + restoredQueueSuffix
+            }
+            currentIndex = 0
+
+            let snapPNIds = Set(snap.playNextQueue.map { $0.id })
+            let snapUQIds = Set(snap.userQueue.map { $0.id })
+            let addedPN = playNextQueue.filter { !snapPNIds.contains($0.id) }
+            let addedUQ = userQueue.filter { !snapUQIds.contains($0.id) }
+            playNextQueue = snap.playNextQueue.filter { allRemaining.contains($0.id) } + addedPN
+            userQueue = snap.userQueue.filter { allRemaining.contains($0.id) } + addedUQ
+
+            shuffleSnapshot = nil
+            isShuffled = false
+
+        } else {
+            shuffleSnapshot = ShuffleSnapshot(
+                playNextQueue: playNextQueue,
+                queue: queue,
+                currentIndex: currentIndex,
+                userQueue: userQueue
+            )
+
+            let upcoming = playNextQueue
+                + Array(queue[(currentIndex + 1)...])
+                + userQueue
+            let shuffled = upcoming.shuffled()
+
+            queue.replaceSubrange((currentIndex + 1)..., with: shuffled)
+            playNextQueue = []
+            userQueue = []
+            isShuffled = true
+        }
+        saveState()
+    }
+
+    func next(triggeredByUser: Bool = false) {
+        if repeatMode == .one && !triggeredByUser && playNextQueue.isEmpty {
+            guard let song = currentSong else { return }
+            startPlayback(song: song)
+            saveState()
+            return
+        }
+
         if !playNextQueue.isEmpty {
             let song = playNextQueue.removeFirst()
             startPlayback(song: song)
@@ -348,6 +479,12 @@ class AudioPlayerService: ObservableObject {
                 queue.append(song)
                 currentIndex = queue.count - 1
                 startPlayback(song: song)
+            } else if repeatMode == .all && !queue.isEmpty {
+                if isShuffled { queue = queue.shuffled() }
+                currentIndex = 0
+                startPlayback(song: queue[0])
+            } else {
+                clearPlaybackState()
             }
         }
         saveState()
@@ -386,34 +523,27 @@ class AudioPlayerService: ObservableObject {
 
     func jumpToPlayNext(at index: Int) {
         guard playNextQueue.indices.contains(index) else { return }
-        if index > 0 { playNextQueue.removeFirst(index) }
-        let song = playNextQueue.removeFirst()
+        let song = playNextQueue.remove(at: index)
         startPlayback(song: song)
         saveState()
     }
 
     func jumpToQueueTrack(at queueIndex: Int) {
         guard queue.indices.contains(queueIndex), queueIndex > currentIndex else { return }
-        let song = queue[queueIndex]
-        playNextQueue = []
-        let rangeStart = currentIndex + 1
-        if rangeStart < queueIndex {
-            queue.removeSubrange(rangeStart..<queueIndex)
-        }
-        currentIndex = rangeStart
+        let song = queue.remove(at: queueIndex)
+        let insertAt = currentIndex + 1
+        queue.insert(song, at: insertAt)
+        currentIndex = insertAt
         startPlayback(song: song)
         saveState()
     }
 
     func jumpToUserQueue(at index: Int) {
         guard userQueue.indices.contains(index) else { return }
-        playNextQueue = []
-        let start = currentIndex + 1
-        if start < queue.count { queue.removeSubrange(start...) }
-        if index > 0 { userQueue.removeFirst(index) }
-        let song = userQueue.removeFirst()
-        queue.append(song)
-        currentIndex = queue.count - 1
+        let song = userQueue.remove(at: index)
+        let insertAt = currentIndex + 1
+        queue.insert(song, at: insertAt)
+        currentIndex = insertAt
         startPlayback(song: song)
         saveState()
     }
@@ -421,12 +551,22 @@ class AudioPlayerService: ObservableObject {
     private let maxQueueSize = 200
 
     func addPlayNext(_ song: Song) {
-        playNextQueue.append(song)
+        shuffleSnapshot?.playNextQueue.append(song)
+        if isShuffled {
+            insertRandomlyInShuffledQueue(song)
+        } else {
+            playNextQueue.append(song)
+        }
         saveState()
     }
 
     func addPlayNext(_ songs: [Song]) {
-        playNextQueue.append(contentsOf: songs)
+        shuffleSnapshot?.playNextQueue.append(contentsOf: songs)
+        if isShuffled {
+            songs.forEach { insertRandomlyInShuffledQueue($0) }
+        } else {
+            playNextQueue.append(contentsOf: songs)
+        }
         saveState()
     }
 
@@ -437,16 +577,33 @@ class AudioPlayerService: ObservableObject {
     }
 
     func addToQueue(_ song: Song) {
-        guard userQueue.count < maxQueueSize else { return }
-        userQueue.append(song)
+        shuffleSnapshot?.userQueue.append(song)
+        if isShuffled {
+            insertRandomlyInShuffledQueue(song)
+        } else {
+            guard userQueue.count < maxQueueSize else { return }
+            userQueue.append(song)
+        }
         saveState()
     }
 
     func addToQueue(_ songs: [Song]) {
-        let slots = maxQueueSize - userQueue.count
-        guard slots > 0 else { return }
-        userQueue.append(contentsOf: songs.prefix(slots))
+        shuffleSnapshot?.userQueue.append(contentsOf: songs)
+        if isShuffled {
+            songs.forEach { insertRandomlyInShuffledQueue($0) }
+        } else {
+            let slots = maxQueueSize - userQueue.count
+            guard slots > 0 else { return }
+            userQueue.append(contentsOf: songs.prefix(slots))
+        }
         saveState()
+    }
+
+    private func insertRandomlyInShuffledQueue(_ song: Song) {
+        let lo = currentIndex + 1
+        let hi = queue.count
+        let pos = lo <= hi ? Int.random(in: lo...hi) : hi
+        queue.insert(song, at: pos)
     }
 
     func removeFromUserQueue(at index: Int) {

@@ -50,7 +50,7 @@ struct AlbumCardView: View {
                 Task {
                     guard let detail = try? await SubsonicAPIService.shared.getAlbum(id: album.id),
                           let songs = detail.song, !songs.isEmpty else { return }
-                    await MainActor.run { AudioPlayerService.shared.play(songs: songs.shuffled(), startIndex: 0) }
+                    await MainActor.run { AudioPlayerService.shared.playShuffled(songs: songs) }
                 }
             } label: {
                 Label(tr("Shuffle", "Zufällig"), systemImage: "shuffle")

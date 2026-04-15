@@ -75,7 +75,7 @@ struct PlayerView: View {
 
                 // Titel / Künstler / Album
                 VStack(spacing: isPad ? 6 : 8) {
-                    Text(player.currentSong?.title ?? tr("Unknown Title", "Titel unbekannt"))
+                    Text(player.displayTitle)
                         .font(isPad ? .title : .title2).bold()
                         .multilineTextAlignment(.center)
                         .lineLimit(2)
@@ -152,14 +152,21 @@ struct PlayerView: View {
                 .padding(.horizontal, isPad ? 48 : 32)
                 .padding(.bottom, isPad ? 20 : 28)
 
-                // Prev / Play / Next
-                HStack(spacing: isPad ? 40 : 32) {
-                    Button { player.previous() } label: {
-                        Image(systemName: "backward.fill")
-                            .font(.system(size: isPad ? 28 : 24))
-                            .foregroundStyle(.primary)
-                    }
-                    .buttonStyle(.plain)
+                // Shuffle / Prev / Play / Next / Repeat
+                HStack(spacing: isPad ? 28 : 22) {
+                    Image(systemName: "shuffle")
+                        .font(.system(size: isPad ? 22 : 19, weight: .semibold))
+                        .foregroundStyle(player.isShuffled ? accentColor : .secondary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                        .onTapGesture { player.toggleShuffle() }
+
+                    Image(systemName: "backward.fill")
+                        .font(.system(size: isPad ? 28 : 24))
+                        .foregroundStyle(.primary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                        .onTapGesture { player.previous() }
 
                     Button { player.togglePlayPause() } label: {
                         ZStack {
@@ -180,12 +187,20 @@ struct PlayerView: View {
                     }
                     .buttonStyle(.plain)
 
-                    Button { player.next() } label: {
-                        Image(systemName: "forward.fill")
-                            .font(.system(size: isPad ? 28 : 24))
-                            .foregroundStyle(.primary)
-                    }
-                    .buttonStyle(.plain)
+                    Image(systemName: "forward.fill")
+                        .font(.system(size: isPad ? 28 : 24))
+                        .foregroundStyle(player.hasNextTrack ? Color.primary : Color.secondary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                        .onTapGesture { player.next(triggeredByUser: true) }
+                        .disabled(!player.hasNextTrack)
+
+                    Image(systemName: player.repeatMode.systemImage)
+                        .font(.system(size: isPad ? 22 : 19, weight: .semibold))
+                        .foregroundStyle(player.repeatMode != .off ? accentColor : .secondary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                        .onTapGesture { player.repeatMode = player.repeatMode.toggled }
                 }
                 .padding(.bottom, isPad ? 36 : 20)
 

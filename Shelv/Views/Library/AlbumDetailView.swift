@@ -172,11 +172,12 @@ struct AlbumDetailView: View {
                         .background(accentColor)
                         .clipShape(RoundedRectangle(cornerRadius: 14))
                 }
+                .buttonStyle(.plain)
                 .disabled(detail == nil)
 
                 Button {
-                    if let songs = detail?.song, !songs.isEmpty {
-                        player.play(songs: songs.shuffled(), startIndex: 0)
+                    if let songs = detail?.song {
+                        player.playShuffled(songs: songs)
                     }
                 } label: {
                     Label(tr("Shuffle", "Zufällig"), systemImage: "shuffle")
@@ -187,6 +188,7 @@ struct AlbumDetailView: View {
                         .background(accentColor.opacity(0.15))
                         .clipShape(RoundedRectangle(cornerRadius: 14))
                 }
+                .buttonStyle(.plain)
                 .disabled(detail == nil)
             }
             .padding(.horizontal)

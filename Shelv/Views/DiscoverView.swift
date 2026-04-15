@@ -175,7 +175,7 @@ struct DiscoverView: View {
             case "frequent": songs = try await SubsonicAPIService.shared.getFrequentSongs(limit: 50)
             default:         songs = try await SubsonicAPIService.shared.getRecentSongs(limit: 50)
             }
-            player.play(songs: songs.shuffled(), startIndex: 0)
+            player.playShuffled(songs: songs)
         } catch {
             errorMessage = error.localizedDescription
             showError = true

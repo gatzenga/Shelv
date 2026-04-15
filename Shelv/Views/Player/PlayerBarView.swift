@@ -27,7 +27,7 @@ struct PlayerBarView: View {
                         .foregroundStyle(.orange)
                         .lineLimit(1)
                 } else {
-                    Text(player.currentSong?.title ?? "")
+                    Text(player.displayTitle)
                         .font(.subheadline).bold()
                         .foregroundStyle(.primary)
                         .lineLimit(1)
@@ -64,14 +64,15 @@ struct PlayerBarView: View {
             .buttonStyle(.plain)
 
             Button {
-                player.next()
+                player.next(triggeredByUser: true)
             } label: {
                 Image(systemName: "forward.fill")
                     .font(.callout)
-                    .foregroundStyle(accentColor)
+                    .foregroundStyle(player.hasNextTrack ? accentColor : Color.secondary)
                     .frame(width: 32, height: 32)
             }
             .buttonStyle(.plain)
+            .disabled(!player.hasNextTrack)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
