@@ -566,8 +566,6 @@ class AudioPlayerService: ObservableObject {
         saveState()
     }
 
-    private let maxQueueSize = 200
-
     func addPlayNext(_ song: Song) {
         shuffleSnapshot?.playNextQueue.append(song)
         if isShuffled {
@@ -599,7 +597,6 @@ class AudioPlayerService: ObservableObject {
         if isShuffled {
             insertRandomlyInShuffledQueue(song)
         } else {
-            guard userQueue.count < maxQueueSize else { return }
             userQueue.append(song)
         }
         saveState()
@@ -610,9 +607,7 @@ class AudioPlayerService: ObservableObject {
         if isShuffled {
             songs.forEach { insertRandomlyInShuffledQueue($0) }
         } else {
-            let slots = maxQueueSize - userQueue.count
-            guard slots > 0 else { return }
-            userQueue.append(contentsOf: songs.prefix(slots))
+            userQueue.append(contentsOf: songs)
         }
         saveState()
     }

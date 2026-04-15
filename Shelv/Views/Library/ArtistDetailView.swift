@@ -19,13 +19,44 @@ struct ArtistDetailView: View {
                 HStack(spacing: 16) {
                     AlbumArtView(coverArtId: artist.coverArt, size: 300, cornerRadius: 50)
                         .frame(width: 100, height: 100)
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: 8) {
                         Text(artist.name)
                             .font(.title2).bold()
                         if let count = artist.albumCount {
                             Text("\(count) \(tr("Albums", "Alben"))")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
+                        }
+                        HStack(spacing: 10) {
+                            Button {
+                                guard let albums = detail?.album, !albums.isEmpty else { return }
+                                Task {
+                                    let songs = await fetchAllSongs(from: albums)
+                                    guard !songs.isEmpty else { return }
+                                    player.play(songs: songs, startIndex: 0)
+                                }
+                            } label: {
+                                Label(tr("Play", "Abspielen"), systemImage: "play.fill")
+                                    .font(.subheadline.weight(.semibold))
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(accentColor)
+                            .disabled(isLoading)
+
+                            Button {
+                                guard let albums = detail?.album, !albums.isEmpty else { return }
+                                Task {
+                                    let songs = await fetchAllSongs(from: albums)
+                                    guard !songs.isEmpty else { return }
+                                    player.playShuffled(songs: songs)
+                                }
+                            } label: {
+                                Label(tr("Shuffle", "Zufällig"), systemImage: "shuffle")
+                                    .font(.subheadline.weight(.semibold))
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(accentColor)
+                            .disabled(isLoading)
                         }
                     }
                 }
@@ -80,5 +111,20 @@ struct ArtistDetailView: View {
             detail = try await SubsonicAPIService.shared.getArtist(id: artist.id)
         } catch {}
         isLoading = false
+    }
+
+    private func fetchAllSongs(from albums: [Album]) async -> [Song] {
+        await withTaskGroup(of: [Song].self) { group in
+            for album in albums {
+                group.addTask {
+                    guard let detail = try? await SubsonicAPIService.shared.getAlbum(id: album.id),
+                          let songs = detail.song else { return [] }
+                    return songs
+                }
+            }
+            var all: [Song] = []
+            for await albumSongs in group { all.append(contentsOf: albumSongs) }
+            return all
+        }
     }
 }

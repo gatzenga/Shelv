@@ -35,6 +35,7 @@ struct LibraryView: View {
     @State private var albumScrollID: String?
     @State private var artistScrollID: String?
     @State private var navigateToAlbum: Album?
+    @State private var navigateToArtist: Artist?
 
     private let columns = [GridItem(.adaptive(minimum: 150, maximum: 200), spacing: 14)]
 
@@ -85,6 +86,24 @@ struct LibraryView: View {
         return letters.map { ($0, dict[$0]!) }
     }
 
+    // Lädt alle Songs eines Künstlers parallel via withTaskGroup
+    private func fetchArtistSongs(_ artist: Artist) async -> [Song] {
+        guard let artistDetail = try? await SubsonicAPIService.shared.getArtist(id: artist.id),
+              let albums = artistDetail.album, !albums.isEmpty else { return [] }
+        return await withTaskGroup(of: [Song].self) { group in
+            for album in albums {
+                group.addTask {
+                    guard let detail = try? await SubsonicAPIService.shared.getAlbum(id: album.id),
+                          let songs = detail.song else { return [] }
+                    return songs
+                }
+            }
+            var all: [Song] = []
+            for await albumSongs in group { all.append(contentsOf: albumSongs) }
+            return all
+        }
+    }
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -123,12 +142,14 @@ struct LibraryView: View {
                 case .artists:
                     if libraryStore.isLoadingArtists && libraryStore.artists.isEmpty {
                         Spacer(); ProgressView(); Spacer()
-                    } else {
+                    } else if artistIsGrid {
                         indexedScrollView(
                             letters: artistGroups.map(\.letter),
                             idPrefix: "art",
                             scrollID: $artistScrollID
-                        ) { artistContent }
+                        ) { artistGridContent }
+                    } else {
+                        artistListContent
                     }
                 case .favorites:
                     if libraryStore.isLoadingStarred && libraryStore.starredSongs.isEmpty && libraryStore.starredAlbums.isEmpty && libraryStore.starredArtists.isEmpty {
@@ -217,6 +238,8 @@ struct LibraryView: View {
         }
     }
 
+    // MARK: - Album Content
+
     @ViewBuilder
     private var albumContent: some View {
         if albumIsGrid {
@@ -243,7 +266,6 @@ struct LibraryView: View {
             ScrollViewReader { proxy in
                 List {
                     ForEach(albumGroups, id: \.letter) { group in
-                        // Buchstabe als normale Zeile — volle Kontrolle über Spacing
                         Text(group.letter)
                             .font(.title2.weight(.bold))
                             .foregroundStyle(.secondary)
@@ -324,72 +346,112 @@ struct LibraryView: View {
         }
     }
 
-    private func albumListRow(_ album: Album) -> some View {
-        HStack(spacing: 12) {
-            AlbumArtView(coverArtId: album.coverArt, size: 150, cornerRadius: 8)
-                .frame(width: 52, height: 52)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(album.name)
-                    .font(.body)
-                    .lineLimit(1)
-                    .foregroundStyle(.primary)
-                HStack(spacing: 6) {
-                    if let artist = album.artist {
-                        Text(artist).font(.caption).foregroundStyle(.secondary)
+    // MARK: - Artist Content
+
+    @ViewBuilder
+    private var artistGridContent: some View {
+        LazyVStack(alignment: .leading, spacing: 0, pinnedViews: .sectionHeaders) {
+            ForEach(artistGroups, id: \.letter) { group in
+                Section {
+                    LazyVGrid(columns: columns, spacing: 14) {
+                        ForEach(group.items) { artist in
+                            NavigationLink(destination: ArtistDetailView(artist: artist)) {
+                                artistGridCell(artist)
+                            }
+                            .buttonStyle(.plain)
+                            .contextMenu { artistContextMenuItems(artist) }
+                        }
                     }
-                    if let year = album.year {
-                        Text("·").font(.caption).foregroundStyle(.tertiary)
-                        Text(String(year)).font(.caption).foregroundStyle(.tertiary)
-                    }
+                    .padding(.horizontal)
+                    .padding(.bottom, 14)
+                } header: {
+                    letterHeader(group.letter, id: "art-\(group.letter)")
                 }
             }
-            Spacer()
-            Image(systemName: "chevron.right")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
+            bottomSpacer
         }
-        .padding(.horizontal)
-        .padding(.vertical, 9)
     }
 
     @ViewBuilder
-    private var artistContent: some View {
-        if artistIsGrid {
-            LazyVStack(alignment: .leading, spacing: 0, pinnedViews: .sectionHeaders) {
+    private var artistListContent: some View {
+        ScrollViewReader { proxy in
+            List {
                 ForEach(artistGroups, id: \.letter) { group in
-                    Section {
-                        LazyVGrid(columns: columns, spacing: 14) {
-                            ForEach(group.items) { artist in
-                                NavigationLink(destination: ArtistDetailView(artist: artist)) {
-                                    artistGridCell(artist)
+                    Text(group.letter)
+                        .font(.title2.weight(.bold))
+                        .foregroundStyle(.secondary)
+                        .id("art-\(group.letter)")
+                        .listRowInsets(EdgeInsets(top: 20, leading: 16, bottom: 4, trailing: 0))
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+                    ForEach(group.items) { artist in
+                        Button { navigateToArtist = artist } label: {
+                            artistListRow(artist)
+                        }
+                        .buttonStyle(.plain)
+                        .contextMenu { artistContextMenuItems(artist) }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button {
+                                Task {
+                                    let songs = await fetchArtistSongs(artist)
+                                    guard !songs.isEmpty else { return }
+                                    await MainActor.run { player.addToQueue(songs) }
                                 }
-                                .buttonStyle(.plain)
+                            } label: { Image(systemName: "text.badge.plus") }
+                            .tint(accentColor)
+                            Button {
+                                Task {
+                                    let songs = await fetchArtistSongs(artist)
+                                    guard !songs.isEmpty else { return }
+                                    await MainActor.run { player.addPlayNext(songs) }
+                                }
+                            } label: { Image(systemName: "text.insert") }
+                            .tint(.orange)
+                        }
+                        .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                            if enableFavorites {
+                                Button {
+                                    Task { await libraryStore.toggleStarArtist(artist) }
+                                } label: {
+                                    Image(systemName: libraryStore.isArtistStarred(artist) ? "heart.slash" : "heart.fill")
+                                }
+                                .tint(.pink)
+                            }
+                            if enablePlaylists {
+                                Button {
+                                    Task {
+                                        let songs = await fetchArtistSongs(artist)
+                                        guard !songs.isEmpty else { return }
+                                        let ids = songs.map(\.id)
+                                        await MainActor.run {
+                                            NotificationCenter.default.post(name: .addSongsToPlaylist, object: ids)
+                                        }
+                                    }
+                                } label: { Image(systemName: "music.note.list") }
+                                .tint(.purple)
                             }
                         }
-                        .padding(.horizontal)
-                        .padding(.bottom, 14)
-                    } header: {
-                        letterHeader(group.letter, id: "art-\(group.letter)")
                     }
                 }
-                bottomSpacer
+                Color.clear
+                    .frame(height: player.currentSong != nil ? 90 : 16)
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
             }
-        } else {
-            LazyVStack(alignment: .leading, spacing: 0, pinnedViews: .sectionHeaders) {
-                ForEach(artistGroups, id: \.letter) { group in
-                    Section {
-                        ForEach(group.items) { artist in
-                            NavigationLink(destination: ArtistDetailView(artist: artist)) {
-                                artistListRow(artist)
-                            }
-                            .buttonStyle(.plain)
-                            Divider().padding(.leading, 76)
-                        }
-                    } header: {
-                        letterHeader(group.letter, id: "art-\(group.letter)")
-                    }
+            .listStyle(.plain)
+            .scrollIndicators(.hidden)
+            .contentMargins(.trailing, 20, for: .scrollContent)
+            .overlay(alignment: .trailing) {
+                AlphabetIndexBar(letters: artistGroups.map(\.letter)) { letter in
+                    proxy.scrollTo("art-\(letter)", anchor: .top)
                 }
-                bottomSpacer
+                .frame(width: 14)
+                .padding(.vertical, 16)
+                .padding(.trailing, 2)
+            }
+            .navigationDestination(item: $navigateToArtist) { artist in
+                ArtistDetailView(artist: artist)
             }
         }
     }
@@ -428,6 +490,8 @@ struct LibraryView: View {
         .padding(.horizontal)
         .padding(.vertical, 9)
     }
+
+    // MARK: - Favorites Content
 
     @ViewBuilder
     private var favoritesContent: some View {
@@ -548,41 +612,7 @@ struct LibraryView: View {
         }
     }
 
-    private func sectionHeader(_ title: String) -> some View {
-        Text(title)
-            .font(.title3.bold())
-            .padding(.horizontal)
-            .padding(.top, 20)
-            .padding(.bottom, 6)
-            .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func favArtistRow(_ artist: Artist) -> some View {
-        HStack(spacing: 12) {
-            AlbumArtView(coverArtId: artist.coverArt, size: 150, cornerRadius: 999)
-                .frame(width: 44, height: 44)
-            Text(artist.name).font(.body).lineLimit(1)
-            Spacer()
-        }
-        .padding(.vertical, 4)
-        .contentShape(Rectangle())
-    }
-
-    private func favAlbumRow(_ album: Album) -> some View {
-        HStack(spacing: 12) {
-            AlbumArtView(coverArtId: album.coverArt, size: 150, cornerRadius: 8)
-                .frame(width: 44, height: 44)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(album.name).font(.body).lineLimit(1)
-                if let artist = album.artist {
-                    Text(artist).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                }
-            }
-            Spacer()
-        }
-        .padding(.vertical, 4)
-        .contentShape(Rectangle())
-    }
+    // MARK: - Context Menus
 
     @ViewBuilder
     private func albumContextMenuItems(_ album: Album) -> some View {
@@ -649,7 +679,73 @@ struct LibraryView: View {
         }
     }
 
-    // Row für List-Kontext (kein manuelles horizontal padding, kein Chevron)
+    @ViewBuilder
+    private func artistContextMenuItems(_ artist: Artist) -> some View {
+        Button {
+            Task {
+                let songs = await fetchArtistSongs(artist)
+                guard !songs.isEmpty else { return }
+                await MainActor.run { player.play(songs: songs, startIndex: 0) }
+            }
+        } label: { Label(tr("Play", "Abspielen"), systemImage: "play.fill") }
+
+        Button {
+            Task {
+                let songs = await fetchArtistSongs(artist)
+                guard !songs.isEmpty else { return }
+                await MainActor.run { player.playShuffled(songs: songs) }
+            }
+        } label: { Label(tr("Shuffle", "Zufällig"), systemImage: "shuffle") }
+
+        Divider()
+
+        Button {
+            Task {
+                let songs = await fetchArtistSongs(artist)
+                guard !songs.isEmpty else { return }
+                await MainActor.run { player.addPlayNext(songs) }
+            }
+        } label: { Label(tr("Play Next", "Als nächstes"), systemImage: "text.insert") }
+
+        Button {
+            Task {
+                let songs = await fetchArtistSongs(artist)
+                guard !songs.isEmpty else { return }
+                await MainActor.run { player.addToQueue(songs) }
+            }
+        } label: { Label(tr("Add to Queue", "Zur Warteschlange"), systemImage: "text.badge.plus") }
+
+        if enableFavorites || enablePlaylists {
+            Divider()
+            if enableFavorites {
+                Button {
+                    Task { await libraryStore.toggleStarArtist(artist) }
+                } label: {
+                    Label(
+                        libraryStore.isArtistStarred(artist)
+                            ? tr("Unfavorite", "Aus Favoriten entfernen")
+                            : tr("Favorite", "Zu Favoriten"),
+                        systemImage: libraryStore.isArtistStarred(artist) ? "heart.slash" : "heart"
+                    )
+                }
+            }
+            if enablePlaylists {
+                Button {
+                    Task {
+                        let songs = await fetchArtistSongs(artist)
+                        guard !songs.isEmpty else { return }
+                        let ids = songs.map(\.id)
+                        await MainActor.run {
+                            NotificationCenter.default.post(name: .addSongsToPlaylist, object: ids)
+                        }
+                    }
+                } label: { Label(tr("Add to Playlist…", "Zur Playlist hinzufügen…"), systemImage: "music.note.list") }
+            }
+        }
+    }
+
+    // MARK: - Row Helpers
+
     private func albumListRowContent(_ album: Album) -> some View {
         HStack(spacing: 12) {
             AlbumArtView(coverArtId: album.coverArt, size: 150, cornerRadius: 8)
@@ -665,6 +761,33 @@ struct LibraryView: View {
                         Text("·").font(.caption).foregroundStyle(.tertiary)
                         Text(String(year)).font(.caption).foregroundStyle(.tertiary)
                     }
+                }
+            }
+            Spacer()
+        }
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+    }
+
+    private func favArtistRow(_ artist: Artist) -> some View {
+        HStack(spacing: 12) {
+            AlbumArtView(coverArtId: artist.coverArt, size: 150, cornerRadius: 999)
+                .frame(width: 44, height: 44)
+            Text(artist.name).font(.body).lineLimit(1)
+            Spacer()
+        }
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+    }
+
+    private func favAlbumRow(_ album: Album) -> some View {
+        HStack(spacing: 12) {
+            AlbumArtView(coverArtId: album.coverArt, size: 150, cornerRadius: 8)
+                .frame(width: 44, height: 44)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(album.name).font(.body).lineLimit(1)
+                if let artist = album.artist {
+                    Text(artist).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
             }
             Spacer()
@@ -691,6 +814,8 @@ struct LibraryView: View {
         .padding(.vertical, 4)
         .contentShape(Rectangle())
     }
+
+    // MARK: - Toolbar Items
 
     private var viewToggleButton: some View {
         Button {
@@ -719,6 +844,8 @@ struct LibraryView: View {
             Image(systemName: "arrow.up.arrow.down")
         }
     }
+
+    // MARK: - Shared Helpers
 
     private func letterHeader(_ letter: String, id: String) -> some View {
         Text(letter)
