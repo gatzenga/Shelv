@@ -16,6 +16,14 @@ struct AlbumDetailView: View {
     @State private var errorMessage: String?
     @State private var queueToast = false
     @State private var toastMessage = ""
+    @State private var artistDestination: Artist?
+    @State private var isResolvingArtist = false
+    @State private var artistResolveTask: Task<Void, Never>?
+
+    private var currentArtist: Artist? {
+        guard let name = album.artist else { return nil }
+        return libraryStore.artists.first { $0.name == name }
+    }
 
     var body: some View {
         List {
@@ -182,6 +190,10 @@ struct AlbumDetailView: View {
         .task {
             await loadDetail()
         }
+        .onDisappear {
+            artistResolveTask?.cancel()
+            artistResolveTask = nil
+        }
     }
 
     private var headerView: some View {
@@ -195,9 +207,20 @@ struct AlbumDetailView: View {
                     .font(.title2).bold()
                     .multilineTextAlignment(.center)
                 if let artist = album.artist {
-                    Text(artist)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                    Button { resolveArtist(artist) } label: {
+                        HStack(spacing: 6) {
+                            Text(artist)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            if isResolvingArtist {
+                                ProgressView().scaleEffect(0.7)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .navigationDestination(item: $artistDestination) { artist in
+                        ArtistDetailView(artist: artist)
+                    }
                 }
                 HStack(spacing: 12) {
                     if let year = album.year  { Text(String(year)) }
@@ -271,6 +294,26 @@ struct AlbumDetailView: View {
         Task {
             try? await Task.sleep(for: .seconds(2))
             withAnimation { queueToast = false }
+        }
+    }
+
+    private func resolveArtist(_ artistName: String) {
+        if let found = currentArtist {
+            artistDestination = found
+        } else if !isResolvingArtist {
+            isResolvingArtist = true
+            artistResolveTask?.cancel()
+            artistResolveTask = Task {
+                defer { isResolvingArtist = false }
+                guard !Task.isCancelled else { return }
+                if let result = try? await SubsonicAPIService.shared.search(query: artistName),
+                   let found = result.artist?.first(where: {
+                       $0.name.lowercased() == artistName.lowercased()
+                   }) ?? result.artist?.first {
+                    guard !Task.isCancelled else { return }
+                    artistDestination = found
+                }
+            }
         }
     }
 
