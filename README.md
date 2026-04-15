@@ -4,7 +4,7 @@
 
 # Shelv
 
-A native iOS and iPadOS client for [Navidrome](https://www.navidrome.org/) and Subsonic-compatible music servers, built with SwiftUI.
+A native iOS and iPadOS client for [Navidrome](https://www.navidrome.org/) and Subsonic-compatible music servers, built with SwiftUI. Also available as a [native macOS app](https://github.com/gatzenga/Shelv-Desktop).
 
 ![Platform](https://img.shields.io/badge/platform-iOS%20%7C%20iPadOS-lightgrey)
 ![Swift](https://img.shields.io/badge/swift-5.9-orange)
