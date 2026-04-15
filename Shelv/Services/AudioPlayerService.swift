@@ -267,7 +267,7 @@ class AudioPlayerService: ObservableObject {
         playerItem?.preferredForwardBufferDuration = 10
 
         player = AVPlayer(playerItem: playerItem)
-        player?.allowsExternalPlayback = true
+        player?.allowsExternalPlayback = false
         player?.automaticallyWaitsToMinimizeStalling = true
 
         statusObserver = playerItem?.observe(\.status, options: [.new]) { [weak self] item, _ in
@@ -324,6 +324,7 @@ class AudioPlayerService: ObservableObject {
         }
 
         isPlaying = true
+        MPNowPlayingInfoCenter.default().playbackState = .playing
         updateNowPlayingInfo(song: song)
         Task { await SubsonicAPIService.shared.scrobble(songId: song.id) }
     }
@@ -361,6 +362,7 @@ class AudioPlayerService: ObservableObject {
         player?.pause()
         isPlaying = false
         updateNowPlayingPlaybackRate(0)
+        MPNowPlayingInfoCenter.default().playbackState = .paused
         saveState()
     }
 
@@ -374,6 +376,7 @@ class AudioPlayerService: ObservableObject {
             player?.play()
             isPlaying = true
             updateNowPlayingPlaybackRate(1)
+            MPNowPlayingInfoCenter.default().playbackState = .playing
         }
     }
 
@@ -403,9 +406,6 @@ class AudioPlayerService: ObservableObject {
         currentIndex = 0
         isShuffled = true
 
-        // Snapshot speichert die gemischte Reihenfolge als Referenz —
-        // beim Deaktivieren von Shuffle bleibt diese zufällige Reihenfolge erhalten
-        // (kein Zurückspringen auf die originale Album-Reihenfolge, kein Titelverlust).
         shuffleSnapshot = ShuffleSnapshot(
             playNextQueue: [],
             queue: shuffled,
@@ -672,6 +672,7 @@ class AudioPlayerService: ObservableObject {
         info[MPNowPlayingInfoPropertyPlaybackRate] = 0.0
         info[MPNowPlayingInfoPropertyDefaultPlaybackRate] = 1.0
         info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = currentTime
+        info[MPNowPlayingInfoPropertyMediaType] = MPNowPlayingInfoMediaType.audio.rawValue as NSNumber
         if let d = song.duration { info[MPMediaItemPropertyPlaybackDuration] = Double(d) }
 
         if let artId = song.coverArt, let artURL = SubsonicAPIService.shared.coverArtURL(for: artId, size: 600) {
