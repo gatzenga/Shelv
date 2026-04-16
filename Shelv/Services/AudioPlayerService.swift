@@ -3,6 +3,7 @@ import MediaPlayer
 import Combine
 import UIKit
 import SwiftUI
+import Network
 
 enum RepeatMode: String {
     case off, all, one
@@ -25,6 +26,7 @@ class AudioPlayerService: ObservableObject {
 
     @Published var isPlaying: Bool = false
     @Published var isBuffering: Bool = false
+    @Published var isNetworkAvailable: Bool = true
     @Published var currentSong: Song?
     @Published var queue: [Song] = []
     @Published var currentIndex: Int = 0
@@ -65,6 +67,9 @@ class AudioPlayerService: ObservableObject {
     private var currentArtwork: MPMediaItemArtwork?
     private var artworkTask: URLSessionDataTask?
 
+    private var networkMonitor = NWPathMonitor()
+    private let networkMonitorQueue = DispatchQueue(label: "shelv.network", qos: .utility)
+
     private var pendingSeekTime: Double = 0
     private var resumeTime: Double = 0
 
@@ -82,6 +87,7 @@ class AudioPlayerService: ObservableObject {
         setupAudioSession()
         setupRemoteControls()
         setupRouteObserver()
+        setupNetworkMonitor()
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(appDidEnterBackground),
@@ -89,6 +95,15 @@ class AudioPlayerService: ObservableObject {
             object: nil
         )
         restoreState()
+    }
+
+    private func setupNetworkMonitor() {
+        networkMonitor.pathUpdateHandler = { [weak self] path in
+            DispatchQueue.main.async {
+                self?.isNetworkAvailable = path.status == .satisfied
+            }
+        }
+        networkMonitor.start(queue: networkMonitorQueue)
     }
 
     @objc private func appDidEnterBackground() {
@@ -321,6 +336,7 @@ class AudioPlayerService: ObservableObject {
             if let d = self.playerItem?.duration, d.isNumeric, d.seconds > 0 {
                 self.duration = d.seconds
             }
+            self.updateNowPlayingTime(time.seconds)
         }
 
         MPNowPlayingInfoCenter.default().playbackState = .playing

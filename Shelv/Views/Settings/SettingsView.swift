@@ -145,6 +145,7 @@ struct SettingsView: View {
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
             }
+            .tint(accentColor)
             .listStyle(.insetGrouped)
             .scrollIndicators(.hidden)
             .navigationTitle(tr("Settings", "Einstellungen"))

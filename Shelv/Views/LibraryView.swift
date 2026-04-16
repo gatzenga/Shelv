@@ -44,16 +44,10 @@ struct LibraryView: View {
     @State private var toastMessage = ""
     @State private var showToast = false
     @State private var toastTask: Task<Void, Never>?
+    @State private var albumGroups: [(letter: String, items: [Album])] = []
+    @State private var artistGroups: [(letter: String, items: [Artist])] = []
 
     private let columns = [GridItem(.adaptive(minimum: 150, maximum: 200), spacing: 14)]
-
-    private var albumGroups: [(letter: String, items: [Album])] {
-        groupByFirstLetter(libraryStore.albums, name: \.name)
-    }
-
-    private var artistGroups: [(letter: String, items: [Artist])] {
-        groupByFirstLetter(libraryStore.artists, name: \.name)
-    }
 
     private static let sortArticles: [String] = [
         "the ", "an ", "a ",
@@ -94,130 +88,161 @@ struct LibraryView: View {
         return letters.map { ($0, dict[$0]!) }
     }
 
+    @ViewBuilder
+    private var segmentContent: some View {
+        switch segment {
+        case .albums:
+            if libraryStore.isLoadingAlbums && libraryStore.albums.isEmpty {
+                Spacer()
+                ProgressView()
+                Spacer()
+            } else if albumIsGrid {
+                indexedScrollView(
+                    letters: albumGroups.map(\.letter),
+                    idPrefix: "alb",
+                    scrollID: $albumScrollID
+                ) { albumContent }
+            } else {
+                albumContent
+            }
+        case .artists:
+            if libraryStore.isLoadingArtists && libraryStore.artists.isEmpty {
+                Spacer()
+                ProgressView()
+                Spacer()
+            } else if artistIsGrid {
+                indexedScrollView(
+                    letters: artistGroups.map(\.letter),
+                    idPrefix: "art",
+                    scrollID: $artistScrollID
+                ) { artistGridContent }
+            } else {
+                artistListContent
+            }
+        case .favorites:
+            let isLoadingFavorites = libraryStore.isLoadingStarred
+                && libraryStore.starredSongs.isEmpty
+                && libraryStore.starredAlbums.isEmpty
+                && libraryStore.starredArtists.isEmpty
+            if isLoadingFavorites {
+                Spacer()
+                ProgressView()
+                Spacer()
+            } else {
+                favoritesContent
+            }
+        }
+    }
+
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                if enableFavorites {
-                    Picker("", selection: $segment) {
-                        Text(tr("Albums", "Alben")).tag(LibrarySegment.albums)
-                        Text(tr("Artists", "Künstler")).tag(LibrarySegment.artists)
-                        Text(tr("Favorites", "Favoriten")).tag(LibrarySegment.favorites)
-                    }
-                    .pickerStyle(.segmented)
-                    .padding(.horizontal)
-                    .padding(.vertical, 10)
-                } else {
-                    Picker("", selection: $segment) {
-                        Text(tr("Albums", "Alben")).tag(LibrarySegment.albums)
-                        Text(tr("Artists", "Künstler")).tag(LibrarySegment.artists)
-                    }
-                    .pickerStyle(.segmented)
-                    .padding(.horizontal)
-                    .padding(.vertical, 10)
-                }
+            mainContent
+        }
+    }
 
-                switch segment {
+    @ViewBuilder
+    private var segmentPicker: some View {
+        Picker("", selection: $segment) {
+            Text(tr("Albums", "Alben")).tag(LibrarySegment.albums)
+            Text(tr("Artists", "Künstler")).tag(LibrarySegment.artists)
+            if enableFavorites {
+                Text(tr("Favorites", "Favoriten")).tag(LibrarySegment.favorites)
+            }
+        }
+        .pickerStyle(.segmented)
+        .padding(.horizontal)
+        .padding(.vertical, 10)
+    }
+
+    @ToolbarContentBuilder
+    private var libraryToolbar: some ToolbarContent {
+        if segment == .albums {
+            ToolbarItem(placement: .topBarTrailing) { sortMenu }
+        }
+        if segment != .favorites {
+            ToolbarItem(placement: .topBarTrailing) { viewToggleButton }
+        }
+    }
+
+    private var stackBase: some View {
+        VStack(spacing: 0) {
+            segmentPicker
+            segmentContent
+        }
+        .navigationTitle(tr("Library", "Bibliothek"))
+        .toolbar { libraryToolbar }
+        .task(id: libraryStore.reloadID) {
+            switch segment {
+            case .albums:    await libraryStore.loadAlbums(sortBy: sortOption.rawValue)
+            case .artists:   await libraryStore.loadArtists()
+            case .favorites: await libraryStore.loadStarred()
+            }
+        }
+        .onChange(of: segment) { _, newSegment in
+            Task {
+                switch newSegment {
                 case .albums:
-                    if libraryStore.isLoadingAlbums && libraryStore.albums.isEmpty {
-                        Spacer(); ProgressView(); Spacer()
-                    } else if albumIsGrid {
-                        indexedScrollView(
-                            letters: albumGroups.map(\.letter),
-                            idPrefix: "alb",
-                            scrollID: $albumScrollID
-                        ) { albumContent }
-                    } else {
-                        albumContent
-                    }
+                    if libraryStore.albums.isEmpty { await libraryStore.loadAlbums() }
                 case .artists:
-                    if libraryStore.isLoadingArtists && libraryStore.artists.isEmpty {
-                        Spacer(); ProgressView(); Spacer()
-                    } else if artistIsGrid {
-                        indexedScrollView(
-                            letters: artistGroups.map(\.letter),
-                            idPrefix: "art",
-                            scrollID: $artistScrollID
-                        ) { artistGridContent }
-                    } else {
-                        artistListContent
-                    }
+                    if libraryStore.artists.isEmpty { await libraryStore.loadArtists() }
                 case .favorites:
-                    if libraryStore.isLoadingStarred && libraryStore.starredSongs.isEmpty && libraryStore.starredAlbums.isEmpty && libraryStore.starredArtists.isEmpty {
-                        Spacer(); ProgressView(); Spacer()
-                    } else {
-                        favoritesContent
-                    }
+                    await libraryStore.loadStarred()
                 }
             }
-            .navigationTitle(tr("Library", "Bibliothek"))
-            .toolbar {
-                if segment == .albums {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        sortMenu
-                    }
-                }
-                if segment != .favorites {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        viewToggleButton
-                    }
-                }
+        }
+    }
+
+    private var stackContent: some View {
+        stackBase
+        .onAppear {
+            albumGroups = groupByFirstLetter(libraryStore.albums, name: \.name)
+            artistGroups = groupByFirstLetter(libraryStore.artists, name: \.name)
+        }
+        .onChange(of: libraryStore.albums) { _, albums in
+            albumGroups = groupByFirstLetter(albums, name: \.name)
+        }
+        .onChange(of: libraryStore.artists) { _, artists in
+            artistGroups = groupByFirstLetter(artists, name: \.name)
+        }
+        .onChange(of: enableFavorites) { _, enabled in
+            let isFavorites = segment == .favorites
+            if !enabled && isFavorites { segment = .albums }
+        }
+    }
+
+    private var mainContent: some View {
+        stackContent
+        .refreshable {
+            switch segment {
+            case .albums:    await libraryStore.loadAlbums(sortBy: sortOption.rawValue)
+            case .artists:   await libraryStore.loadArtists()
+            case .favorites: await libraryStore.loadStarred()
             }
-            .task(id: libraryStore.reloadID) {
-                switch segment {
-                case .albums: await libraryStore.loadAlbums(sortBy: sortOption.rawValue)
-                case .artists: await libraryStore.loadArtists()
-                case .favorites: await libraryStore.loadStarred()
-                }
+        }
+        .overlay(alignment: .top) {
+            if showToast {
+                toastBanner
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .zIndex(1)
             }
-            .onChange(of: segment) { _, newSegment in
-                Task {
-                    switch newSegment {
-                    case .albums:
-                        if libraryStore.albums.isEmpty { await libraryStore.loadAlbums() }
-                    case .artists:
-                        if libraryStore.artists.isEmpty { await libraryStore.loadArtists() }
-                    case .favorites:
-                        await libraryStore.loadStarred()
-                    }
-                }
+        }
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: showToast)
+        .onChange(of: libraryStore.errorMessage) { _, msg in
+            if let msg {
+                errorMessage = msg
+                showError = true
+                libraryStore.errorMessage = nil
             }
-            .onChange(of: enableFavorites) { _, enabled in
-                if !enabled && segment == .favorites {
-                    segment = .albums
-                }
-            }
-            .refreshable {
-                switch segment {
-                case .albums:   await libraryStore.loadAlbums(sortBy: sortOption.rawValue)
-                case .artists:  await libraryStore.loadArtists()
-                case .favorites: await libraryStore.loadStarred()
-                }
-            }
-            .overlay(alignment: .top) {
-                if showToast {
-                    toastBanner
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                        .zIndex(1)
-                }
-            }
-            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: showToast)
-            .onChange(of: libraryStore.errorMessage) { _, msg in
-                if let msg {
-                    errorMessage = msg
-                    showError = true
-                    libraryStore.errorMessage = nil
-                }
-            }
-            .alert(tr("Error", "Fehler"), isPresented: $showError, presenting: errorMessage) { _ in
-                Button(tr("OK", "OK"), role: .cancel) {}
-            } message: { msg in
-                Text(msg)
-            }
-            .sheet(isPresented: $showAddToPlaylist) {
-                AddToPlaylistSheet(songIds: playlistSongIds)
-                    .environmentObject(libraryStore)
-                    .tint(accentColor)
-            }
+        }
+        .alert(tr("Error", "Fehler"), isPresented: $showError, presenting: errorMessage) { _ in
+            Button(tr("OK", "OK"), role: .cancel) {}
+        } message: { msg in
+            Text(msg)
+        }
+        .sheet(isPresented: $showAddToPlaylist) {
+            AddToPlaylistSheet(songIds: playlistSongIds)
+                .environmentObject(libraryStore)
+                .tint(accentColor)
         }
     }
 

@@ -13,6 +13,8 @@ struct Song: Identifiable, Codable, Hashable {
     let genre: String?
     let playCount: Int?
     let starred: Date?
+    let suffix: String?
+    let bitRate: Int?
 
     var durationFormatted: String {
         guard let d = duration else { return "" }
@@ -22,6 +24,6 @@ struct Song: Identifiable, Codable, Hashable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, title, artist, album, albumId, track, duration, coverArt, year, genre, playCount, starred
+        case id, title, artist, album, albumId, track, duration, coverArt, year, genre, playCount, starred, suffix, bitRate
     }
 }

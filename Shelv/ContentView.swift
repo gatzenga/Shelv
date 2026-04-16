@@ -74,6 +74,7 @@ struct ContentView: View {
                 .presentationSizing(.page)
                 .presentationBackgroundInteraction(.enabled)
                 .presentationCornerRadius(24)
+                .presentationDragIndicator(.visible)
                 .tint(accentColor)
         }
         .sheet(isPresented: $showAddServer) {

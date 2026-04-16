@@ -51,25 +51,6 @@ struct PlayerView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // Drag-Indikator + Dismiss
-                VStack(spacing: isPad ? 10 : 12) {
-                    Capsule()
-                        .fill(Color.gray.opacity(0.4))
-                        .frame(width: 40, height: 5)
-
-                    Button { dismiss() } label: {
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 20, weight: .semibold))
-                            .foregroundStyle(accentColor)
-                            .frame(width: 44, height: 44)
-                            .background(Color.gray.opacity(colorScheme == .dark ? 0.3 : 0.1))
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(.top, 10)
-                .padding(.bottom, isPad ? 0 : 4)
-
                 Spacer()
 
                 // Album Art
@@ -101,11 +82,12 @@ struct PlayerView: View {
                         .buttonStyle(.plain)
                         .navigationDestination(item: $artistDestination) { artist in
                             ArtistDetailView(artist: artist)
+                                .toolbarBackground(.visible, for: .navigationBar)
                         }
                     }
 
                     if let album = currentAlbum {
-                        NavigationLink(destination: AlbumDetailView(album: album)) {
+                        NavigationLink(destination: AlbumDetailView(album: album).toolbarBackground(.visible, for: .navigationBar)) {
                             Text(album.name)
                                 .font(.callout)
                                 .foregroundStyle(.tertiary)
@@ -153,9 +135,16 @@ struct PlayerView: View {
                             .foregroundStyle(.secondary)
                             .monospacedDigit()
                     }
+
+                    if let badge = audioBadge {
+                        Text(badge)
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                            .padding(.top, 2)
+                    }
                 }
                 .padding(.horizontal, isPad ? 48 : 32)
-                .padding(.bottom, isPad ? 20 : 28)
+                .padding(.bottom, isPad ? 24 : 32)
 
                 // Shuffle / Prev / Play / Next / Repeat
                 HStack(spacing: isPad ? 28 : 22) {
@@ -209,7 +198,6 @@ struct PlayerView: View {
                 }
                 .padding(.bottom, isPad ? 36 : 20)
 
-                // AirPlay / Favorite / Queue / Stop
                 HStack {
                     ZStack {
                         Circle()
@@ -295,7 +283,19 @@ struct PlayerView: View {
             }
             .background(Color(UIColor.systemBackground))
             .ignoresSafeArea(edges: .bottom)
-            .toolbar(.hidden, for: .navigationBar)
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { dismiss() } label: {
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(.primary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
             .onChange(of: player.currentSong?.id) { _, _ in
                 artistDestination = nil
                 artistResolveTask?.cancel()
@@ -340,6 +340,14 @@ struct PlayerView: View {
                 }
             }
         }
+    }
+
+    private var audioBadge: String? {
+        guard let song = player.currentSong else { return nil }
+        var parts: [String] = []
+        if let suffix = song.suffix { parts.append(suffix.uppercased()) }
+        if let bitRate = song.bitRate { parts.append("\(bitRate) kbps") }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     private func formatTime(_ seconds: Double) -> String {

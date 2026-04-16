@@ -11,9 +11,9 @@ struct PlayerBarView: View {
                 .frame(width: 48, height: 48)
                 .shadow(color: .black.opacity(0.1), radius: 2, y: 1)
                 .overlay(alignment: .bottomTrailing) {
-                    if player.isBuffering || player.isPlaying {
+                    if player.isBuffering || player.isPlaying || !player.isNetworkAvailable {
                         Circle()
-                            .fill(player.isBuffering ? Color.orange : Color.green)
+                            .fill(!player.isNetworkAvailable ? Color.red : player.isBuffering ? Color.orange : Color.green)
                             .frame(width: 12, height: 12)
                             .overlay(Circle().stroke(Color(UIColor.systemBackground), lineWidth: 2))
                             .offset(x: 3, y: 3)

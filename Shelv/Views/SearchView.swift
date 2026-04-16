@@ -148,6 +148,7 @@ struct SearchView: View {
                                                 .foregroundStyle(.secondary)
                                                 .monospacedDigit()
                                         }
+                                        .contentShape(Rectangle())
                                     }
                                     .buttonStyle(.plain)
                                     .contextMenu {

@@ -61,6 +61,12 @@ struct PlaylistDetailView: View {
                                     Image(systemName: "line.3.horizontal")
                                         .foregroundStyle(.secondary)
                                         .frame(width: 24)
+                                } else if player.currentSong?.id == song.id {
+                                    Image(systemName: "waveform")
+                                        .font(.subheadline)
+                                        .foregroundStyle(accentColor)
+                                        .frame(width: 28, alignment: .trailing)
+                                        .symbolEffect(.variableColor.iterative.reversing, isActive: player.isPlaying)
                                 } else {
                                     Text("\(index + 1)")
                                         .font(.subheadline)
@@ -88,6 +94,7 @@ struct PlaylistDetailView: View {
                                     .monospacedDigit()
                             }
                             .padding(.vertical, 2)
+                            .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {

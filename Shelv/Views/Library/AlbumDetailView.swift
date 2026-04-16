@@ -48,10 +48,18 @@ struct AlbumDetailView: View {
                             player.play(songs: songs, startIndex: index)
                         } label: {
                             HStack(spacing: 14) {
-                                Text("\(song.track ?? (index + 1))")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                                    .frame(width: 28, alignment: .trailing)
+                                if player.currentSong?.id == song.id {
+                                    Image(systemName: "waveform")
+                                        .font(.subheadline)
+                                        .foregroundStyle(accentColor)
+                                        .frame(width: 28, alignment: .trailing)
+                                        .symbolEffect(.variableColor.iterative.reversing, isActive: player.isPlaying)
+                                } else {
+                                    Text("\(song.track ?? (index + 1))")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                        .frame(width: 28, alignment: .trailing)
+                                }
                                 Text(song.title)
                                     .font(.body)
                                     .foregroundStyle(.primary)
@@ -63,6 +71,7 @@ struct AlbumDetailView: View {
                                     .monospacedDigit()
                             }
                             .padding(.vertical, 4)
+                            .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
