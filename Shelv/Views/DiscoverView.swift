@@ -81,9 +81,14 @@ struct DiscoverView: View {
             .refreshable {
                 await libraryStore.loadDiscover()
             }
-            .task {
-                if libraryStore.recentlyAdded.isEmpty {
-                    await libraryStore.loadDiscover()
+            .task(id: libraryStore.reloadID) {
+                await libraryStore.loadDiscover()
+            }
+            .onChange(of: libraryStore.errorMessage) { _, msg in
+                if let msg {
+                    errorMessage = msg
+                    showError = true
+                    libraryStore.errorMessage = nil
                 }
             }
             .alert(tr("Error", "Fehler"), isPresented: $showError, presenting: errorMessage) { _ in

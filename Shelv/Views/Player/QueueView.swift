@@ -37,10 +37,9 @@ struct QueueView: View {
                 } else {
                     List {
                         if player.isShuffled {
-                            // Im Shuffle-Modus: nur eine gemischte Queue, keine separaten Abschnitte
                             if !remainingAlbumTracks.isEmpty {
                                 Section(tr("Shuffled Queue", "Gemischte Warteschlange")) {
-                                    ForEach(remainingAlbumTracks, id: \.song.id) { item in
+                                    ForEach(Array(remainingAlbumTracks.enumerated()), id: \.offset) { _, item in
                                         songRow(item.song)
                                             .onTapGesture {
                                                 guard editMode == .inactive else { return }
@@ -60,7 +59,7 @@ struct QueueView: View {
                         } else {
                             if !player.playNextQueue.isEmpty {
                                 Section(tr("Play Next", "Als nächstes")) {
-                                    ForEach(Array(player.playNextQueue.enumerated()), id: \.element.id) { index, song in
+                                    ForEach(Array(player.playNextQueue.enumerated()), id: \.offset) { index, song in
                                         songRow(song)
                                             .onTapGesture {
                                                 guard editMode == .inactive else { return }
@@ -78,8 +77,8 @@ struct QueueView: View {
                             }
 
                             if !remainingAlbumTracks.isEmpty {
-                                Section(tr("From this album", "Dieses Album")) {
-                                    ForEach(remainingAlbumTracks, id: \.song.id) { item in
+                                Section(tr("Up Next", "Nächste Titel")) {
+                                    ForEach(Array(remainingAlbumTracks.enumerated()), id: \.offset) { _, item in
                                         songRow(item.song)
                                             .onTapGesture {
                                                 guard editMode == .inactive else { return }
@@ -99,7 +98,7 @@ struct QueueView: View {
 
                             if !player.userQueue.isEmpty {
                                 Section(tr("Next in Queue", "Nächste in Warteschlange")) {
-                                    ForEach(Array(player.userQueue.enumerated()), id: \.element.id) { index, song in
+                                    ForEach(Array(player.userQueue.enumerated()), id: \.offset) { index, song in
                                         songRow(song)
                                             .onTapGesture {
                                                 guard editMode == .inactive else { return }

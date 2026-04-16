@@ -49,7 +49,6 @@ struct ContentView: View {
                 }
                 .tint(accentColor)
 
-                // iPhone: PlayerBar über TabBar, Abstand dynamisch via GeometryReader
                 if player.currentSong != nil && !isRegularWidth {
                     VStack {
                         Spacer()
@@ -62,7 +61,6 @@ struct ContentView: View {
                 }
             }
         }
-        // iPad: safeAreaInset schiebt TabBar automatisch hoch, PlayerBar sitzt ganz unten
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if player.currentSong != nil && isRegularWidth {
                 playerBar
@@ -97,6 +95,7 @@ struct ContentView: View {
             }
         }
         .onChange(of: serverStore.activeServerID) { _, _ in
+            player.stop()
             libraryStore.resetInMemory()
         }
         .onAppear {

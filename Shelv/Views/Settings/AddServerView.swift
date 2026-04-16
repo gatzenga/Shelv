@@ -95,23 +95,14 @@ struct AddServerView: View {
         testResult = nil
         testSuccess = false
 
-        let originalServer = SubsonicAPIService.shared.activeServer
-        let originalPassword = SubsonicAPIService.shared.activePassword
-
         let tempServer = SubsonicServer(name: name, baseURL: baseURL, username: username)
-        SubsonicAPIService.shared.activeServer = tempServer
-        SubsonicAPIService.shared.activePassword = password
-
         do {
-            try await SubsonicAPIService.shared.ping()
+            _ = try await SubsonicAPIService.shared.ping(server: tempServer, password: password)
             testSuccess = true
             testResult = tr("Connection successful!", "Verbindung erfolgreich!")
         } catch {
             testResult = error.localizedDescription
         }
-
-        SubsonicAPIService.shared.activeServer = originalServer
-        SubsonicAPIService.shared.activePassword = originalPassword
 
         isTesting = false
     }

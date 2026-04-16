@@ -15,17 +15,17 @@ class LibraryStore: ObservableObject {
     @Published var isLoadingDiscover: Bool = false
     @Published var errorMessage: String?
 
-    // Favoriten
     @Published var starredSongs: [Song] = []
     @Published var starredAlbums: [Album] = []
     @Published var starredArtists: [Artist] = []
     @Published var isLoadingStarred: Bool = false
 
-    // Playlists
     @Published var playlists: [Playlist] = []
     @Published var isLoadingPlaylists: Bool = false
 
     var isLoading: Bool { isLoadingAlbums || isLoadingArtists || isLoadingDiscover }
+
+    @Published var reloadID = UUID()
 
     private let api = SubsonicAPIService.shared
 
@@ -101,7 +101,6 @@ class LibraryStore: ObservableObject {
             var result: [Album] = []
             var offset = 0
             let pageSize = 500
-            // "year" ist keine API-Sortieroption (byYear braucht fromYear/toYear) → alphabetisch laden, dann client-seitig sortieren
             let apiSortBy = sortBy == "year" ? "alphabeticalByName" : sortBy
             while true {
                 let page = try await api.getAllAlbums(size: pageSize, offset: offset, sortBy: apiSortBy)
@@ -147,7 +146,6 @@ class LibraryStore: ObservableObject {
         isLoadingArtists = false
     }
 
-    /// Leert nur den Arbeitsspeicher — Disk-Cache bleibt erhalten (für stale-while-revalidate beim nächsten Laden).
     func resetInMemory() {
         albums = []
         artists = []
@@ -159,15 +157,30 @@ class LibraryStore: ObservableObject {
         starredAlbums = []
         starredArtists = []
         playlists = []
+        reloadID = UUID()
     }
 
-    /// Leert Speicher und Disk-Cache vollständig (z. B. beim Abmelden).
     func clearCache() {
         resetInMemory()
         try? FileManager.default.removeItem(at: Self.libraryDir)
     }
 
-    // MARK: - Favoriten
+    func fetchAllSongs(for artist: Artist) async -> [Song] {
+        guard let artistDetail = try? await api.getArtist(id: artist.id),
+              let albums = artistDetail.album, !albums.isEmpty else { return [] }
+        return await withTaskGroup(of: [Song].self) { group in
+            for album in albums {
+                group.addTask {
+                    guard let detail = try? await SubsonicAPIService.shared.getAlbum(id: album.id),
+                          let songs = detail.song else { return [] }
+                    return songs
+                }
+            }
+            var all: [Song] = []
+            for await albumSongs in group { all.append(contentsOf: albumSongs) }
+            return all
+        }
+    }
 
     func loadStarred() async {
         if let id = activeServerID {
@@ -217,7 +230,6 @@ class LibraryStore: ObservableObject {
             }
             if let id = activeServerID { save(starredSongs, name: "starred_songs", serverID: id) }
         } catch {
-            // Rollback
             if isStarred {
                 starredSongs.insert(song, at: 0)
             } else {
@@ -286,8 +298,6 @@ class LibraryStore: ObservableObject {
     func isArtistStarred(_ artist: Artist) -> Bool {
         starredArtists.contains(where: { $0.id == artist.id })
     }
-
-    // MARK: - Playlists
 
     func loadPlaylists() async {
         if let id = activeServerID {

@@ -149,7 +149,7 @@ class AudioPlayerService: ObservableObject {
             repeatMode = RepeatMode(rawValue: raw) ?? .off
         }
 
-        updateNowPlayingInfo(song: currentSong!)
+        if let song = currentSong { updateNowPlayingInfo(song: song) }
     }
 
     private func setupAudioSession() {
@@ -323,7 +323,6 @@ class AudioPlayerService: ObservableObject {
             }
         }
 
-        isPlaying = true
         MPNowPlayingInfoCenter.default().playbackState = .playing
         updateNowPlayingInfo(song: song)
         Task { await SubsonicAPIService.shared.scrobble(songId: song.id) }
@@ -522,9 +521,10 @@ class AudioPlayerService: ObservableObject {
 
     func seek(to seconds: Double) {
         currentTime = seconds
+        guard let player else { return }
         isSeeking = true
         let time = CMTime(seconds: seconds, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
-        player?.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
+        player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
             DispatchQueue.main.async {
                 self?.isSeeking = false
                 self?.updateNowPlayingTime(seconds)
@@ -640,8 +640,9 @@ class AudioPlayerService: ObservableObject {
     func clearUpcomingPlayQueue() {
         playNextQueue = []
         let start = currentIndex + 1
-        guard start < queue.count else { return }
-        queue.removeSubrange(start...)
+        if start < queue.count {
+            queue.removeSubrange(start...)
+        }
         saveState()
     }
 
@@ -669,7 +670,7 @@ class AudioPlayerService: ObservableObject {
         info[MPMediaItemPropertyArtist] = song.artist ?? ""
         info[MPMediaItemPropertyAlbumTitle] = song.album ?? ""
         info[MPNowPlayingInfoPropertyIsLiveStream] = false
-        info[MPNowPlayingInfoPropertyPlaybackRate] = 0.0
+        info[MPNowPlayingInfoPropertyPlaybackRate] = 1.0
         info[MPNowPlayingInfoPropertyDefaultPlaybackRate] = 1.0
         info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = currentTime
         info[MPNowPlayingInfoPropertyMediaType] = MPNowPlayingInfoMediaType.audio.rawValue as NSNumber

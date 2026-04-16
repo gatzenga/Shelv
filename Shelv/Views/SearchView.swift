@@ -14,6 +14,11 @@ struct SearchView: View {
     @State private var searchTask: Task<Void, Never>?
     @State private var showAddToPlaylist = false
     @State private var playlistSongIds: [String] = []
+    @State private var errorMessage: String?
+    @State private var showError = false
+    @State private var toastMessage = ""
+    @State private var showToast = false
+    @State private var toastTask: Task<Void, Never>?
 
     private var hasResults: Bool {
         !(result?.artist ?? []).isEmpty ||
@@ -57,6 +62,22 @@ struct SearchView: View {
                                                 .font(.body)
                                         }
                                     }
+                                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                        Button { queueArtist(artist) } label: { Image(systemName: "text.badge.plus") }
+                                            .tint(accentColor)
+                                        Button { playNextArtist(artist) } label: { Image(systemName: "text.insert") }
+                                            .tint(.orange)
+                                    }
+                                    .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                                        if enableFavorites {
+                                            Button {
+                                                Task { await libraryStore.toggleStarArtist(artist) }
+                                            } label: {
+                                                Image(systemName: libraryStore.isArtistStarred(artist) ? "heart.slash" : "heart.fill")
+                                            }
+                                            .tint(.pink)
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -79,22 +100,10 @@ struct SearchView: View {
                                         }
                                     }
                                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                        Button {
-                                            Task {
-                                                guard let detail = try? await SubsonicAPIService.shared.getAlbum(id: album.id),
-                                                      let songs = detail.song, !songs.isEmpty else { return }
-                                                await MainActor.run { player.addToQueue(songs) }
-                                            }
-                                        } label: { Image(systemName: "text.badge.plus") }
-                                        .tint(accentColor)
-                                        Button {
-                                            Task {
-                                                guard let detail = try? await SubsonicAPIService.shared.getAlbum(id: album.id),
-                                                      let songs = detail.song, !songs.isEmpty else { return }
-                                                await MainActor.run { player.addPlayNext(songs) }
-                                            }
-                                        } label: { Image(systemName: "text.insert") }
-                                        .tint(.orange)
+                                        Button { queueAlbum(album) } label: { Image(systemName: "text.badge.plus") }
+                                            .tint(accentColor)
+                                        Button { playNextAlbum(album) } label: { Image(systemName: "text.insert") }
+                                            .tint(.orange)
                                     }
                                     .swipeActions(edge: .leading, allowsFullSwipe: false) {
                                         if enableFavorites {
@@ -106,18 +115,8 @@ struct SearchView: View {
                                             .tint(.pink)
                                         }
                                         if enablePlaylists {
-                                            Button {
-                                                Task {
-                                                    guard let detail = try? await SubsonicAPIService.shared.getAlbum(id: album.id),
-                                                          let songs = detail.song, !songs.isEmpty else { return }
-                                                    let ids = songs.map(\.id)
-                                                    await MainActor.run {
-                                                        playlistSongIds = ids
-                                                        showAddToPlaylist = true
-                                                    }
-                                                }
-                                            } label: { Image(systemName: "music.note.list") }
-                                            .tint(.purple)
+                                            Button { addAlbumToPlaylist(album) } label: { Image(systemName: "music.note.list") }
+                                                .tint(.purple)
                                         }
                                     }
                                 }
@@ -151,18 +150,52 @@ struct SearchView: View {
                                         }
                                     }
                                     .buttonStyle(.plain)
+                                    .contextMenu {
+                                        Button {
+                                            player.playSong(song)
+                                        } label: { Label(tr("Play", "Abspielen"), systemImage: "play.fill") }
+                                        Button {
+                                            player.addPlayNext(song)
+                                            toast(tr("Plays Next", "Wird als nächstes gespielt"))
+                                        } label: { Label(tr("Play Next", "Als nächstes"), systemImage: "text.insert") }
+                                        Button {
+                                            player.addToQueue(song)
+                                            toast(tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+                                        } label: { Label(tr("Add to Queue", "Zur Warteschlange"), systemImage: "text.badge.plus") }
+                                        if enableFavorites || enablePlaylists {
+                                            Divider()
+                                            if enableFavorites {
+                                                Button {
+                                                    Task { await libraryStore.toggleStarSong(song) }
+                                                } label: {
+                                                    Label(
+                                                        libraryStore.isSongStarred(song)
+                                                            ? tr("Unfavorite", "Aus Favoriten entfernen")
+                                                            : tr("Favorite", "Zu Favoriten"),
+                                                        systemImage: libraryStore.isSongStarred(song) ? "heart.slash" : "heart"
+                                                    )
+                                                }
+                                            }
+                                            if enablePlaylists {
+                                                Button {
+                                                    playlistSongIds = [song.id]
+                                                    showAddToPlaylist = true
+                                                } label: {
+                                                    Label(tr("Add to Playlist…", "Zur Playlist hinzufügen…"), systemImage: "music.note.list")
+                                                }
+                                            }
+                                        }
+                                    }
                                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                         Button {
                                             player.addToQueue(song)
-                                        } label: {
-                                            Image(systemName: "text.badge.plus")
-                                        }
+                                            toast(tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+                                        } label: { Image(systemName: "text.badge.plus") }
                                         .tint(accentColor)
                                         Button {
                                             player.addPlayNext(song)
-                                        } label: {
-                                            Image(systemName: "text.insert")
-                                        }
+                                            toast(tr("Plays Next", "Wird als nächstes gespielt"))
+                                        } label: { Image(systemName: "text.insert") }
                                         .tint(.orange)
                                     }
                                     .swipeActions(edge: .leading, allowsFullSwipe: false) {
@@ -216,6 +249,19 @@ struct SearchView: View {
                     await performSearch(query: newValue)
                 }
             }
+            .overlay(alignment: .top) {
+                if showToast {
+                    toastBanner
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .zIndex(1)
+                }
+            }
+            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: showToast)
+            .alert(tr("Error", "Fehler"), isPresented: $showError, presenting: errorMessage) { _ in
+                Button(tr("OK", "OK"), role: .cancel) {}
+            } message: { msg in
+                Text(msg)
+            }
             .sheet(isPresented: $showAddToPlaylist) {
                 AddToPlaylistSheet(songIds: playlistSongIds)
                     .environmentObject(libraryStore)
@@ -224,11 +270,107 @@ struct SearchView: View {
         }
     }
 
+    private var toastBanner: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(.white)
+            Text(toastMessage)
+                .font(.subheadline).bold()
+                .foregroundStyle(.white)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .background(accentColor)
+        .clipShape(Capsule())
+        .shadow(color: .black.opacity(0.2), radius: 8, y: 4)
+        .padding(.top, 8)
+        .allowsHitTesting(false)
+    }
+
+    private func toast(_ message: String) {
+        toastMessage = message
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { showToast = true }
+        toastTask?.cancel()
+        toastTask = Task {
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            withAnimation { showToast = false }
+        }
+    }
+
+    private func fetchAlbumSongs(_ album: Album) async throws -> [Song] {
+        let detail = try await SubsonicAPIService.shared.getAlbum(id: album.id)
+        return detail.song ?? []
+    }
+
+    private func queueArtist(_ artist: Artist) {
+        Task {
+            let songs = await libraryStore.fetchAllSongs(for: artist)
+            guard !songs.isEmpty else { return }
+            player.addToQueue(songs)
+            toast(tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+        }
+    }
+
+    private func playNextArtist(_ artist: Artist) {
+        Task {
+            let songs = await libraryStore.fetchAllSongs(for: artist)
+            guard !songs.isEmpty else { return }
+            player.addPlayNext(songs)
+            toast(tr("Plays Next", "Wird als nächstes gespielt"))
+        }
+    }
+
+    private func queueAlbum(_ album: Album) {
+        Task {
+            do {
+                let songs = try await fetchAlbumSongs(album)
+                guard !songs.isEmpty else { return }
+                player.addToQueue(songs)
+                toast(tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+            } catch {
+                errorMessage = error.localizedDescription
+                showError = true
+            }
+        }
+    }
+
+    private func playNextAlbum(_ album: Album) {
+        Task {
+            do {
+                let songs = try await fetchAlbumSongs(album)
+                guard !songs.isEmpty else { return }
+                player.addPlayNext(songs)
+                toast(tr("Plays Next", "Wird als nächstes gespielt"))
+            } catch {
+                errorMessage = error.localizedDescription
+                showError = true
+            }
+        }
+    }
+
+    private func addAlbumToPlaylist(_ album: Album) {
+        Task {
+            do {
+                let songs = try await fetchAlbumSongs(album)
+                guard !songs.isEmpty else { return }
+                playlistSongIds = songs.map(\.id)
+                showAddToPlaylist = true
+            } catch {
+                errorMessage = error.localizedDescription
+                showError = true
+            }
+        }
+    }
+
     private func performSearch(query: String) async {
         isSearching = true
         do {
             result = try await SubsonicAPIService.shared.search(query: query)
-        } catch {}
+        } catch {
+            errorMessage = error.localizedDescription
+            showError = true
+        }
         isSearching = false
     }
 }

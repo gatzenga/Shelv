@@ -11,6 +11,7 @@ struct PlaylistDetailView: View {
     @AppStorage("enablePlaylists") private var enablePlaylists = true
 
     @State private var songs: [Song] = []
+    @State private var displayName: String = ""
     @State private var showAddToPlaylist = false
     @State private var playlistSongIds: [String] = []
     @State private var isLoading = true
@@ -20,6 +21,8 @@ struct PlaylistDetailView: View {
     @State private var showDeleteConfirm = false
     @State private var toastMessage = ""
     @State private var showToast = false
+    @State private var toastIsError = false
+    @State private var toastTask: Task<Void, Never>?
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -151,7 +154,7 @@ struct PlaylistDetailView: View {
         .listStyle(.plain)
         .scrollIndicators(.hidden)
         .environment(\.editMode, .constant(isEditMode ? .active : .inactive))
-        .navigationTitle(playlist.name)
+        .navigationTitle(displayName.isEmpty ? playlist.name : displayName)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -234,7 +237,10 @@ struct PlaylistDetailView: View {
             Button(tr("Save", "Speichern")) {
                 let name = newName.trimmingCharacters(in: .whitespaces)
                 guard !name.isEmpty else { return }
-                Task { await libraryStore.renamePlaylist(playlist, newName: name) }
+                Task {
+                    await libraryStore.renamePlaylist(playlist, newName: name)
+                    displayName = name
+                }
             }
             .bold()
             Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
@@ -256,6 +262,7 @@ struct PlaylistDetailView: View {
                 .tint(accentColor)
         }
         .task {
+            displayName = playlist.name
             await loadSongs()
         }
     }
@@ -267,7 +274,7 @@ struct PlaylistDetailView: View {
                 .shadow(color: .black.opacity(0.3), radius: 20, y: 10)
 
             VStack(spacing: 4) {
-                Text(playlist.name)
+                Text(displayName.isEmpty ? playlist.name : displayName)
                     .font(.title2).bold()
                     .multilineTextAlignment(.center)
                 if let comment = playlist.comment, !comment.isEmpty {
@@ -276,8 +283,8 @@ struct PlaylistDetailView: View {
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                 }
-                if let count = playlist.songCount {
-                    Text("\(count) \(tr("Songs", "Titel"))")
+                if !isLoading {
+                    Text("\(songs.count) \(tr("Songs", "Titel"))")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
@@ -321,7 +328,7 @@ struct PlaylistDetailView: View {
 
     private var toastBanner: some View {
         HStack(spacing: 8) {
-            Image(systemName: "checkmark.circle.fill")
+            Image(systemName: toastIsError ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
                 .foregroundStyle(.white)
             Text(toastMessage)
                 .font(.subheadline).bold()
@@ -329,17 +336,20 @@ struct PlaylistDetailView: View {
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 12)
-        .background(accentColor)
+        .background(toastIsError ? Color.red : accentColor)
         .clipShape(Capsule())
         .shadow(color: .black.opacity(0.2), radius: 8, y: 4)
         .padding(.top, 8)
     }
 
-    private func toast(_ message: String) {
+    private func toast(_ message: String, isError: Bool = false) {
         toastMessage = message
+        toastIsError = isError
         withAnimation { showToast = true }
-        Task {
+        toastTask?.cancel()
+        toastTask = Task {
             try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
             withAnimation { showToast = false }
         }
     }
@@ -364,15 +374,16 @@ struct PlaylistDetailView: View {
     }
 
     private func syncOrder() async {
-        // Subsonic hat kein direktes "reorder" — alle alten Indizes entfernen,
-        // dann alle in neuer Reihenfolge per ID wieder hinzufügen (ein Aufruf, API macht removes zuerst)
         let newIds = songs.map(\.id)
-        let totalBefore = (playlist.songCount ?? songs.count)
-        let allOldIndices = Array(0..<totalBefore)
-        try? await SubsonicAPIService.shared.updatePlaylist(
-            id: playlist.id,
-            songIdsToAdd: newIds,
-            songIndicesToRemove: allOldIndices
-        )
+        let allOldIndices = Array(0..<newIds.count)
+        do {
+            try await SubsonicAPIService.shared.updatePlaylist(
+                id: playlist.id,
+                songIdsToAdd: newIds,
+                songIndicesToRemove: allOldIndices
+            )
+        } catch {
+            toast(tr("Order could not be saved", "Reihenfolge konnte nicht gespeichert werden"), isError: true)
+        }
     }
 }

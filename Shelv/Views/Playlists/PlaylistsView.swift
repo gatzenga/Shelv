@@ -10,6 +10,8 @@ struct PlaylistsView: View {
     @State private var newPlaylistName = ""
     @State private var showDeleteConfirm = false
     @State private var playlistToDelete: Playlist?
+    @State private var errorMessage: String?
+    @State private var showError = false
 
     var body: some View {
         NavigationStack {
@@ -84,10 +86,8 @@ struct PlaylistsView: View {
                     }
                 }
             }
-            .task {
-                if libraryStore.playlists.isEmpty {
-                    await libraryStore.loadPlaylists()
-                }
+            .task(id: libraryStore.reloadID) {
+                await libraryStore.loadPlaylists()
             }
             .refreshable {
                 await libraryStore.loadPlaylists()
@@ -103,6 +103,18 @@ struct PlaylistsView: View {
                 Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
             } message: { playlist in
                 Text("\"\(playlist.name)\"")
+            }
+            .onChange(of: libraryStore.errorMessage) { _, msg in
+                if let msg {
+                    errorMessage = msg
+                    showError = true
+                    libraryStore.errorMessage = nil
+                }
+            }
+            .alert(tr("Error", "Fehler"), isPresented: $showError, presenting: errorMessage) { _ in
+                Button(tr("OK", "OK"), role: .cancel) {}
+            } message: { msg in
+                Text(msg)
             }
             .sheet(isPresented: $showCreateSheet) {
                 createPlaylistSheet

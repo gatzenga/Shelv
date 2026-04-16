@@ -10,6 +10,8 @@ struct ArtistDetailView: View {
 
     @State private var detail: ArtistDetail?
     @State private var isLoading = true
+    @State private var errorMessage: String?
+    @State private var showError = false
 
     private let columns = [GridItem(.adaptive(minimum: 150, maximum: 200), spacing: 16)]
 
@@ -66,6 +68,14 @@ struct ArtistDetailView: View {
                     ProgressView()
                         .frame(maxWidth: .infinity)
                         .padding(.top, 40)
+                } else if let msg = errorMessage {
+                    Text(msg)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal)
+                        .padding(.top, 40)
+                        .frame(maxWidth: .infinity)
                 } else if let albums = detail?.album, !albums.isEmpty {
                     Text(tr("Albums", "Alben"))
                         .font(.title3).bold()
@@ -109,7 +119,9 @@ struct ArtistDetailView: View {
         isLoading = true
         do {
             detail = try await SubsonicAPIService.shared.getArtist(id: artist.id)
-        } catch {}
+        } catch {
+            errorMessage = error.localizedDescription
+        }
         isLoading = false
     }
 
