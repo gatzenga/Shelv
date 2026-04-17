@@ -12,8 +12,17 @@ enum KeychainService {
             kSecValueData: data
         ]
 
-        SecItemDelete(query as CFDictionary)
-        SecItemAdd(query as CFDictionary, nil)
+        let status = SecItemAdd(query as CFDictionary, nil)
+        if status == errSecDuplicateItem {
+            let searchQuery: [CFString: Any] = [
+                kSecClass: kSecClassGenericPassword,
+                kSecAttrAccount: key
+            ]
+            let updateAttrs: [CFString: Any] = [
+                kSecValueData: data
+            ]
+            SecItemUpdate(searchQuery as CFDictionary, updateAttrs as CFDictionary)
+        }
     }
 
     static func load(for serverID: UUID) -> String? {

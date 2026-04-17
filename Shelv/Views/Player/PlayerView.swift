@@ -17,6 +17,8 @@ struct PlayerView: View {
 
     @State private var seekValue: Double = 0
     @State private var isDragging: Bool = false
+    @State private var displayTime: Double = 0
+    @State private var displayDuration: Double = 0
     @State private var showQueue: Bool = false
     @State private var showAddToPlaylist = false
     @State private var showLyricsSheet: Bool = false
@@ -112,29 +114,28 @@ struct PlayerView: View {
                 VStack(spacing: 4) {
                     Slider(
                         value: (isDragging || player.isSeeking) ? $seekValue : Binding(
-                            get: { player.duration > 0 ? player.currentTime / player.duration : 0 },
+                            get: { displayDuration > 0 ? displayTime / displayDuration : 0 },
                             set: { _ in }
                         ),
                         in: 0...1
                     ) { editing in
                         if editing {
                             isDragging = true
-                            player.isSeeking = true
-                            seekValue = player.duration > 0 ? player.currentTime / player.duration : 0
+                            seekValue = displayDuration > 0 ? displayTime / displayDuration : 0
                         } else {
-                            player.seek(to: seekValue * player.duration)
+                            player.seek(to: seekValue * displayDuration)
                             isDragging = false
                         }
                     }
                     .tint(accentColor)
 
                     HStack {
-                        Text(formatTime(player.currentTime))
+                        Text(formatTime(displayTime))
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                             .monospacedDigit()
                         Spacer()
-                        Text(formatTime(player.duration))
+                        Text(formatTime(displayDuration))
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                             .monospacedDigit()
@@ -327,6 +328,15 @@ struct PlayerView: View {
                     return
                 }
                 lyricsStore.loadLyrics(for: song, serverId: serverId)
+            }
+            .onReceive(player.timePublisher) { update in
+                guard !isDragging, !player.isSeeking else { return }
+                displayTime = update.time
+                displayDuration = update.duration
+            }
+            .onAppear {
+                displayTime = player.currentTime
+                displayDuration = player.duration
             }
             .onDisappear {
                 artistResolveTask?.cancel()

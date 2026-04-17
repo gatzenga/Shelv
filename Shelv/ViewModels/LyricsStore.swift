@@ -29,7 +29,10 @@ class LyricsStore: ObservableObject {
         isLoadingLyrics = true
         loadTask = Task {
             let record = await LyricsService.shared.fetchAndSave(song: song, serverId: serverId)
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else {
+                isLoadingLyrics = false
+                return
+            }
             currentLyrics = record
             isLoadingLyrics = false
         }
@@ -67,16 +70,17 @@ class LyricsStore: ObservableObject {
             }
             guard !Task.isCancelled else { return }
 
-            var allSongs: [Song] = []
-            await withTaskGroup(of: [Song].self) { group in
+            let allSongs: [Song] = await withTaskGroup(of: [Song].self) { group -> [Song] in
                 for album in albums {
                     group.addTask {
                         (try? await api.getAlbum(id: album.id))?.song ?? []
                     }
                 }
+                var collected: [Song] = []
                 for await songs in group {
-                    allSongs.append(contentsOf: songs)
+                    collected.append(contentsOf: songs)
                 }
+                return collected
             }
             guard !Task.isCancelled else { return }
 

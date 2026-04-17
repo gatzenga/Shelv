@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 import Combine
 
+@MainActor
 class ServerStore: ObservableObject {
     @Published var servers: [SubsonicServer] = []
     @Published var activeServerID: UUID?
@@ -47,8 +48,7 @@ class ServerStore: ObservableObject {
 
     private func applyToAPIService(server: SubsonicServer) {
         let password = KeychainService.load(for: server.id)
-        SubsonicAPIService.shared.activeServer = server
-        SubsonicAPIService.shared.activePassword = password
+        SubsonicAPIService.shared.setCredentials(server: server, password: password)
     }
 
     func add(server: SubsonicServer, password: String) {

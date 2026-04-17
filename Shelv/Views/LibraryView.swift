@@ -22,7 +22,7 @@ enum LibrarySegment: Int {
 
 struct LibraryView: View {
     @EnvironmentObject var libraryStore: LibraryStore
-    @EnvironmentObject var player: AudioPlayerService
+    private let player = AudioPlayerService.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
     @AppStorage("enableFavorites") private var enableFavorites = true
@@ -41,9 +41,7 @@ struct LibraryView: View {
     @State private var navigateToArtist: Artist?
     @State private var errorMessage: String?
     @State private var showError = false
-    @State private var toastMessage = ""
-    @State private var showToast = false
-    @State private var toastTask: Task<Void, Never>?
+    @State private var currentToast: ShelveToast?
     @State private var albumGroups: [(letter: String, items: [Album])] = []
     @State private var artistGroups: [(letter: String, items: [Artist])] = []
 
@@ -219,14 +217,7 @@ struct LibraryView: View {
             case .favorites: await libraryStore.loadStarred()
             }
         }
-        .overlay(alignment: .top) {
-            if showToast {
-                toastBanner
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                    .zIndex(1)
-            }
-        }
-        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: showToast)
+        .shelveToast($currentToast)
         .onChange(of: libraryStore.errorMessage) { _, msg in
             if let msg {
                 errorMessage = msg
@@ -246,46 +237,13 @@ struct LibraryView: View {
         }
     }
 
-    private var toastBanner: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.white)
-            Text(toastMessage)
-                .font(.subheadline).bold()
-                .foregroundStyle(.white)
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
-        .background(accentColor)
-        .clipShape(Capsule())
-        .shadow(color: .black.opacity(0.2), radius: 8, y: 4)
-        .padding(.top, 8)
-        .allowsHitTesting(false)
-    }
-
-    private func toast(_ message: String) {
-        toastMessage = message
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { showToast = true }
-        toastTask?.cancel()
-        toastTask = Task {
-            try? await Task.sleep(for: .seconds(2))
-            guard !Task.isCancelled else { return }
-            withAnimation { showToast = false }
-        }
-    }
-
-    private func fetchAlbumSongs(_ album: Album) async throws -> [Song] {
-        let detail = try await SubsonicAPIService.shared.getAlbum(id: album.id)
-        return detail.song ?? []
-    }
-
     private func queueAlbum(_ album: Album) {
         Task {
             do {
-                let songs = try await fetchAlbumSongs(album)
+                let songs = try await libraryStore.fetchAlbumSongs(album)
                 guard !songs.isEmpty else { return }
                 player.addToQueue(songs)
-                toast(tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+                currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
             } catch {
                 errorMessage = error.localizedDescription
                 showError = true
@@ -296,10 +254,10 @@ struct LibraryView: View {
     private func playNextAlbum(_ album: Album) {
         Task {
             do {
-                let songs = try await fetchAlbumSongs(album)
+                let songs = try await libraryStore.fetchAlbumSongs(album)
                 guard !songs.isEmpty else { return }
                 player.addPlayNext(songs)
-                toast(tr("Plays Next", "Wird als nächstes gespielt"))
+                currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
             } catch {
                 errorMessage = error.localizedDescription
                 showError = true
@@ -310,7 +268,7 @@ struct LibraryView: View {
     private func playAlbum(_ album: Album) {
         Task {
             do {
-                let songs = try await fetchAlbumSongs(album)
+                let songs = try await libraryStore.fetchAlbumSongs(album)
                 guard !songs.isEmpty else { return }
                 player.play(songs: songs, startIndex: 0)
             } catch {
@@ -323,7 +281,7 @@ struct LibraryView: View {
     private func shuffleAlbum(_ album: Album) {
         Task {
             do {
-                let songs = try await fetchAlbumSongs(album)
+                let songs = try await libraryStore.fetchAlbumSongs(album)
                 guard !songs.isEmpty else { return }
                 player.playShuffled(songs: songs)
             } catch {
@@ -336,7 +294,7 @@ struct LibraryView: View {
     private func addAlbumToPlaylist(_ album: Album) {
         Task {
             do {
-                let songs = try await fetchAlbumSongs(album)
+                let songs = try await libraryStore.fetchAlbumSongs(album)
                 guard !songs.isEmpty else { return }
                 NotificationCenter.default.post(name: .addSongsToPlaylist, object: songs.map(\.id))
             } catch {
@@ -351,7 +309,7 @@ struct LibraryView: View {
             let songs = await libraryStore.fetchAllSongs(for: artist)
             guard !songs.isEmpty else { return }
             player.addToQueue(songs)
-            toast(tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+            currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
         }
     }
 
@@ -360,7 +318,7 @@ struct LibraryView: View {
             let songs = await libraryStore.fetchAllSongs(for: artist)
             guard !songs.isEmpty else { return }
             player.addPlayNext(songs)
-            toast(tr("Plays Next", "Wird als nächstes gespielt"))
+            currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
         }
     }
 
@@ -449,8 +407,7 @@ struct LibraryView: View {
                             }
                         }
                     }
-                    Color.clear
-                        .frame(height: player.currentSong != nil ? 90 : 16)
+                    PlayerBottomSpacer()
                         .listRowInsets(EdgeInsets())
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
@@ -543,8 +500,7 @@ struct LibraryView: View {
                         }
                     }
                 }
-                Color.clear
-                    .frame(height: player.currentSong != nil ? 90 : 16)
+                PlayerBottomSpacer()
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
@@ -677,12 +633,12 @@ struct LibraryView: View {
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                 Button {
                                     player.addToQueue(song)
-                                    toast(tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+                                    currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
                                 } label: { Image(systemName: "text.badge.plus") }
                                 .tint(accentColor)
                                 Button {
                                     player.addPlayNext(song)
-                                    toast(tr("Plays Next", "Wird als nächstes gespielt"))
+                                    currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
                                 } label: { Image(systemName: "text.insert") }
                                 .tint(.orange)
                             }
@@ -702,8 +658,7 @@ struct LibraryView: View {
                         }
                     }
                 }
-                Color.clear
-                    .frame(height: player.currentSong != nil ? 90 : 16)
+                PlayerBottomSpacer()
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
@@ -770,21 +725,12 @@ struct LibraryView: View {
 
         Divider()
 
-        Button {
-            Task {
-                let songs = await libraryStore.fetchAllSongs(for: artist)
-                guard !songs.isEmpty else { return }
-                player.addPlayNext(songs)
-            }
-        } label: { Label(tr("Play Next", "Als nächstes"), systemImage: "text.insert") }
-
-        Button {
-            Task {
-                let songs = await libraryStore.fetchAllSongs(for: artist)
-                guard !songs.isEmpty else { return }
-                player.addToQueue(songs)
-            }
-        } label: { Label(tr("Add to Queue", "Zur Warteschlange"), systemImage: "text.badge.plus") }
+        Button { playNextArtist(artist) } label: {
+            Label(tr("Play Next", "Als nächstes"), systemImage: "text.insert")
+        }
+        Button { queueArtist(artist) } label: {
+            Label(tr("Add to Queue", "Zur Warteschlange"), systemImage: "text.badge.plus")
+        }
 
         if enableFavorites || enablePlaylists {
             Divider()
@@ -932,6 +878,6 @@ struct LibraryView: View {
     }
 
     private var bottomSpacer: some View {
-        Color.clear.frame(height: player.currentSong != nil ? 90 : 16)
+        PlayerBottomSpacer()
     }
 }

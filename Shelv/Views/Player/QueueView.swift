@@ -7,6 +7,7 @@ struct QueueView: View {
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
     @State private var editMode = EditMode.inactive
+    @State private var showClearConfirm = false
 
     private var remainingAlbumTracks: [(queueIndex: Int, song: Song)] {
         let start = player.currentIndex + 1
@@ -39,7 +40,7 @@ struct QueueView: View {
                         if player.isShuffled {
                             if !remainingAlbumTracks.isEmpty {
                                 Section(tr("Shuffled Queue", "Gemischte Warteschlange")) {
-                                    ForEach(Array(remainingAlbumTracks.enumerated()), id: \.offset) { _, item in
+                                    ForEach(Array(remainingAlbumTracks.enumerated()), id: \.element.queueIndex) { _, item in
                                         songRow(item.song)
                                             .onTapGesture {
                                                 guard editMode == .inactive else { return }
@@ -59,8 +60,9 @@ struct QueueView: View {
                         } else {
                             if !player.playNextQueue.isEmpty {
                                 Section(tr("Play Next", "Als nächstes")) {
-                                    ForEach(Array(player.playNextQueue.enumerated()), id: \.offset) { index, song in
+                                    ForEach(Array(player.playNextQueue.enumerated()), id: \.element.id) { index, song in
                                         songRow(song)
+                                            .id("pn_\(index)_\(song.id)")
                                             .onTapGesture {
                                                 guard editMode == .inactive else { return }
                                                 player.jumpToPlayNext(at: index)
@@ -78,7 +80,7 @@ struct QueueView: View {
 
                             if !remainingAlbumTracks.isEmpty {
                                 Section(tr("Up Next", "Nächste Titel")) {
-                                    ForEach(Array(remainingAlbumTracks.enumerated()), id: \.offset) { _, item in
+                                    ForEach(Array(remainingAlbumTracks.enumerated()), id: \.element.queueIndex) { _, item in
                                         songRow(item.song)
                                             .onTapGesture {
                                                 guard editMode == .inactive else { return }
@@ -98,8 +100,9 @@ struct QueueView: View {
 
                             if !player.userQueue.isEmpty {
                                 Section(tr("Next in Queue", "Nächste in Warteschlange")) {
-                                    ForEach(Array(player.userQueue.enumerated()), id: \.offset) { index, song in
+                                    ForEach(Array(player.userQueue.enumerated()), id: \.element.id) { index, song in
                                         songRow(song)
+                                            .id("uq_\(index)_\(song.id)")
                                             .onTapGesture {
                                                 guard editMode == .inactive else { return }
                                                 player.jumpToUserQueue(at: index)
@@ -139,8 +142,7 @@ struct QueueView: View {
                     ToolbarItem(placement: .topBarTrailing) {
                         if editMode == .inactive {
                             Button(tr("Clear all", "Alles leeren")) {
-                                player.clearUpcomingPlayQueue()
-                                player.clearUserQueue()
+                                showClearConfirm = true
                             }
                             .foregroundStyle(.red)
                         }
@@ -153,6 +155,18 @@ struct QueueView: View {
                     }
                 }
             }
+        }
+        .alert(tr("Clear Queue?", "Warteschlange leeren?"), isPresented: $showClearConfirm) {
+            Button(tr("Clear", "Leeren"), role: .destructive) {
+                player.clearUpcomingPlayQueue()
+                player.clearUserQueue()
+            }
+            Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+        } message: {
+            Text(tr(
+                "All upcoming songs will be removed from the queue.",
+                "Alle kommenden Songs werden aus der Warteschlange entfernt."
+            ))
         }
     }
 

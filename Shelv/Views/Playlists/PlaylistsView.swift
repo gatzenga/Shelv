@@ -2,16 +2,18 @@ import SwiftUI
 
 struct PlaylistsView: View {
     @EnvironmentObject var libraryStore: LibraryStore
-    @EnvironmentObject var player: AudioPlayerService
+    private let player = AudioPlayerService.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
     @State private var showCreateSheet = false
     @State private var newPlaylistName = ""
+    @FocusState private var nameFieldFocused: Bool
     @State private var showDeleteConfirm = false
     @State private var playlistToDelete: Playlist?
     @State private var errorMessage: String?
     @State private var showError = false
+    @State private var currentToast: ShelveToast?
 
     var body: some View {
         NavigationStack {
@@ -46,7 +48,10 @@ struct PlaylistsView: View {
                                         Task {
                                             if let loaded = await libraryStore.loadPlaylistDetail(id: playlist.id),
                                                let songs = loaded.songs, !songs.isEmpty {
-                                                await MainActor.run { player.addToQueue(songs) }
+                                                await MainActor.run {
+                                                    player.addToQueue(songs)
+                                                    currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+                                                }
                                             }
                                         }
                                     } label: { Image(systemName: "text.badge.plus") }
@@ -55,7 +60,10 @@ struct PlaylistsView: View {
                                         Task {
                                             if let loaded = await libraryStore.loadPlaylistDetail(id: playlist.id),
                                                let songs = loaded.songs, !songs.isEmpty {
-                                                await MainActor.run { player.addPlayNext(songs) }
+                                                await MainActor.run {
+                                                    player.addPlayNext(songs)
+                                                    currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
+                                                }
                                             }
                                         }
                                     } label: { Image(systemName: "text.insert") }
@@ -65,8 +73,7 @@ struct PlaylistsView: View {
                         }
                         .listSectionSeparator(.hidden, edges: .top)
 
-                        Color.clear
-                            .frame(height: player.currentSong != nil ? 90 : 16)
+                        PlayerBottomSpacer()
                             .listRowInsets(EdgeInsets())
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
@@ -116,6 +123,7 @@ struct PlaylistsView: View {
             } message: { msg in
                 Text(msg)
             }
+            .shelveToast($currentToast)
             .sheet(isPresented: $showCreateSheet) {
                 createPlaylistSheet
             }
@@ -150,11 +158,17 @@ struct PlaylistsView: View {
             Form {
                 Section(tr("Name", "Name")) {
                     TextField(tr("My Playlist", "Meine Playlist"), text: $newPlaylistName)
+                        .focused($nameFieldFocused)
                         .autocorrectionDisabled()
                 }
             }
             .navigationTitle(tr("New Playlist", "Neue Playlist"))
             .navigationBarTitleDisplayMode(.inline)
+            .onAppear {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    nameFieldFocused = true
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button(tr("Cancel", "Abbrechen"), role: .cancel) {

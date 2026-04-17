@@ -13,6 +13,7 @@ struct AlbumArtView: View {
 
     @State private var uiImage: UIImage? = nil
     @State private var loading = true
+    @State private var didCheck = false
 
     var body: some View {
         Group {
@@ -28,7 +29,21 @@ struct AlbumArtView: View {
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+        .onAppear {
+            guard !didCheck else { return }
+            didCheck = true
+            if let id = coverArtId {
+                let key = "\(id)_\(size)"
+                if let cached = ImageCacheService.shared.cachedImage(key: key) {
+                    uiImage = cached
+                    loading = false
+                }
+            } else {
+                loading = false
+            }
+        }
         .task(id: coverArtId) {
+            guard uiImage == nil else { return }
             await load()
         }
     }
@@ -36,12 +51,18 @@ struct AlbumArtView: View {
     @MainActor
     private func load() async {
         loading = true
-        uiImage = nil
         guard let id = coverArtId,
               let url = SubsonicAPIService.shared.coverArtURL(for: id, size: size)
         else { loading = false; return }
 
         let key = "\(id)_\(size)"
+
+        // Synchroner Check nochmal (falls zwischen onAppear und task geladen)
+        if let cached = ImageCacheService.shared.cachedImage(key: key) {
+            uiImage = cached
+            loading = false
+            return
+        }
 
         // Bis zu 3 Versuche bei fehlgeschlagenem Laden
         for attempt in 0..<3 {

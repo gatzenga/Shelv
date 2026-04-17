@@ -2,8 +2,8 @@ import SwiftUI
 
 struct AlbumDetailView: View {
     let album: Album
-    @EnvironmentObject var player: AudioPlayerService
     @EnvironmentObject var libraryStore: LibraryStore
+    private let player = AudioPlayerService.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
     @AppStorage("enableFavorites") private var enableFavorites = true
@@ -14,8 +14,7 @@ struct AlbumDetailView: View {
     @State private var playlistSongIds: [String] = []
     @State private var isLoading = true
     @State private var errorMessage: String?
-    @State private var queueToast = false
-    @State private var toastMessage = ""
+    @State private var currentToast: ShelveToast?
     @State private var artistDestination: Artist?
     @State private var isResolvingArtist = false
     @State private var artistResolveTask: Task<Void, Never>?
@@ -48,18 +47,11 @@ struct AlbumDetailView: View {
                             player.play(songs: songs, startIndex: index)
                         } label: {
                             HStack(spacing: 14) {
-                                if player.currentSong?.id == song.id {
-                                    Image(systemName: "waveform")
-                                        .font(.subheadline)
-                                        .foregroundStyle(accentColor)
-                                        .frame(width: 28, alignment: .trailing)
-                                        .symbolEffect(.variableColor.iterative.reversing, isActive: player.isPlaying)
-                                } else {
-                                    Text("\(song.track ?? (index + 1))")
-                                        .font(.subheadline)
-                                        .foregroundStyle(.secondary)
-                                        .frame(width: 28, alignment: .trailing)
-                                }
+                                NowPlayingIndicator(
+                                    songId: song.id,
+                                    fallbackIndex: song.track ?? (index + 1),
+                                    accentColor: accentColor
+                                )
                                 Text(song.title)
                                     .font(.body)
                                     .foregroundStyle(.primary)
@@ -77,7 +69,7 @@ struct AlbumDetailView: View {
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             Button {
                                 player.addToQueue(song)
-                                showToast(tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+                                currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
                             } label: {
                                 Image(systemName: "text.badge.plus")
                             }
@@ -85,7 +77,7 @@ struct AlbumDetailView: View {
 
                             Button {
                                 player.addPlayNext(song)
-                                showToast(tr("Plays Next", "Wird als nächstes gespielt"))
+                                currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
                             } label: {
                                 Image(systemName: "text.insert")
                             }
@@ -124,8 +116,7 @@ struct AlbumDetailView: View {
             }
 
             Section {
-                Color.clear
-                    .frame(height: player.currentSong != nil ? 90 : 0)
+                PlayerBottomSpacer(activeHeight: 90, inactiveHeight: 0)
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
@@ -151,7 +142,7 @@ struct AlbumDetailView: View {
                     Button {
                         if let songs = detail?.song, !songs.isEmpty {
                             player.addPlayNext(songs)
-                            showToast(tr("Plays Next", "Wird als nächstes gespielt"))
+                            currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
                         }
                     } label: {
                         Label(tr("Play Next", "Als nächstes"), systemImage: "text.insert")
@@ -161,7 +152,7 @@ struct AlbumDetailView: View {
                     Button {
                         if let songs = detail?.song, !songs.isEmpty {
                             player.addToQueue(songs)
-                            showToast(tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+                            currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
                         }
                     } label: {
                         Label(tr("Add to Queue", "Zur Warteschlange"), systemImage: "text.badge.plus")
@@ -184,13 +175,7 @@ struct AlbumDetailView: View {
                 }
             }
         }
-        .overlay(alignment: .top) {
-            if queueToast {
-                toastBanner
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                    .zIndex(1)
-            }
-        }
+        .shelveToast($currentToast)
         .sheet(isPresented: $showAddToPlaylist) {
             AddToPlaylistSheet(songIds: playlistSongIds)
                 .environmentObject(libraryStore)
@@ -277,33 +262,6 @@ struct AlbumDetailView: View {
             .padding(.bottom, 8)
         }
         .padding(.top, 16)
-    }
-
-    private var toastBanner: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.white)
-            Text(toastMessage)
-                .font(.subheadline).bold()
-                .foregroundStyle(.white)
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
-        .background(accentColor)
-        .clipShape(Capsule())
-        .shadow(color: .black.opacity(0.2), radius: 8, y: 4)
-        .padding(.top, 8)
-    }
-
-    private func showToast(_ message: String) {
-        toastMessage = message
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-            queueToast = true
-        }
-        Task {
-            try? await Task.sleep(for: .seconds(2))
-            withAnimation { queueToast = false }
-        }
     }
 
     private func resolveArtist(_ artistName: String) {

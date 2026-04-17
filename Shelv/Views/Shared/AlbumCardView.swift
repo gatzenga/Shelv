@@ -12,6 +12,8 @@ struct AlbumCardView: View {
     @AppStorage("enableFavorites") private var enableFavorites = true
     @AppStorage("enablePlaylists") private var enablePlaylists = true
 
+    @State private var cachedSongs: [Song]?
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             if let s = fixedSize {
@@ -41,9 +43,8 @@ struct AlbumCardView: View {
         .contextMenu {
             Button {
                 Task {
-                    guard let detail = try? await SubsonicAPIService.shared.getAlbum(id: album.id),
-                          let songs = detail.song, !songs.isEmpty else { return }
-                    await MainActor.run { AudioPlayerService.shared.play(songs: songs, startIndex: 0) }
+                    guard let songs = await fetchSongs(), !songs.isEmpty else { return }
+                    AudioPlayerService.shared.play(songs: songs, startIndex: 0)
                 }
             } label: {
                 Label(tr("Play", "Abspielen"), systemImage: "play.fill")
@@ -51,9 +52,8 @@ struct AlbumCardView: View {
 
             Button {
                 Task {
-                    guard let detail = try? await SubsonicAPIService.shared.getAlbum(id: album.id),
-                          let songs = detail.song, !songs.isEmpty else { return }
-                    await MainActor.run { AudioPlayerService.shared.playShuffled(songs: songs) }
+                    guard let songs = await fetchSongs(), !songs.isEmpty else { return }
+                    AudioPlayerService.shared.playShuffled(songs: songs)
                 }
             } label: {
                 Label(tr("Shuffle", "Zufällig"), systemImage: "shuffle")
@@ -63,9 +63,8 @@ struct AlbumCardView: View {
 
             Button {
                 Task {
-                    guard let detail = try? await SubsonicAPIService.shared.getAlbum(id: album.id),
-                          let songs = detail.song, !songs.isEmpty else { return }
-                    await MainActor.run { AudioPlayerService.shared.addPlayNext(songs) }
+                    guard let songs = await fetchSongs(), !songs.isEmpty else { return }
+                    AudioPlayerService.shared.addPlayNext(songs)
                 }
             } label: {
                 Label(tr("Play Next", "Als nächstes"), systemImage: "text.insert")
@@ -73,9 +72,8 @@ struct AlbumCardView: View {
 
             Button {
                 Task {
-                    guard let detail = try? await SubsonicAPIService.shared.getAlbum(id: album.id),
-                          let songs = detail.song, !songs.isEmpty else { return }
-                    await MainActor.run { AudioPlayerService.shared.addToQueue(songs) }
+                    guard let songs = await fetchSongs(), !songs.isEmpty else { return }
+                    AudioPlayerService.shared.addToQueue(songs)
                 }
             } label: {
                 Label(tr("Add to Queue", "Zur Warteschlange"), systemImage: "text.badge.plus")
@@ -98,12 +96,8 @@ struct AlbumCardView: View {
                 if enablePlaylists {
                     Button {
                         Task {
-                            guard let detail = try? await SubsonicAPIService.shared.getAlbum(id: album.id),
-                                  let songs = detail.song, !songs.isEmpty else { return }
-                            let ids = songs.map(\.id)
-                            await MainActor.run {
-                                NotificationCenter.default.post(name: .addSongsToPlaylist, object: ids)
-                            }
+                            guard let songs = await fetchSongs(), !songs.isEmpty else { return }
+                            NotificationCenter.default.post(name: .addSongsToPlaylist, object: songs.map(\.id))
                         }
                     } label: {
                         Label(tr("Add to Playlist…", "Zur Playlist hinzufügen…"), systemImage: "music.note.list")
@@ -113,6 +107,15 @@ struct AlbumCardView: View {
         } preview: {
             AlbumArtView(coverArtId: album.coverArt, size: 600, cornerRadius: 0)
                 .frame(width: 280, height: 280)
+                .task { let _ = await fetchSongs() }
         }
+    }
+
+    private func fetchSongs() async -> [Song]? {
+        if let cachedSongs { return cachedSongs }
+        guard let detail = try? await SubsonicAPIService.shared.getAlbum(id: album.id) else { return nil }
+        let songs = detail.song ?? []
+        await MainActor.run { cachedSongs = songs }
+        return songs
     }
 }

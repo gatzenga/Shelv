@@ -1,8 +1,8 @@
 import SwiftUI
 
 struct SearchView: View {
-    @EnvironmentObject var player: AudioPlayerService
     @EnvironmentObject var libraryStore: LibraryStore
+    private let player = AudioPlayerService.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
     @AppStorage("enableFavorites") private var enableFavorites = true
@@ -17,9 +17,7 @@ struct SearchView: View {
     @State private var playlistSongIds: [String] = []
     @State private var errorMessage: String?
     @State private var showError = false
-    @State private var toastMessage = ""
-    @State private var showToast = false
-    @State private var toastTask: Task<Void, Never>?
+    @State private var currentToast: ShelveToast?
 
     private var hasResults: Bool {
         !(result?.artist ?? []).isEmpty ||
@@ -135,6 +133,12 @@ struct SearchView: View {
                                         HStack(spacing: 12) {
                                             AlbumArtView(coverArtId: song.coverArt, size: 100, cornerRadius: 8)
                                                 .frame(width: 44, height: 44)
+                                                .overlay {
+                                                    NowPlayingOverlay(
+                                                        songId: song.id, size: 44,
+                                                        cornerRadius: 8, accentColor: accentColor
+                                                    )
+                                                }
                                             VStack(alignment: .leading, spacing: 2) {
                                                 Text(song.title)
                                                     .font(.body)
@@ -160,11 +164,11 @@ struct SearchView: View {
                                         } label: { Label(tr("Play", "Abspielen"), systemImage: "play.fill") }
                                         Button {
                                             player.addPlayNext(song)
-                                            toast(tr("Plays Next", "Wird als nächstes gespielt"))
+                                            currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
                                         } label: { Label(tr("Play Next", "Als nächstes"), systemImage: "text.insert") }
                                         Button {
                                             player.addToQueue(song)
-                                            toast(tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+                                            currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
                                         } label: { Label(tr("Add to Queue", "Zur Warteschlange"), systemImage: "text.badge.plus") }
                                         if enableFavorites || enablePlaylists {
                                             Divider()
@@ -193,12 +197,12 @@ struct SearchView: View {
                                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                         Button {
                                             player.addToQueue(song)
-                                            toast(tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+                                            currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
                                         } label: { Image(systemName: "text.badge.plus") }
                                         .tint(accentColor)
                                         Button {
                                             player.addPlayNext(song)
-                                            toast(tr("Plays Next", "Wird als nächstes gespielt"))
+                                            currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
                                         } label: { Image(systemName: "text.insert") }
                                         .tint(.orange)
                                     }
@@ -233,6 +237,12 @@ struct SearchView: View {
                                         HStack(spacing: 12) {
                                             AlbumArtView(coverArtId: item.coverArt, size: 100, cornerRadius: 8)
                                                 .frame(width: 44, height: 44)
+                                                .overlay {
+                                                    NowPlayingOverlay(
+                                                        songId: item.songId, size: 44,
+                                                        cornerRadius: 8, accentColor: accentColor
+                                                    )
+                                                }
                                             VStack(alignment: .leading, spacing: 2) {
                                                 Text(item.songTitle ?? tr("Unknown Song", "Unbekannter Titel"))
                                                     .font(.body)
@@ -257,8 +267,7 @@ struct SearchView: View {
                         }
 
                         Section {
-                            Color.clear
-                                .frame(height: player.currentSong != nil ? 90 : 0)
+                            PlayerBottomSpacer(activeHeight: 90, inactiveHeight: 0)
                                 .listRowInsets(EdgeInsets())
                                 .listRowBackground(Color.clear)
                                 .listRowSeparator(.hidden)
@@ -286,14 +295,7 @@ struct SearchView: View {
                     await performSearch(query: newValue)
                 }
             }
-            .overlay(alignment: .top) {
-                if showToast {
-                    toastBanner
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                        .zIndex(1)
-                }
-            }
-            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: showToast)
+            .shelveToast($currentToast)
             .alert(tr("Error", "Fehler"), isPresented: $showError, presenting: errorMessage) { _ in
                 Button(tr("OK", "OK"), role: .cancel) {}
             } message: { msg in
@@ -307,45 +309,12 @@ struct SearchView: View {
         }
     }
 
-    private var toastBanner: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.white)
-            Text(toastMessage)
-                .font(.subheadline).bold()
-                .foregroundStyle(.white)
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
-        .background(accentColor)
-        .clipShape(Capsule())
-        .shadow(color: .black.opacity(0.2), radius: 8, y: 4)
-        .padding(.top, 8)
-        .allowsHitTesting(false)
-    }
-
-    private func toast(_ message: String) {
-        toastMessage = message
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { showToast = true }
-        toastTask?.cancel()
-        toastTask = Task {
-            try? await Task.sleep(for: .seconds(2))
-            guard !Task.isCancelled else { return }
-            withAnimation { showToast = false }
-        }
-    }
-
-    private func fetchAlbumSongs(_ album: Album) async throws -> [Song] {
-        let detail = try await SubsonicAPIService.shared.getAlbum(id: album.id)
-        return detail.song ?? []
-    }
-
     private func queueArtist(_ artist: Artist) {
         Task {
             let songs = await libraryStore.fetchAllSongs(for: artist)
             guard !songs.isEmpty else { return }
             player.addToQueue(songs)
-            toast(tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+            currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
         }
     }
 
@@ -354,17 +323,17 @@ struct SearchView: View {
             let songs = await libraryStore.fetchAllSongs(for: artist)
             guard !songs.isEmpty else { return }
             player.addPlayNext(songs)
-            toast(tr("Plays Next", "Wird als nächstes gespielt"))
+            currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
         }
     }
 
     private func queueAlbum(_ album: Album) {
         Task {
             do {
-                let songs = try await fetchAlbumSongs(album)
+                let songs = try await libraryStore.fetchAlbumSongs(album)
                 guard !songs.isEmpty else { return }
                 player.addToQueue(songs)
-                toast(tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+                currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
             } catch {
                 errorMessage = error.localizedDescription
                 showError = true
@@ -375,10 +344,10 @@ struct SearchView: View {
     private func playNextAlbum(_ album: Album) {
         Task {
             do {
-                let songs = try await fetchAlbumSongs(album)
+                let songs = try await libraryStore.fetchAlbumSongs(album)
                 guard !songs.isEmpty else { return }
                 player.addPlayNext(songs)
-                toast(tr("Plays Next", "Wird als nächstes gespielt"))
+                currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
             } catch {
                 errorMessage = error.localizedDescription
                 showError = true
@@ -389,7 +358,7 @@ struct SearchView: View {
     private func addAlbumToPlaylist(_ album: Album) {
         Task {
             do {
-                let songs = try await fetchAlbumSongs(album)
+                let songs = try await libraryStore.fetchAlbumSongs(album)
                 guard !songs.isEmpty else { return }
                 playlistSongIds = songs.map(\.id)
                 showAddToPlaylist = true
@@ -444,24 +413,28 @@ struct SearchView: View {
             showError = true
         }
         guard !Task.isCancelled else { isSearching = false; return }
+        isSearching = false
         if let serverId = SubsonicAPIService.shared.activeServer?.id.uuidString {
             let results = await LyricsService.shared.searchLyrics(text: query, serverId: serverId)
             lyricsResults = results
-            // Fehlende Metadaten im Hintergrund nachladen
             let missing = results.filter { $0.songTitle == nil }
             if !missing.isEmpty {
-                Task.detached(priority: .utility) {
-                    for item in missing {
-                        guard !Task.isCancelled else { break }
-                        guard let song = try? await SubsonicAPIService.shared.getSong(id: item.songId) else { continue }
-                        await LyricsService.shared.updateMetadata(
-                            songId: item.songId, serverId: serverId,
-                            title: song.title, artist: song.artist, coverArt: song.coverArt
+                for item in missing {
+                    guard !Task.isCancelled else { break }
+                    guard let song = try? await SubsonicAPIService.shared.getSong(id: item.songId) else { continue }
+                    await LyricsService.shared.updateMetadata(
+                        songId: item.songId, serverId: serverId,
+                        title: song.title, artist: song.artist, coverArt: song.coverArt
+                    )
+                    if let idx = lyricsResults.firstIndex(where: { $0.songId == item.songId }) {
+                        lyricsResults[idx] = LyricsSearchResult(
+                            songId: item.songId,
+                            songTitle: song.title, artistName: song.artist,
+                            coverArt: song.coverArt, snippet: item.snippet
                         )
                     }
                 }
             }
         }
-        isSearching = false
     }
 }

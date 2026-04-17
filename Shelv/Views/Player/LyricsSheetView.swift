@@ -1,5 +1,4 @@
 import SwiftUI
-import Combine
 
 private struct LyricLine: Identifiable {
     let id = UUID()
@@ -13,11 +12,10 @@ struct LyricsSheetView: View {
     @AppStorage("themeColor") private var themeColorName = "violet"
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
-    private let timer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
-
     @State private var parsedLines: [LyricLine] = []
     @State private var activeLineIndex: Int? = nil
     @State private var isUserScrolling = false
+    @State private var currentTimeMs: Int = 0
     @State private var resumeScrollTask: Task<Void, Never>? = nil
 
     private var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
@@ -46,9 +44,13 @@ struct LyricsSheetView: View {
             activeLineIndex = nil
             rebuildLines()
         }
-        .onReceive(timer) { _ in
+        .onReceive(player.timePublisher) { update in
+            currentTimeMs = Int(update.time * 1000)
             guard lyricsStore.currentLyrics?.isSynced == true, !parsedLines.isEmpty else { return }
             updateActiveIndex()
+        }
+        .onDisappear {
+            resumeScrollTask?.cancel()
         }
     }
 
@@ -194,7 +196,7 @@ struct LyricsSheetView: View {
     }
 
     private func updateActiveIndex() {
-        let currentMs = Int(player.currentTime * 1000)
+        let currentMs = currentTimeMs
         var idx = 0
         for (i, line) in parsedLines.enumerated() {
             if line.timeMs <= currentMs { idx = i } else { break }

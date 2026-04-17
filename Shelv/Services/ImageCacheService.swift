@@ -3,7 +3,7 @@ import UIKit
 actor ImageCacheService {
     static let shared = ImageCacheService()
 
-    private let memory = NSCache<NSString, UIImage>()
+    nonisolated(unsafe) private let memory = NSCache<NSString, UIImage>()
     private let cacheDir: URL
     private var inflight: [String: Task<UIImage?, Never>] = [:]
 
@@ -14,6 +14,11 @@ actor ImageCacheService {
         try? FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
         memory.countLimit = 200
         memory.totalCostLimit = 100 * 1024 * 1024
+    }
+
+    /// Synchroner Memory-Cache-Lookup — kein Actor-Hop nötig (NSCache ist thread-safe)
+    nonisolated func cachedImage(key: String) -> UIImage? {
+        memory.object(forKey: key as NSString)
     }
 
     func image(url: URL, key: String) async -> UIImage? {

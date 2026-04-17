@@ -10,6 +10,7 @@ struct AddToPlaylistSheet: View {
     @State private var showCreateSheet = false
     @State private var newPlaylistName = ""
     @State private var addedToast = false
+    @FocusState private var nameFieldFocused: Bool
 
     var body: some View {
         NavigationStack {
@@ -80,6 +81,7 @@ struct AddToPlaylistSheet: View {
             Form {
                 Section(tr("Name", "Name")) {
                     TextField(tr("My Playlist", "Meine Playlist"), text: $newPlaylistName)
+                        .focused($nameFieldFocused)
                         .autocorrectionDisabled()
                 }
             }
@@ -109,5 +111,10 @@ struct AddToPlaylistSheet: View {
         }
         .presentationDetents([.medium])
         .presentationCornerRadius(24)
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                nameFieldFocused = true
+            }
+        }
     }
 }

@@ -32,8 +32,9 @@ class AudioPlayerService: ObservableObject {
     @Published var currentIndex: Int = 0
     @Published var playNextQueue: [Song] = []
     @Published var userQueue: [Song] = []
-    @Published var currentTime: Double = 0
-    @Published var duration: Double = 0
+    var currentTime: Double = 0
+    var duration: Double = 0
+    let timePublisher = PassthroughSubject<(time: Double, duration: Double), Never>()
     @Published var isAirPlayActive: Bool = false
     @Published var isSeeking: Bool = false
     @Published var isShuffled: Bool = false
@@ -175,7 +176,9 @@ class AudioPlayerService: ObservableObject {
                 options: [.allowAirPlay, .allowBluetoothHFP]
             )
             try AVAudioSession.sharedInstance().setActive(true)
-        } catch {}
+        } catch {
+            print("[AudioSession] Failed to activate: \(error)")
+        }
     }
 
     private func setupRouteObserver() {
@@ -409,7 +412,7 @@ class AudioPlayerService: ObservableObject {
             )
 
             let upcoming = playNextQueue
-                + Array(queue[(currentIndex + 1)...])
+                + (currentIndex + 1 < queue.count ? Array(queue[(currentIndex + 1)...]) : [])
                 + userQueue
             let shuffled = upcoming.shuffled()
 
@@ -629,10 +632,13 @@ class AudioPlayerService: ObservableObject {
 
         engine.$currentTime
             .sink { [weak self] time in
-                guard let self, !self.isSeeking, !self.crossfadeTriggered else { return }
+                guard let self, !self.isSeeking else { return }
                 self.currentTime = time
+                self.timePublisher.send((time: time, duration: self.duration))
                 self.updateNowPlayingTime(time)
-                self.checkCrossfadeTrigger(currentTime: time)
+                if !self.crossfadeTriggered {
+                    self.checkCrossfadeTrigger(currentTime: time)
+                }
             }
             .store(in: &engineSubscriptions)
 
@@ -640,6 +646,7 @@ class AudioPlayerService: ObservableObject {
             .sink { [weak self] d in
                 guard let self, d > 0 else { return }
                 self.duration = d
+                self.timePublisher.send((time: self.currentTime, duration: d))
             }
             .store(in: &engineSubscriptions)
 
@@ -697,6 +704,7 @@ class AudioPlayerService: ObservableObject {
 
     private func checkCrossfadeTrigger(currentTime: Double) {
         guard crossfadeEnabled, !crossfadeTriggered, duration > 1 else { return }
+        guard crossfadeDuration < duration else { return }
 
         let triggerAt = duration - crossfadeDuration
         guard currentTime >= triggerAt else { return }
@@ -710,6 +718,8 @@ class AudioPlayerService: ObservableObject {
     }
 
     private func updateNowPlayingInfo(song: Song) {
+        artworkTask?.cancel()
+        artworkTask = nil
         var info: [String: Any] = [:]
         info[MPMediaItemPropertyTitle] = song.title
         info[MPMediaItemPropertyArtist] = song.artist ?? ""

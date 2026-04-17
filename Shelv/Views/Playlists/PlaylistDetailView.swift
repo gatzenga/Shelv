@@ -3,8 +3,8 @@ import SwiftUI
 struct PlaylistDetailView: View {
     let playlist: Playlist
 
-    @EnvironmentObject var player: AudioPlayerService
     @EnvironmentObject var libraryStore: LibraryStore
+    private let player = AudioPlayerService.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
     @AppStorage("enableFavorites") private var enableFavorites = true
@@ -19,10 +19,8 @@ struct PlaylistDetailView: View {
     @State private var showRenameAlert = false
     @State private var newName = ""
     @State private var showDeleteConfirm = false
-    @State private var toastMessage = ""
-    @State private var showToast = false
-    @State private var toastIsError = false
-    @State private var toastTask: Task<Void, Never>?
+    @State private var currentToast: ShelveToast?
+    @State private var isSyncing = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -57,21 +55,12 @@ struct PlaylistDetailView: View {
                             player.play(songs: songs, startIndex: index)
                         } label: {
                             HStack(spacing: 14) {
-                                if isEditMode {
-                                    Image(systemName: "line.3.horizontal")
-                                        .foregroundStyle(.secondary)
-                                        .frame(width: 24)
-                                } else if player.currentSong?.id == song.id {
-                                    Image(systemName: "waveform")
-                                        .font(.subheadline)
-                                        .foregroundStyle(accentColor)
-                                        .frame(width: 28, alignment: .trailing)
-                                        .symbolEffect(.variableColor.iterative.reversing, isActive: player.isPlaying)
-                                } else {
-                                    Text("\(index + 1)")
-                                        .font(.subheadline)
-                                        .foregroundStyle(.secondary)
-                                        .frame(width: 28, alignment: .trailing)
+                                if !isEditMode {
+                                    NowPlayingIndicator(
+                                        songId: song.id,
+                                        fallbackIndex: index + 1,
+                                        accentColor: accentColor
+                                    )
                                 }
                                 AlbumArtView(coverArtId: song.coverArt, size: 100, cornerRadius: 6)
                                     .frame(width: 40, height: 40)
@@ -106,7 +95,7 @@ struct PlaylistDetailView: View {
 
                             Button {
                                 player.addToQueue(song)
-                                toast(tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+                                currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
                             } label: {
                                 Image(systemName: "text.badge.plus")
                             }
@@ -114,7 +103,7 @@ struct PlaylistDetailView: View {
 
                             Button {
                                 player.addPlayNext(song)
-                                toast(tr("Plays Next", "Wird als nächstes gespielt"))
+                                currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
                             } label: {
                                 Image(systemName: "text.insert")
                             }
@@ -147,12 +136,12 @@ struct PlaylistDetailView: View {
                     .onDelete { offsets in
                         Task { await removeSongs(at: offsets) }
                     }
+                    .deleteDisabled(isEditMode)
                 }
             }
 
             Section {
-                Color.clear
-                    .frame(height: player.currentSong != nil ? 90 : 0)
+                PlayerBottomSpacer(activeHeight: 90, inactiveHeight: 0)
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
@@ -165,80 +154,77 @@ struct PlaylistDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    Button {
-                        isEditMode.toggle()
-                    } label: {
-                        Label(
-                            isEditMode ? tr("Done", "Fertig") : tr("Reorder / Delete", "Sortieren / Löschen"),
-                            systemImage: isEditMode ? "checkmark" : "pencil"
-                        )
+                if isEditMode {
+                    Button(tr("Done", "Fertig")) {
+                        isEditMode = false
                     }
+                    .bold()
+                } else {
+                    Menu {
+                        Button {
+                            isEditMode = true
+                        } label: {
+                            Label(tr("Reorder / Delete", "Sortieren / Löschen"), systemImage: "pencil")
+                        }
 
-                    Button {
-                        newName = playlist.name
-                        showRenameAlert = true
-                    } label: {
-                        Label(tr("Rename", "Umbenennen"), systemImage: "pencil.line")
-                    }
+                        Button {
+                            newName = playlist.name
+                            showRenameAlert = true
+                        } label: {
+                            Label(tr("Rename", "Umbenennen"), systemImage: "pencil.line")
+                        }
 
-                    Divider()
+                        Divider()
 
-                    Button {
-                        if !songs.isEmpty { player.play(songs: songs, startIndex: 0) }
-                    } label: {
-                        Label(tr("Play", "Abspielen"), systemImage: "play.fill")
-                    }
-                    .disabled(songs.isEmpty)
+                        Button {
+                            if !songs.isEmpty { player.play(songs: songs, startIndex: 0) }
+                        } label: {
+                            Label(tr("Play", "Abspielen"), systemImage: "play.fill")
+                        }
+                        .disabled(songs.isEmpty)
 
-                    Button {
-                        if !songs.isEmpty { player.playShuffled(songs: songs) }
-                    } label: {
-                        Label(tr("Shuffle", "Zufällig"), systemImage: "shuffle")
-                    }
-                    .disabled(songs.isEmpty)
+                        Button {
+                            if !songs.isEmpty { player.playShuffled(songs: songs) }
+                        } label: {
+                            Label(tr("Shuffle", "Zufällig"), systemImage: "shuffle")
+                        }
+                        .disabled(songs.isEmpty)
 
-                    Button {
-                        if !songs.isEmpty {
-                            player.addPlayNext(songs)
-                            toast(tr("Plays Next", "Wird als nächstes gespielt"))
+                        Button {
+                            if !songs.isEmpty {
+                                player.addPlayNext(songs)
+                                currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
+                            }
+                        } label: {
+                            Label(tr("Play Next", "Als nächstes"), systemImage: "text.insert")
+                        }
+                        .disabled(songs.isEmpty)
+
+                        Button {
+                            if !songs.isEmpty {
+                                player.addToQueue(songs)
+                                currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+                            }
+                        } label: {
+                            Label(tr("Add to Queue", "Zur Warteschlange"), systemImage: "text.badge.plus")
+                        }
+                        .disabled(songs.isEmpty)
+
+                        Divider()
+
+                        Button(role: .destructive) {
+                            showDeleteConfirm = true
+                        } label: {
+                            Label(tr("Delete Playlist", "Playlist löschen"), systemImage: "trash")
                         }
                     } label: {
-                        Label(tr("Play Next", "Als nächstes"), systemImage: "text.insert")
+                        Image(systemName: "ellipsis.circle")
+                            .symbolRenderingMode(.hierarchical)
                     }
-                    .disabled(songs.isEmpty)
-
-                    Button {
-                        if !songs.isEmpty {
-                            player.addToQueue(songs)
-                            toast(tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
-                        }
-                    } label: {
-                        Label(tr("Add to Queue", "Zur Warteschlange"), systemImage: "text.badge.plus")
-                    }
-                    .disabled(songs.isEmpty)
-
-                    Divider()
-
-                    Button(role: .destructive) {
-                        showDeleteConfirm = true
-                    } label: {
-                        Label(tr("Delete Playlist", "Playlist löschen"), systemImage: "trash")
-                    }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                        .symbolRenderingMode(.hierarchical)
                 }
             }
         }
-        .overlay(alignment: .top) {
-            if showToast {
-                toastBanner
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                    .zIndex(1)
-            }
-        }
-        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: showToast)
+        .shelveToast($currentToast)
         .alert(tr("Rename Playlist", "Playlist umbenennen"), isPresented: $showRenameAlert) {
             TextField(playlist.name, text: $newName)
             Button(tr("Save", "Speichern")) {
@@ -333,34 +319,6 @@ struct PlaylistDetailView: View {
         .padding(.top, 16)
     }
 
-    private var toastBanner: some View {
-        HStack(spacing: 8) {
-            Image(systemName: toastIsError ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
-                .foregroundStyle(.white)
-            Text(toastMessage)
-                .font(.subheadline).bold()
-                .foregroundStyle(.white)
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
-        .background(toastIsError ? Color.red : accentColor)
-        .clipShape(Capsule())
-        .shadow(color: .black.opacity(0.2), radius: 8, y: 4)
-        .padding(.top, 8)
-    }
-
-    private func toast(_ message: String, isError: Bool = false) {
-        toastMessage = message
-        toastIsError = isError
-        withAnimation { showToast = true }
-        toastTask?.cancel()
-        toastTask = Task {
-            try? await Task.sleep(for: .seconds(2))
-            guard !Task.isCancelled else { return }
-            withAnimation { showToast = false }
-        }
-    }
-
     private func loadSongs() async {
         isLoading = true
         if let loaded = await libraryStore.loadPlaylistDetail(id: playlist.id) {
@@ -370,17 +328,25 @@ struct PlaylistDetailView: View {
     }
 
     private func removeSong(at index: Int) async {
+        guard !isSyncing else { return }
+        isSyncing = true
         songs.remove(at: index)
         await libraryStore.removeSongsFromPlaylist(playlist, indices: [index])
+        isSyncing = false
     }
 
     private func removeSongs(at offsets: IndexSet) async {
+        guard !isSyncing else { return }
+        isSyncing = true
         let indices = Array(offsets).sorted(by: >)
         songs.remove(atOffsets: offsets)
         await libraryStore.removeSongsFromPlaylist(playlist, indices: indices)
+        isSyncing = false
     }
 
     private func syncOrder() async {
+        guard !isSyncing else { return }
+        isSyncing = true
         let newIds = songs.map(\.id)
         let allOldIndices = Array(0..<newIds.count)
         do {
@@ -390,7 +356,9 @@ struct PlaylistDetailView: View {
                 songIndicesToRemove: allOldIndices
             )
         } catch {
-            toast(tr("Order could not be saved", "Reihenfolge konnte nicht gespeichert werden"), isError: true)
+            currentToast = ShelveToast(message: tr("Order could not be saved", "Reihenfolge konnte nicht gespeichert werden"), isError: true)
+            await loadSongs()
         }
+        isSyncing = false
     }
 }

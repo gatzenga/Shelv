@@ -7,7 +7,6 @@ extension Notification.Name {
 struct ContentView: View {
     @EnvironmentObject var serverStore: ServerStore
     @EnvironmentObject var libraryStore: LibraryStore
-    @EnvironmentObject var player: AudioPlayerService
     @Environment(\.horizontalSizeClass) var horizontalSizeClass
     @State private var selectedTab = 0
     @State private var showPlayer = false
@@ -18,15 +17,6 @@ struct ContentView: View {
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
     private var isRegularWidth: Bool { horizontalSizeClass == .regular }
-
-    private var playerBar: some View {
-        PlayerBarView()
-            .onTapGesture {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                    showPlayer = true
-                }
-            }
-    }
 
     var body: some View {
         GeometryReader { geometry in
@@ -49,24 +39,15 @@ struct ContentView: View {
                 }
                 .tint(accentColor)
 
-                if player.currentSong != nil && !isRegularWidth {
-                    VStack {
-                        Spacer()
-                        playerBar
-                            .padding(.horizontal, 16)
-                            .padding(.bottom, geometry.safeAreaInsets.bottom + 49 + 8)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .ignoresSafeArea(edges: .bottom)
-                }
+                PlayerBarOverlay(
+                    isRegularWidth: isRegularWidth,
+                    showPlayer: $showPlayer,
+                    bottomInset: geometry.safeAreaInsets.bottom
+                )
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if player.currentSong != nil && isRegularWidth {
-                playerBar
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-            }
+            PlayerBarInset(isRegularWidth: isRegularWidth, showPlayer: $showPlayer)
         }
         .sheet(isPresented: $showPlayer) {
             PlayerView()
@@ -96,8 +77,11 @@ struct ContentView: View {
             }
         }
         .onChange(of: serverStore.activeServerID) { _, _ in
-            player.stop()
+            AudioPlayerService.shared.stop()
             libraryStore.resetInMemory()
+        }
+        .onChange(of: enablePlaylists) { _, enabled in
+            if !enabled && selectedTab == 2 { selectedTab = 0 }
         }
         .onAppear {
             if serverStore.servers.isEmpty {
@@ -108,6 +92,52 @@ struct ContentView: View {
 }
 
 private struct IdentifiableStrings: Identifiable {
-    let id = UUID()
+    var id: String { ids.joined(separator: ",") }
     let ids: [String]
+}
+
+/// Isoliertes PlayerBar-Overlay für iPhone — beobachtet Player ohne ContentView zu invalidieren
+private struct PlayerBarOverlay: View {
+    let isRegularWidth: Bool
+    @Binding var showPlayer: Bool
+    let bottomInset: CGFloat
+    @ObservedObject private var player = AudioPlayerService.shared
+
+    var body: some View {
+        if player.currentSong != nil && !isRegularWidth {
+            VStack {
+                Spacer()
+                PlayerBarView()
+                    .onTapGesture {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                            showPlayer = true
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, bottomInset + 49 + 8)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .ignoresSafeArea(edges: .bottom)
+        }
+    }
+}
+
+/// Isoliertes PlayerBar-Inset für iPad
+private struct PlayerBarInset: View {
+    let isRegularWidth: Bool
+    @Binding var showPlayer: Bool
+    @ObservedObject private var player = AudioPlayerService.shared
+
+    var body: some View {
+        if player.currentSong != nil && isRegularWidth {
+            PlayerBarView()
+                .onTapGesture {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        showPlayer = true
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+        }
+    }
 }

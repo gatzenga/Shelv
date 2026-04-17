@@ -2,8 +2,8 @@ import SwiftUI
 
 struct ArtistDetailView: View {
     let artist: Artist
-    @EnvironmentObject var player: AudioPlayerService
     @EnvironmentObject var libraryStore: LibraryStore
+    private let player = AudioPlayerService.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
     @AppStorage("enableFavorites") private var enableFavorites = true
@@ -90,8 +90,8 @@ struct ArtistDetailView: View {
                         }
                     }
                     .padding(.horizontal)
-                    .padding(.bottom, player.currentSong != nil ? 90 : 16)
                 }
+                PlayerBottomSpacer()
             }
             .padding(.top, 16)
         }
@@ -126,17 +126,18 @@ struct ArtistDetailView: View {
     }
 
     private func fetchAllSongs(from albums: [Album]) async -> [Song] {
-        await withTaskGroup(of: [Song].self) { group in
-            for album in albums {
+        let indexed = Array(albums.enumerated())
+        return await withTaskGroup(of: (Int, [Song]).self) { group in
+            for (i, album) in indexed {
                 group.addTask {
                     guard let detail = try? await SubsonicAPIService.shared.getAlbum(id: album.id),
-                          let songs = detail.song else { return [] }
-                    return songs
+                          let songs = detail.song else { return (i, []) }
+                    return (i, songs)
                 }
             }
-            var all: [Song] = []
-            for await albumSongs in group { all.append(contentsOf: albumSongs) }
-            return all
+            var results: [(Int, [Song])] = []
+            for await result in group { results.append(result) }
+            return results.sorted { $0.0 < $1.0 }.flatMap { $0.1 }
         }
     }
 }

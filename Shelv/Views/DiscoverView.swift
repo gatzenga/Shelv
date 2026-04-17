@@ -2,7 +2,7 @@ import SwiftUI
 
 struct DiscoverView: View {
     @EnvironmentObject var libraryStore: LibraryStore
-    @EnvironmentObject var player: AudioPlayerService
+    private let player = AudioPlayerService.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
@@ -57,7 +57,7 @@ struct DiscoverView: View {
                         )
                         randomAlbumSection
 
-                        Color.clear.frame(height: player.currentSong != nil ? 90 : 16)
+                        PlayerBottomSpacer()
                     }
                 }
                 .padding(.top, 8)

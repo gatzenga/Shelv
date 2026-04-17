@@ -3,7 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject var serverStore: ServerStore
     @EnvironmentObject var libraryStore: LibraryStore
-    @EnvironmentObject var player: AudioPlayerService
+    private let player = AudioPlayerService.shared
     @EnvironmentObject var lyricsStore: LyricsStore
     @AppStorage("appAppearance") private var appAppearance = "system"
     @AppStorage("themeColor") private var themeColorName = "violet"
@@ -245,8 +245,7 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
                 }
 
-                Color.clear
-                    .frame(height: player.currentSong != nil ? 90 : 16)
+                PlayerBottomSpacer()
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
             }
@@ -334,7 +333,6 @@ struct SettingsView: View {
                 .allowsHitTesting(false)
         }
         }
-        .animation(.spring(duration: 0.35), value: showClearToast)
         .tint(accentColor)
     }
 

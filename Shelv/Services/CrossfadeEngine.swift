@@ -18,6 +18,7 @@ final class CrossfadeEngine: ObservableObject {
     private var inactivePlayer: AVPlayer
 
     private var timeObserverToken: Any?
+    private var timeObserverPlayer: AVPlayer?
     private var fadeCancellable: AnyCancellable?
     private var fadeStartDate: Date?
     private var itemFinishedObserver: NSObjectProtocol?
@@ -114,6 +115,7 @@ final class CrossfadeEngine: ObservableObject {
         let progress = min(Date().timeIntervalSince(start) / crossfadeDuration, 1.0)
         activePlayer.volume = Float(1.0 - progress)
         inactivePlayer.volume = Float(progress)
+        currentTime = inactivePlayer.currentTime().seconds
         if progress >= 1.0 { completeFade() }
     }
 
@@ -147,8 +149,9 @@ final class CrossfadeEngine: ObservableObject {
 
     private func setupTimeObserver() {
         removeTimeObserver()
+        let player = activePlayer
         let interval = CMTime(seconds: 0.5, preferredTimescale: 1000)
-        timeObserverToken = activePlayer.addPeriodicTimeObserver(
+        timeObserverToken = player.addPeriodicTimeObserver(
             forInterval: interval,
             queue: .main
         ) { [weak self] time in
@@ -156,12 +159,14 @@ final class CrossfadeEngine: ObservableObject {
             self.currentTime = time.seconds
             self.refreshDuration()
         }
+        timeObserverPlayer = player
     }
 
     private func removeTimeObserver() {
-        guard let token = timeObserverToken else { return }
-        activePlayer.removeTimeObserver(token)
+        guard let token = timeObserverToken, let player = timeObserverPlayer else { return }
+        player.removeTimeObserver(token)
         timeObserverToken = nil
+        timeObserverPlayer = nil
     }
 
     private func setupItemFinishedObserver() {

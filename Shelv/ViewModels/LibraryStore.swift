@@ -73,7 +73,7 @@ class LibraryStore: ObservableObject {
             frequentlyPlayed = f
             randomAlbums     = r
         } catch {
-            errorMessage = error.localizedDescription
+            if !(error is CancellationError) { errorMessage = error.localizedDescription }
         }
         isLoadingDiscover = false
     }
@@ -82,7 +82,7 @@ class LibraryStore: ObservableObject {
         do {
             randomAlbums = try await api.getAlbumList(type: "random", size: 20)
         } catch {
-            errorMessage = error.localizedDescription
+            if !(error is CancellationError) { errorMessage = error.localizedDescription }
         }
     }
 
@@ -117,7 +117,7 @@ class LibraryStore: ObservableObject {
                 UserDefaults.standard.set(result.count, forKey: "shelv_albumCount_\(id)")
             }
         } catch {
-            errorMessage = error.localizedDescription
+            if !(error is CancellationError) { errorMessage = error.localizedDescription }
         }
         isLoadingAlbums = false
     }
@@ -141,7 +141,7 @@ class LibraryStore: ObservableObject {
                 UserDefaults.standard.set(result.count, forKey: "shelv_artistCount_\(id)")
             }
         } catch {
-            errorMessage = error.localizedDescription
+            if !(error is CancellationError) { errorMessage = error.localizedDescription }
         }
         isLoadingArtists = false
     }
@@ -165,20 +165,26 @@ class LibraryStore: ObservableObject {
         try? FileManager.default.removeItem(at: Self.libraryDir)
     }
 
+    func fetchAlbumSongs(_ album: Album) async throws -> [Song] {
+        let detail = try await api.getAlbum(id: album.id)
+        return detail.song ?? []
+    }
+
     func fetchAllSongs(for artist: Artist) async -> [Song] {
         guard let artistDetail = try? await api.getArtist(id: artist.id),
               let albums = artistDetail.album, !albums.isEmpty else { return [] }
-        return await withTaskGroup(of: [Song].self) { group in
-            for album in albums {
+        let indexed = Array(albums.enumerated())
+        return await withTaskGroup(of: (Int, [Song]).self) { group in
+            for (i, album) in indexed {
                 group.addTask {
                     guard let detail = try? await SubsonicAPIService.shared.getAlbum(id: album.id),
-                          let songs = detail.song else { return [] }
-                    return songs
+                          let songs = detail.song else { return (i, []) }
+                    return (i, songs)
                 }
             }
-            var all: [Song] = []
-            for await albumSongs in group { all.append(contentsOf: albumSongs) }
-            return all
+            var results: [(Int, [Song])] = []
+            for await result in group { results.append(result) }
+            return results.sorted { $0.0 < $1.0 }.flatMap { $0.1 }
         }
     }
 
@@ -210,7 +216,7 @@ class LibraryStore: ObservableObject {
                 save(starredArtists, name: "starred_artists", serverID: id)
             }
         } catch {
-            errorMessage = error.localizedDescription
+            if !(error is CancellationError) { errorMessage = error.localizedDescription }
         }
         isLoadingStarred = false
     }
@@ -235,7 +241,7 @@ class LibraryStore: ObservableObject {
             } else {
                 starredSongs.removeAll { $0.id == song.id }
             }
-            errorMessage = error.localizedDescription
+            if !(error is CancellationError) { errorMessage = error.localizedDescription }
         }
     }
 
@@ -259,7 +265,7 @@ class LibraryStore: ObservableObject {
             } else {
                 starredAlbums.removeAll { $0.id == album.id }
             }
-            errorMessage = error.localizedDescription
+            if !(error is CancellationError) { errorMessage = error.localizedDescription }
         }
     }
 
@@ -283,7 +289,7 @@ class LibraryStore: ObservableObject {
             } else {
                 starredArtists.removeAll { $0.id == artist.id }
             }
-            errorMessage = error.localizedDescription
+            if !(error is CancellationError) { errorMessage = error.localizedDescription }
         }
     }
 
@@ -314,7 +320,7 @@ class LibraryStore: ObservableObject {
             playlists = result
             if let id = activeServerID { save(result, name: "playlists", serverID: id) }
         } catch {
-            errorMessage = error.localizedDescription
+            if !(error is CancellationError) { errorMessage = error.localizedDescription }
         }
         isLoadingPlaylists = false
     }
@@ -323,7 +329,7 @@ class LibraryStore: ObservableObject {
         do {
             return try await api.getPlaylist(id: id)
         } catch {
-            errorMessage = error.localizedDescription
+            if !(error is CancellationError) { errorMessage = error.localizedDescription }
             return nil
         }
     }
@@ -334,7 +340,7 @@ class LibraryStore: ObservableObject {
             playlists.append(created)
             if let id = activeServerID { save(playlists, name: "playlists", serverID: id) }
         } catch {
-            errorMessage = error.localizedDescription
+            if !(error is CancellationError) { errorMessage = error.localizedDescription }
         }
     }
 
@@ -345,7 +351,7 @@ class LibraryStore: ObservableObject {
             if let id = activeServerID { save(playlists, name: "playlists", serverID: id) }
         } catch {
             playlists.append(playlist)
-            errorMessage = error.localizedDescription
+            if !(error is CancellationError) { errorMessage = error.localizedDescription }
         }
     }
 
@@ -361,7 +367,7 @@ class LibraryStore: ObservableObject {
             }
             if let id = activeServerID { save(playlists, name: "playlists", serverID: id) }
         } catch {
-            errorMessage = error.localizedDescription
+            if !(error is CancellationError) { errorMessage = error.localizedDescription }
         }
     }
 
@@ -369,7 +375,7 @@ class LibraryStore: ObservableObject {
         do {
             try await api.updatePlaylist(id: playlist.id, songIdsToAdd: songIds)
         } catch {
-            errorMessage = error.localizedDescription
+            if !(error is CancellationError) { errorMessage = error.localizedDescription }
         }
     }
 
@@ -377,7 +383,7 @@ class LibraryStore: ObservableObject {
         do {
             try await api.updatePlaylist(id: playlist.id, songIndicesToRemove: indices)
         } catch {
-            errorMessage = error.localizedDescription
+            if !(error is CancellationError) { errorMessage = error.localizedDescription }
         }
     }
 }

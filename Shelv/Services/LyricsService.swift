@@ -151,9 +151,19 @@ actor LyricsService {
 
     func fetchAndSave(song: Song, serverId: String) async -> LyricsRecord {
         let sixMonths: Double = 60 * 60 * 24 * 180
-        if let cached = lyrics(songId: song.id, serverId: serverId),
+        if var cached = lyrics(songId: song.id, serverId: serverId),
            Date().timeIntervalSince1970 - cached.fetchedAt < sixMonths {
+            if cached.songTitle == nil || cached.artistName == nil || cached.coverArt == nil {
+                cached.songTitle = cached.songTitle ?? song.title
+                cached.artistName = cached.artistName ?? song.artist
+                cached.coverArt = cached.coverArt ?? song.coverArt
+                save(cached)
+            }
             return cached
+        }
+
+        if let lrc = await fetchFromNavidrome(song: song, serverId: serverId) {
+            save(lrc); return lrc
         }
 
         if let lrc = await fetchFromLrcLib(song: song, serverId: serverId) {
@@ -254,9 +264,11 @@ actor LyricsService {
         req.setValue("Shelv/1.0 (https://github.com/gatzenga/Shelv)", forHTTPHeaderField: "User-Agent")
 
         guard let (data, resp) = try? await URLSession.shared.data(for: req),
-              (resp as? HTTPURLResponse)?.statusCode == 200,
-              let lrc = try? JSONDecoder().decode(LrcLibResponse.self, from: data)
+              (resp as? HTTPURLResponse)?.statusCode == 200
         else { return nil }
+
+        let lrcDecoded = try? await MainActor.run { try JSONDecoder().decode(LrcLibResponse.self, from: data) }
+        guard let lrc = lrcDecoded else { return nil }
 
         if lrc.instrumental == true {
             return LyricsRecord(

@@ -152,7 +152,9 @@ struct ServerDetailView: View {
         errorMessage = nil
         do {
             try await api.startScan(server: server, password: password)
-            while true {
+            var attempts = 0
+            let maxAttempts = 60
+            while attempts < maxAttempts {
                 let status = try await api.getScanStatus(server: server, password: password)
                 if !status.scanning {
                     if status.count > 0 {
@@ -162,6 +164,10 @@ struct ServerDetailView: View {
                     break
                 }
                 try await Task.sleep(nanoseconds: 2_000_000_000)
+                attempts += 1
+            }
+            if attempts >= maxAttempts {
+                throw SubsonicAPIError.apiError(0, tr("Scan timed out after 2 minutes.", "Scan nach 2 Minuten abgebrochen."))
             }
             await withTaskGroup(of: Void.self) { group in
                 group.addTask { await libraryStore.loadAlbums() }

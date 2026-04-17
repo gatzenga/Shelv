@@ -15,6 +15,9 @@ struct AddServerView: View {
     @State private var isTesting = false
     @State private var testResult: String?
     @State private var testSuccess = false
+    @FocusState private var focusedField: Field?
+
+    private enum Field { case name, url, username, password }
 
     private var isEditing: Bool { editingServer != nil }
     private var canSave: Bool { !baseURL.trimmingCharacters(in: .whitespaces).isEmpty && !username.isEmpty && !password.isEmpty }
@@ -24,9 +27,11 @@ struct AddServerView: View {
             Form {
                 Section(tr("Server", "Server")) {
                     TextField(tr("Name (optional)", "Name (optional)"), text: $name)
+                        .focused($focusedField, equals: .name)
                         .autocorrectionDisabled()
 
                     TextField(tr("URL (e.g. https://music.example.com)", "URL (z.B. https://musik.example.com)"), text: $baseURL)
+                        .focused($focusedField, equals: .url)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
                         .keyboardType(.URL)
@@ -34,10 +39,12 @@ struct AddServerView: View {
 
                 Section(tr("Account", "Konto")) {
                     TextField(tr("Username", "Benutzername"), text: $username)
+                        .focused($focusedField, equals: .username)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
 
                     SecureField(tr("Password", "Passwort"), text: $password)
+                        .focused($focusedField, equals: .password)
                 }
 
                 Section {
@@ -85,6 +92,9 @@ struct AddServerView: View {
                     baseURL = server.baseURL
                     username = server.username
                     password = serverStore.password(for: server) ?? ""
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    focusedField = isEditing ? .name : .url
                 }
             }
         }

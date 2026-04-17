@@ -15,9 +15,28 @@ enum SubsonicAPIError: LocalizedError {
         case .noServer:              return tr("No server configured", "Kein Server konfiguriert")
         case .noPassword:            return tr("No password found", "Kein Passwort gefunden")
         case .invalidURL:            return tr("Invalid server URL", "Ungültige Server-URL")
-        case .networkError(let e):   return e.localizedDescription
-        case .apiError(let c, let m): return "API \(c): \(m ?? "")"
-        case .decodingError(let e):  return e.localizedDescription
+        case .networkError(let e):
+            if let urlError = e as? URLError {
+                switch urlError.code {
+                case .timedOut:
+                    return tr("Connection timed out. Please check your network.", "Zeitüberschreitung. Bitte Netzwerkverbindung prüfen.")
+                case .notConnectedToInternet:
+                    return tr("No internet connection.", "Keine Internetverbindung.")
+                case .cannotConnectToHost, .cannotFindHost:
+                    return tr("Server not reachable. Please check the URL.", "Server nicht erreichbar. Bitte URL prüfen.")
+                case .networkConnectionLost:
+                    return tr("Connection lost. Please try again.", "Verbindung verloren. Bitte erneut versuchen.")
+                case .secureConnectionFailed:
+                    return tr("Secure connection failed. Please check the server certificate.", "Sichere Verbindung fehlgeschlagen. Bitte Serverzertifikat prüfen.")
+                default:
+                    return tr("Network error. Please try again.", "Netzwerkfehler. Bitte erneut versuchen.")
+                }
+            }
+            return tr("Network error. Please try again.", "Netzwerkfehler. Bitte erneut versuchen.")
+        case .apiError(_, let m):
+            return m ?? tr("Server returned an error.", "Server hat einen Fehler zurückgegeben.")
+        case .decodingError:
+            return tr("Unexpected server response.", "Unerwartete Serverantwort.")
         }
     }
 }
@@ -197,8 +216,26 @@ private struct CreatePlaylistBody: Decodable {
 class SubsonicAPIService: ObservableObject {
     static let shared = SubsonicAPIService()
 
-    var activeServer: SubsonicServer?
-    var activePassword: String?
+    private let credentialLock = NSLock()
+    private var _activeServer: SubsonicServer?
+    private var _activePassword: String?
+
+    var activeServer: SubsonicServer? {
+        get { credentialLock.withLock { _activeServer } }
+        set { credentialLock.withLock { _activeServer = newValue } }
+    }
+
+    var activePassword: String? {
+        get { credentialLock.withLock { _activePassword } }
+        set { credentialLock.withLock { _activePassword = newValue } }
+    }
+
+    func setCredentials(server: SubsonicServer, password: String?) {
+        credentialLock.withLock {
+            _activeServer = server
+            _activePassword = password
+        }
+    }
 
     private let apiVersion = "1.16.1"
     private let clientName = "Shelv"
@@ -208,21 +245,24 @@ class SubsonicAPIService: ObservableObject {
         return d
     }()
 
+    private let session: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 30
+        config.timeoutIntervalForResource = 120
+        return URLSession(configuration: config)
+    }()
+
     private init() {}
 
-    private func makeSalt() -> String {
-        let chars = "abcdefghijklmnopqrstuvwxyz0123456789"
-        return String((0..<8).map { _ in chars.randomElement()! })
+    private func resolveCredentials() throws -> (server: SubsonicServer, password: String) {
+        try credentialLock.withLock {
+            guard let s = _activeServer else { throw SubsonicAPIError.noServer }
+            guard let p = _activePassword else { throw SubsonicAPIError.noPassword }
+            return (s, p)
+        }
     }
 
-    private func makeToken(password: String, salt: String) -> String {
-        let digest = Insecure.MD5.hash(data: Data((password + salt).utf8))
-        return digest.map { String(format: "%02x", $0) }.joined()
-    }
-
-    func authParams() throws -> [URLQueryItem] {
-        guard let server = activeServer else { throw SubsonicAPIError.noServer }
-        guard let password = activePassword else { throw SubsonicAPIError.noPassword }
+    private func makeAuthParams(server: SubsonicServer, password: String) -> [URLQueryItem] {
         let s = makeSalt()
         let t = makeToken(password: password, salt: s)
         return [
@@ -235,26 +275,56 @@ class SubsonicAPIService: ObservableObject {
         ]
     }
 
+    private func makeSalt() -> String {
+        let chars = "abcdefghijklmnopqrstuvwxyz0123456789"
+        return String((0..<8).map { _ in chars.randomElement()! })
+    }
+
+    private func makeToken(password: String, salt: String) -> String {
+        let digest = Insecure.MD5.hash(data: Data((password + salt).utf8))
+        return digest.map { String(format: "%02x", $0) }.joined()
+    }
+
+    func authParams() throws -> [URLQueryItem] {
+        let creds = try resolveCredentials()
+        return makeAuthParams(server: creds.server, password: creds.password)
+    }
+
     private func buildURL(path: String, extra: [URLQueryItem] = []) throws -> URL {
-        guard let server = activeServer else { throw SubsonicAPIError.noServer }
-        var base = server.baseURL
+        let creds = try resolveCredentials()
+        var base = creds.server.baseURL
         if base.hasSuffix("/") { base.removeLast() }
         guard var comps = URLComponents(string: "\(base)/rest/\(path)") else {
             throw SubsonicAPIError.invalidURL
         }
-        comps.queryItems = (try authParams()) + extra
+        comps.queryItems = makeAuthParams(server: creds.server, password: creds.password) + extra
         guard let url = comps.url else { throw SubsonicAPIError.invalidURL }
         return url
     }
 
-    private func fetchData(path: String, extra: [URLQueryItem] = []) async throws -> Data {
+    private func fetchData(path: String, extra: [URLQueryItem] = [], retries: Int = 2) async throws -> Data {
         let url = try buildURL(path: path, extra: extra)
-        do {
-            let (data, _) = try await URLSession.shared.data(from: url)
-            return data
-        } catch {
-            throw SubsonicAPIError.networkError(error)
+        var lastError: Error?
+        for attempt in 0...retries {
+            if attempt > 0 {
+                try await Task.sleep(for: .milliseconds(500 * attempt))
+                try Task.checkCancellation()
+            }
+            do {
+                let (data, _) = try await session.data(from: url)
+                return data
+            } catch {
+                if Task.isCancelled || (error as? URLError)?.code == .cancelled {
+                    throw CancellationError()
+                }
+                lastError = error
+                let isRetryable = (error as? URLError).map {
+                    [.timedOut, .networkConnectionLost, .notConnectedToInternet, .cannotConnectToHost].contains($0.code)
+                } ?? false
+                if !isRetryable || attempt == retries { break }
+            }
         }
+        throw SubsonicAPIError.networkError(lastError!)
     }
 
     private func check(status: String, error: StatusCheck.APIError?) throws {
@@ -290,7 +360,7 @@ class SubsonicAPIService: ObservableObject {
     private func fetchData(for server: SubsonicServer, password: String, path: String, extra: [URLQueryItem] = []) async throws -> Data {
         let url = try buildURL(for: server, password: password, path: path, extra: extra)
         do {
-            let (data, _) = try await URLSession.shared.data(from: url)
+            let (data, _) = try await session.data(from: url)
             return data
         } catch {
             throw SubsonicAPIError.networkError(error)
