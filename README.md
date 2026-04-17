@@ -6,7 +6,8 @@
 
 A native, album and artist focused iOS and iPadOS client for [Navidrome](https://www.navidrome.org/) and Subsonic-compatible music servers, built with SwiftUI. Also available as a [native macOS app](https://github.com/gatzenga/Shelv-Desktop).
 
-**TestFlight:** https://testflight.apple.com/join/5y4tN6NB
+**TestFlight:** https://testflight.apple.com/join/5y4tN6NB  
+**Discord:** https://discord.gg/zU3qv9v6Vn
 
 ![Platform](https://img.shields.io/badge/platform-iOS%20%7C%20iPadOS-lightgrey)
 ![Swift](https://img.shields.io/badge/swift-5-orange)
@@ -24,9 +25,11 @@ A native, album and artist focused iOS and iPadOS client for [Navidrome](https:/
 - **Shelves** — Recently added, recently played, frequently played, and random albums in horizontal scroll sections
 - **Smart Mixes** — Three one-tap buttons that build a shuffled queue from your newest tracks, most played tracks, or recently played tracks
 - **Random Albums** — A dedicated section with a shuffle button to load a fresh random selection at any time
+- **Insights** — A ranked overview of your most played artists, albums, and songs, pulled directly from your server's play count data. The top three entries are highlighted; play counts are shown as badges next to each entry. Accessible via the chart icon in the top-right corner of Discover
 
 ### Playback
 - **Full player** — Play, pause, seek, previous, next, shuffle, and three repeat modes (Off / All / One)
+- **Crossfade** — Smooth crossfade between tracks with a configurable duration; enable and adjust it in Settings
 - **AirPlay** — Stream to any AirPlay-compatible device directly from the player
 - **Lock screen and media keys** — Full remote control integration via MPRemoteCommandCenter
 - **iPad layout** — Optimised player layout for iPad with larger cover art and controls; mini-player anchored correctly at the bottom via `safeAreaInset`
@@ -47,8 +50,15 @@ A native, album and artist focused iOS and iPadOS client for [Navidrome](https:/
 - Available via context menus, swipe actions, and the full-screen player
 - Playlists can be enabled or disabled in Settings; when disabled, all related UI elements are hidden
 
+### Lyrics
+- Synced and plain-text lyrics displayed in the full-screen player, with automatic line highlighting and scrolling for time-coded tracks
+- Lyrics are fetched from your Navidrome server first; if none are stored there, Shelv falls back to [lrclib.net](https://lrclib.net) automatically
+- Each song's lyrics are cached locally so they load instantly after the first fetch
+- **Auto-load** — when enabled in Settings, lyrics are fetched in the background as soon as a song starts playing
+- **Bulk download** — a one-tap option in Settings pre-fetches lyrics for your entire library in the background, with a live progress counter
+
 ### Search
-- Global search across artists, albums, and tracks on your server
+- Global search across artists, albums, and tracks on your server; also searches locally cached lyrics
 - Debounced live results with task cancellation — no redundant network requests
 
 ### Settings
@@ -123,7 +133,7 @@ Credentials are authenticated using the Subsonic API's token-based method: `MD5(
 
 ## Contributing
 
-Pull requests are welcome. For larger changes, please open an issue first to discuss what you'd like to change.
+Pull requests are welcome. For larger changes, please open an issue first to discuss what you'd like to change. Feature ideas, feedback, and general discussion are welcome on the [Discord server](https://discord.gg/zU3qv9v6Vn).
 
 ## License
 
