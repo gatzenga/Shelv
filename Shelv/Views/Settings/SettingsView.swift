@@ -4,10 +4,14 @@ struct SettingsView: View {
     @EnvironmentObject var serverStore: ServerStore
     @EnvironmentObject var libraryStore: LibraryStore
     @EnvironmentObject var player: AudioPlayerService
+    @EnvironmentObject var lyricsStore: LyricsStore
     @AppStorage("appAppearance") private var appAppearance = "system"
     @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage("enableFavorites") private var enableFavorites = true
     @AppStorage("enablePlaylists") private var enablePlaylists = true
+    @AppStorage("crossfadeEnabled") private var crossfadeEnabled = false
+    @AppStorage("crossfadeDuration") private var crossfadeDuration = 5
+    @AppStorage("autoFetchLyrics") private var autoFetchLyrics = true
 
     @State private var showAddServer = false
     @State private var editingServer: SubsonicServer?
@@ -16,7 +20,9 @@ struct SettingsView: View {
     @State private var serverToDelete: SubsonicServer?
     @State private var showClearToast = false
     @State private var showClearCacheConfirm = false
+    @State private var showResetLyricsConfirm = false
     @State private var cacheSize = "—"
+    @State private var lyricsFetchedCount: Int = 0
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
@@ -59,18 +65,115 @@ struct SettingsView: View {
 
                 Section(tr("Playlists & Favorites", "Playlists & Favoriten")) {
                     Toggle(isOn: $enableFavorites) {
-                        Label(tr("Favorites", "Favoriten"), systemImage: "heart")
+                        Label { Text(tr("Favorites", "Favoriten")) } icon: {
+                            Image(systemName: "heart").foregroundStyle(accentColor)
+                        }
                     }
                     .tint(accentColor)
                     Toggle(isOn: $enablePlaylists) {
-                        Label(tr("Playlists", "Playlists"), systemImage: "music.note.list")
+                        Label { Text(tr("Playlists", "Playlists")) } icon: {
+                            Image(systemName: "music.note.list").foregroundStyle(accentColor)
+                        }
                     }
                     .tint(accentColor)
                 }
 
+                Section(tr("Crossfade", "Crossfade")) {
+                    Toggle(isOn: $crossfadeEnabled) {
+                        Label { Text(tr("Crossfade", "Crossfade")) } icon: {
+                            Image(systemName: "waveform").foregroundStyle(accentColor)
+                        }
+                    }
+                    .tint(accentColor)
+
+                    if crossfadeEnabled {
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Label { Text(tr("Duration", "Dauer")) } icon: {
+                                    Image(systemName: "timer").foregroundStyle(accentColor)
+                                }
+                                Spacer()
+                                Text("\(crossfadeDuration)s")
+                                    .monospacedDigit()
+                                    .foregroundStyle(.secondary)
+                            }
+                            Slider(
+                                value: Binding(
+                                    get: { Double(crossfadeDuration) },
+                                    set: { crossfadeDuration = Int($0.rounded()) }
+                                ),
+                                in: 1...12,
+                                step: 1
+                            )
+                            .tint(accentColor)
+                        }
+                    }
+                }
+
+                Section(tr("Lyrics", "Lyrics")) {
+                    HStack {
+                        Label { Text(tr("Database", "Datenbank")) } icon: {
+                            Image(systemName: "text.bubble").foregroundStyle(accentColor)
+                        }
+                        Spacer()
+                        Group {
+                            if lyricsStore.isDownloading {
+                                Text("\(lyricsStore.downloadFetched) / \(lyricsStore.downloadTotal)")
+                            } else {
+                                Text("\(lyricsFetchedCount) · \(lyricsStore.dbSize)")
+                            }
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                    }
+
+                    Toggle(isOn: $autoFetchLyrics) {
+                        Label { Text(tr("Auto-fetch on playback", "Beim Abspielen laden")) } icon: {
+                            Image(systemName: "wand.and.stars").foregroundStyle(accentColor)
+                        }
+                    }
+                    .tint(accentColor)
+
+                    if lyricsStore.isDownloading {
+                        VStack(alignment: .leading, spacing: 8) {
+                            ProgressView(
+                                value: Double(lyricsStore.downloadFetched),
+                                total: Double(max(lyricsStore.downloadTotal, 1))
+                            )
+                            .tint(accentColor)
+                            Button(tr("Cancel download", "Download abbrechen")) {
+                                lyricsStore.cancelBulkDownload()
+                            }
+                            .foregroundStyle(.red)
+                            .font(.caption)
+                        }
+                    } else {
+                        Button {
+                            guard let sid = serverStore.activeServerID?.uuidString else { return }
+                            lyricsStore.startBulkDownload(serverId: sid)
+                        } label: {
+                            Label { Text(tr("Download all lyrics", "Alle Lyrics laden")) } icon: {
+                            Image(systemName: "arrow.down.circle").foregroundStyle(accentColor)
+                        }
+                        }
+                    }
+
+                    Button(role: .destructive) {
+                        showResetLyricsConfirm = true
+                    } label: {
+                        Label { Text(tr("Reset lyrics database", "Lyrics zurücksetzen")) } icon: {
+                            Image(systemName: "trash").foregroundStyle(.red)
+                        }
+                    }
+                    .tint(.red)
+                }
+
                 Section(tr("Cache", "Cache")) {
                     HStack {
-                        Label(tr("Cache Size", "Cache-Größe"), systemImage: "internaldrive")
+                        Label { Text(tr("Cache Size", "Cache-Größe")) } icon: {
+                            Image(systemName: "internaldrive").foregroundStyle(accentColor)
+                        }
                         Spacer()
                         Text(cacheSize)
                             .foregroundStyle(.secondary)
@@ -78,7 +181,9 @@ struct SettingsView: View {
                     Button(role: .destructive) {
                         showClearCacheConfirm = true
                     } label: {
-                        Label(tr("Clear Cache", "Cache leeren"), systemImage: "trash")
+                        Label { Text(tr("Clear Cache", "Cache leeren")) } icon: {
+                            Image(systemName: "trash").foregroundStyle(.red)
+                        }
                     }
                     .tint(.red)
                 }
@@ -149,7 +254,13 @@ struct SettingsView: View {
             .listStyle(.insetGrouped)
             .scrollIndicators(.hidden)
             .navigationTitle(tr("Settings", "Einstellungen"))
-            .task { await recalculateCacheSize() }
+            .task {
+                await recalculateCacheSize()
+                if let sid = serverStore.activeServerID?.uuidString {
+                    lyricsFetchedCount = await lyricsStore.fetchedCount(serverId: sid)
+                }
+                lyricsStore.refreshDbSize()
+            }
             .sheet(isPresented: $showAddServer) {
                 AddServerView()
                     .environmentObject(serverStore)
@@ -181,6 +292,24 @@ struct SettingsView: View {
                 Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
             } message: { server in
                 Text("\"\(server.displayName)\"")
+            }
+            .alert(
+                tr("Reset lyrics database?", "Lyrics-Datenbank zurücksetzen?"),
+                isPresented: $showResetLyricsConfirm
+            ) {
+                Button(tr("Reset", "Zurücksetzen"), role: .destructive) {
+                    Task {
+                        guard let sid = serverStore.activeServerID?.uuidString else { return }
+                        await lyricsStore.reset(serverId: sid)
+                        lyricsFetchedCount = 0
+                    }
+                }
+                Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+            } message: {
+                Text(tr(
+                    "All downloaded lyrics will be removed.",
+                    "Alle heruntergeladenen Lyrics werden entfernt."
+                ))
             }
             .alert(
                 tr("Clear Cache?", "Cache leeren?"),

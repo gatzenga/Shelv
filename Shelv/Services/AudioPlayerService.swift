@@ -59,11 +59,10 @@ class AudioPlayerService: ObservableObject {
         var userQueue: [Song]
     }
 
-    private var player: AVPlayer?
-    private var playerItem: AVPlayerItem?
-    private var statusObserver: NSKeyValueObservation?
-    private var timeControlObserver: NSKeyValueObservation?
-    private var timeObserver: Any?
+    private let engine = CrossfadeEngine()
+    private var engineSubscriptions = Set<AnyCancellable>()
+    private var crossfadeTriggered = false
+    private var isEngineLoaded = false
     private var currentArtwork: MPMediaItemArtwork?
     private var artworkTask: URLSessionDataTask?
 
@@ -85,6 +84,7 @@ class AudioPlayerService: ObservableObject {
 
     private init() {
         setupAudioSession()
+        setupEngine()
         setupRemoteControls()
         setupRouteObserver()
         setupNetworkMonitor()
@@ -267,85 +267,22 @@ class AudioPlayerService: ObservableObject {
     private func startPlayback(song: Song) {
         guard let url = SubsonicAPIService.shared.streamURL(for: song.id) else { return }
 
-        teardownPlayer()
+        crossfadeTriggered = false
         currentSong = song
         isBuffering = true
         currentTime = 0
-        duration = 0
+        if let d = song.duration { duration = Double(d) }
 
         let seekTo = pendingSeekTime
         pendingSeekTime = 0
 
-        let headers: [String: String] = ["Range": "bytes=0-"]
-        let asset = AVURLAsset(url: url, options: ["AVURLAssetHTTPHeaderFieldsKey": headers])
-        playerItem = AVPlayerItem(asset: asset)
-        playerItem?.preferredForwardBufferDuration = 10
-
-        player = AVPlayer(playerItem: playerItem)
-        player?.allowsExternalPlayback = false
-        player?.automaticallyWaitsToMinimizeStalling = true
-
-        statusObserver = playerItem?.observe(\.status, options: [.new]) { [weak self] item, _ in
-            DispatchQueue.main.async {
-                guard let self else { return }
-                if item.status == .readyToPlay {
-                    if let d = self.playerItem?.duration, d.isNumeric {
-                        self.duration = d.seconds
-                    }
-                    if seekTo > 0 {
-                        let seekTime = CMTime(seconds: seekTo, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
-                        self.player?.seek(to: seekTime, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
-                            DispatchQueue.main.async { self?.player?.play() }
-                        }
-                    } else {
-                        self.player?.play()
-                    }
-                } else if item.status == .failed {
-                    self.isBuffering = false
-                }
-            }
-        }
-
-        timeControlObserver = player?.observe(\.timeControlStatus, options: [.new]) { [weak self] avPlayer, _ in
-            DispatchQueue.main.async {
-                switch avPlayer.timeControlStatus {
-                case .playing:
-                    self?.isBuffering = false
-                    self?.isPlaying = true
-                case .waitingToPlayAtSpecifiedRate:
-                    self?.isBuffering = true
-                case .paused:
-                    break
-                @unknown default:
-                    break
-                }
-            }
-        }
-
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(itemDidFinishPlaying),
-            name: .AVPlayerItemDidPlayToEndTime,
-            object: playerItem
-        )
-
-        let interval = CMTime(seconds: 0.5, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
-        timeObserver = player?.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
-            guard let self, !self.isSeeking else { return }
-            self.currentTime = time.seconds
-            if let d = self.playerItem?.duration, d.isNumeric, d.seconds > 0 {
-                self.duration = d.seconds
-            }
-            self.updateNowPlayingTime(time.seconds)
-        }
+        engine.play(url: url)
+        if seekTo > 0 { engine.seek(to: seekTo) }
+        isEngineLoaded = true
 
         MPNowPlayingInfoCenter.default().playbackState = .playing
         updateNowPlayingInfo(song: song)
         Task { await SubsonicAPIService.shared.scrobble(songId: song.id) }
-    }
-
-    @objc private func itemDidFinishPlaying() {
-        DispatchQueue.main.async { self.next(triggeredByUser: false) }
     }
 
     private func clearPlaybackState() {
@@ -361,20 +298,13 @@ class AudioPlayerService: ObservableObject {
     private func teardownPlayer() {
         artworkTask?.cancel()
         artworkTask = nil
-        if let obs = timeObserver { player?.removeTimeObserver(obs) }
-        timeObserver = nil
-        statusObserver?.invalidate()
-        statusObserver = nil
-        timeControlObserver?.invalidate()
-        timeControlObserver = nil
-        NotificationCenter.default.removeObserver(self, name: .AVPlayerItemDidPlayToEndTime, object: playerItem)
-        player?.pause()
-        player = nil
-        playerItem = nil
+        engine.stop()
+        isEngineLoaded = false
+        crossfadeTriggered = false
     }
 
     func pause() {
-        player?.pause()
+        engine.pause()
         isPlaying = false
         updateNowPlayingPlaybackRate(0)
         MPNowPlayingInfoCenter.default().playbackState = .paused
@@ -383,12 +313,12 @@ class AudioPlayerService: ObservableObject {
 
     func resume() {
         guard let song = currentSong else { return }
-        if player == nil {
+        if !isEngineLoaded {
             pendingSeekTime = resumeTime
             resumeTime = 0
             startPlayback(song: song)
         } else {
-            player?.play()
+            engine.resume()
             isPlaying = true
             updateNowPlayingPlaybackRate(1)
             MPNowPlayingInfoCenter.default().playbackState = .playing
@@ -526,25 +456,23 @@ class AudioPlayerService: ObservableObject {
     func previous() {
         if currentTime > 3 {
             seek(to: 0)
-        } else {
-            let prevIndex = currentIndex - 1
-            guard prevIndex >= 0 else { return }
-            currentIndex = prevIndex
-            startPlayback(song: queue[prevIndex])
+            saveState()
+            return
         }
+        let prevIndex = currentIndex - 1
+        guard prevIndex >= 0 else { return }
+        currentIndex = prevIndex
+        startPlayback(song: queue[prevIndex])
         saveState()
     }
 
     func seek(to seconds: Double) {
         currentTime = seconds
-        guard let player else { return }
         isSeeking = true
-        let time = CMTime(seconds: seconds, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
-        player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
-            DispatchQueue.main.async {
-                self?.isSeeking = false
-                self?.updateNowPlayingTime(seconds)
-            }
+        engine.seek(to: seconds)
+        updateNowPlayingTime(seconds)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+            self?.isSeeking = false
         }
     }
 
@@ -677,6 +605,107 @@ class AudioPlayerService: ObservableObject {
 
     func moveInUserQueue(from source: IndexSet, to destination: Int) {
         userQueue.move(fromOffsets: source, toOffset: destination)
+        saveState()
+    }
+
+    private var crossfadeEnabled: Bool {
+        UserDefaults.standard.bool(forKey: "crossfadeEnabled")
+    }
+
+    private var crossfadeDuration: Double {
+        let v = UserDefaults.standard.integer(forKey: "crossfadeDuration")
+        return v >= 1 ? Double(v) : 5
+    }
+
+    private func setupEngine() {
+        engine.onTrackFinished = { [weak self] in
+            guard let self else { return }
+            if self.crossfadeTriggered {
+                self.crossfadeTriggered = false
+            } else {
+                self.next(triggeredByUser: false)
+            }
+        }
+
+        engine.$currentTime
+            .sink { [weak self] time in
+                guard let self, !self.isSeeking, !self.crossfadeTriggered else { return }
+                self.currentTime = time
+                self.updateNowPlayingTime(time)
+                self.checkCrossfadeTrigger(currentTime: time)
+            }
+            .store(in: &engineSubscriptions)
+
+        engine.$duration
+            .sink { [weak self] d in
+                guard let self, d > 0 else { return }
+                self.duration = d
+            }
+            .store(in: &engineSubscriptions)
+
+        engine.$isPlaying
+            .sink { [weak self] playing in
+                guard let self else { return }
+                if playing { self.isBuffering = false }
+                self.isPlaying = playing
+            }
+            .store(in: &engineSubscriptions)
+    }
+
+    private func peekNextSong() -> Song? {
+        if !playNextQueue.isEmpty { return playNextQueue[0] }
+        let nextIndex = currentIndex + 1
+        if nextIndex < queue.count { return queue[nextIndex] }
+        if !userQueue.isEmpty { return userQueue[0] }
+        if repeatMode == .all && !queue.isEmpty && !isShuffled { return queue[0] }
+        return nil
+    }
+
+    private func advanceQueueState() {
+        if !playNextQueue.isEmpty {
+            playNextQueue.removeFirst()
+        } else {
+            let nextIndex = currentIndex + 1
+            if nextIndex < queue.count {
+                currentIndex = nextIndex
+            } else if !userQueue.isEmpty {
+                let song = userQueue.removeFirst()
+                queue.append(song)
+                currentIndex = queue.count - 1
+            } else if repeatMode == .all && !queue.isEmpty {
+                currentIndex = 0
+            }
+        }
+    }
+
+    private func crossfadeToSong(_ song: Song) {
+        guard let url = SubsonicAPIService.shared.streamURL(for: song.id) else { return }
+
+        engine.crossfadeDuration = crossfadeDuration
+        engine.triggerCrossfade(nextURL: url)
+
+        crossfadeTriggered = true
+        currentSong = song
+        currentTime = 0
+        isEngineLoaded = true
+        if let d = song.duration { duration = Double(d) }
+
+        updateNowPlayingInfo(song: song)
+        MPNowPlayingInfoCenter.default().playbackState = .playing
+        Task { await SubsonicAPIService.shared.scrobble(songId: song.id) }
+    }
+
+    private func checkCrossfadeTrigger(currentTime: Double) {
+        guard crossfadeEnabled, !crossfadeTriggered, duration > 1 else { return }
+
+        let triggerAt = duration - crossfadeDuration
+        guard currentTime >= triggerAt else { return }
+        guard !(repeatMode == .one && playNextQueue.isEmpty) else { return }
+        guard let nextSong = peekNextSong() else { return }
+
+        crossfadeTriggered = true
+        advanceQueueState()
+        crossfadeToSong(nextSong)
         saveState()
     }
 

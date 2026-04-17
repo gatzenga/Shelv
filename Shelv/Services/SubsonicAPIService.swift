@@ -70,6 +70,12 @@ private struct SearchBody: Decodable {
     let searchResult3: SearchResult?
 }
 
+private struct SongBody: Decodable {
+    let status: String
+    let error: StatusCheck.APIError?
+    let song: Song?
+}
+
 private struct PingBody: Decodable {
     let status: String
     let error: StatusCheck.APIError?
@@ -369,6 +375,16 @@ class SubsonicAPIService: ObservableObject {
         return artist
     }
 
+    func getSong(id: String) async throws -> Song {
+        let data = try await fetchData(path: "getSong", extra: [
+            URLQueryItem(name: "id", value: id)
+        ])
+        let body = try decoder.decode(Envelope<SongBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+        guard let song = body.song else { throw SubsonicAPIError.apiError(0, "Song not found") }
+        return song
+    }
+
     func search(query: String) async throws -> SearchResult {
         let data = try await fetchData(path: "search3", extra: [
             URLQueryItem(name: "query", value: query),
@@ -534,5 +550,37 @@ class SubsonicAPIService: ObservableObject {
         ])
         let body = try decoder.decode(Envelope<PingBody>.self, from: data).response
         try check(status: body.status, error: body.error)
+    }
+
+    // MARK: - Lyrics (OpenSubsonic)
+
+    func getLyricsBySongId(songId: String) async throws -> StructuredLyrics? {
+        let data = try await fetchData(path: "getLyricsBySongId", extra: [
+            URLQueryItem(name: "id", value: songId)
+        ])
+        let body = try decoder.decode(Envelope<LyricsListBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+        return body.lyricsList?.structuredLyrics?.first
+    }
+}
+
+struct StructuredLyrics: Decodable {
+    let synced: Bool
+    let lang: String?
+    let line: [LyricsLine]?
+
+    struct LyricsLine: Decodable {
+        let start: Int?
+        let value: String
+    }
+}
+
+private struct LyricsListBody: Decodable {
+    let status: String
+    let error: StatusCheck.APIError?
+    let lyricsList: LyricsList?
+
+    struct LyricsList: Decodable {
+        let structuredLyrics: [StructuredLyrics]?
     }
 }

@@ -10,6 +10,7 @@ struct SearchView: View {
 
     @State private var query = ""
     @State private var result: SearchResult?
+    @State private var lyricsResults: [LyricsSearchResult] = []
     @State private var isSearching = false
     @State private var searchTask: Task<Void, Never>?
     @State private var showAddToPlaylist = false
@@ -23,7 +24,8 @@ struct SearchView: View {
     private var hasResults: Bool {
         !(result?.artist ?? []).isEmpty ||
         !(result?.album ?? []).isEmpty ||
-        !(result?.song ?? []).isEmpty
+        !(result?.song ?? []).isEmpty ||
+        !lyricsResults.isEmpty
     }
 
     var body: some View {
@@ -110,7 +112,8 @@ struct SearchView: View {
                                             Button {
                                                 Task { await libraryStore.toggleStarAlbum(album) }
                                             } label: {
-                                                Image(systemName: libraryStore.isAlbumStarred(album) ? "heart.slash" : "heart.fill")
+                                                let starred = libraryStore.isAlbumStarred(album)
+                                                Image(systemName: starred ? "heart.slash" : "heart.fill")
                                             }
                                             .tint(.pink)
                                         }
@@ -221,6 +224,38 @@ struct SearchView: View {
                                 }
                             }
                         }
+                        if !lyricsResults.isEmpty {
+                            Section(tr("Lyrics", "Lyrics")) {
+                                ForEach(lyricsResults) { item in
+                                    Button {
+                                        playLyricsResult(item)
+                                    } label: {
+                                        HStack(spacing: 12) {
+                                            AlbumArtView(coverArtId: item.coverArt, size: 100, cornerRadius: 8)
+                                                .frame(width: 44, height: 44)
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text(item.songTitle ?? tr("Unknown Song", "Unbekannter Titel"))
+                                                    .font(.body)
+                                                    .foregroundStyle(item.songTitle != nil ? Color.primary : Color.secondary)
+                                                if let artist = item.artistName {
+                                                    Text(artist)
+                                                        .font(.caption)
+                                                        .foregroundStyle(.secondary)
+                                                }
+                                                Text(item.snippet)
+                                                    .font(.caption2)
+                                                    .foregroundStyle(.tertiary)
+                                                    .lineLimit(1)
+                                                    .italic()
+                                            }
+                                        }
+                                        .contentShape(Rectangle())
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+
                         Section {
                             Color.clear
                                 .frame(height: player.currentSong != nil ? 90 : 0)
@@ -242,6 +277,7 @@ struct SearchView: View {
                 searchTask?.cancel()
                 guard !newValue.isEmpty else {
                     result = nil
+                    lyricsResults = []
                     return
                 }
                 searchTask = Task {
@@ -364,13 +400,67 @@ struct SearchView: View {
         }
     }
 
+    private func playLyricsResult(_ item: LyricsSearchResult) {
+        Task {
+            if let song = try? await SubsonicAPIService.shared.getSong(id: item.songId) {
+                player.playSong(song)
+                // Metadaten in DB nachfüllen, damit künftige Suchen den echten Namen zeigen
+                if item.songTitle == nil || item.artistName == nil || item.coverArt == nil,
+                   let serverId = SubsonicAPIService.shared.activeServer?.id.uuidString {
+                    Task.detached(priority: .utility) {
+                        await LyricsService.shared.updateMetadata(
+                            songId: item.songId, serverId: serverId,
+                            title: song.title, artist: song.artist, coverArt: song.coverArt
+                        )
+                    }
+                }
+            } else {
+                // Fallback: mit vorhandenen Daten abspielen
+                let song = Song(
+                    id: item.songId,
+                    title: item.songTitle ?? item.songId,
+                    artist: item.artistName, album: nil, albumId: nil,
+                    track: nil, duration: nil, coverArt: item.coverArt,
+                    year: nil, genre: nil, playCount: nil,
+                    starred: nil, suffix: nil, bitRate: nil
+                )
+                player.playSong(song)
+            }
+        }
+    }
+
     private func performSearch(query: String) async {
         isSearching = true
         do {
             result = try await SubsonicAPIService.shared.search(query: query)
         } catch {
+            let isCancelled = error is CancellationError
+                || (error as? URLError)?.code == .cancelled
+            if isCancelled {
+                isSearching = false
+                return
+            }
             errorMessage = error.localizedDescription
             showError = true
+        }
+        guard !Task.isCancelled else { isSearching = false; return }
+        if let serverId = SubsonicAPIService.shared.activeServer?.id.uuidString {
+            let results = await LyricsService.shared.searchLyrics(text: query, serverId: serverId)
+            lyricsResults = results
+            // Fehlende Metadaten im Hintergrund nachladen
+            let missing = results.filter { $0.songTitle == nil }
+            if !missing.isEmpty {
+                Task.detached(priority: .utility) {
+                    for item in missing {
+                        guard !Task.isCancelled else { break }
+                        guard let song = try? await SubsonicAPIService.shared.getSong(id: item.songId) else { continue }
+                        await LyricsService.shared.updateMetadata(
+                            songId: item.songId, serverId: serverId,
+                            title: song.title, artist: song.artist, coverArt: song.coverArt
+                        )
+                    }
+                }
+            }
         }
         isSearching = false
     }

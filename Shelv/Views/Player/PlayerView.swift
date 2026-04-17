@@ -4,6 +4,7 @@ import AVKit
 struct PlayerView: View {
     @ObservedObject var player = AudioPlayerService.shared
     @EnvironmentObject var libraryStore: LibraryStore
+    @EnvironmentObject var lyricsStore: LyricsStore
     @Environment(\.dismiss) var dismiss
     @Environment(\.colorScheme) var colorScheme
 
@@ -12,11 +13,13 @@ struct PlayerView: View {
 
     @AppStorage("enableFavorites") private var enableFavorites = true
     @AppStorage("enablePlaylists") private var enablePlaylists = true
+    @AppStorage("autoFetchLyrics") private var autoFetchLyrics = true
 
     @State private var seekValue: Double = 0
     @State private var isDragging: Bool = false
     @State private var showQueue: Bool = false
     @State private var showAddToPlaylist = false
+    @State private var showLyricsSheet: Bool = false
     @State private var artistDestination: Artist?
     @State private var isResolvingArtist = false
     @State private var artistResolveTask: Task<Void, Never>?
@@ -33,6 +36,7 @@ struct PlayerView: View {
             duration: nil,
             year: song.year,
             genre: song.genre,
+            playCount: nil,
             starred: nil,
             songs: nil
         )
@@ -199,18 +203,6 @@ struct PlayerView: View {
                 .padding(.bottom, isPad ? 36 : 20)
 
                 HStack {
-                    ZStack {
-                        Circle()
-                            .fill(player.isAirPlayActive
-                                  ? accentColor.opacity(0.2)
-                                  : Color.gray.opacity(colorScheme == .dark ? 0.3 : 0.15))
-                            .frame(width: controlSize, height: controlSize)
-                        AirPlayButton(tintColor: UIColor(accentColor), activeTintColor: UIColor(accentColor))
-                            .frame(width: isPad ? 28 : 26, height: isPad ? 28 : 26)
-                    }
-
-                    Spacer()
-
                     if enableFavorites, let song = player.currentSong {
                         Button {
                             Task { await libraryStore.toggleStarSong(song) }
@@ -225,9 +217,24 @@ struct PlayerView: View {
                             }
                         }
                         .buttonStyle(.plain)
-
                         Spacer()
                     }
+
+                    Button {
+                        showLyricsSheet = true
+                    } label: {
+                        ZStack {
+                            Circle()
+                                .fill(Color.gray.opacity(colorScheme == .dark ? 0.3 : 0.15))
+                                .frame(width: controlSize, height: controlSize)
+                            Image(systemName: "quote.bubble")
+                                .font(.system(size: isPad ? 18 : 16))
+                                .foregroundStyle(accentColor)
+                        }
+                    }
+                    .buttonStyle(.plain)
+
+                    Spacer()
 
                     Button {
                         showQueue = true
@@ -295,12 +302,31 @@ struct PlayerView: View {
                     }
                     .buttonStyle(.plain)
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    AirPlayButton(tintColor: UIColor(accentColor), activeTintColor: UIColor(accentColor))
+                        .frame(width: 34, height: 34)
+                }
+            }
+            .navigationDestination(isPresented: $showLyricsSheet) {
+                LyricsSheetView()
+                    .toolbarBackground(.visible, for: .navigationBar)
             }
             .onChange(of: player.currentSong?.id) { _, _ in
                 artistDestination = nil
                 artistResolveTask?.cancel()
                 artistResolveTask = nil
                 isResolvingArtist = false
+            }
+            .task(id: player.currentSong?.id) {
+                guard autoFetchLyrics,
+                      let song = player.currentSong,
+                      let serverId = SubsonicAPIService.shared.activeServer?.id.uuidString
+                else {
+                    lyricsStore.currentLyrics = nil
+                    lyricsStore.isLoadingLyrics = false
+                    return
+                }
+                lyricsStore.loadLyrics(for: song, serverId: serverId)
             }
             .onDisappear {
                 artistResolveTask?.cancel()

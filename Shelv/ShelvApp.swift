@@ -11,6 +11,7 @@ struct ShelvApp: App {
     @StateObject private var serverStore = ServerStore()
     @StateObject private var libraryStore = LibraryStore()
     @StateObject private var player = AudioPlayerService.shared
+    @StateObject private var lyricsStore = LyricsStore()
     @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage("appAppearance") private var appAppearance = "system"
 
@@ -28,8 +29,10 @@ struct ShelvApp: App {
                 .environmentObject(serverStore)
                 .environmentObject(libraryStore)
                 .environmentObject(player)
+                .environmentObject(lyricsStore)
                 .tint(AppTheme.color(for: themeColorName))
                 .preferredColorScheme(preferredScheme)
+                .task { await lyricsStore.setup() }
         }
     }
 }
