@@ -143,16 +143,14 @@ See [LICENSE](LICENSE) for details.
 
 <p align="center">
   <img src="Screenshots/home.png" width="30%" alt="Home"/>
-  <img src="Screenshots/albums.png" width="30%" alt="Albums"/>
-  <img src="Screenshots/artists.png" width="30%" alt="Artists"/>
+  <img src="Screenshots/player.png" width="30%" alt="Player"/>
+  <img src="Screenshots/favourites.png" width="30%" alt="Favourites"/>
 </p>
 <p align="center">
+  <img src="Screenshots/albums.png" width="30%" alt="Albums"/>
+  <img src="Screenshots/artists.png" width="30%" alt="Artists"/>
   <img src="Screenshots/favourites.png" width="30%" alt="Favourites"/>
-  <img src="Screenshots/playlists.png" width="30%" alt="Playlists"/>
-  <img src="Screenshots/search.png" width="30%" alt="Search"/>
 </p>
 <p align="center">
   <img src="Screenshots/album.png" width="30%" alt="Album Detail"/>
-  <img src="Screenshots/artist.png" width="30%" alt="Artist Detail"/>
-  <img src="Screenshots/player.png" width="30%" alt="Player"/>
 </p>

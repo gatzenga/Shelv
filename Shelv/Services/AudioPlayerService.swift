@@ -63,6 +63,7 @@ class AudioPlayerService: ObservableObject {
     private let engine = CrossfadeEngine()
     private var engineSubscriptions = Set<AnyCancellable>()
     private var crossfadeTriggered = false
+    private var crossfadeSeekSuppressed = false
     private var isEngineLoaded = false
     private var currentArtwork: MPMediaItemArtwork?
     private var artworkTask: URLSessionDataTask?
@@ -271,6 +272,7 @@ class AudioPlayerService: ObservableObject {
         guard let url = SubsonicAPIService.shared.streamURL(for: song.id) else { return }
 
         crossfadeTriggered = false
+        crossfadeSeekSuppressed = false
         currentSong = song
         isBuffering = true
         currentTime = 0
@@ -304,6 +306,7 @@ class AudioPlayerService: ObservableObject {
         engine.stop()
         isEngineLoaded = false
         crossfadeTriggered = false
+        crossfadeSeekSuppressed = false
     }
 
     func pause() {
@@ -472,10 +475,12 @@ class AudioPlayerService: ObservableObject {
     func seek(to seconds: Double) {
         currentTime = seconds
         isSeeking = true
-        engine.seek(to: seconds)
         updateNowPlayingTime(seconds)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
-            self?.isSeeking = false
+        crossfadeSeekSuppressed = crossfadeEnabled && duration > 0 && seconds >= duration - crossfadeDuration
+        engine.seek(to: seconds) { [weak self] _ in
+            DispatchQueue.main.async {
+                self?.isSeeking = false
+            }
         }
     }
 
@@ -703,10 +708,11 @@ class AudioPlayerService: ObservableObject {
     }
 
     private func checkCrossfadeTrigger(currentTime: Double) {
-        guard crossfadeEnabled, !crossfadeTriggered, duration > 1 else { return }
+        guard crossfadeEnabled, !crossfadeTriggered, !crossfadeSeekSuppressed, duration > 1 else { return }
         guard crossfadeDuration < duration else { return }
 
         let triggerAt = duration - crossfadeDuration
+        guard triggerAt >= 1.0 else { return }
         guard currentTime >= triggerAt else { return }
         guard !(repeatMode == .one && playNextQueue.isEmpty) else { return }
         guard let nextSong = peekNextSong() else { return }

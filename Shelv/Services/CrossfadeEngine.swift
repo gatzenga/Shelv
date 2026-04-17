@@ -78,10 +78,19 @@ final class CrossfadeEngine: ObservableObject {
         isPlaying = true
     }
 
-    func seek(to seconds: TimeInterval) {
+    func seek(to seconds: TimeInterval, completion: ((Bool) -> Void)? = nil) {
+        if isCrossfading {
+            cancelFade()
+            inactivePlayer.pause()
+            inactivePlayer.replaceCurrentItem(with: nil)
+            inactivePlayer.volume = 1.0
+            isCrossfading = false
+        }
         let time = CMTime(seconds: seconds, preferredTimescale: 1000)
-        activePlayer.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
         currentTime = seconds
+        activePlayer.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero) { finished in
+            completion?(finished)
+        }
     }
 
     func stop() {

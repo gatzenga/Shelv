@@ -123,7 +123,9 @@ struct PlayerView: View {
                             isDragging = true
                             seekValue = displayDuration > 0 ? displayTime / displayDuration : 0
                         } else {
-                            player.seek(to: seekValue * displayDuration)
+                            let seconds = seekValue * displayDuration
+                            displayTime = seconds
+                            player.seek(to: seconds)
                             isDragging = false
                         }
                     }
