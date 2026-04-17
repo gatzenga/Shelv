@@ -304,7 +304,7 @@ struct PlayerView: View {
                     .buttonStyle(.plain)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    AirPlayButton(tintColor: UIColor(accentColor), activeTintColor: UIColor(accentColor))
+                    AirPlayButton(tintColor: .label, activeTintColor: UIColor(accentColor))
                         .frame(width: 34, height: 34)
                 }
             }

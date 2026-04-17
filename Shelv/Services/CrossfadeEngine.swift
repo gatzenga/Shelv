@@ -26,6 +26,8 @@ final class CrossfadeEngine: ObservableObject {
     init() {
         let a = AVPlayer()
         let b = AVPlayer()
+        a.allowsExternalPlayback = false
+        b.allowsExternalPlayback = false
         playerA = a
         playerB = b
         activePlayer = a

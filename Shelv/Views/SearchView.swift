@@ -51,7 +51,7 @@ struct SearchView: View {
                     ContentUnavailableView.search(text: query)
                 } else {
                     List {
-                        if let artists = result?.artist, !artists.isEmpty {
+                        if let artists = result?.artist.map({ $0.filter { ($0.albumCount ?? 0) > 0 } }), !artists.isEmpty {
                             Section(tr("Artists", "Künstler")) {
                                 ForEach(artists) { artist in
                                     NavigationLink(destination: ArtistDetailView(artist: artist)) {
