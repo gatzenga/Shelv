@@ -2,6 +2,10 @@ import SwiftUI
 
 let appLang: String = Locale.preferredLanguages.first?.hasPrefix("de") == true ? "de" : "en"
 
+extension Notification.Name {
+    static let recapRegistryUpdated = Notification.Name("shelv.recapRegistryUpdated")
+}
+
 func tr(_ en: String, _ de: String, _ lang: String = appLang) -> String {
     lang == "de" ? de : en
 }
@@ -65,6 +69,10 @@ struct ShelvApp: App {
                 .onChange(of: scenePhase) { _, phase in
                     guard phase == .active else { return }
                     Task { await CloudKitSyncService.shared.syncNow() }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .recapRegistryUpdated)) { _ in
+                    guard let server = serverStore.activeServer else { return }
+                    Task { await recapStore.loadEntries(serverId: server.stableId) }
                 }
         }
     }

@@ -58,8 +58,6 @@ struct InsightsView: View {
                 .padding(.horizontal)
                 .padding(.vertical, 12)
 
-                Divider()
-
                 mainContent
             }
             .navigationTitle(tr("Insights", "Insights"))
@@ -80,7 +78,9 @@ struct InsightsView: View {
         .task { await loadIfNeeded() }
         .refreshable {
             lastLoadDate = nil
-            await loadData(keepExisting: true)
+            async let reload: Void = loadData(keepExisting: true)
+            async let sync:   Void = CloudKitSyncService.shared.syncNow()
+            _ = await (reload, sync)
         }
     }
 

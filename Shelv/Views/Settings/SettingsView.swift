@@ -29,6 +29,7 @@ struct SettingsView: View {
     @AppStorage("crossfadeDuration") private var crossfadeDuration = 5
     @AppStorage("autoFetchLyrics") private var autoFetchLyrics = true
     @AppStorage("recapEnabled") private var recapEnabled = false
+    @AppStorage("iCloudSyncEnabled") private var iCloudSyncEnabled = true
 
     @State private var showAddServer = false
     @State private var editingServer: SubsonicServer?
@@ -145,6 +146,25 @@ struct SettingsView: View {
                             Label { Text(tr("Settings", "Einstellungen")) } icon: {
                                 Image(systemName: "slider.horizontal.3").foregroundStyle(accentColor)
                             }
+                        }
+
+                        Toggle(isOn: $iCloudSyncEnabled) {
+                            Label { Text(tr("iCloud Sync", "iCloud-Sync")) } icon: {
+                                Image(systemName: "icloud").foregroundStyle(accentColor)
+                            }
+                        }
+                        .tint(accentColor)
+                        .onChange(of: iCloudSyncEnabled) { _, _ in
+                            Task { await CloudKitSyncService.shared.handleSyncEnabledChange() }
+                        }
+
+                        if !iCloudSyncEnabled {
+                            Text(tr(
+                                "Data stays local. Multiple devices may create duplicate recap playlists.",
+                                "Daten bleiben lokal. Mehrere Geräte können doppelte Recap-Playlists erstellen."
+                            ))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                         }
                     }
                 }

@@ -107,7 +107,9 @@ struct DiscoverView: View {
                     .tint(accentColor)
             }
             .refreshable {
-                await libraryStore.loadDiscover()
+                async let discover: Void = libraryStore.loadDiscover()
+                async let sync:     Void = CloudKitSyncService.shared.syncNow()
+                _ = await (discover, sync)
             }
             .task(id: libraryStore.reloadID) {
                 await libraryStore.loadDiscover()

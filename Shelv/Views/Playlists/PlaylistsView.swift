@@ -102,7 +102,9 @@ struct PlaylistsView: View {
                 await libraryStore.loadPlaylists()
             }
             .refreshable {
-                await libraryStore.loadPlaylists()
+                async let reload: Void = libraryStore.loadPlaylists()
+                async let sync:   Void = CloudKitSyncService.shared.syncNow()
+                _ = await (reload, sync)
             }
             .alert(
                 tr("Delete Playlist?", "Playlist löschen?"),

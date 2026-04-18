@@ -19,7 +19,7 @@ struct ArtistDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 HStack(spacing: 16) {
-                    AlbumArtView(coverArtId: artist.coverArt, size: 300, cornerRadius: 50)
+                    AlbumArtView(coverArtId: artist.coverArt, size: 300, isCircle: true)
                         .frame(width: 100, height: 100)
                     VStack(alignment: .leading, spacing: 8) {
                         Text(artist.name)

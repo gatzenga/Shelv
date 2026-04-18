@@ -4,11 +4,13 @@ struct AlbumArtView: View {
     let coverArtId: String?
     let size: Int
     let cornerRadius: CGFloat
+    let isCircle: Bool
 
-    init(coverArtId: String?, size: Int = 300, cornerRadius: CGFloat = 12) {
+    init(coverArtId: String?, size: Int = 300, cornerRadius: CGFloat = 12, isCircle: Bool = false) {
         self.coverArtId = coverArtId
         self.size = size
         self.cornerRadius = cornerRadius
+        self.isCircle = isCircle
     }
 
     @State private var uiImage: UIImage? = nil
@@ -16,7 +18,7 @@ struct AlbumArtView: View {
     @State private var didCheck = false
 
     var body: some View {
-        Group {
+        let content = Group {
             if let uiImage {
                 Image(uiImage: uiImage)
                     .resizable()
@@ -28,7 +30,13 @@ struct AlbumArtView: View {
                 placeholder
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+        return Group {
+            if isCircle {
+                content.clipShape(Circle())
+            } else {
+                content.clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+            }
+        }
         .onAppear {
             guard !didCheck else { return }
             didCheck = true
@@ -89,9 +97,10 @@ struct AlbumArtView: View {
     private var placeholder: some View {
         ZStack {
             Color.gray.opacity(0.15)
-            Image(systemName: "music.note")
+            Image(systemName: isCircle ? "person.fill" : "music.note")
                 .font(.system(size: CGFloat(size) * 0.2))
                 .foregroundStyle(.secondary)
         }
     }
+
 }

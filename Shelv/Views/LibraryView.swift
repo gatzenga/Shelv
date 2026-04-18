@@ -211,11 +211,15 @@ struct LibraryView: View {
     private var mainContent: some View {
         stackContent
         .refreshable {
-            switch segment {
-            case .albums:    await libraryStore.loadAlbums(sortBy: sortOption.rawValue)
-            case .artists:   await libraryStore.loadArtists()
-            case .favorites: await libraryStore.loadStarred()
-            }
+            async let reload: Void = {
+                switch segment {
+                case .albums:    await libraryStore.loadAlbums(sortBy: sortOption.rawValue)
+                case .artists:   await libraryStore.loadArtists()
+                case .favorites: await libraryStore.loadStarred()
+                }
+            }()
+            async let sync: Void = CloudKitSyncService.shared.syncNow()
+            _ = await (reload, sync)
         }
         .shelveToast($currentToast)
         .onChange(of: libraryStore.errorMessage) { _, msg in
@@ -524,7 +528,7 @@ struct LibraryView: View {
 
     private func artistGridCell(_ artist: Artist) -> some View {
         VStack(spacing: 8) {
-            AlbumArtView(coverArtId: artist.coverArt, size: 300, cornerRadius: 999)
+            AlbumArtView(coverArtId: artist.coverArt, size: 300, isCircle: true)
                 .aspectRatio(1, contentMode: .fit)
             Text(artist.name)
                 .font(.caption)
@@ -535,7 +539,7 @@ struct LibraryView: View {
 
     private func artistListRow(_ artist: Artist) -> some View {
         HStack(spacing: 12) {
-            AlbumArtView(coverArtId: artist.coverArt, size: 150, cornerRadius: 999)
+            AlbumArtView(coverArtId: artist.coverArt, size: 150, isCircle: true)
                 .frame(width: 52, height: 52)
             VStack(alignment: .leading, spacing: 2) {
                 Text(artist.name)
@@ -783,7 +787,7 @@ struct LibraryView: View {
 
     private func favArtistRow(_ artist: Artist) -> some View {
         HStack(spacing: 12) {
-            AlbumArtView(coverArtId: artist.coverArt, size: 150, cornerRadius: 999)
+            AlbumArtView(coverArtId: artist.coverArt, size: 150, isCircle: true)
                 .frame(width: 44, height: 44)
             Text(artist.name).font(.body).lineLimit(1)
             Spacer()

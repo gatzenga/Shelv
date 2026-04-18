@@ -47,7 +47,7 @@ class RecapStore: ObservableObject {
     @Published var showSyncReport: Bool = false
     @Published var entries: [RecapRegistryRecord] = []
     @Published var recapPlaylistIds: Set<String> = []
-    @Published var showVerifyAfterImport: Bool = false
+    @Published var isImporting: Bool = false
 
     private enum GenKey {
         static let lastWeek  = "recap_last_gen_week"
@@ -69,6 +69,48 @@ class RecapStore: ObservableObject {
         recapPlaylistIds = Set(all.map { $0.playlistId })
     }
 
+    func refreshWithCleanup(serverId: String) async {
+        let api = SubsonicAPIService.shared
+        if let playlists = try? await api.getPlaylists() {
+            let activeIds = Set(playlists.map { $0.id })
+            if !activeIds.isEmpty {
+                let regEntries = await PlayLogService.shared.allRegistryEntries(serverId: serverId)
+                let candidates = regEntries.filter { !activeIds.contains($0.playlistId) }
+                for entry in candidates {
+                    do {
+                        _ = try await api.getPlaylist(id: entry.playlistId)
+                    } catch let err where Self.isNotFoundError(err) {
+                        CloudKitSyncService.debugLog("[OrphanCleanup:recap] playlistId=\(entry.playlistId) confirmed missing (code 70), deleting marker=\(entry.ckRecordName ?? "nil")")
+                        if let ckName = entry.ckRecordName {
+                            await CloudKitSyncService.shared.deleteRecapMarker(ckRecordName: ckName)
+                        }
+                        await PlayLogService.shared.deleteRegistryEntry(playlistId: entry.playlistId)
+                    } catch {
+                        continue
+                    }
+                }
+            }
+        }
+        await loadEntries(serverId: serverId)
+    }
+
+    private static func isNotFoundError(_ error: Error) -> Bool {
+        if case SubsonicAPIError.apiError(let code, _) = error {
+            return code == 70
+        }
+        return false
+    }
+
+    func deleteRegistryEntryOnly(playlistId: String, serverId: String) async {
+        let entry = await PlayLogService.shared.registryEntry(playlistId: playlistId)
+        CloudKitSyncService.debugLog("[UserAction:registryOnly] playlistId=\(playlistId) marker=\(entry?.ckRecordName ?? "nil")")
+        if let ckName = entry?.ckRecordName {
+            await CloudKitSyncService.shared.deleteRecapMarker(ckRecordName: ckName)
+        }
+        await PlayLogService.shared.deleteRegistryEntry(playlistId: playlistId)
+        await loadEntries(serverId: serverId)
+    }
+
     // MARK: - Recap Playlist Check
 
     func isRecapPlaylist(id: String) async -> Bool {
@@ -86,6 +128,9 @@ class RecapStore: ObservableObject {
     // MARK: - Import + Verify
 
     func importDatabase(from url: URL, serverId: String) async {
+        isImporting = true
+        defer { isImporting = false }
+
         let dest = PlayLogService.dbURL
         do {
             _ = url.startAccessingSecurityScopedResource()
@@ -107,12 +152,83 @@ class RecapStore: ObservableObject {
             try FileManager.default.copyItem(at: url, to: dest)
 
             await PlayLogService.shared.setup()
+            await PlayLogService.shared.rewriteAllServerIds(to: serverId)
+            await CloudKitSyncService.shared.resetChangeToken()
+            await CloudKitSyncService.shared.syncNow()
+            await recreateMissingPlaylists(serverId: serverId)
             await loadEntries(serverId: serverId)
-            showVerifyAfterImport = true
+            await PlayLogService.shared.cleanupImportRollback()
+
+            syncReports = [RecapSyncReport(
+                message: tr("Import finished", "Import abgeschlossen"),
+                isError: false
+            )]
+            showSyncReport = true
+            NotificationCenter.default.post(name: .recapRegistryUpdated, object: nil)
         } catch {
             await PlayLogService.shared.cleanupImportRollback()
             syncReports = [RecapSyncReport(message: error.localizedDescription, isError: true)]
             showSyncReport = true
+        }
+    }
+
+    private func recreateMissingPlaylists(serverId: String) async {
+        let api = SubsonicAPIService.shared
+        let entries = await PlayLogService.shared.allRegistryEntries(serverId: serverId)
+        for entry in entries {
+            guard (try? await api.getPlaylist(id: entry.playlistId)) == nil else { continue }
+            guard let type = RecapPeriod.PeriodType(rawValue: entry.periodType) else { continue }
+            let periodStart = Date(timeIntervalSince1970: entry.periodStart)
+            let periodEnd   = Date(timeIntervalSince1970: entry.periodEnd)
+            let period = RecapPeriod(type: type, start: periodStart, end: periodEnd)
+
+            let expectedIds = await PlayLogService.shared.topSongs(
+                serverId: serverId, from: periodStart, to: periodEnd, limit: type.songLimit
+            ).map(\.songId)
+            guard !expectedIds.isEmpty else { continue }
+
+            do {
+                let newPlaylist = try await api.createPlaylist(
+                    name: period.playlistName,
+                    songIds: expectedIds,
+                    comment: "Shelv Recap"
+                )
+
+                if let oldCkName = entry.ckRecordName {
+                    await CloudKitSyncService.shared.deleteRecapMarker(ckRecordName: oldCkName)
+                }
+                await PlayLogService.shared.deleteRegistryEntry(playlistId: entry.playlistId)
+
+                let periodKey = period.periodKey
+                let recordName = "\(serverId.lowercased()).\(periodKey)"
+                var newEntry = RecapRegistryRecord(
+                    playlistId: newPlaylist.id,
+                    serverId: serverId,
+                    periodType: entry.periodType,
+                    periodStart: entry.periodStart,
+                    periodEnd: entry.periodEnd,
+                    ckRecordName: nil
+                )
+                if let result = try? await CloudKitSyncService.shared.saveRecapMarker(newEntry, periodKey: periodKey) {
+                    switch result {
+                    case .created:
+                        newEntry.ckRecordName = recordName
+                    case .conflict(let existingPlaylistId):
+                        try? await api.deletePlaylist(id: newPlaylist.id)
+                        newEntry = RecapRegistryRecord(
+                            playlistId: existingPlaylistId,
+                            serverId: serverId,
+                            periodType: entry.periodType,
+                            periodStart: entry.periodStart,
+                            periodEnd: entry.periodEnd,
+                            ckRecordName: recordName
+                        )
+                    }
+                }
+                await PlayLogService.shared.registerPlaylist(newEntry)
+            } catch {
+                continue
+            }
         }
     }
 
@@ -183,7 +299,6 @@ class RecapStore: ObservableObject {
                 }
 
             } else {
-                // Playlist fehlt → neu erstellen
                 let expected = await PlayLogService.shared.topSongs(
                     serverId: serverId, from: periodStart, to: periodEnd, limit: type.songLimit
                 ).map { $0.songId }
@@ -191,14 +306,40 @@ class RecapStore: ObservableObject {
 
                 do {
                     let newPlaylist = try await api.createPlaylist(name: name, songIds: expected, comment: "Shelv Recap")
-                    let updatedEntry = RecapRegistryRecord(
+
+                    if let oldCkName = entry.ckRecordName {
+                        await CloudKitSyncService.shared.deleteRecapMarker(ckRecordName: oldCkName)
+                    }
+                    await PlayLogService.shared.deleteRegistryEntry(playlistId: entry.playlistId)
+
+                    let periodKey = period.periodKey
+                    let recordName = "\(serverId.lowercased()).\(periodKey)"
+                    var updatedEntry = RecapRegistryRecord(
                         playlistId: newPlaylist.id,
                         serverId: serverId,
                         periodType: entry.periodType,
                         periodStart: entry.periodStart,
-                        periodEnd: entry.periodEnd
+                        periodEnd: entry.periodEnd,
+                        ckRecordName: nil
                     )
-                    await PlayLogService.shared.deleteRegistryEntry(playlistId: entry.playlistId)
+
+                    if let markerResult = try? await CloudKitSyncService.shared.saveRecapMarker(updatedEntry, periodKey: periodKey) {
+                        switch markerResult {
+                        case .created:
+                            updatedEntry.ckRecordName = recordName
+                        case .conflict(let existingPlaylistId):
+                            try? await api.deletePlaylist(id: newPlaylist.id)
+                            updatedEntry = RecapRegistryRecord(
+                                playlistId: existingPlaylistId,
+                                serverId: serverId,
+                                periodType: entry.periodType,
+                                periodStart: entry.periodStart,
+                                periodEnd: entry.periodEnd,
+                                ckRecordName: recordName
+                            )
+                        }
+                    }
+
                     await PlayLogService.shared.registerPlaylist(updatedEntry)
                     reports.append(RecapSyncReport(
                         message: tr("\"\(name)\" recreated", "\"\(name)\" neu erstellt"),
@@ -362,14 +503,50 @@ class RecapStore: ObservableObject {
                 songIds: expectedIds,
                 comment: "Shelv Recap"
             )
-            let newEntry = RecapRegistryRecord(
+
+            if let oldCkName = diff.entry.ckRecordName {
+                await CloudKitSyncService.shared.deleteRecapMarker(ckRecordName: oldCkName)
+            }
+            await PlayLogService.shared.deleteRegistryEntry(playlistId: diff.entry.playlistId)
+
+            guard let type = RecapPeriod.PeriodType(rawValue: diff.entry.periodType) else {
+                throw NSError(domain: "RecapStore", code: 3,
+                              userInfo: [NSLocalizedDescriptionKey: "Invalid period type"])
+            }
+            let period = RecapPeriod(
+                type: type,
+                start: Date(timeIntervalSince1970: diff.entry.periodStart),
+                end: Date(timeIntervalSince1970: diff.entry.periodEnd)
+            )
+            let periodKey = period.periodKey
+            let recordName = "\(serverId.lowercased()).\(periodKey)"
+
+            var newEntry = RecapRegistryRecord(
                 playlistId: newPlaylist.id,
                 serverId: serverId,
                 periodType: diff.entry.periodType,
                 periodStart: diff.entry.periodStart,
-                periodEnd: diff.entry.periodEnd
+                periodEnd: diff.entry.periodEnd,
+                ckRecordName: nil
             )
-            await PlayLogService.shared.deleteRegistryEntry(playlistId: diff.entry.playlistId)
+
+            if let markerResult = try? await CloudKitSyncService.shared.saveRecapMarker(newEntry, periodKey: periodKey) {
+                switch markerResult {
+                case .created:
+                    newEntry.ckRecordName = recordName
+                case .conflict(let existingPlaylistId):
+                    try? await api.deletePlaylist(id: newPlaylist.id)
+                    newEntry = RecapRegistryRecord(
+                        playlistId: existingPlaylistId,
+                        serverId: serverId,
+                        periodType: diff.entry.periodType,
+                        periodStart: diff.entry.periodStart,
+                        periodEnd: diff.entry.periodEnd,
+                        ckRecordName: recordName
+                    )
+                }
+            }
+
             await PlayLogService.shared.registerPlaylist(newEntry)
             await loadEntries(serverId: serverId)
         }
@@ -397,8 +574,13 @@ class RecapStore: ObservableObject {
     }
 
     func deleteEntry(playlistId: String, serverId: String) async {
+        let entry = await PlayLogService.shared.registryEntry(playlistId: playlistId)
+        CloudKitSyncService.debugLog("[UserAction:deleteEntry] playlistId=\(playlistId) marker=\(entry?.ckRecordName ?? "nil")")
         try? await SubsonicAPIService.shared.deletePlaylist(id: playlistId)
         await PlayLogService.shared.deleteRegistryEntry(playlistId: playlistId)
+        if let ckName = entry?.ckRecordName {
+            await CloudKitSyncService.shared.deleteRecapMarker(ckRecordName: ckName)
+        }
         await loadEntries(serverId: serverId)
     }
 

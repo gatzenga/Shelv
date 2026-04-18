@@ -14,6 +14,7 @@ final class CloudKitSyncStatus: ObservableObject {
     @Published var lastError: String?
     @Published var accountAvailable = true
     @Published var logEntries: [String] = []
+    @Published var debugLogEntries: [String] = []
 
     nonisolated init() {}
 
@@ -21,6 +22,12 @@ final class CloudKitSyncStatus: ObservableObject {
         let stamp = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
         logEntries.insert("[\(stamp)] \(message)", at: 0)
         if logEntries.count > 100 { logEntries = Array(logEntries.prefix(100)) }
+    }
+
+    func appendDebugLog(_ message: String) {
+        let stamp = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+        debugLogEntries.insert("[\(stamp)] \(message)", at: 0)
+        if debugLogEntries.count > 500 { debugLogEntries = Array(debugLogEntries.prefix(500)) }
     }
 }
 
@@ -45,8 +52,14 @@ actor CloudKitSyncService {
 
     private let tokenKey    = "shelv_ck_zone_token"
     private let deviceIdKey = "shelv_device_id"
+    private let syncEnabledKey = "iCloudSyncEnabled"
 
     private var isZoneReady = false
+
+    private var syncEnabled: Bool {
+        if UserDefaults.standard.object(forKey: syncEnabledKey) == nil { return true }
+        return UserDefaults.standard.bool(forKey: syncEnabledKey)
+    }
     // NWPathMonitor lebt im actor – kein Lifecycle-Problem auf SwiftUI-Structs
     nonisolated(unsafe) private var pathMonitor: NWPathMonitor?
     private init() {}
@@ -80,27 +93,32 @@ actor CloudKitSyncService {
     // MARK: - Setup
 
     func setup() async {
-        print("[CloudKitSync] setup() starting")
+        debug("[CloudKitSync] setup() starting")
+        guard syncEnabled else {
+            debug("[CloudKitSync] setup() skipped — iCloud Sync disabled")
+            log("iCloud sync disabled")
+            return
+        }
         let accountStatus = await updateAccountStatus()
-        print("[CloudKitSync] accountStatus = \(Self.describe(accountStatus))")
+        debug("[CloudKitSync] accountStatus = \(Self.describe(accountStatus))")
         startNetworkMonitor()
         guard accountStatus == .available else {
-            print("[CloudKitSync] Aborting setup – iCloud account not available (status=\(Self.describe(accountStatus)))")
+            debug("[CloudKitSync] Aborting setup – iCloud account not available (status=\(Self.describe(accountStatus)))")
             return
         }
         do {
-            print("[CloudKitSync] Ensuring zone exists...")
+            debug("[CloudKitSync] Ensuring zone exists...")
             try await ensureZoneExists()
-            print("[CloudKitSync] Zone ready: \(zoneID.zoneName)")
+            debug("[CloudKitSync] Zone ready: \(zoneID.zoneName)")
             await updatePendingCounts()
-            log("Bereit")
+            log("Ready")
         } catch {
-            print("[CloudKitSync] Setup failed with error: \(error)")
-            print("[CloudKitSync] Setup error description: \(error.localizedDescription)")
+            debug("[CloudKitSync] Setup failed with error: \(error)")
+            debug("[CloudKitSync] Setup error description: \(error.localizedDescription)")
             if let ck = error as? CKError {
-                print("[CloudKitSync] CKError code=\(ck.code.rawValue) (\(ck.code)) userInfo=\(ck.userInfo)")
+                debug("[CloudKitSync] CKError code=\(ck.code.rawValue) (\(ck.code)) userInfo=\(ck.userInfo)")
             }
-            log("Setup-Fehler: \(error.localizedDescription)", isError: true)
+            log("Setup error: \(error.localizedDescription)", isError: true)
         }
     }
 
@@ -128,7 +146,7 @@ actor CloudKitSyncService {
             await MainActor.run { status.accountAvailable = available }
             return s
         } catch {
-            print("[CloudKitSync] accountStatus() threw: \(error.localizedDescription)")
+            debug("[CloudKitSync] accountStatus() threw: \(error.localizedDescription)")
             await MainActor.run { status.accountAvailable = false }
             return .couldNotDetermine
         }
@@ -148,21 +166,21 @@ actor CloudKitSyncService {
     // MARK: - Zone
 
     private func ensureZoneExists() async throws {
-        print("[CloudKitSync] Checking if zone exists...")
+        debug("[CloudKitSync] Checking if zone exists...")
         guard !isZoneReady else {
-            print("[CloudKitSync] Zone already marked ready (in-memory flag)")
+            debug("[CloudKitSync] Zone already marked ready (in-memory flag)")
             return
         }
         do {
-            print("[CloudKitSync] Creating/saving zone \(zoneID.zoneName)...")
+            debug("[CloudKitSync] Creating/saving zone \(zoneID.zoneName)...")
             let saved = try await db.save(CKRecordZone(zoneID: zoneID))
-            print("[CloudKitSync] Zone save returned: \(saved.zoneID)")
+            debug("[CloudKitSync] Zone save returned: \(saved.zoneID)")
             isZoneReady = true
         } catch {
-            print("[CloudKitSync] Zone save FAILED: \(error)")
-            print("[CloudKitSync] Zone save error description: \(error.localizedDescription)")
+            debug("[CloudKitSync] Zone save FAILED: \(error)")
+            debug("[CloudKitSync] Zone save error description: \(error.localizedDescription)")
             if let ck = error as? CKError {
-                print("[CloudKitSync] Zone CKError code=\(ck.code.rawValue) (\(ck.code)) userInfo=\(ck.userInfo)")
+                debug("[CloudKitSync] Zone CKError code=\(ck.code.rawValue) (\(ck.code)) userInfo=\(ck.userInfo)")
             }
             throw error
         }
@@ -171,14 +189,15 @@ actor CloudKitSyncService {
     // MARK: - Upload
 
     func uploadPendingEvents() async {
+        guard syncEnabled else { return }
         guard await status.accountAvailable else {
-            print("[CloudKitSync] uploadPendingEvents skipped – account not available")
+            debug("[CloudKitSync] uploadPendingEvents skipped – account not available")
             return
         }
         do {
             try await ensureZoneExists()
             let unsynced = await PlayLogService.shared.fetchUnsynced(limit: 200)
-            print("[CloudKitSync] Pending events to upload: \(unsynced.count)")
+            debug("[CloudKitSync] Pending events to upload: \(unsynced.count)")
             guard !unsynced.isEmpty else { return }
 
             let did = deviceId
@@ -196,7 +215,7 @@ actor CloudKitSyncService {
             }
             guard !records.isEmpty else { return }
 
-            print("[CloudKitSync] Sending modifyRecords with \(records.count) records...")
+            debug("[CloudKitSync] Sending modifyRecords with \(records.count) records...")
             let saveResults = try await db.modifyRecords(
                 saving: records, deleting: [],
                 savePolicy: .allKeys, atomically: false
@@ -213,63 +232,89 @@ actor CloudKitSyncService {
                         uploaded.append(recordID.recordName)
                     } else {
                         failureCount += 1
-                        print("[CloudKitSync] Save failure for \(recordID.recordName): \(err.localizedDescription)")
+                        debug("[CloudKitSync] Save failure for \(recordID.recordName): \(err.localizedDescription)")
                     }
                 }
             }
 
             await PlayLogService.shared.markSynced(uuids: uploaded)
             await updatePendingCounts()
-            print("[CloudKitSync] Uploaded \(uploaded.count) events (\(failureCount) failures)")
-            log("Hochgeladen: \(uploaded.count) Events")
+            debug("[CloudKitSync] Uploaded \(uploaded.count) events (\(failureCount) failures)")
+            if failureCount > 0 {
+                log("Uploaded \(uploaded.count) plays (\(failureCount) failed)", isError: true)
+            } else {
+                log("Uploaded \(uploaded.count) plays")
+            }
             await MainActor.run { status.lastSyncDate = Date() }
         } catch {
-            print("[CloudKitSync] Upload error: \(error)")
-            print("[CloudKitSync] Upload error description: \(error.localizedDescription)")
+            debug("[CloudKitSync] Upload error: \(error)")
+            debug("[CloudKitSync] Upload error description: \(error.localizedDescription)")
             if let ck = error as? CKError {
-                print("[CloudKitSync] Upload CKError code=\(ck.code.rawValue) (\(ck.code)) userInfo=\(ck.userInfo)")
+                debug("[CloudKitSync] Upload CKError code=\(ck.code.rawValue) (\(ck.code)) userInfo=\(ck.userInfo)")
             }
-            log("Upload-Fehler: \(error.localizedDescription)", isError: true)
+            log("Upload error: \(error.localizedDescription)", isError: true)
         }
     }
 
     // MARK: - Download
 
     func downloadChanges() async {
+        guard syncEnabled else { return }
         guard await status.accountAvailable else {
-            print("[CloudKitSync] downloadChanges skipped – account not available")
+            debug("[CloudKitSync] downloadChanges skipped – account not available")
             return
         }
         do {
             try await ensureZoneExists()
             let hasToken = changeToken != nil
-            print("[CloudKitSync] Fetching changes with token: \(hasToken ? "hasToken" : "noToken")")
-            let (records, newToken) = try await fetchZoneChanges()
-            print("[CloudKitSync] Received \(records.count) new records")
+            debug("[CloudKitSync] Fetching changes with token: \(hasToken ? "hasToken" : "noToken")")
+            let (records, deletions, newToken) = try await fetchZoneChanges()
+            debug("[CloudKitSync] Received \(records.count) new records, \(deletions.count) deletions")
+            var playsIn = 0, recapsIn = 0
             for record in records {
+                switch record.recordType {
+                case "PlayEvent": playsIn += 1
+                case "RecapMarker": recapsIn += 1
+                default: break
+                }
                 await handleIncomingRecord(record)
             }
+            var playsDel = 0, recapsDel = 0
+            for (recordID, recordType) in deletions {
+                switch recordType {
+                case "PlayEvent": playsDel += 1
+                case "RecapMarker": recapsDel += 1
+                default: break
+                }
+                await handleDeletedRecord(id: recordID, type: recordType)
+            }
             if let token = newToken { changeToken = token }
-            if !records.isEmpty { log("Empfangen: \(records.count) Records") }
+            if playsIn + recapsIn > 0 {
+                log("Downloaded \(playsIn) plays, \(recapsIn) recaps")
+            }
+            if playsDel + recapsDel > 0 {
+                log("Deleted on other device: \(playsDel) plays, \(recapsDel) recaps")
+            }
             await MainActor.run { status.lastSyncDate = Date() }
         } catch {
-            print("[CloudKitSync] Download error: \(error)")
-            print("[CloudKitSync] Download error description: \(error.localizedDescription)")
+            debug("[CloudKitSync] Download error: \(error)")
+            debug("[CloudKitSync] Download error description: \(error.localizedDescription)")
             if let ck = error as? CKError {
-                print("[CloudKitSync] Download CKError code=\(ck.code.rawValue) (\(ck.code)) userInfo=\(ck.userInfo)")
+                debug("[CloudKitSync] Download CKError code=\(ck.code.rawValue) (\(ck.code)) userInfo=\(ck.userInfo)")
             }
             if isChangeTokenError(error) {
                 changeToken = nil
-                log("Change-Token abgelaufen – nächster Sync holt alles neu")
+                log("Change token expired — next sync fetches all")
             } else {
-                log("Download-Fehler: \(error.localizedDescription)", isError: true)
+                log("Download error: \(error.localizedDescription)", isError: true)
             }
         }
     }
 
-    private func fetchZoneChanges() async throws -> ([CKRecord], CKServerChangeToken?) {
+    private func fetchZoneChanges() async throws -> (changed: [CKRecord], deleted: [(CKRecord.ID, CKRecord.RecordType)], token: CKServerChangeToken?) {
         try await withCheckedThrowingContinuation { continuation in
-            var collected: [CKRecord] = []
+            var changed: [CKRecord] = []
+            var deleted: [(CKRecord.ID, CKRecord.RecordType)] = []
             var latestToken: CKServerChangeToken?
 
             let config = CKFetchRecordZoneChangesOperation.ZoneConfiguration()
@@ -282,22 +327,24 @@ actor CloudKitSyncService {
             op.fetchAllChanges = true
 
             op.recordWasChangedBlock = { _, result in
-                if case .success(let record) = result { collected.append(record) }
+                if case .success(let record) = result { changed.append(record) }
+            }
+
+            op.recordWithIDWasDeletedBlock = { recordID, recordType in
+                deleted.append((recordID, recordType))
             }
 
             op.recordZoneChangeTokensUpdatedBlock = { _, token, _ in
                 if let token { latestToken = token }
             }
 
-            // recordZoneFetchResultBlock: Token aktualisieren, Fehler nicht selbst resumieren –
-            // fetchRecordZoneChangesResultBlock ist der einzige Resumption-Punkt.
             op.recordZoneFetchResultBlock = { _, result in
                 if case .success(let (token, _, _)) = result { latestToken = token }
             }
 
             op.fetchRecordZoneChangesResultBlock = { result in
                 switch result {
-                case .success: continuation.resume(returning: (collected, latestToken))
+                case .success: continuation.resume(returning: (changed, deleted, latestToken))
                 case .failure(let err): continuation.resume(throwing: err)
                 }
             }
@@ -337,7 +384,21 @@ actor CloudKitSyncService {
                 ckRecordName: name
             )
             await PlayLogService.shared.registerPlaylist(entry)
+            NotificationCenter.default.post(name: .recapRegistryUpdated, object: nil)
 
+        default:
+            break
+        }
+    }
+
+    private func handleDeletedRecord(id: CKRecord.ID, type: CKRecord.RecordType) async {
+        switch type {
+        case "RecapMarker":
+            await PlayLogService.shared.deleteRegistryEntry(byCKRecordName: id.recordName)
+            NotificationCenter.default.post(name: .recapRegistryUpdated, object: nil)
+        case "PlayEvent":
+            await PlayLogService.shared.deletePlayLog(uuid: id.recordName)
+            await updatePendingCounts()
         default:
             break
         }
@@ -346,6 +407,7 @@ actor CloudKitSyncService {
     // MARK: - RecapMarker
 
     func saveRecapMarker(_ entry: RecapRegistryRecord, periodKey: String) async throws -> RecapMarkerSaveResult {
+        guard syncEnabled else { return .created }
         try await ensureZoneExists()
         let recordName = makeRecapMarkerRecordName(serverId: entry.serverId, periodKey: periodKey)
         let rid = CKRecord.ID(recordName: recordName, zoneID: zoneID)
@@ -356,17 +418,30 @@ actor CloudKitSyncService {
         record["periodStart"] = entry.periodStart
         record["periodEnd"]   = entry.periodEnd
 
+        await MainActor.run { status.isSyncing = true }
+        log("Syncing…")
+
         do {
             _ = try await db.save(record)
             await PlayLogService.shared.updateRegistryCKRecordName(
                 playlistId: entry.playlistId, ckRecordName: recordName
             )
+            await MainActor.run {
+                status.lastSyncDate = Date()
+                status.isSyncing = false
+            }
+            log("Recap uploaded")
             return .created
         } catch let err as CKError where err.code == .serverRecordChanged {
+            await MainActor.run { status.isSyncing = false }
             if let server = err.serverRecord, let existing = server["playlistId"] as? String {
                 return .conflict(existingPlaylistId: existing)
             }
             throw err
+        } catch {
+            await MainActor.run { status.isSyncing = false }
+            log("Recap upload failed: \(error.localizedDescription)", isError: true)
+            throw error
         }
     }
 
@@ -388,14 +463,89 @@ actor CloudKitSyncService {
         )
     }
 
-    func deleteRecapMarkers(serverId: String) async {
+    func deleteRecapMarker(ckRecordName: String, force: Bool = false) async {
+        guard syncEnabled || force else { return }
+        await MainActor.run { status.isSyncing = true }
+        log("Syncing…")
+        let rid = CKRecord.ID(recordName: ckRecordName, zoneID: zoneID)
+        do {
+            _ = try await db.modifyRecords(saving: [], deleting: [rid])
+            await MainActor.run {
+                status.lastSyncDate = Date()
+                status.isSyncing = false
+            }
+            log("Recap deleted")
+        } catch {
+            await MainActor.run { status.isSyncing = false }
+            log("Recap deletion failed: \(error.localizedDescription)", isError: true)
+        }
+    }
+
+    func deletePlayEvent(uuid: String, force: Bool = false) async {
+        guard syncEnabled || force else { return }
+        await MainActor.run { status.isSyncing = true }
+        log("Syncing…")
+        let rid = CKRecord.ID(recordName: uuid, zoneID: zoneID)
+        do {
+            _ = try await db.modifyRecords(saving: [], deleting: [rid])
+            await MainActor.run {
+                status.lastSyncDate = Date()
+                status.isSyncing = false
+            }
+            log("Play event deleted")
+        } catch {
+            await MainActor.run { status.isSyncing = false }
+            log("Play event deletion failed: \(error.localizedDescription)", isError: true)
+        }
+    }
+
+    func deletePlayEvents(uuids: [String], force: Bool = false) async {
+        guard syncEnabled || force else { return }
+        guard !uuids.isEmpty else { return }
+        await MainActor.run { status.isSyncing = true }
+        log("Syncing…")
+        let rids = uuids.map { CKRecord.ID(recordName: $0, zoneID: zoneID) }
+        var failed = 0
+        for start in stride(from: 0, to: rids.count, by: 400) {
+            let chunk = Array(rids[start..<min(start + 400, rids.count)])
+            do {
+                _ = try await db.modifyRecords(saving: [], deleting: chunk)
+            } catch {
+                failed += chunk.count
+            }
+        }
+        await MainActor.run {
+            status.lastSyncDate = Date()
+            status.isSyncing = false
+        }
+        if failed == 0 {
+            log("Deleted \(uuids.count) play events")
+        } else {
+            log("Deleted \(uuids.count - failed) play events, \(failed) failed", isError: true)
+        }
+    }
+
+    func deleteRecapMarkers(serverId: String, force: Bool = false) async {
+        guard syncEnabled || force else { return }
         let entries = await PlayLogService.shared.allRegistryEntries(serverId: serverId)
         let ids = entries.compactMap { e -> CKRecord.ID? in
             guard let name = e.ckRecordName else { return nil }
             return CKRecord.ID(recordName: name, zoneID: zoneID)
         }
         guard !ids.isEmpty else { return }
-        _ = try? await db.modifyRecords(saving: [], deleting: ids)
+        await MainActor.run { status.isSyncing = true }
+        log("Syncing…")
+        do {
+            _ = try await db.modifyRecords(saving: [], deleting: ids)
+            await MainActor.run {
+                status.lastSyncDate = Date()
+                status.isSyncing = false
+            }
+            log("Deleted \(ids.count) recaps")
+        } catch {
+            await MainActor.run { status.isSyncing = false }
+            log("Recap deletion failed: \(error.localizedDescription)", isError: true)
+        }
     }
 
     private func makeRecapMarkerRecordName(serverId: String, periodKey: String) -> String {
@@ -424,13 +574,15 @@ actor CloudKitSyncService {
     }
 
     func syncNow() async {
-        let msgStart = await MainActor.run { tr("Syncing…", "Synchronisiere…") }
-        let msgDone  = await MainActor.run { tr("Sync done", "Sync abgeschlossen") }
-        log(msgStart)
+        guard syncEnabled else {
+            await flushScrobbleQueue()
+            return
+        }
+        log("Syncing…")
         await uploadPendingEvents()
         await downloadChanges()
         await flushScrobbleQueue()
-        log(msgDone)
+        log("Sync done")
     }
 
     // MARK: - flushAndWait (mit Timeout)
@@ -462,6 +614,41 @@ actor CloudKitSyncService {
         }
     }
 
+    func resetChangeToken() {
+        changeToken = nil
+        isZoneReady = false
+    }
+
+    func handleSyncEnabledChange() async {
+        guard syncEnabled else {
+            log("iCloud sync disabled")
+            return
+        }
+        log("iCloud sync enabled — merging")
+        await setup()
+        resetChangeToken()
+        await uploadPendingEvents()
+        await reuploadAllRecapMarkers()
+        await downloadChanges()
+        await flushScrobbleQueue()
+    }
+
+    private func reuploadAllRecapMarkers() async {
+        let stableId = await MainActor.run { SubsonicAPIService.shared.activeServer?.stableId } ?? ""
+        guard !stableId.isEmpty else { return }
+        let entries = await PlayLogService.shared.allRegistryEntries(serverId: stableId)
+        for entry in entries {
+            guard let type = RecapPeriod.PeriodType(rawValue: entry.periodType) else { continue }
+            let period = RecapPeriod(
+                type: type,
+                start: Date(timeIntervalSince1970: entry.periodStart),
+                end: Date(timeIntervalSince1970: entry.periodEnd)
+            )
+            let periodKey = await MainActor.run { period.periodKey }
+            _ = try? await saveRecapMarker(entry, periodKey: periodKey)
+        }
+    }
+
     // MARK: - Helpers
 
     private func isChangeTokenError(_ error: Error) -> Bool {
@@ -470,11 +657,28 @@ actor CloudKitSyncService {
     }
 
     private func log(_ message: String, isError: Bool = false) {
-        print("[CloudKitSync] \(message)")
+        debug("[CloudKitSync] \(message)")
         let msg = message
         Task { @MainActor in
             status.appendLog(msg)
+            status.appendDebugLog("[CloudKitSync] \(msg)")
             if isError { status.lastError = msg }
+        }
+    }
+
+    private func debug(_ message: String) {
+        print(message)
+        let msg = message
+        Task { @MainActor in
+            status.appendDebugLog(msg)
+        }
+    }
+
+    nonisolated static func debugLog(_ message: String) {
+        print(message)
+        let msg = message
+        Task { @MainActor in
+            CloudKitSyncService.shared.status.appendDebugLog(msg)
         }
     }
 }

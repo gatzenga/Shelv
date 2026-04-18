@@ -74,6 +74,17 @@ class ServerStore: ObservableObject {
         if activeServerID == server.id {
             activateStoredServer()
         }
+
+        let serverStableId = server.stableId
+        if !serverStableId.isEmpty {
+            Task.detached(priority: .utility) {
+                await PlayLogService.shared.resetLog(serverId: serverStableId)
+                await PlayLogService.shared.resetRegistry(serverId: serverStableId)
+                await PlayLogService.shared.removeScrobbles(serverId: serverStableId)
+                await CloudKitSyncService.shared.updatePendingCounts()
+                NotificationCenter.default.post(name: .recapRegistryUpdated, object: nil)
+            }
+        }
     }
 
     func password(for server: SubsonicServer) -> String? {

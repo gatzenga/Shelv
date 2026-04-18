@@ -49,7 +49,6 @@ struct RecapView: View {
                         .pickerStyle(.segmented)
                         .padding(.horizontal)
                         .padding(.vertical, 12)
-                        Divider()
                     }
 
                     if filteredEntries.isEmpty {
@@ -74,12 +73,19 @@ struct RecapView: View {
                                     } label: {
                                         Image(systemName: "trash")
                                     }
+                                    .tint(.red)
                                 }
                             }
                         }
                         .listStyle(.plain)
                         .scrollContentBackground(.hidden)
                         .scrollIndicators(.hidden)
+                        .refreshable {
+                            guard let sid = serverStore.activeServer?.stableId else { return }
+                            async let cleanup: Void = recapStore.refreshWithCleanup(serverId: sid)
+                            async let sync:    Void = CloudKitSyncService.shared.syncNow()
+                            _ = await (cleanup, sync)
+                        }
                         .navigationDestination(item: $selectedEntry) { entry in
                             recapDetail(entry)
                         }
@@ -127,7 +133,7 @@ struct RecapView: View {
         }
         .task(id: serverStore.activeServerID) {
             guard let sid = serverStore.activeServer?.stableId else { return }
-            await recapStore.loadEntries(serverId: sid)
+            await recapStore.refreshWithCleanup(serverId: sid)
         }
     }
 

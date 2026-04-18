@@ -56,7 +56,7 @@ struct SearchView: View {
                                 ForEach(artists) { artist in
                                     NavigationLink(destination: ArtistDetailView(artist: artist)) {
                                         HStack(spacing: 12) {
-                                            AlbumArtView(coverArtId: artist.coverArt, size: 100, cornerRadius: 8)
+                                            AlbumArtView(coverArtId: artist.coverArt, size: 100, isCircle: true)
                                                 .frame(width: 44, height: 44)
                                             Text(artist.name)
                                                 .font(.body)

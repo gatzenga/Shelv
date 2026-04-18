@@ -196,12 +196,13 @@ actor RecapGenerator {
         )
 
         let periodKey = await MainActor.run { period.periodKey }
+        let recordName = "\(serverId.lowercased()).\(periodKey)"
 
         // CloudKit-Marker speichern – best-effort, kein Hard-Fail bei CK-Fehlern
         if let markerResult = try? await CloudKitSyncService.shared.saveRecapMarker(entry, periodKey: periodKey) {
             switch markerResult {
             case .created:
-                break
+                entry.ckRecordName = recordName
             case .conflict(let existingPlaylistId):
                 // Anderes Gerät war schneller – eigene Playlist verwerfen
                 try? await SubsonicAPIService.shared.deletePlaylist(id: playlist.id)
@@ -211,7 +212,7 @@ actor RecapGenerator {
                     periodType: period.type.rawValue,
                     periodStart: period.start.timeIntervalSince1970,
                     periodEnd: period.end.timeIntervalSince1970,
-                    ckRecordName: "\(serverId.lowercased()).\(periodKey)"
+                    ckRecordName: recordName
                 )
             }
         }
@@ -234,7 +235,11 @@ actor RecapGenerator {
         // allRegistryEntries ist DESC nach periodStart — älteste sind am Ende
         let toDelete = entries.suffix(entries.count - limit)
         for entry in toDelete {
+            CloudKitSyncService.debugLog("[Retention] deleting playlistId=\(entry.playlistId) marker=\(entry.ckRecordName ?? "nil") period=\(entry.periodType)/\(Date(timeIntervalSince1970: entry.periodStart))")
             try? await SubsonicAPIService.shared.deletePlaylist(id: entry.playlistId)
+            if let ckName = entry.ckRecordName {
+                await CloudKitSyncService.shared.deleteRecapMarker(ckRecordName: ckName)
+            }
             await PlayLogService.shared.deleteRegistryEntry(playlistId: entry.playlistId)
         }
     }

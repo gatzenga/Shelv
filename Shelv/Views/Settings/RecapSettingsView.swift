@@ -29,12 +29,12 @@ struct RecapSettingsView: View {
 
     @State private var showImportFilePicker = false
     @State private var showSyncReport = false
-    @State private var showVerifyAfterImport = false
-    @State private var showSyncLog = false
+    @State private var showVerifySheet = false
     @State private var isSyncingManually = false
     @State private var isPreparingExport = false
     @State private var exportItem: ShareableFileWrap?
     @State private var exportError: String?
+    @State private var totalPlays: Int = 0
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
@@ -74,6 +74,29 @@ struct RecapSettingsView: View {
                 }
             }
 
+            // MARK: Overview
+            Section(tr("Overview", "Übersicht")) {
+                HStack {
+                    Label { Text(tr("Total plays", "Gesamte Plays")) } icon: {
+                        Image(systemName: "music.note.list").foregroundStyle(accentColor)
+                    }
+                    Spacer()
+                    Text("\(totalPlays)")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+
+                Button {
+                    showVerifySheet = true
+                } label: {
+                    Label { Text(tr("Sync with Navidrome", "Mit Navidrome abgleichen")) } icon: {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .foregroundStyle(accentColor)
+                    }
+                }
+            }
+
             // MARK: Datenbank
             Section(tr("Database", "Datenbank")) {
                 Button {
@@ -103,17 +126,6 @@ struct RecapSettingsView: View {
                 } label: {
                     Label { Text(tr("Import database", "Datenbank importieren")) } icon: {
                         Image(systemName: "square.and.arrow.down").foregroundStyle(accentColor)
-                    }
-                }
-
-                if let sid = serverStore.activeServer?.stableId {
-                    NavigationLink(destination:
-                        RecapDebugView(serverId: sid)
-                            .environmentObject(recapStore)
-                    ) {
-                        Label { Text(tr("Play Log", "Play Log")) } icon: {
-                            Image(systemName: "list.bullet.clipboard").foregroundStyle(accentColor)
-                        }
                     }
                 }
             }
@@ -188,10 +200,43 @@ struct RecapSettingsView: View {
                         }
                     }
                     .disabled(isSyncingManually)
+                }
+            }
 
-                    Button { showSyncLog = true } label: {
+            // MARK: Logs
+            if let sid = serverStore.activeServer?.stableId {
+                Section(tr("Logs", "Logs")) {
+                    NavigationLink(destination: RecapPlayLogView(serverId: sid)) {
+                        Label { Text(tr("Recent plays", "Letzte Plays")) } icon: {
+                            Image(systemName: "list.bullet.clipboard").foregroundStyle(accentColor)
+                        }
+                    }
+                    NavigationLink(destination:
+                        RecapRegistryView(serverId: sid)
+                            .environmentObject(recapStore)
+                    ) {
+                        Label { Text(tr("Registry", "Registry")) } icon: {
+                            Image(systemName: "square.stack.3d.up").foregroundStyle(accentColor)
+                        }
+                    }
+                    NavigationLink(destination:
+                        RecapSyncLogView()
+                            .environmentObject(ckStatus)
+                    ) {
                         Label { Text(tr("Sync log", "Sync-Protokoll")) } icon: {
                             Image(systemName: "doc.text").foregroundStyle(accentColor)
+                        }
+                    }
+                }
+
+                // MARK: Erweitert
+                Section {
+                    NavigationLink(destination:
+                        RecapAdvancedView(serverId: sid)
+                            .environmentObject(recapStore)
+                    ) {
+                        Label { Text(tr("Advanced", "Erweitert")) } icon: {
+                            Image(systemName: "slider.horizontal.2.square").foregroundStyle(accentColor)
                         }
                     }
                 }
@@ -225,21 +270,29 @@ struct RecapSettingsView: View {
         .sheet(isPresented: $showSyncReport) {
             syncReportSheet
         }
-        .sheet(isPresented: $showVerifyAfterImport) {
+        .sheet(isPresented: $showVerifySheet, onDismiss: {
+            Task { await refreshTotalPlays() }
+        }) {
             if let sid = serverStore.activeServer?.stableId {
-                RecapVerifyView(serverId: sid, isImportContext: true)
+                RecapVerifyView(serverId: sid)
                     .environmentObject(recapStore)
             }
-        }
-        .sheet(isPresented: $showSyncLog) {
-            syncLogSheet
         }
         .onChange(of: recapStore.showSyncReport) { _, show in
             if show { showSyncReport = true; recapStore.showSyncReport = false }
         }
-        .onChange(of: recapStore.showVerifyAfterImport) { _, show in
-            if show { showVerifyAfterImport = true; recapStore.showVerifyAfterImport = false }
+        .task(id: serverStore.activeServerID) { await refreshTotalPlays() }
+        .onReceive(NotificationCenter.default.publisher(for: .recapRegistryUpdated)) { _ in
+            Task { await refreshTotalPlays() }
         }
+    }
+
+    private func refreshTotalPlays() async {
+        guard let sid = serverStore.activeServer?.stableId else {
+            totalPlays = 0
+            return
+        }
+        totalPlays = await PlayLogService.shared.logCount(serverId: sid)
     }
 
     // MARK: - Period Row
@@ -293,30 +346,4 @@ struct RecapSettingsView: View {
         .presentationCornerRadius(24)
     }
 
-    private var syncLogSheet: some View {
-        NavigationStack {
-            Group {
-                if ckStatus.logEntries.isEmpty {
-                    Text(tr("No entries yet.", "Noch keine Einträge."))
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    List(ckStatus.logEntries, id: \.self) { entry in
-                        Text(entry)
-                            .font(.system(.caption, design: .monospaced))
-                    }
-                    .listStyle(.plain)
-                }
-            }
-            .navigationTitle(tr("Sync log", "Sync-Protokoll"))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(tr("Done", "Fertig")) { showSyncLog = false }
-                }
-            }
-        }
-        .presentationDetents([.medium, .large])
-        .presentationCornerRadius(24)
-    }
 }
