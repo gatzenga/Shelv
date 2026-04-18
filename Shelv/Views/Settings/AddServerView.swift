@@ -13,6 +13,7 @@ struct AddServerView: View {
     @State private var username = ""
     @State private var password = ""
     @State private var isTesting = false
+    @State private var isSaving = false
     @State private var testResult: String?
     @State private var testSuccess = false
     @FocusState private var focusedField: Field?
@@ -81,9 +82,13 @@ struct AddServerView: View {
                     Button(tr("Cancel", "Abbrechen")) { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(tr("Save", "Speichern")) { save() }
-                        .disabled(!canSave)
-                        .bold()
+                    if isSaving {
+                        ProgressView()
+                    } else {
+                        Button(tr("Save", "Speichern")) { Task { await save() } }
+                            .disabled(!canSave)
+                            .bold()
+                    }
                 }
             }
             .onAppear {
@@ -117,17 +122,29 @@ struct AddServerView: View {
         isTesting = false
     }
 
-    private func save() {
+    private func save() async {
+        isSaving = true
+        defer { isSaving = false }
+
         if let existing = editingServer {
             var updated = existing
             updated.name = name
             updated.baseURL = baseURL
             updated.username = username
             serverStore.update(server: updated, password: password.isEmpty ? nil : password)
+            dismiss()
         } else {
-            let server = SubsonicServer(name: name, baseURL: baseURL, username: username)
-            serverStore.add(server: server, password: password)
+            let tempServer = SubsonicServer(name: name, baseURL: baseURL, username: username)
+            do {
+                let uid = try await SubsonicAPIService.shared.authLogin(server: tempServer, password: password)
+                var server = tempServer
+                server.remoteUserId = uid
+                serverStore.add(server: server, password: password)
+                dismiss()
+            } catch {
+                testResult = error.localizedDescription
+                testSuccess = false
+            }
         }
-        dismiss()
     }
 }

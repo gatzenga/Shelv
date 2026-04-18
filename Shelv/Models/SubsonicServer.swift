@@ -5,10 +5,13 @@ struct SubsonicServer: Identifiable, Codable {
     var name: String
     var baseURL: String
     var username: String
+    var remoteUserId: String?
 
     var displayName: String {
         name.isEmpty ? baseURL : name
     }
+
+    var stableId: String { remoteUserId ?? "" }
 
     init(name: String, baseURL: String, username: String) {
         self.id = UUID()

@@ -77,10 +77,12 @@ struct PlaylistDetailView: View {
                                     }
                                 }
                                 Spacer()
-                                Text(song.durationFormatted)
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                                    .monospacedDigit()
+                                if !isEditMode {
+                                    Text(song.durationFormatted)
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                        .monospacedDigit()
+                                }
                             }
                             .padding(.vertical, 2)
                             .contentShape(Rectangle())
@@ -137,14 +139,12 @@ struct PlaylistDetailView: View {
                         Task { await removeSongs(at: offsets) }
                     }
                     .deleteDisabled(isEditMode)
-                }
-            }
 
-            Section {
-                PlayerBottomSpacer(activeHeight: 90, inactiveHeight: 0)
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
+                    PlayerBottomSpacer(activeHeight: 110, inactiveHeight: 0)
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                }
             }
         }
         .listStyle(.plain)

@@ -3,14 +3,20 @@ import SwiftUI
 struct AddToPlaylistSheet: View {
     let songIds: [String]
     @EnvironmentObject var libraryStore: LibraryStore
+    @EnvironmentObject var recapStore: RecapStore
     @AppStorage("themeColor") private var themeColorName = "violet"
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
     @Environment(\.dismiss) private var dismiss
 
     @State private var showCreateSheet = false
     @State private var newPlaylistName = ""
-    @State private var addedToast = false
+    @State private var addingToPlaylistId: String?
+    @State private var toast: ShelveToast?
     @FocusState private var nameFieldFocused: Bool
+
+    private var visiblePlaylists: [Playlist] {
+        libraryStore.playlists.filter { !recapStore.recapPlaylistIds.contains($0.id) }
+    }
 
     var body: some View {
         NavigationStack {
@@ -25,14 +31,17 @@ struct AddToPlaylistSheet: View {
                     }
                 }
 
-                if !libraryStore.playlists.isEmpty {
+                if !visiblePlaylists.isEmpty {
                     Section(tr("Add to Playlist", "Zu Playlist hinzufügen")) {
-                        ForEach(libraryStore.playlists) { playlist in
+                        ForEach(visiblePlaylists) { playlist in
                             Button {
+                                guard addingToPlaylistId == nil else { return }
+                                addingToPlaylistId = playlist.id
                                 Task {
                                     await libraryStore.addSongsToPlaylist(playlist, songIds: songIds)
-                                    withAnimation { addedToast = true }
-                                    try? await Task.sleep(for: .milliseconds(800))
+                                    addingToPlaylistId = nil
+                                    toast = ShelveToast(message: tr("Added to \"\(playlist.name)\"", "Zu \"\(playlist.name)\" hinzugefügt"))
+                                    try? await Task.sleep(for: .milliseconds(1200))
                                     dismiss()
                                 }
                             } label: {
@@ -49,9 +58,14 @@ struct AddToPlaylistSheet: View {
                                                 .foregroundStyle(.secondary)
                                         }
                                     }
+                                    Spacer()
+                                    if addingToPlaylistId == playlist.id {
+                                        ProgressView()
+                                    }
                                 }
                             }
                             .buttonStyle(.plain)
+                            .disabled(addingToPlaylistId != nil)
                         }
                     }
                 }
@@ -72,6 +86,7 @@ struct AddToPlaylistSheet: View {
             .sheet(isPresented: $showCreateSheet) {
                 createAndAddSheet
             }
+            .shelveToast($toast)
         }
         .tint(accentColor)
     }

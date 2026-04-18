@@ -7,7 +7,7 @@
 A native, album and artist focused iOS and iPadOS client for [Navidrome](https://www.navidrome.org/) and Subsonic-compatible music servers, built with SwiftUI. Also available as a [native macOS app](https://github.com/gatzenga/Shelv-Desktop).
 
 **TestFlight:** https://testflight.apple.com/join/5y4tN6NB  
-**Discord:** https://discord.gg/zU3qv9v6Vn
+**Discord:** https://discord.gg/a8VvwDeR
 
 ![Platform](https://img.shields.io/badge/platform-iOS%20%7C%20iPadOS-lightgrey)
 ![Swift](https://img.shields.io/badge/swift-5-orange)
@@ -56,6 +56,14 @@ A native, album and artist focused iOS and iPadOS client for [Navidrome](https:/
 - Each song's lyrics are cached locally so they load instantly after the first fetch
 - **Auto-load** — when enabled in Settings, lyrics are fetched in the background as soon as a song starts playing
 - **Bulk download** — a one-tap option in Settings pre-fetches lyrics for your entire library in the background, with a live progress counter
+
+### Recap
+- Automatic weekly, monthly, and yearly playlists of your most-played songs, created directly on your Navidrome server
+- Configurable play threshold (10–50%): a track only counts once you've heard enough of it
+- Plays are recorded locally and synced across all your devices via iCloud — offline plays are queued and uploaded as soon as the network is available
+- Duplicate-safe: a CloudKit marker prevents multiple devices from creating the same Recap playlist
+- **Playlog Sync** — checks whether existing Recap playlists on the server still match the database and lets you apply fixes or create a new playlist
+- Database can be exported and imported; after an import a sync check runs automatically with rollback on cancel
 
 ### Search
 - Global search across artists, albums, and tracks on your server; also searches locally cached lyrics

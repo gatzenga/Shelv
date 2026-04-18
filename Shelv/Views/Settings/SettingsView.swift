@@ -1,10 +1,26 @@
 import SwiftUI
+import UniformTypeIdentifiers
+
+private struct ShareableFile: Identifiable {
+    let url: URL
+    var id: String { url.path }
+}
+
+private struct ActivityView: UIViewControllerRepresentable {
+    let items: [Any]
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
+}
 
 struct SettingsView: View {
     @EnvironmentObject var serverStore: ServerStore
     @EnvironmentObject var libraryStore: LibraryStore
     private let player = AudioPlayerService.shared
     @EnvironmentObject var lyricsStore: LyricsStore
+    @EnvironmentObject var recapStore: RecapStore
+    @EnvironmentObject var ckStatus: CloudKitSyncStatus
     @AppStorage("appAppearance") private var appAppearance = "system"
     @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage("enableFavorites") private var enableFavorites = true
@@ -12,6 +28,7 @@ struct SettingsView: View {
     @AppStorage("crossfadeEnabled") private var crossfadeEnabled = false
     @AppStorage("crossfadeDuration") private var crossfadeDuration = 5
     @AppStorage("autoFetchLyrics") private var autoFetchLyrics = true
+    @AppStorage("recapEnabled") private var recapEnabled = false
 
     @State private var showAddServer = false
     @State private var editingServer: SubsonicServer?
@@ -106,6 +123,28 @@ struct SettingsView: View {
                                 step: 1
                             )
                             .tint(accentColor)
+                        }
+                    }
+                }
+
+                Section(tr("Recap", "Recap")) {
+                    Toggle(isOn: $recapEnabled) {
+                        Label { Text(tr("Recap", "Recap")) } icon: {
+                            Image(systemName: "calendar.badge.clock").foregroundStyle(accentColor)
+                        }
+                    }
+                    .tint(accentColor)
+
+                    if recapEnabled {
+                        NavigationLink(destination:
+                            RecapSettingsView()
+                                .environmentObject(serverStore)
+                                .environmentObject(recapStore)
+                                .environmentObject(ckStatus)
+                        ) {
+                            Label { Text(tr("Settings", "Einstellungen")) } icon: {
+                                Image(systemName: "slider.horizontal.3").foregroundStyle(accentColor)
+                            }
                         }
                     }
                 }
@@ -387,9 +426,15 @@ struct SettingsView: View {
                 Text(server.baseURL)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Text(server.username)
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                HStack(spacing: 6) {
+                    Text(server.username)
+                    if let uid = server.remoteUserId {
+                        Text("·")
+                        Text(uid)
+                    }
+                }
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
             }
             Spacer()
             Menu {

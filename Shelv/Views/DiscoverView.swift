@@ -12,6 +12,7 @@ struct DiscoverView: View {
     @State private var randomRefreshing = false
     @State private var showSearch = false
     @State private var showInsights = false
+    @State private var showRecap = false
 
     var body: some View {
         NavigationStack {
@@ -67,6 +68,13 @@ struct DiscoverView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
+                        showRecap = true
+                    } label: {
+                        Image(systemName: "calendar.badge.clock")
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
                         showInsights = true
                     } label: {
                         Image(systemName: "chart.bar.xaxis")
@@ -88,6 +96,12 @@ struct DiscoverView: View {
             }
             .sheet(isPresented: $showInsights) {
                 InsightsView()
+                    .presentationDetents([.large])
+                    .presentationCornerRadius(24)
+                    .tint(accentColor)
+            }
+            .sheet(isPresented: $showRecap) {
+                RecapView()
                     .presentationDetents([.large])
                     .presentationCornerRadius(24)
                     .tint(accentColor)

@@ -282,7 +282,7 @@ struct InsightsView: View {
         HStack(spacing: 12) {
             content()
         }
-        .padding(.vertical, isTop3 ? 10 : 6)
+        .padding(.vertical, 10)
         .padding(.horizontal, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(

@@ -287,7 +287,19 @@ class AudioPlayerService: ObservableObject {
 
         MPNowPlayingInfoCenter.default().playbackState = .playing
         updateNowPlayingInfo(song: song)
-        Task { await SubsonicAPIService.shared.scrobble(songId: song.id) }
+        let scrobbleSongId = song.id
+        let scrobbleServerId = SubsonicAPIService.shared.activeServer?.stableId ?? ""
+        let scrobbleAt = Date().timeIntervalSince1970
+        Task {
+            do {
+                try await SubsonicAPIService.shared.scrobble(songId: scrobbleSongId, playedAt: scrobbleAt)
+            } catch {
+                guard !scrobbleServerId.isEmpty else { return }
+                await PlayLogService.shared.addPendingScrobble(
+                    songId: scrobbleSongId, serverId: scrobbleServerId, playedAt: scrobbleAt
+                )
+            }
+        }
     }
 
     private func clearPlaybackState() {
@@ -704,7 +716,19 @@ class AudioPlayerService: ObservableObject {
 
         updateNowPlayingInfo(song: song)
         MPNowPlayingInfoCenter.default().playbackState = .playing
-        Task { await SubsonicAPIService.shared.scrobble(songId: song.id) }
+        let scrobbleSongId = song.id
+        let scrobbleServerId = SubsonicAPIService.shared.activeServer?.stableId ?? ""
+        let scrobbleAt = Date().timeIntervalSince1970
+        Task {
+            do {
+                try await SubsonicAPIService.shared.scrobble(songId: scrobbleSongId, playedAt: scrobbleAt)
+            } catch {
+                guard !scrobbleServerId.isEmpty else { return }
+                await PlayLogService.shared.addPendingScrobble(
+                    songId: scrobbleSongId, serverId: scrobbleServerId, playedAt: scrobbleAt
+                )
+            }
+        }
     }
 
     private func checkCrossfadeTrigger(currentTime: Double) {

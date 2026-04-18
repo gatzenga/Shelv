@@ -100,6 +100,7 @@ private struct PingBody: Decodable {
     let error: StatusCheck.APIError?
 }
 
+
 private struct PingInfoBody: Decodable {
     let status: String
     let version: String
@@ -511,11 +512,29 @@ class SubsonicAPIService: ObservableObject {
         }
     }
 
-    func scrobble(songId: String) async {
-        _ = try? await fetchData(path: "scrobble", extra: [
+    func scrobble(songId: String, playedAt: Double? = nil) async throws {
+        var extra = [
             URLQueryItem(name: "id", value: songId),
             URLQueryItem(name: "submission", value: "true")
-        ])
+        ]
+        if let ts = playedAt {
+            // Subsonic erwartet Millisekunden seit Epoch
+            extra.append(URLQueryItem(name: "time", value: String(Int64(ts * 1000))))
+        }
+        _ = try await fetchData(path: "scrobble", extra: extra)
+    }
+
+    func authLogin(server: SubsonicServer, password: String) async throws -> String {
+        var base = server.baseURL
+        if base.hasSuffix("/") { base.removeLast() }
+        guard let url = URL(string: "\(base)/auth/login") else { throw SubsonicAPIError.invalidURL }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(["username": server.username, "password": password])
+        let (data, _) = try await session.data(for: request)
+        struct AuthResponse: Decodable { let id: String }
+        return try decoder.decode(AuthResponse.self, from: data).id
     }
 
     func streamURL(for songId: String) -> URL? {
@@ -587,7 +606,7 @@ class SubsonicAPIService: ObservableObject {
         return playlist
     }
 
-    func createPlaylist(name: String, songIds: [String] = []) async throws -> Playlist {
+    func createPlaylist(name: String, songIds: [String] = [], comment: String? = nil) async throws -> Playlist {
         var extra = [URLQueryItem(name: "name", value: name)]
         extra += songIds.map { URLQueryItem(name: "songId", value: $0) }
         let data = try await fetchData(path: "createPlaylist", extra: extra)
@@ -595,6 +614,9 @@ class SubsonicAPIService: ObservableObject {
         try check(status: body.status, error: body.error)
         guard let detail = body.playlist else {
             throw SubsonicAPIError.apiError(0, "Create playlist failed")
+        }
+        if let comment {
+            try? await updatePlaylist(id: detail.id, comment: comment)
         }
         return Playlist(
             id: detail.id, name: detail.name, comment: detail.comment,

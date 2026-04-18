@@ -1,0 +1,241 @@
+import Foundation
+
+// MARK: - RecapPeriod
+
+struct RecapPeriod {
+    enum PeriodType: String {
+        case week, month, year
+
+        var songLimit: Int {
+            switch self {
+            case .week:         return 25
+            case .month, .year: return 50
+            }
+        }
+
+        // Mindestwartezeit nach Periodenende – gibt Offline-Geräten Zeit zum Hochladen.
+        static let weekGraceHours  = 24
+        static let monthGraceHours = 48
+        static let yearGraceHours  = 96
+
+        var gracePeriodHours: Int {
+            switch self {
+            case .week:  return Self.weekGraceHours
+            case .month: return Self.monthGraceHours
+            case .year:  return Self.yearGraceHours
+            }
+        }
+
+        var retentionKey: String {
+            switch self {
+            case .week:  return "recapWeeklyRetention"
+            case .month: return "recapMonthlyRetention"
+            case .year:  return "recapYearlyRetention"
+            }
+        }
+
+        var defaultRetention: Int {
+            switch self {
+            case .week:  return 1
+            case .month: return 12
+            case .year:  return 3
+            }
+        }
+    }
+
+    let type: PeriodType
+    let start: Date
+    let end: Date
+
+    var playlistName: String {
+        switch type {
+        case .week:
+            var cal = Calendar(identifier: .gregorian)
+            cal.locale = Locale.current
+            let startComps = cal.dateComponents([.month], from: start)
+            let endComps   = cal.dateComponents([.month], from: end)
+
+            let dayFmt = DateFormatter()
+            dayFmt.dateFormat = "d"
+
+            let monthFmt = DateFormatter()
+            monthFmt.dateFormat = "MMM"
+            monthFmt.locale = Locale.current
+
+            let yearFmt = DateFormatter()
+            yearFmt.dateFormat = "yyyy"
+
+            let sd = dayFmt.string(from: start)
+            let ed = dayFmt.string(from: end)
+            let sm = monthFmt.string(from: start)
+            let em = monthFmt.string(from: end)
+            let yr = yearFmt.string(from: end)
+
+            if startComps.month == endComps.month {
+                return "\(sd).–\(ed). \(em) \(yr)"
+            } else {
+                return "\(sd). \(sm) – \(ed). \(em) \(yr)"
+            }
+
+        case .month:
+            let fmt = DateFormatter()
+            fmt.dateFormat = "MMMM yyyy"
+            fmt.locale = Locale.current
+            return fmt.string(from: start)
+
+        case .year:
+            let fmt = DateFormatter()
+            fmt.dateFormat = "yyyy"
+            return fmt.string(from: start)
+        }
+    }
+}
+
+// MARK: - Period Calculation
+
+extension RecapPeriod {
+    /// Letzte abgeschlossene Woche (Mo–So) relativ zu `now`
+    static func lastWeek(relativeTo now: Date = Date()) -> RecapPeriod? {
+        var cal = Calendar(identifier: .gregorian)
+        cal.firstWeekday = 2
+        guard
+            let startOfThisWeek = cal.dateInterval(of: .weekOfYear, for: now)?.start,
+            let start = cal.date(byAdding: .weekOfYear, value: -1, to: startOfThisWeek),
+            let end   = cal.date(byAdding: .second, value: -1, to: startOfThisWeek)
+        else { return nil }
+        return RecapPeriod(type: .week, start: start, end: end)
+    }
+
+    /// Letzter abgeschlossener Monat relativ zu `now`
+    static func lastMonth(relativeTo now: Date = Date()) -> RecapPeriod? {
+        let cal = Calendar.current
+        guard
+            let startOfThisMonth = cal.dateInterval(of: .month, for: now)?.start,
+            let start = cal.date(byAdding: .month, value: -1, to: startOfThisMonth),
+            let end   = cal.date(byAdding: .second, value: -1, to: startOfThisMonth)
+        else { return nil }
+        return RecapPeriod(type: .month, start: start, end: end)
+    }
+
+    /// Letztes abgeschlossenes Jahr relativ zu `now`
+    static func lastYear(relativeTo now: Date = Date()) -> RecapPeriod? {
+        var cal = Calendar.current
+        guard
+            let startOfThisYear = cal.dateInterval(of: .year, for: now)?.start,
+            let start = cal.date(byAdding: .year, value: -1, to: startOfThisYear),
+            let end   = cal.date(byAdding: .second, value: -1, to: startOfThisYear)
+        else { return nil }
+        return RecapPeriod(type: .year, start: start, end: end)
+    }
+}
+
+// MARK: - Period Key (für CloudKit recordName)
+
+extension RecapPeriod {
+    /// Eindeutiger String für diese Periode — wird Teil des CloudKit-recordName.
+    var periodKey: String {
+        var cal = Calendar(identifier: .gregorian)
+        cal.firstWeekday = 2          // Montag
+        cal.minimumDaysInFirstWeek = 4 // ISO-8601-Wochennummerierung
+        cal.timeZone = TimeZone(identifier: "UTC")!
+        switch type {
+        case .week:
+            let week = cal.component(.weekOfYear, from: start)
+            let year = cal.component(.yearForWeekOfYear, from: start)
+            return String(format: "%04d-W%02d", year, week)
+        case .month:
+            let comps = cal.dateComponents([.year, .month], from: start)
+            return String(format: "%04d-%02d", comps.year!, comps.month!)
+        case .year:
+            let year = cal.component(.year, from: start)
+            return String(format: "%04d", year)
+        }
+    }
+}
+
+// MARK: - RecapGenerator
+
+actor RecapGenerator {
+    static let shared = RecapGenerator()
+    private init() {}
+
+    func generate(period: RecapPeriod, serverId: String) async throws {
+        // Blockierender Sync – wirft CKSyncError.timeout wenn zu lange;
+        // generatePendingPeriods() markiert dann keinen Erfolg → nächster Start versucht erneut.
+        try await CloudKitSyncService.shared.flushAndWait()
+
+        // Nach dem Download: wurde diese Periode bereits von einem anderen Gerät erstellt?
+        if await PlayLogService.shared.registryEntry(
+            serverId: serverId,
+            periodType: period.type.rawValue,
+            periodStart: period.start.timeIntervalSince1970
+        ) != nil { return }
+
+        let topSongs = await PlayLogService.shared.topSongs(
+            serverId: serverId,
+            from: period.start,
+            to: period.end,
+            limit: period.type.songLimit
+        )
+        guard !topSongs.isEmpty else { return }
+
+        let songIds = topSongs.map { $0.songId }
+        let playlist = try await SubsonicAPIService.shared.createPlaylist(
+            name: period.playlistName,
+            songIds: songIds,
+            comment: "Shelv Recap"
+        )
+
+        var entry = RecapRegistryRecord(
+            playlistId: playlist.id,
+            serverId: serverId,
+            periodType: period.type.rawValue,
+            periodStart: period.start.timeIntervalSince1970,
+            periodEnd: period.end.timeIntervalSince1970,
+            ckRecordName: nil
+        )
+
+        let periodKey = await MainActor.run { period.periodKey }
+
+        // CloudKit-Marker speichern – best-effort, kein Hard-Fail bei CK-Fehlern
+        if let markerResult = try? await CloudKitSyncService.shared.saveRecapMarker(entry, periodKey: periodKey) {
+            switch markerResult {
+            case .created:
+                break
+            case .conflict(let existingPlaylistId):
+                // Anderes Gerät war schneller – eigene Playlist verwerfen
+                try? await SubsonicAPIService.shared.deletePlaylist(id: playlist.id)
+                entry = RecapRegistryRecord(
+                    playlistId: existingPlaylistId,
+                    serverId: serverId,
+                    periodType: period.type.rawValue,
+                    periodStart: period.start.timeIntervalSince1970,
+                    periodEnd: period.end.timeIntervalSince1970,
+                    ckRecordName: "\(serverId.lowercased()).\(periodKey)"
+                )
+            }
+        }
+
+        await PlayLogService.shared.registerPlaylist(entry)
+        await enforceRetention(periodType: period.type, serverId: serverId)
+    }
+
+    private func enforceRetention(periodType: RecapPeriod.PeriodType, serverId: String) async {
+        let limit = await MainActor.run {
+            let raw = UserDefaults.standard.integer(forKey: periodType.retentionKey)
+            return raw > 0 ? raw : periodType.defaultRetention
+        }
+
+        let entries = await PlayLogService.shared.allRegistryEntries(serverId: serverId)
+            .filter { $0.periodType == periodType.rawValue }
+
+        guard entries.count > limit else { return }
+
+        // allRegistryEntries ist DESC nach periodStart — älteste sind am Ende
+        let toDelete = entries.suffix(entries.count - limit)
+        for entry in toDelete {
+            try? await SubsonicAPIService.shared.deletePlaylist(id: entry.playlistId)
+            await PlayLogService.shared.deleteRegistryEntry(playlistId: entry.playlistId)
+        }
+    }
+}

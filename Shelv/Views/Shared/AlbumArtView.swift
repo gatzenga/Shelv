@@ -43,26 +43,28 @@ struct AlbumArtView: View {
             }
         }
         .task(id: coverArtId) {
-            guard uiImage == nil else { return }
             await load()
         }
     }
 
     @MainActor
     private func load() async {
-        loading = true
         guard let id = coverArtId,
               let url = SubsonicAPIService.shared.coverArtURL(for: id, size: size)
-        else { loading = false; return }
+        else { uiImage = nil; loading = false; return }
 
         let key = "\(id)_\(size)"
 
-        // Synchroner Check nochmal (falls zwischen onAppear und task geladen)
+        // Gecachtes Bild sofort setzen — kein Flash, kein Spinner
         if let cached = ImageCacheService.shared.cachedImage(key: key) {
             uiImage = cached
             loading = false
             return
         }
+
+        // Kein Cache → altes Cover wegräumen, neu laden
+        uiImage = nil
+        loading = true
 
         // Bis zu 3 Versuche bei fehlgeschlagenem Laden
         for attempt in 0..<3 {

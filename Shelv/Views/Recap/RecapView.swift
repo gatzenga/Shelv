@@ -1,0 +1,238 @@
+import SwiftUI
+
+struct RecapView: View {
+    @EnvironmentObject var recapStore: RecapStore
+    @EnvironmentObject var serverStore: ServerStore
+    @Environment(\.dismiss) private var dismiss
+    @AppStorage("themeColor") private var themeColorName = "violet"
+    @AppStorage("recapEnabled") private var recapEnabled = false
+    @AppStorage("recapWeeklyEnabled") private var weeklyEnabled = true
+    @AppStorage("recapMonthlyEnabled") private var monthlyEnabled = true
+    @AppStorage("recapYearlyEnabled") private var yearlyEnabled = true
+
+    @State private var segment: RecapPeriod.PeriodType = .week
+    @State private var selectedEntry: RecapRegistryRecord?
+    @State private var entryToDelete: RecapRegistryRecord?
+    @State private var showDeleteConfirm = false
+
+    private var accentColor: Color { AppTheme.color(for: themeColorName) }
+
+    private var enabledTypes: [RecapPeriod.PeriodType] {
+        var types: [RecapPeriod.PeriodType] = []
+        if weeklyEnabled  { types.append(.week) }
+        if monthlyEnabled { types.append(.month) }
+        if yearlyEnabled  { types.append(.year) }
+        return types
+    }
+
+    private var filteredEntries: [RecapRegistryRecord] {
+        recapStore.entries.filter { $0.periodType == segment.rawValue }
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                if !recapEnabled {
+                    disabledStateView
+                } else if enabledTypes.isEmpty {
+                    emptyStateView(
+                        icon: "chart.bar.xaxis",
+                        message: tr("Enable at least one period in Settings.", "Aktiviere mindestens eine Periode in den Einstellungen.")
+                    )
+                } else {
+                    if enabledTypes.count > 1 {
+                        Picker("", selection: $segment) {
+                            ForEach(enabledTypes, id: \.self) { type in
+                                Text(type.label).tag(type)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .padding(.horizontal)
+                        .padding(.vertical, 12)
+                        Divider()
+                    }
+
+                    if filteredEntries.isEmpty {
+                        emptyStateView(
+                            icon: "clock",
+                            message: tr("No recap generated yet for this period.", "Noch kein Recap für diese Periode erstellt.")
+                        )
+                    } else {
+                        List {
+                            ForEach(filteredEntries, id: \.playlistId) { entry in
+                                Button { selectedEntry = entry } label: {
+                                    recapRow(entry)
+                                }
+                                .buttonStyle(.plain)
+                                .listRowSeparator(.hidden)
+                                .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                                .listRowBackground(Color.clear)
+                                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                    Button(role: .destructive) {
+                                        entryToDelete = entry
+                                        showDeleteConfirm = true
+                                    } label: {
+                                        Image(systemName: "trash")
+                                    }
+                                }
+                            }
+                        }
+                        .listStyle(.plain)
+                        .scrollContentBackground(.hidden)
+                        .scrollIndicators(.hidden)
+                        .navigationDestination(item: $selectedEntry) { entry in
+                            recapDetail(entry)
+                        }
+                    }
+                }
+            }
+            .navigationTitle(tr("Recap", "Recap"))
+            .navigationBarTitleDisplayMode(.large)
+            .toolbarBackground(.hidden, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { dismiss() } label: {
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(.primary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .tint(accentColor)
+        .alert(
+            tr("Delete Recap?", "Recap löschen?"),
+            isPresented: $showDeleteConfirm,
+            presenting: entryToDelete
+        ) { entry in
+            Button(tr("Delete", "Löschen"), role: .destructive) {
+                guard let sid = serverStore.activeServer?.stableId else { return }
+                Task { await recapStore.deleteEntry(playlistId: entry.playlistId, serverId: sid) }
+            }
+            Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+        } message: { entry in
+            let type = RecapPeriod.PeriodType(rawValue: entry.periodType) ?? .week
+            let period = RecapPeriod(
+                type: type,
+                start: Date(timeIntervalSince1970: entry.periodStart),
+                end: Date(timeIntervalSince1970: entry.periodEnd)
+            )
+            Text(period.playlistName)
+        }
+        .onAppear {
+            if let first = enabledTypes.first, !enabledTypes.contains(segment) {
+                segment = first
+            }
+        }
+        .task(id: serverStore.activeServerID) {
+            guard let sid = serverStore.activeServer?.stableId else { return }
+            await recapStore.loadEntries(serverId: sid)
+        }
+    }
+
+    // MARK: - Row
+
+    private func recapRow(_ entry: RecapRegistryRecord) -> some View {
+        let type = RecapPeriod.PeriodType(rawValue: entry.periodType) ?? .week
+        let period = RecapPeriod(
+            type: type,
+            start: Date(timeIntervalSince1970: entry.periodStart),
+            end: Date(timeIntervalSince1970: entry.periodEnd)
+        )
+        return HStack(spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(accentColor.opacity(0.1))
+                Image(systemName: type.icon)
+                    .font(.title3)
+                    .foregroundStyle(accentColor)
+            }
+            .frame(width: 52, height: 52)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(period.playlistName)
+                    .font(.body)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                Text(tr("Top \(type.songLimit)", "Top \(type.songLimit)"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.right")
+                .font(.caption.bold())
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.vertical, 10)
+        .padding(.horizontal, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(Color(.secondarySystemBackground))
+        )
+    }
+
+    // MARK: - Detail Navigation
+
+    @ViewBuilder
+    private func recapDetail(_ entry: RecapRegistryRecord) -> some View {
+        if let sid = serverStore.activeServer?.stableId {
+            RecapDetailView(entry: entry, serverId: sid)
+        }
+    }
+
+    // MARK: - State Views
+
+    private var disabledStateView: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "chart.bar.xaxis")
+                .font(.system(size: 48))
+                .foregroundStyle(.quaternary)
+            Text(tr("Recap is disabled", "Recap ist deaktiviert"))
+                .font(.headline)
+                .foregroundStyle(.secondary)
+            Text(tr("Enable Recap in Settings to start tracking your listening history.", "Aktiviere Recap in den Einstellungen, um dein Hörverhalten aufzuzeichnen."))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func emptyStateView(icon: String, message: String) -> some View {
+        VStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 48))
+                .foregroundStyle(.quaternary)
+            Text(message)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - PeriodType helpers
+
+extension RecapPeriod.PeriodType {
+    var label: String {
+        switch self {
+        case .week:  return tr("Weekly", "Wöchentlich")
+        case .month: return tr("Monthly", "Monatlich")
+        case .year:  return tr("Yearly", "Jährlich")
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .week:  return "calendar"
+        case .month: return "calendar.badge.clock"
+        case .year:  return "calendar.badge.checkmark"
+        }
+    }
+}

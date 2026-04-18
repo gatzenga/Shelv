@@ -2,9 +2,14 @@ import SwiftUI
 
 struct PlaylistsView: View {
     @EnvironmentObject var libraryStore: LibraryStore
+    @EnvironmentObject var recapStore: RecapStore
     private let player = AudioPlayerService.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
+
+    private var visiblePlaylists: [Playlist] {
+        libraryStore.playlists.filter { !recapStore.recapPlaylistIds.contains($0.id) }
+    }
 
     @State private var showCreateSheet = false
     @State private var newPlaylistName = ""
@@ -21,7 +26,7 @@ struct PlaylistsView: View {
                 if libraryStore.isLoadingPlaylists && libraryStore.playlists.isEmpty {
                     ProgressView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if libraryStore.playlists.isEmpty {
+                } else if visiblePlaylists.isEmpty {
                     ContentUnavailableView(
                         tr("No Playlists", "Keine Playlists"),
                         systemImage: "music.note.list",
@@ -33,7 +38,7 @@ struct PlaylistsView: View {
                 } else {
                     List {
                         Section {
-                            ForEach(libraryStore.playlists) { playlist in
+                            ForEach(visiblePlaylists) { playlist in
                                 NavigationLink(destination: PlaylistDetailView(playlist: playlist)) {
                                     playlistRow(playlist)
                                 }
