@@ -33,7 +33,7 @@ struct LyricsSearchResult: Identifiable {
 
 // MARK: - LRCLIB Response
 
-private struct LrcLibResponse: Decodable, Sendable {
+nonisolated private struct LrcLibResponse: Decodable, Sendable {
     let instrumental: Bool?
     let plainLyrics: String?
     let syncedLyrics: String?

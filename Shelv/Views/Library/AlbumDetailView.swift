@@ -124,6 +124,9 @@ struct AlbumDetailView: View {
         }
         .listStyle(.plain)
         .scrollIndicators(.hidden)
+        .navigationDestination(item: $artistDestination) { artist in
+            ArtistDetailView(artist: artist)
+        }
         .navigationTitle(album.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -212,9 +215,6 @@ struct AlbumDetailView: View {
                         }
                     }
                     .buttonStyle(.plain)
-                    .navigationDestination(item: $artistDestination) { artist in
-                        ArtistDetailView(artist: artist)
-                    }
                 }
                 HStack(spacing: 12) {
                     if let year = album.year  { Text(String(year)) }

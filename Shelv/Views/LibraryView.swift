@@ -211,9 +211,11 @@ struct LibraryView: View {
     private var mainContent: some View {
         stackContent
         .refreshable {
+            let currentSegment = segment
+            let currentSort = sortOption.rawValue
             async let reload: Void = {
-                switch segment {
-                case .albums:    await libraryStore.loadAlbums(sortBy: sortOption.rawValue)
+                switch currentSegment {
+                case .albums:    await libraryStore.loadAlbums(sortBy: currentSort)
                 case .artists:   await libraryStore.loadArtists()
                 case .favorites: await libraryStore.loadStarred()
                 }
@@ -851,7 +853,11 @@ struct LibraryView: View {
                     sortOptionRaw = option.rawValue
                     Task { await libraryStore.loadAlbums(sortBy: option.rawValue) }
                 } label: {
-                    Label(option.label, systemImage: sortOption == option ? "checkmark" : "")
+                    if sortOption == option {
+                        Label(option.label, systemImage: "checkmark")
+                    } else {
+                        Text(option.label)
+                    }
                 }
             }
         } label: {

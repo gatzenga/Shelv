@@ -119,7 +119,7 @@ extension RecapPeriod {
 
     /// Letztes abgeschlossenes Jahr relativ zu `now`
     static func lastYear(relativeTo now: Date = Date()) -> RecapPeriod? {
-        var cal = Calendar.current
+        let cal = Calendar.current
         guard
             let startOfThisYear = cal.dateInterval(of: .year, for: now)?.start,
             let start = cal.date(byAdding: .year, value: -1, to: startOfThisYear),

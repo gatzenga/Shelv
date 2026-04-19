@@ -33,7 +33,7 @@ final class DBErrorLog: ObservableObject {
         print("[DB:lyrics] \(message)")
     }
 
-    private static func stamp(_ message: String) -> String {
+    private nonisolated static func stamp(_ message: String) -> String {
         let time = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
         return "[\(time)] \(message)"
     }

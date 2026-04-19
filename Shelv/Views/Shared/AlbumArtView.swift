@@ -37,6 +37,7 @@ struct AlbumArtView: View {
                 content.clipShape(RoundedRectangle(cornerRadius: cornerRadius))
             }
         }
+        .aspectRatio(1, contentMode: .fit)
         .onAppear {
             guard !didCheck else { return }
             didCheck = true

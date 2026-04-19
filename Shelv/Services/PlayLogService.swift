@@ -153,7 +153,7 @@ actor PlayLogService {
 
     @discardableResult
     func log(songId: String, serverId: String, songDuration: Double) -> String? {
-        guard let pool else { return nil }
+        guard pool != nil else { return nil }
         let uuid = UUID().uuidString.lowercased()
         let record = PlayLogRecord(
             songId: songId, serverId: serverId,
@@ -194,7 +194,7 @@ actor PlayLogService {
     }
 
     func markSynced(uuids: [String]) {
-        guard let pool, !uuids.isEmpty else { return }
+        guard pool != nil, !uuids.isEmpty else { return }
         let now = Date().timeIntervalSince1970
         let placeholders = uuids.map { _ in "?" }.joined(separator: ",")
         var args: [DatabaseValueConvertible] = [now]
@@ -319,7 +319,7 @@ actor PlayLogService {
     }
 
     func migrateServerId(from oldId: String, to newId: String) {
-        guard let pool, oldId != newId else { return }
+        guard pool != nil, oldId != newId else { return }
         safeWrite { db in
             try db.execute(
                 sql: "UPDATE play_log SET serverId = ?, syncedAt = NULL WHERE serverId = ?",
@@ -529,7 +529,7 @@ actor PlayLogService {
     }
 
     func rewriteAllServerIds(to newId: String) {
-        guard let pool, !newId.isEmpty else { return }
+        guard pool != nil, !newId.isEmpty else { return }
         safeWrite { db in
             try db.execute(sql: "UPDATE play_log SET serverId = ?, syncedAt = NULL WHERE serverId != ?",
                            arguments: [newId, newId])

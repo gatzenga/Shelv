@@ -3,7 +3,7 @@ import SwiftUI
 let appLang: String = Locale.preferredLanguages.first?.hasPrefix("de") == true ? "de" : "en"
 
 extension Notification.Name {
-    static let recapRegistryUpdated = Notification.Name("shelv.recapRegistryUpdated")
+    nonisolated static let recapRegistryUpdated = Notification.Name("shelv.recapRegistryUpdated")
 }
 
 func tr(_ en: String, _ de: String, _ lang: String = appLang) -> String {
