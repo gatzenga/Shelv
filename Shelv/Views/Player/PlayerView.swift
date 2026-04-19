@@ -25,6 +25,7 @@ struct PlayerView: View {
     @State private var artistDestination: Artist?
     @State private var isResolvingArtist = false
     @State private var artistResolveTask: Task<Void, Never>?
+    @State private var availableHeight: CGFloat = 820
 
     private var currentAlbum: Album? {
         guard let song = player.currentSong, let albumId = song.albumId else { return nil }
@@ -50,20 +51,36 @@ struct PlayerView: View {
     }
 
     private var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
-    private var artSize: CGFloat { isPad ? 380 : 280 }
-    private var playButtonSize: CGFloat { isPad ? 96 : 72 }
-    private var controlSize: CGFloat { isPad ? 56 : 44 }
+
+    private func artSize(_ h: CGFloat) -> CGFloat {
+        isPad ? min(380, max(240, h * 0.42)) : 280
+    }
+    private func playButtonSize(_ h: CGFloat) -> CGFloat {
+        isPad ? min(96, max(72, h * 0.11)) : 72
+    }
+    private func controlSize(_ h: CGFloat) -> CGFloat {
+        isPad ? min(56, max(44, h * 0.065)) : 44
+    }
+    private func vPad(_ h: CGFloat, large: CGFloat, small: CGFloat) -> CGFloat {
+        guard isPad else { return small }
+        return h < 760 ? max(small * 0.6, large * 0.5) : large
+    }
 
     var body: some View {
         NavigationStack {
+            GeometryReader { geo in
+                let h = geo.size.height
+                let art = artSize(h)
+                let play = playButtonSize(h)
+                let ctrl = controlSize(h)
             VStack(spacing: 0) {
-                Spacer()
+                Spacer(minLength: 0)
 
                 // Album Art
                 AlbumArtView(coverArtId: player.currentSong?.coverArt, size: 600, cornerRadius: isPad ? 22 : 20)
-                    .frame(width: artSize, height: artSize)
+                    .frame(width: art, height: art)
                     .shadow(color: .black.opacity(0.4), radius: 30, y: 15)
-                    .padding(.bottom, isPad ? 20 : 28)
+                    .padding(.bottom, vPad(h, large: 20, small: 28))
 
                 // Titel / Künstler / Album
                 VStack(spacing: isPad ? 6 : 8) {
@@ -108,7 +125,7 @@ struct PlayerView: View {
                     }
                 }
 
-                Spacer()
+                Spacer(minLength: 0)
 
                 // Seek-Slider
                 VStack(spacing: 4) {
@@ -151,7 +168,7 @@ struct PlayerView: View {
                     }
                 }
                 .padding(.horizontal, isPad ? 48 : 32)
-                .padding(.bottom, isPad ? 24 : 32)
+                .padding(.bottom, vPad(h, large: 24, small: 32))
 
                 // Shuffle / Prev / Play / Next / Repeat
                 HStack(spacing: isPad ? 28 : 22) {
@@ -173,7 +190,7 @@ struct PlayerView: View {
                         ZStack {
                             Circle()
                                 .fill(accentColor)
-                                .frame(width: playButtonSize, height: playButtonSize)
+                                .frame(width: play, height: play)
                             if player.isBuffering {
                                 ProgressView()
                                     .tint(.white)
@@ -203,7 +220,7 @@ struct PlayerView: View {
                         .contentShape(Rectangle())
                         .onTapGesture { player.repeatMode = player.repeatMode.toggled }
                 }
-                .padding(.bottom, isPad ? 36 : 20)
+                .padding(.bottom, vPad(h, large: 36, small: 20))
 
                 HStack {
                     if enableFavorites, let song = player.currentSong {
@@ -213,7 +230,7 @@ struct PlayerView: View {
                             ZStack {
                                 Circle()
                                     .fill(Color.gray.opacity(colorScheme == .dark ? 0.3 : 0.15))
-                                    .frame(width: controlSize, height: controlSize)
+                                    .frame(width: ctrl, height: ctrl)
                                 Image(systemName: libraryStore.isSongStarred(song) ? "heart.fill" : "heart")
                                     .font(.system(size: isPad ? 20 : 18))
                                     .foregroundStyle(libraryStore.isSongStarred(song) ? accentColor : .secondary)
@@ -229,7 +246,7 @@ struct PlayerView: View {
                         ZStack {
                             Circle()
                                 .fill(Color.gray.opacity(colorScheme == .dark ? 0.3 : 0.15))
-                                .frame(width: controlSize, height: controlSize)
+                                .frame(width: ctrl, height: ctrl)
                             Image(systemName: "quote.bubble")
                                 .font(.system(size: isPad ? 18 : 16))
                                 .foregroundStyle(accentColor)
@@ -245,7 +262,7 @@ struct PlayerView: View {
                         ZStack {
                             Circle()
                                 .fill(Color.gray.opacity(colorScheme == .dark ? 0.3 : 0.15))
-                                .frame(width: controlSize, height: controlSize)
+                                .frame(width: ctrl, height: ctrl)
                             Image(systemName: "list.bullet")
                                 .font(.system(size: isPad ? 18 : 16))
                                 .foregroundStyle(accentColor)
@@ -262,7 +279,7 @@ struct PlayerView: View {
                             ZStack {
                                 Circle()
                                     .fill(Color.gray.opacity(colorScheme == .dark ? 0.3 : 0.15))
-                                    .frame(width: controlSize, height: controlSize)
+                                    .frame(width: ctrl, height: ctrl)
                                 Image(systemName: "music.note.list")
                                     .font(.system(size: isPad ? 18 : 16))
                                     .foregroundStyle(accentColor)
@@ -280,7 +297,7 @@ struct PlayerView: View {
                         ZStack {
                             Circle()
                                 .fill(Color.gray.opacity(colorScheme == .dark ? 0.3 : 0.15))
-                                .frame(width: controlSize, height: controlSize)
+                                .frame(width: ctrl, height: ctrl)
                             Image(systemName: "stop.fill")
                                 .font(.system(size: isPad ? 20 : 18))
                                 .foregroundStyle(accentColor)
@@ -289,8 +306,9 @@ struct PlayerView: View {
                     .buttonStyle(.plain)
                 }
                 .padding(.horizontal, isPad ? 44 : 36)
-                .padding(.bottom, isPad ? 32 : 40)
+                .padding(.bottom, vPad(h, large: 32, small: 40))
             }
+            .frame(width: geo.size.width, height: geo.size.height)
             .background(Color(UIColor.systemBackground))
             .ignoresSafeArea(edges: .bottom)
             .navigationTitle("")
@@ -356,6 +374,7 @@ struct PlayerView: View {
                         .environmentObject(libraryStore)
                         .tint(accentColor)
                 }
+            }
             }
         }
     }
