@@ -637,15 +637,59 @@ actor CloudKitSyncService {
         let stableId = await MainActor.run { SubsonicAPIService.shared.activeServer?.stableId } ?? ""
         guard !stableId.isEmpty else { return }
         let entries = await PlayLogService.shared.allRegistryEntries(serverId: stableId)
-        for entry in entries {
-            guard let type = RecapPeriod.PeriodType(rawValue: entry.periodType) else { continue }
-            let period = RecapPeriod(
-                type: type,
-                start: Date(timeIntervalSince1970: entry.periodStart),
-                end: Date(timeIntervalSince1970: entry.periodEnd)
+        guard !entries.isEmpty else { return }
+
+        let conflicts: [(entry: RecapRegistryRecord, existingPlaylistId: String, periodKey: String)] = await withTaskGroup(
+            of: (RecapRegistryRecord, String, String)?.self
+        ) { group in
+            let maxConcurrent = 4
+            var iterator = entries.makeIterator()
+            var active = 0
+
+            @Sendable func taskFor(_ entry: RecapRegistryRecord) async -> (RecapRegistryRecord, String, String)? {
+                guard let type = RecapPeriod.PeriodType(rawValue: entry.periodType) else { return nil }
+                let period = RecapPeriod(
+                    type: type,
+                    start: Date(timeIntervalSince1970: entry.periodStart),
+                    end: Date(timeIntervalSince1970: entry.periodEnd)
+                )
+                let periodKey = await MainActor.run { period.periodKey }
+                guard let result = try? await CloudKitSyncService.shared.saveRecapMarker(entry, periodKey: periodKey) else { return nil }
+                if case .conflict(let existingPlaylistId) = result, existingPlaylistId != entry.playlistId {
+                    return (entry, existingPlaylistId, periodKey)
+                }
+                return nil
+            }
+
+            while active < maxConcurrent, let entry = iterator.next() {
+                group.addTask { await taskFor(entry) }
+                active += 1
+            }
+
+            var results: [(RecapRegistryRecord, String, String)] = []
+            while let result = await group.next() {
+                if let r = result { results.append(r) }
+                if let next = iterator.next() {
+                    group.addTask { await taskFor(next) }
+                }
+            }
+            return results
+        }
+
+        for conflict in conflicts {
+            CloudKitSyncService.debugLog("[Reupload] conflict: iCloud has playlistId=\(conflict.existingPlaylistId), local had \(conflict.entry.playlistId) — adopting iCloud")
+            try? await SubsonicAPIService.shared.deletePlaylist(id: conflict.entry.playlistId)
+            let recordName = makeRecapMarkerRecordName(serverId: stableId, periodKey: conflict.periodKey)
+            let updated = RecapRegistryRecord(
+                playlistId: conflict.existingPlaylistId,
+                serverId: conflict.entry.serverId,
+                periodType: conflict.entry.periodType,
+                periodStart: conflict.entry.periodStart,
+                periodEnd: conflict.entry.periodEnd,
+                ckRecordName: recordName
             )
-            let periodKey = await MainActor.run { period.periodKey }
-            _ = try? await saveRecapMarker(entry, periodKey: periodKey)
+            await PlayLogService.shared.deleteRegistryEntry(playlistId: conflict.entry.playlistId)
+            await PlayLogService.shared.registerPlaylist(updated)
         }
     }
 

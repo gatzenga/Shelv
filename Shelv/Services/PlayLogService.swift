@@ -56,6 +56,18 @@ actor PlayLogService {
         pool = nil
     }
 
+    private func safeWrite(_ label: String = #function, _ block: (Database) throws -> Void) {
+        guard let pool else {
+            DBErrorLog.logPlayLog("\(label): pool not initialized")
+            return
+        }
+        do {
+            try pool.write(block)
+        } catch {
+            DBErrorLog.logPlayLog("\(label): \(error.localizedDescription)")
+        }
+    }
+
     func setup() {
         let url = Self.dbURL
         do {
@@ -148,7 +160,7 @@ actor PlayLogService {
             playedAt: Date().timeIntervalSince1970, songDuration: songDuration,
             uuid: uuid, syncedAt: nil
         )
-        try? pool.write { db in try record.insert(db) }
+        safeWrite { db in try record.insert(db) }
         return uuid
     }
 
@@ -187,7 +199,7 @@ actor PlayLogService {
         let placeholders = uuids.map { _ in "?" }.joined(separator: ",")
         var args: [DatabaseValueConvertible] = [now]
         args.append(contentsOf: uuids)
-        try? pool.write { db in
+        safeWrite { db in
             try db.execute(
                 sql: "UPDATE play_log SET syncedAt = ? WHERE uuid IN (\(placeholders))",
                 arguments: StatementArguments(args)
@@ -196,8 +208,8 @@ actor PlayLogService {
     }
 
     func insertIfNotExists(uuid: String, songId: String, serverId: String, playedAt: Double, songDuration: Double) {
-        guard let pool else { return }
-        try? pool.write { db in
+        
+        safeWrite { db in
             if let existing = try PlayLogRecord.filter(Column("uuid") == uuid).fetchOne(db) {
                 if existing.serverId != serverId {
                     try db.execute(sql: "UPDATE play_log SET serverId = ? WHERE uuid = ?",
@@ -224,8 +236,8 @@ actor PlayLogService {
     // MARK: - CloudKit Sync – Registry
 
     func updateRegistryCKRecordName(playlistId: String, ckRecordName: String) {
-        guard let pool else { return }
-        try? pool.write { db in
+        
+        safeWrite { db in
             try db.execute(
                 sql: "UPDATE recap_registry SET ckRecordName = ? WHERE playlistId = ?",
                 arguments: [ckRecordName, playlistId]
@@ -256,9 +268,9 @@ actor PlayLogService {
     // MARK: - Scrobble Queue
 
     func addPendingScrobble(songId: String, serverId: String, playedAt: Double) {
-        guard let pool else { return }
+        
         let record = ScrobbleQueueRecord(id: nil, songId: songId, serverId: serverId, playedAt: playedAt, retries: 0)
-        try? pool.write { db in try record.insert(db) }
+        safeWrite { db in try record.insert(db) }
     }
 
     func pendingScrobbles(limit: Int = 50) -> [ScrobbleQueueRecord] {
@@ -272,29 +284,29 @@ actor PlayLogService {
     }
 
     func markScrobbleDone(id: Int64) {
-        guard let pool else { return }
-        try? pool.write { db in
+        
+        safeWrite { db in
             try db.execute(sql: "DELETE FROM scrobble_queue WHERE id = ?", arguments: [id])
         }
     }
 
     func incrementScrobbleRetry(id: Int64) {
-        guard let pool else { return }
-        try? pool.write { db in
+        
+        safeWrite { db in
             try db.execute(sql: "UPDATE scrobble_queue SET retries = retries + 1 WHERE id = ?", arguments: [id])
         }
     }
 
     func removeExhaustedScrobbles(maxRetries: Int = 5) {
-        guard let pool else { return }
-        try? pool.write { db in
+        
+        safeWrite { db in
             try db.execute(sql: "DELETE FROM scrobble_queue WHERE retries >= ?", arguments: [maxRetries])
         }
     }
 
     func removeScrobbles(serverId: String) {
-        guard let pool else { return }
-        try? pool.write { db in
+        
+        safeWrite { db in
             try db.execute(sql: "DELETE FROM scrobble_queue WHERE serverId = ?", arguments: [serverId])
         }
     }
@@ -308,7 +320,7 @@ actor PlayLogService {
 
     func migrateServerId(from oldId: String, to newId: String) {
         guard let pool, oldId != newId else { return }
-        try? pool.write { db in
+        safeWrite { db in
             try db.execute(
                 sql: "UPDATE play_log SET serverId = ?, syncedAt = NULL WHERE serverId = ?",
                 arguments: [newId, oldId]
@@ -321,8 +333,8 @@ actor PlayLogService {
     // MARK: - Server Cleanup (CloudKit)
 
     func deleteCloudKitData(serverId: String) {
-        guard let pool else { return }
-        try? pool.write { db in
+        
+        safeWrite { db in
             try db.execute(
                 sql: "UPDATE play_log SET uuid = NULL, syncedAt = NULL WHERE serverId = ?",
                 arguments: [serverId]
@@ -341,20 +353,20 @@ actor PlayLogService {
     // MARK: - Registry
 
     func registerPlaylist(_ record: RecapRegistryRecord) {
-        guard let pool else { return }
-        try? pool.write { db in try record.insert(db, onConflict: .replace) }
+        
+        safeWrite { db in try record.insert(db, onConflict: .replace) }
     }
 
     func deleteRegistryEntry(playlistId: String) {
-        guard let pool else { return }
-        try? pool.write { db in
+        
+        safeWrite { db in
             try db.execute(sql: "DELETE FROM recap_registry WHERE playlistId = ?", arguments: [playlistId])
         }
     }
 
     func deleteRegistryEntry(byCKRecordName ckRecordName: String) {
-        guard let pool else { return }
-        try? pool.write { db in
+        
+        safeWrite { db in
             try db.execute(sql: "DELETE FROM recap_registry WHERE ckRecordName = ?", arguments: [ckRecordName])
         }
     }
@@ -486,29 +498,29 @@ actor PlayLogService {
     // MARK: - Reset
 
     func resetLog(serverId: String) {
-        guard let pool else { return }
-        try? pool.write { db in
+        
+        safeWrite { db in
             try db.execute(sql: "DELETE FROM play_log WHERE serverId = ?", arguments: [serverId])
         }
     }
 
     func deletePlayLog(uuid: String) {
-        guard let pool else { return }
-        try? pool.write { db in
+        
+        safeWrite { db in
             try db.execute(sql: "DELETE FROM play_log WHERE uuid = ?", arguments: [uuid])
         }
     }
 
     func markAllUnsyncedForReUpload() {
-        guard let pool else { return }
-        try? pool.write { db in
+        
+        safeWrite { db in
             try db.execute(sql: "UPDATE play_log SET syncedAt = NULL WHERE uuid IS NOT NULL")
         }
     }
 
     func markServerUnsyncedForReUpload(serverId: String) {
-        guard let pool else { return }
-        try? pool.write { db in
+        
+        safeWrite { db in
             try db.execute(sql: "UPDATE play_log SET syncedAt = NULL WHERE serverId = ? AND uuid IS NOT NULL",
                            arguments: [serverId])
             try db.execute(sql: "UPDATE recap_registry SET ckRecordName = NULL WHERE serverId = ?",
@@ -518,11 +530,9 @@ actor PlayLogService {
 
     func rewriteAllServerIds(to newId: String) {
         guard let pool, !newId.isEmpty else { return }
-        try? pool.write { db in
+        safeWrite { db in
             try db.execute(sql: "UPDATE play_log SET serverId = ?, syncedAt = NULL WHERE serverId != ?",
                            arguments: [newId, newId])
-            try db.execute(sql: "UPDATE play_log SET syncedAt = NULL",
-                           arguments: [])
             try db.execute(sql: "UPDATE recap_registry SET serverId = ?, ckRecordName = NULL WHERE serverId != ?",
                            arguments: [newId, newId])
             try db.execute(sql: "UPDATE scrobble_queue SET serverId = ? WHERE serverId != ?",
@@ -531,8 +541,8 @@ actor PlayLogService {
     }
 
     func resetRegistry(serverId: String) {
-        guard let pool else { return }
-        try? pool.write { db in
+        
+        safeWrite { db in
             try db.execute(sql: "DELETE FROM recap_registry WHERE serverId = ?", arguments: [serverId])
         }
     }

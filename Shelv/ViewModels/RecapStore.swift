@@ -70,35 +70,7 @@ class RecapStore: ObservableObject {
     }
 
     func refreshWithCleanup(serverId: String) async {
-        let api = SubsonicAPIService.shared
-        if let playlists = try? await api.getPlaylists() {
-            let activeIds = Set(playlists.map { $0.id })
-            if !activeIds.isEmpty {
-                let regEntries = await PlayLogService.shared.allRegistryEntries(serverId: serverId)
-                let candidates = regEntries.filter { !activeIds.contains($0.playlistId) }
-                for entry in candidates {
-                    do {
-                        _ = try await api.getPlaylist(id: entry.playlistId)
-                    } catch let err where Self.isNotFoundError(err) {
-                        CloudKitSyncService.debugLog("[OrphanCleanup:recap] playlistId=\(entry.playlistId) confirmed missing (code 70), deleting marker=\(entry.ckRecordName ?? "nil")")
-                        if let ckName = entry.ckRecordName {
-                            await CloudKitSyncService.shared.deleteRecapMarker(ckRecordName: ckName)
-                        }
-                        await PlayLogService.shared.deleteRegistryEntry(playlistId: entry.playlistId)
-                    } catch {
-                        continue
-                    }
-                }
-            }
-        }
         await loadEntries(serverId: serverId)
-    }
-
-    private static func isNotFoundError(_ error: Error) -> Bool {
-        if case SubsonicAPIError.apiError(let code, _) = error {
-            return code == 70
-        }
-        return false
     }
 
     func deleteRegistryEntryOnly(playlistId: String, serverId: String) async {

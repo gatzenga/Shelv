@@ -99,6 +99,11 @@ class AudioPlayerService: ObservableObject {
         restoreState()
     }
 
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+        networkMonitor.cancel()
+    }
+
     private func setupNetworkMonitor() {
         networkMonitor.pathUpdateHandler = { [weak self] path in
             DispatchQueue.main.async {

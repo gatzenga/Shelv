@@ -227,6 +227,11 @@ struct RecapSettingsView: View {
                             Image(systemName: "doc.text").foregroundStyle(accentColor)
                         }
                     }
+                    NavigationLink(destination: RecapDBLogView()) {
+                        Label { Text(tr("Database errors", "Datenbank-Fehler")) } icon: {
+                            Image(systemName: "exclamationmark.octagon").foregroundStyle(accentColor)
+                        }
+                    }
                 }
 
                 // MARK: Erweitert

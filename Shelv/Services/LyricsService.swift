@@ -44,6 +44,14 @@ private struct LrcLibResponse: Decodable, Sendable {
 actor LyricsService {
     static let shared = LyricsService()
 
+    private static let lrcLibSession: URLSession = {
+        let cfg = URLSessionConfiguration.default
+        cfg.httpMaximumConnectionsPerHost = 12
+        cfg.timeoutIntervalForRequest = 8
+        cfg.waitsForConnectivity = false
+        return URLSession(configuration: cfg)
+    }()
+
     private var pool: DatabasePool?
     private init() {}
 
@@ -107,9 +115,20 @@ actor LyricsService {
         }
     }
 
+    private func safeWrite(_ label: String = #function, _ block: (Database) throws -> Void) {
+        guard let pool else {
+            DBErrorLog.logLyrics("\(label): pool not initialized")
+            return
+        }
+        do {
+            try pool.write(block)
+        } catch {
+            DBErrorLog.logLyrics("\(label): \(error.localizedDescription)")
+        }
+    }
+
     func save(_ record: LyricsRecord) {
-        guard let pool else { return }
-        try? pool.write { db in try record.insert(db, onConflict: .replace) }
+        safeWrite { db in try record.insert(db, onConflict: .replace) }
     }
 
     // MARK: - Stats
@@ -126,8 +145,7 @@ actor LyricsService {
     // MARK: - Metadata Backfill
 
     func updateMetadata(songId: String, serverId: String, title: String, artist: String?, coverArt: String?) {
-        guard let pool else { return }
-        try? pool.write { db in
+        safeWrite { db in
             try db.execute(
                 sql: """
                     UPDATE lyrics SET songTitle = ?, artistName = ?, coverArt = ?
@@ -141,8 +159,7 @@ actor LyricsService {
     // MARK: - Reset
 
     func reset(serverId: String) {
-        guard let pool else { return }
-        try? pool.write { db in
+        safeWrite { db in
             try db.execute(sql: "DELETE FROM lyrics WHERE serverId = ?", arguments: [serverId])
         }
     }
@@ -252,7 +269,7 @@ actor LyricsService {
     // MARK: - LRCLIB
 
     private func fetchFromLrcLib(song: Song, serverId: String) async -> LyricsRecord? {
-        var comps = URLComponents(string: "https://lrclib.net/api/get")!
+        guard var comps = URLComponents(string: "https://lrclib.net/api/get") else { return nil }
         var items: [URLQueryItem] = [URLQueryItem(name: "track_name", value: song.title)]
         if let a = song.artist  { items.append(URLQueryItem(name: "artist_name", value: a)) }
         if let a = song.album   { items.append(URLQueryItem(name: "album_name",  value: a)) }
@@ -260,15 +277,14 @@ actor LyricsService {
         comps.queryItems = items
         guard let url = comps.url else { return nil }
 
-        var req = URLRequest(url: url, timeoutInterval: 10)
+        var req = URLRequest(url: url, timeoutInterval: 8)
         req.setValue("Shelv/1.0 (https://github.com/gatzenga/Shelv)", forHTTPHeaderField: "User-Agent")
 
-        guard let (data, resp) = try? await URLSession.shared.data(for: req),
+        guard let (data, resp) = try? await Self.lrcLibSession.data(for: req),
               (resp as? HTTPURLResponse)?.statusCode == 200
         else { return nil }
 
-        let lrcDecoded = try? await MainActor.run { try JSONDecoder().decode(LrcLibResponse.self, from: data) }
-        guard let lrc = lrcDecoded else { return nil }
+        guard let lrc = try? JSONDecoder().decode(LrcLibResponse.self, from: data) else { return nil }
 
         if lrc.instrumental == true {
             return LyricsRecord(

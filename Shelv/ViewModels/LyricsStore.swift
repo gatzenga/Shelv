@@ -71,14 +71,19 @@ class LyricsStore: ObservableObject {
             guard !Task.isCancelled else { return }
 
             let allSongs: [Song] = await withTaskGroup(of: [Song].self) { group -> [Song] in
-                for album in albums {
-                    group.addTask {
-                        (try? await api.getAlbum(id: album.id))?.song ?? []
-                    }
+                let maxConcurrent = 10
+                var iterator = albums.makeIterator()
+                var active = 0
+                while active < maxConcurrent, let album = iterator.next() {
+                    group.addTask { (try? await api.getAlbum(id: album.id))?.song ?? [] }
+                    active += 1
                 }
                 var collected: [Song] = []
-                for await songs in group {
+                while let songs = await group.next() {
                     collected.append(contentsOf: songs)
+                    if let next = iterator.next() {
+                        group.addTask { (try? await api.getAlbum(id: next.id))?.song ?? [] }
+                    }
                 }
                 return collected
             }
@@ -87,23 +92,24 @@ class LyricsStore: ObservableObject {
             let totalCount = allSongs.count
             await MainActor.run { [weak self] in self?.downloadTotal = totalCount }
 
-            let batchSize = 10
-            var fetched = 0
-            var i = 0
-            while i < allSongs.count {
-                guard !Task.isCancelled else { return }
-                let batch = Array(allSongs[i..<min(i + batchSize, allSongs.count)])
-                await withTaskGroup(of: Void.self) { group in
-                    for song in batch {
-                        group.addTask {
-                            _ = await svc.fetchAndSave(song: song, serverId: serverId)
-                        }
+            await withTaskGroup(of: Void.self) { group in
+                let maxConcurrent = 20
+                var iterator = allSongs.makeIterator()
+                var active = 0
+                while active < maxConcurrent, let song = iterator.next() {
+                    group.addTask { _ = await svc.fetchAndSave(song: song, serverId: serverId) }
+                    active += 1
+                }
+                var fetched = 0
+                while await group.next() != nil {
+                    if Task.isCancelled { group.cancelAll(); return }
+                    fetched += 1
+                    let f = fetched
+                    await MainActor.run { [weak self] in self?.downloadFetched = f }
+                    if let next = iterator.next() {
+                        group.addTask { _ = await svc.fetchAndSave(song: next, serverId: serverId) }
                     }
                 }
-                fetched += batch.count
-                i += batchSize
-                let f = fetched
-                await MainActor.run { [weak self] in self?.downloadFetched = f }
             }
         }
     }
