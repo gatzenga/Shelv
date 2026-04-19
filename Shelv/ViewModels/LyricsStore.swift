@@ -49,7 +49,7 @@ class LyricsStore: ObservableObject {
         let api = SubsonicAPIService.shared
         let svc = LyricsService.shared
 
-        downloadTask = Task.detached { [weak self] in
+        downloadTask = Task.detached(priority: .utility) { [weak self] in
             defer {
                 Task { @MainActor [weak self] in
                     self?.isDownloading = false
@@ -101,15 +101,22 @@ class LyricsStore: ObservableObject {
                     active += 1
                 }
                 var fetched = 0
+                var lastPublished = Date.distantPast
                 while await group.next() != nil {
                     if Task.isCancelled { group.cancelAll(); return }
                     fetched += 1
-                    let f = fetched
-                    await MainActor.run { [weak self] in self?.downloadFetched = f }
+                    let now = Date()
+                    if now.timeIntervalSince(lastPublished) >= 0.1 {
+                        lastPublished = now
+                        let f = fetched
+                        await MainActor.run { [weak self] in self?.downloadFetched = f }
+                    }
                     if let next = iterator.next() {
                         group.addTask { _ = await svc.fetchAndSave(song: next, serverId: serverId) }
                     }
                 }
+                let finalCount = fetched
+                await MainActor.run { [weak self] in self?.downloadFetched = finalCount }
             }
         }
     }

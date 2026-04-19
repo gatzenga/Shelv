@@ -166,9 +166,16 @@ actor LyricsService {
 
     // MARK: - Fetch & Cache
 
+    private enum LrcLibOutcome {
+        case found(LyricsRecord)
+        case notFound
+        case indeterminate
+    }
+
     func fetchAndSave(song: Song, serverId: String) async -> LyricsRecord {
         let sixMonths: Double = 60 * 60 * 24 * 180
         if var cached = lyrics(songId: song.id, serverId: serverId),
+           cached.source != "none",
            Date().timeIntervalSince1970 - cached.fetchedAt < sixMonths {
             if cached.songTitle == nil || cached.artistName == nil || cached.coverArt == nil {
                 cached.songTitle = cached.songTitle ?? song.title
@@ -183,19 +190,29 @@ actor LyricsService {
             save(lrc); return lrc
         }
 
-        if let lrc = await fetchFromLrcLib(song: song, serverId: serverId) {
-            save(lrc); return lrc
+        switch await fetchFromLrcLib(song: song, serverId: serverId) {
+        case .found(let lrc):
+            save(lrc)
+            return lrc
+        case .notFound:
+            let none = LyricsRecord(
+                songId: song.id, serverId: serverId, source: "none",
+                plainText: nil, syncedLrc: nil, isSynced: false,
+                isInstrumental: false, language: nil,
+                fetchedAt: Date().timeIntervalSince1970,
+                songTitle: song.title, artistName: song.artist, coverArt: song.coverArt
+            )
+            save(none)
+            return none
+        case .indeterminate:
+            return LyricsRecord(
+                songId: song.id, serverId: serverId, source: "none",
+                plainText: nil, syncedLrc: nil, isSynced: false,
+                isInstrumental: false, language: nil,
+                fetchedAt: Date().timeIntervalSince1970,
+                songTitle: song.title, artistName: song.artist, coverArt: song.coverArt
+            )
         }
-
-        let none = LyricsRecord(
-            songId: song.id, serverId: serverId, source: "none",
-            plainText: nil, syncedLrc: nil, isSynced: false,
-            isInstrumental: false, language: nil,
-            fetchedAt: Date().timeIntervalSince1970,
-            songTitle: song.title, artistName: song.artist, coverArt: song.coverArt
-        )
-        save(none)
-        return none
     }
 
     // MARK: - Search
@@ -268,37 +285,46 @@ actor LyricsService {
 
     // MARK: - LRCLIB
 
-    private func fetchFromLrcLib(song: Song, serverId: String) async -> LyricsRecord? {
-        guard var comps = URLComponents(string: "https://lrclib.net/api/get") else { return nil }
+    private func fetchFromLrcLib(song: Song, serverId: String) async -> LrcLibOutcome {
+        guard var comps = URLComponents(string: "https://lrclib.net/api/get") else { return .indeterminate }
         var items: [URLQueryItem] = [URLQueryItem(name: "track_name", value: song.title)]
         if let a = song.artist  { items.append(URLQueryItem(name: "artist_name", value: a)) }
         if let a = song.album   { items.append(URLQueryItem(name: "album_name",  value: a)) }
         if let d = song.duration { items.append(URLQueryItem(name: "duration",   value: "\(d)")) }
         comps.queryItems = items
-        guard let url = comps.url else { return nil }
+        guard let url = comps.url else { return .indeterminate }
 
         var req = URLRequest(url: url, timeoutInterval: 8)
         req.setValue("Shelv/1.0 (https://github.com/gatzenga/Shelv)", forHTTPHeaderField: "User-Agent")
 
-        guard let (data, resp) = try? await Self.lrcLibSession.data(for: req),
-              (resp as? HTTPURLResponse)?.statusCode == 200
-        else { return nil }
+        let data: Data
+        let resp: URLResponse
+        do {
+            (data, resp) = try await Self.lrcLibSession.data(for: req)
+        } catch {
+            return .indeterminate
+        }
+        guard let http = resp as? HTTPURLResponse else { return .indeterminate }
+        if http.statusCode == 404 { return .notFound }
+        guard http.statusCode == 200 else { return .indeterminate }
 
-        guard let lrc = try? JSONDecoder().decode(LrcLibResponse.self, from: data) else { return nil }
+        guard let lrc = try? JSONDecoder().decode(LrcLibResponse.self, from: data) else {
+            return .indeterminate
+        }
 
         if lrc.instrumental == true {
-            return LyricsRecord(
+            return .found(LyricsRecord(
                 songId: song.id, serverId: serverId, source: "lrclib",
                 plainText: nil, syncedLrc: nil, isSynced: false,
                 isInstrumental: true, language: nil,
                 fetchedAt: Date().timeIntervalSince1970,
                 songTitle: song.title, artistName: song.artist, coverArt: song.coverArt
-            )
+            ))
         }
 
-        guard lrc.plainLyrics != nil || lrc.syncedLyrics != nil else { return nil }
+        guard lrc.plainLyrics != nil || lrc.syncedLyrics != nil else { return .notFound }
 
-        return LyricsRecord(
+        return .found(LyricsRecord(
             songId: song.id, serverId: serverId, source: "lrclib",
             plainText: lrc.plainLyrics,
             syncedLrc: lrc.syncedLyrics,
@@ -306,6 +332,6 @@ actor LyricsService {
             isInstrumental: false, language: nil,
             fetchedAt: Date().timeIntervalSince1970,
             songTitle: song.title, artistName: song.artist, coverArt: song.coverArt
-        )
+        ))
     }
 }

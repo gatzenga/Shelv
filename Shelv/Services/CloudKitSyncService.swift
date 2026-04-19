@@ -15,19 +15,33 @@ final class CloudKitSyncStatus: ObservableObject {
     @Published var accountAvailable = true
     @Published var logEntries: [String] = []
     @Published var debugLogEntries: [String] = []
+    @Published var recapCreationLog: [String] = []
 
     nonisolated init() {}
 
+    private static let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .none
+        f.timeStyle = .medium
+        return f
+    }()
+
     func appendLog(_ message: String) {
-        let stamp = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+        let stamp = Self.timeFormatter.string(from: Date())
         logEntries.insert("[\(stamp)] \(message)", at: 0)
-        if logEntries.count > 100 { logEntries = Array(logEntries.prefix(100)) }
+        if logEntries.count > 100 { logEntries.removeLast(logEntries.count - 100) }
     }
 
     func appendDebugLog(_ message: String) {
-        let stamp = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+        let stamp = Self.timeFormatter.string(from: Date())
         debugLogEntries.insert("[\(stamp)] \(message)", at: 0)
-        if debugLogEntries.count > 500 { debugLogEntries = Array(debugLogEntries.prefix(500)) }
+        if debugLogEntries.count > 500 { debugLogEntries.removeLast(debugLogEntries.count - 500) }
+    }
+
+    func appendRecapLog(_ message: String) {
+        let stamp = Self.timeFormatter.string(from: Date())
+        recapCreationLog.insert("[\(stamp)] \(message)", at: 0)
+        if recapCreationLog.count > 300 { recapCreationLog.removeLast(recapCreationLog.count - 300) }
     }
 }
 
@@ -302,7 +316,12 @@ actor CloudKitSyncService {
             if let ck = error as? CKError {
                 debug("[CloudKitSync] Download CKError code=\(ck.code.rawValue) (\(ck.code)) userInfo=\(ck.userInfo)")
             }
-            if isChangeTokenError(error) {
+            if isZoneNotFound(error) {
+                await markLocalAsUnsyncedForActiveServer()
+                changeToken = nil
+                isZoneReady = false
+                log("iCloud zone was reset on another device — marking local data for re-upload")
+            } else if isChangeTokenExpired(error) {
                 changeToken = nil
                 log("Change token expired — next sync fetches all")
             } else {
@@ -316,6 +335,7 @@ actor CloudKitSyncService {
             var changed: [CKRecord] = []
             var deleted: [(CKRecord.ID, CKRecord.RecordType)] = []
             var latestToken: CKServerChangeToken?
+            var zoneError: Error?
 
             let config = CKFetchRecordZoneChangesOperation.ZoneConfiguration()
             config.previousServerChangeToken = changeToken
@@ -339,10 +359,19 @@ actor CloudKitSyncService {
             }
 
             op.recordZoneFetchResultBlock = { _, result in
-                if case .success(let (token, _, _)) = result { latestToken = token }
+                switch result {
+                case .success(let (token, _, _)):
+                    latestToken = token
+                case .failure(let err):
+                    zoneError = err
+                }
             }
 
             op.fetchRecordZoneChangesResultBlock = { result in
+                if let zoneError {
+                    continuation.resume(throwing: zoneError)
+                    return
+                }
                 switch result {
                 case .success: continuation.resume(returning: (changed, deleted, latestToken))
                 case .failure(let err): continuation.resume(throwing: err)
@@ -529,6 +558,40 @@ actor CloudKitSyncService {
         }
     }
 
+    func deleteZone(force: Bool = false) async {
+        guard syncEnabled || force else { return }
+        await MainActor.run { status.isSyncing = true }
+        log("Deleting iCloud zone…")
+        do {
+            _ = try await db.deleteRecordZone(withID: zoneID)
+            isZoneReady = false
+            changeToken = nil
+            await MainActor.run {
+                status.lastSyncDate = Date()
+                status.isSyncing = false
+            }
+            log("iCloud zone deleted")
+        } catch {
+            await MainActor.run { status.isSyncing = false }
+            if let ck = error as? CKError, ck.code == .zoneNotFound {
+                isZoneReady = false
+                changeToken = nil
+                log("iCloud zone already gone")
+            } else {
+                log("Zone deletion failed: \(error.localizedDescription)", isError: true)
+            }
+        }
+    }
+
+    private func markLocalAsUnsyncedForActiveServer() async {
+        let sid: String = await MainActor.run {
+            SubsonicAPIService.shared.activeServer?.stableId ?? ""
+        }
+        guard !sid.isEmpty else { return }
+        await PlayLogService.shared.markServerUnsyncedForReUpload(serverId: sid)
+        await updatePendingCounts()
+    }
+
     func deleteRecapMarkers(serverId: String, force: Bool = false) async {
         guard syncEnabled || force else { return }
         let entries = await PlayLogService.shared.allRegistryEntries(serverId: serverId)
@@ -585,6 +648,7 @@ actor CloudKitSyncService {
         log("Syncing…")
         await uploadPendingEvents()
         await downloadChanges()
+        await uploadPendingEvents()
         await flushScrobbleQueue()
         log("Sync done")
     }
@@ -699,13 +763,23 @@ actor CloudKitSyncService {
 
     // MARK: - Helpers
 
+    private func isZoneNotFound(_ error: Error) -> Bool {
+        guard let ck = error as? CKError else { return false }
+        return ck.code == .zoneNotFound || ck.code == .userDeletedZone
+    }
+
+    private func isChangeTokenExpired(_ error: Error) -> Bool {
+        guard let ck = error as? CKError else { return false }
+        return ck.code == .changeTokenExpired
+    }
+
     private func isChangeTokenError(_ error: Error) -> Bool {
         guard let ck = error as? CKError else { return false }
         return ck.code == .changeTokenExpired || ck.code == .zoneNotFound
     }
 
     private func log(_ message: String, isError: Bool = false) {
-        debug("[CloudKitSync] \(message)")
+        print("[CloudKitSync] \(message)")
         let msg = message
         Task { @MainActor in
             status.appendLog(msg)
@@ -727,6 +801,14 @@ actor CloudKitSyncService {
         let msg = message
         Task { @MainActor in
             CloudKitSyncService.shared.status.appendDebugLog(msg)
+        }
+    }
+
+    nonisolated static func recapLog(_ message: String) {
+        print(message)
+        let msg = message
+        Task { @MainActor in
+            CloudKitSyncService.shared.status.appendRecapLog(msg)
         }
     }
 }

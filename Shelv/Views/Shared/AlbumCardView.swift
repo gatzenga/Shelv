@@ -25,7 +25,8 @@ struct AlbumCardView: View {
             }
             Text(album.name)
                 .font(.caption).bold()
-                .lineLimit(2)
+                .lineLimit(1)
+                .truncationMode(.tail)
                 .foregroundStyle(.primary)
             if showArtist, let artist = album.artist {
                 Text(artist)

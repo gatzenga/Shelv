@@ -533,11 +533,13 @@ class RecapStore: ObservableObject {
         isGenerating = true
         defer { isGenerating = false }
         let before = entries.count
+        var cal = Calendar(identifier: .gregorian)
+        cal.firstWeekday = 2
         let now = Date()
-        let start = now.addingTimeInterval(-7 * 24 * 3600)
-        let period = RecapPeriod(type: .week, start: start, end: now.addingTimeInterval(1))
+        guard let start = cal.dateInterval(of: .weekOfYear, for: now)?.start else { return false }
+        let period = RecapPeriod(type: .week, start: start, end: now)
         do {
-            try await RecapGenerator.shared.generate(period: period, serverId: serverId)
+            try await RecapGenerator.shared.generate(period: period, serverId: serverId, trigger: "test-button")
             await loadEntries(serverId: serverId)
         } catch {
             generationError = error.localizedDescription
@@ -556,47 +558,102 @@ class RecapStore: ObservableObject {
         await loadEntries(serverId: serverId)
     }
 
+    func excessRetentionCount(periodType: RecapPeriod.PeriodType, limit: Int, serverId: String) async -> Int {
+        let all = await PlayLogService.shared.allRegistryEntries(serverId: serverId)
+            .filter { $0.periodType == periodType.rawValue }
+        return max(0, all.count - limit)
+    }
+
+    func applyRetention(periodType: RecapPeriod.PeriodType, limit: Int, serverId: String) async {
+        let all = await PlayLogService.shared.allRegistryEntries(serverId: serverId)
+            .filter { $0.periodType == periodType.rawValue }
+        guard all.count > limit else { return }
+        let toDelete = all.suffix(all.count - limit)
+        for entry in toDelete {
+            CloudKitSyncService.debugLog("[Retention:manual] deleting playlistId=\(entry.playlistId) marker=\(entry.ckRecordName ?? "nil") period=\(entry.periodType)")
+            try? await SubsonicAPIService.shared.deletePlaylist(id: entry.playlistId)
+            if let ckName = entry.ckRecordName {
+                await CloudKitSyncService.shared.deleteRecapMarker(ckRecordName: ckName)
+            }
+            await PlayLogService.shared.deleteRegistryEntry(playlistId: entry.playlistId)
+        }
+        await loadEntries(serverId: serverId)
+    }
+
     private func generatePendingPeriods(serverId: String) async {
         isGenerating = true
         defer { isGenerating = false }
 
+        CloudKitSyncService.recapLog("[RecapGen] ══ Auto-trigger check ══")
+
         let defaults = UserDefaults.standard
         var tasks: [(RecapPeriod, String)] = []
 
-        if defaults.bool(forKey: "recapWeeklyEnabled"),
-           let period = RecapPeriod.lastWeek() {
-            let lastGen = defaults.double(forKey: GenKey.lastWeek)
-            let graceDeadline = period.end.addingTimeInterval(Double(RecapPeriod.PeriodType.weekGraceHours) * 3600)
-            if period.start.timeIntervalSince1970 > lastGen, Date() >= graceDeadline {
-                tasks.append((period, GenKey.lastWeek))
-            }
-        }
+        logAutoCheck(
+            label: "Weekly", enabled: defaults.bool(forKey: "recapWeeklyEnabled"),
+            period: RecapPeriod.lastWeek(), genKey: GenKey.lastWeek,
+            graceHours: RecapPeriod.PeriodType.weekGraceHours,
+            tasks: &tasks
+        )
+        logAutoCheck(
+            label: "Monthly", enabled: defaults.bool(forKey: "recapMonthlyEnabled"),
+            period: RecapPeriod.lastMonth(), genKey: GenKey.lastMonth,
+            graceHours: RecapPeriod.PeriodType.monthGraceHours,
+            tasks: &tasks
+        )
+        logAutoCheck(
+            label: "Yearly", enabled: defaults.bool(forKey: "recapYearlyEnabled"),
+            period: RecapPeriod.lastYear(), genKey: GenKey.lastYear,
+            graceHours: RecapPeriod.PeriodType.yearGraceHours,
+            tasks: &tasks
+        )
 
-        if defaults.bool(forKey: "recapMonthlyEnabled"),
-           let period = RecapPeriod.lastMonth() {
-            let lastGen = defaults.double(forKey: GenKey.lastMonth)
-            let graceDeadline = period.end.addingTimeInterval(Double(RecapPeriod.PeriodType.monthGraceHours) * 3600)
-            if period.start.timeIntervalSince1970 > lastGen, Date() >= graceDeadline {
-                tasks.append((period, GenKey.lastMonth))
-            }
-        }
-
-        if defaults.bool(forKey: "recapYearlyEnabled"),
-           let period = RecapPeriod.lastYear() {
-            let lastGen = defaults.double(forKey: GenKey.lastYear)
-            let graceDeadline = period.end.addingTimeInterval(Double(RecapPeriod.PeriodType.yearGraceHours) * 3600)
-            if period.start.timeIntervalSince1970 > lastGen, Date() >= graceDeadline {
-                tasks.append((period, GenKey.lastYear))
-            }
+        if tasks.isEmpty {
+            CloudKitSyncService.recapLog("[RecapGen] Auto-trigger: nothing to do")
         }
 
         for (period, genKey) in tasks {
             do {
-                try await RecapGenerator.shared.generate(period: period, serverId: serverId)
+                try await RecapGenerator.shared.generate(period: period, serverId: serverId, trigger: "auto:\(period.type.rawValue)")
                 defaults.set(period.start.timeIntervalSince1970, forKey: genKey)
             } catch {
                 generationError = error.localizedDescription
             }
         }
+    }
+
+    private func logAutoCheck(
+        label: String,
+        enabled: Bool,
+        period: RecapPeriod?,
+        genKey: String,
+        graceHours: Int,
+        tasks: inout [(RecapPeriod, String)]
+    ) {
+        guard enabled else {
+            CloudKitSyncService.recapLog("[RecapGen] \(label): disabled")
+            return
+        }
+        guard let period else {
+            CloudKitSyncService.recapLog("[RecapGen] \(label): period calculation failed")
+            return
+        }
+        let defaults = UserDefaults.standard
+        let lastGen = defaults.double(forKey: genKey)
+        let graceDeadline = period.end.addingTimeInterval(Double(graceHours) * 3600)
+        let periodFresh = period.start.timeIntervalSince1970 > lastGen
+        let gracePassed = Date() >= graceDeadline
+
+        if !periodFresh {
+            CloudKitSyncService.recapLog("[RecapGen] \(label) \(period.periodKey): already generated (lastGen >= periodStart)")
+            return
+        }
+        if !gracePassed {
+            let hoursLeft = max(0, graceDeadline.timeIntervalSinceNow / 3600)
+            CloudKitSyncService.recapLog("[RecapGen] \(label) \(period.periodKey): grace not passed (\(String(format: "%.1f", hoursLeft))h remaining)")
+            return
+        }
+        CloudKitSyncService.recapLog("[RecapGen] \(label) \(period.periodKey): queued")
+        tasks.append((period, genKey))
     }
 }

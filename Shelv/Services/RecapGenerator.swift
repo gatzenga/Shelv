@@ -52,8 +52,10 @@ struct RecapPeriod {
         case .week:
             var cal = Calendar(identifier: .gregorian)
             cal.locale = Locale(identifier: "en_US_POSIX")
-            let startComps = cal.dateComponents([.month], from: start)
-            let endComps   = cal.dateComponents([.month], from: end)
+            let startYear  = cal.component(.year, from: start)
+            let endYear    = cal.component(.year, from: end)
+            let startMonth = cal.component(.month, from: start)
+            let endMonth   = cal.component(.month, from: end)
 
             let dayFmt = DateFormatter()
             dayFmt.dateFormat = "d"
@@ -69,12 +71,15 @@ struct RecapPeriod {
             let ed = dayFmt.string(from: end)
             let sm = monthFmt.string(from: start)
             let em = monthFmt.string(from: end)
-            let yr = yearFmt.string(from: end)
+            let sy = yearFmt.string(from: start)
+            let ey = yearFmt.string(from: end)
 
-            if startComps.month == endComps.month {
-                return "\(sd).–\(ed). \(em) \(yr)"
+            if startYear != endYear {
+                return "\(sd). \(sm) \(sy) – \(ed). \(em) \(ey)"
+            } else if startMonth == endMonth {
+                return "\(sd).–\(ed). \(em) \(ey)"
             } else {
-                return "\(sd). \(sm) – \(ed). \(em) \(yr)"
+                return "\(sd). \(sm) – \(ed). \(em) \(ey)"
             }
 
         case .month:
@@ -137,7 +142,6 @@ extension RecapPeriod {
         var cal = Calendar(identifier: .gregorian)
         cal.firstWeekday = 2          // Montag
         cal.minimumDaysInFirstWeek = 4 // ISO-8601-Wochennummerierung
-        cal.timeZone = TimeZone(identifier: "UTC") ?? .gmt
         switch type {
         case .week:
             let week = cal.component(.weekOfYear, from: start)
@@ -159,32 +163,84 @@ actor RecapGenerator {
     static let shared = RecapGenerator()
     private init() {}
 
-    func generate(period: RecapPeriod, serverId: String) async throws {
-        // Blockierender Sync – wirft CKSyncError.timeout wenn zu lange;
-        // generatePendingPeriods() markiert dann keinen Erfolg → nächster Start versucht erneut.
-        try await CloudKitSyncService.shared.flushAndWait()
+    func generate(period: RecapPeriod, serverId: String, trigger: String = "auto") async throws {
+        let periodKey = await MainActor.run { period.periodKey }
+        let playlistName = await MainActor.run { period.playlistName }
+        let recordName = "\(serverId.lowercased()).\(periodKey)"
 
-        // Nach dem Download: wurde diese Periode bereits von einem anderen Gerät erstellt?
+        CloudKitSyncService.recapLog("[RecapGen] ── Trigger: \(trigger) ──")
+        CloudKitSyncService.recapLog("[RecapGen] Period: \(period.type.rawValue) \(playlistName)")
+        CloudKitSyncService.recapLog("[RecapGen] periodKey: \(periodKey)")
+        CloudKitSyncService.recapLog("[RecapGen] recordName: \(recordName)")
+
+        CloudKitSyncService.recapLog("[RecapGen] Step 1: flushAndWait")
+        do {
+            try await CloudKitSyncService.shared.flushAndWait()
+            CloudKitSyncService.recapLog("[RecapGen] Step 1: flushAndWait — done")
+        } catch {
+            CloudKitSyncService.recapLog("[RecapGen] Step 1: flushAndWait — failed: \(error.localizedDescription)")
+            throw error
+        }
+
+        CloudKitSyncService.recapLog("[RecapGen] Step 2: local registry check (ckRecordName)")
+        if await PlayLogService.shared.registryEntry(byCKRecordName: recordName) != nil {
+            CloudKitSyncService.recapLog("[RecapGen] Step 2: FOUND — existing entry matched by ckRecordName")
+            CloudKitSyncService.recapLog("[RecapGen] Result: SKIPPED — playlist already exists for this period")
+            return
+        }
+        CloudKitSyncService.recapLog("[RecapGen] Step 2: not found")
+
+        CloudKitSyncService.recapLog("[RecapGen] Step 3: local registry check (periodStart)")
         if await PlayLogService.shared.registryEntry(
             serverId: serverId,
             periodType: period.type.rawValue,
             periodStart: period.start.timeIntervalSince1970
-        ) != nil { return }
+        ) != nil {
+            CloudKitSyncService.recapLog("[RecapGen] Step 3: FOUND — existing entry matched by periodStart")
+            CloudKitSyncService.recapLog("[RecapGen] Result: SKIPPED — playlist already exists for this period")
+            return
+        }
+        CloudKitSyncService.recapLog("[RecapGen] Step 3: not found")
 
+        CloudKitSyncService.recapLog("[RecapGen] Step 4: iCloud marker fetch")
+        if let existing = await CloudKitSyncService.shared.fetchRecapMarker(
+            serverId: serverId, periodKey: periodKey
+        ) {
+            CloudKitSyncService.recapLog("[RecapGen] Step 4: FOUND — adopting iCloud marker, playlistId=\(existing.playlistId)")
+            await PlayLogService.shared.registerPlaylist(existing)
+            CloudKitSyncService.recapLog("[RecapGen] Result: ADOPTED — registered remote playlist (\(existing.playlistId))")
+            return
+        }
+        CloudKitSyncService.recapLog("[RecapGen] Step 4: not found")
+
+        CloudKitSyncService.recapLog("[RecapGen] Step 5: top songs query (limit=\(period.type.songLimit))")
         let topSongs = await PlayLogService.shared.topSongs(
             serverId: serverId,
             from: period.start,
             to: period.end,
             limit: period.type.songLimit
         )
-        guard !topSongs.isEmpty else { return }
+        CloudKitSyncService.recapLog("[RecapGen] Step 5: \(topSongs.count) plays found")
+        guard !topSongs.isEmpty else {
+            CloudKitSyncService.recapLog("[RecapGen] Result: ABORTED — no plays in period")
+            return
+        }
 
+        CloudKitSyncService.recapLog("[RecapGen] Step 6: Navidrome createPlaylist")
         let songIds = topSongs.map { $0.songId }
-        let playlist = try await SubsonicAPIService.shared.createPlaylist(
-            name: period.playlistName,
-            songIds: songIds,
-            comment: "Shelv Recap"
-        )
+        let playlist: Playlist
+        do {
+            playlist = try await SubsonicAPIService.shared.createPlaylist(
+                name: playlistName,
+                songIds: songIds,
+                comment: "Shelv Recap"
+            )
+            CloudKitSyncService.recapLog("[RecapGen] Step 6: created playlistId=\(playlist.id)")
+        } catch {
+            CloudKitSyncService.recapLog("[RecapGen] Step 6: FAILED — \(error.localizedDescription)")
+            CloudKitSyncService.recapLog("[RecapGen] Result: FAILED — Navidrome createPlaylist failed")
+            throw error
+        }
 
         var entry = RecapRegistryRecord(
             playlistId: playlist.id,
@@ -195,17 +251,18 @@ actor RecapGenerator {
             ckRecordName: nil
         )
 
-        let periodKey = await MainActor.run { period.periodKey }
-        let recordName = "\(serverId.lowercased()).\(periodKey)"
-
-        // CloudKit-Marker speichern – best-effort, kein Hard-Fail bei CK-Fehlern
+        CloudKitSyncService.recapLog("[RecapGen] Step 7: saveRecapMarker")
+        var resultTag = "CREATED"
         if let markerResult = try? await CloudKitSyncService.shared.saveRecapMarker(entry, periodKey: periodKey) {
             switch markerResult {
             case .created:
+                CloudKitSyncService.recapLog("[RecapGen] Step 7: created new iCloud marker")
                 entry.ckRecordName = recordName
             case .conflict(let existingPlaylistId):
-                // Anderes Gerät war schneller – eigene Playlist verwerfen
+                CloudKitSyncService.recapLog("[RecapGen] Step 7: CONFLICT — iCloud already has playlistId=\(existingPlaylistId)")
+                CloudKitSyncService.recapLog("[RecapGen] Step 7a: deleting own Navidrome playlist \(playlist.id)")
                 try? await SubsonicAPIService.shared.deletePlaylist(id: playlist.id)
+                CloudKitSyncService.recapLog("[RecapGen] Step 7b: adopting remote playlistId=\(existingPlaylistId)")
                 entry = RecapRegistryRecord(
                     playlistId: existingPlaylistId,
                     serverId: serverId,
@@ -214,10 +271,18 @@ actor RecapGenerator {
                     periodEnd: period.end.timeIntervalSince1970,
                     ckRecordName: recordName
                 )
+                resultTag = "CONFLICT_RESOLVED"
             }
+        } else {
+            CloudKitSyncService.recapLog("[RecapGen] Step 7: saveRecapMarker returned nil (iCloud disabled or error)")
         }
 
+        CloudKitSyncService.recapLog("[RecapGen] Step 8: registerPlaylist (local DB)")
         await PlayLogService.shared.registerPlaylist(entry)
+        CloudKitSyncService.recapLog("[RecapGen] Step 8: local DB written")
+
+        CloudKitSyncService.recapLog("[RecapGen] Result: \(resultTag) — playlistId=\(entry.playlistId)")
+
         await enforceRetention(periodType: period.type, serverId: serverId)
     }
 

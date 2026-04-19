@@ -83,9 +83,10 @@ struct RecapView: View {
                         .scrollIndicators(.hidden)
                         .refreshable {
                             guard let sid = serverStore.activeServer?.stableId else { return }
-                            async let cleanup: Void = recapStore.refreshWithCleanup(serverId: sid)
-                            async let sync:    Void = CloudKitSyncService.shared.syncNow()
-                            _ = await (cleanup, sync)
+                            async let cleanup:  Void = recapStore.refreshWithCleanup(serverId: sid)
+                            async let sync:     Void = CloudKitSyncService.shared.syncNow()
+                            async let playlists: Void = libraryStore.loadPlaylists()
+                            _ = await (cleanup, sync, playlists)
                         }
                         .navigationDestination(item: $selectedEntry) { entry in
                             recapDetail(entry)
@@ -134,7 +135,9 @@ struct RecapView: View {
         }
         .task(id: serverStore.activeServerID) {
             guard let sid = serverStore.activeServer?.stableId else { return }
-            await recapStore.refreshWithCleanup(serverId: sid)
+            async let cleanup:   Void = recapStore.refreshWithCleanup(serverId: sid)
+            async let playlists: Void = libraryStore.loadPlaylists()
+            _ = await (cleanup, playlists)
         }
     }
 

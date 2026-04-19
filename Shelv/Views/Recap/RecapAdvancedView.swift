@@ -111,6 +111,7 @@ struct RecapAdvancedView: View {
                     await PlayLogService.shared.resetRegistry(serverId: serverId)
                     await CloudKitSyncService.shared.resetChangeToken()
                     await recapStore.loadEntries(serverId: serverId)
+                    NotificationCenter.default.post(name: .recapRegistryUpdated, object: nil)
                     testResult = nil
                 }
             }
@@ -155,12 +156,7 @@ struct RecapAdvancedView: View {
         isIcloudResetting = true
         defer { isIcloudResetting = false }
 
-        let events = await PlayLogService.shared.allPlayLogs(serverId: serverId)
-        let uuids = events.compactMap { $0.uuid }
-
-        await CloudKitSyncService.shared.deleteRecapMarkers(serverId: serverId, force: true)
-        await CloudKitSyncService.shared.deletePlayEvents(uuids: uuids, force: true)
-        await CloudKitSyncService.shared.resetChangeToken()
+        await CloudKitSyncService.shared.deleteZone(force: true)
         await PlayLogService.shared.markServerUnsyncedForReUpload(serverId: serverId)
         await CloudKitSyncService.shared.updatePendingCounts()
     }
@@ -169,18 +165,12 @@ struct RecapAdvancedView: View {
         isFullResetting = true
         defer { isFullResetting = false }
 
-        await CloudKitSyncService.shared.downloadChanges()
-
         let registry = await PlayLogService.shared.allRegistryEntries(serverId: serverId)
         for entry in registry {
             try? await SubsonicAPIService.shared.deletePlaylist(id: entry.playlistId)
         }
 
-        await CloudKitSyncService.shared.deleteRecapMarkers(serverId: serverId, force: true)
-
-        let events = await PlayLogService.shared.allPlayLogs(serverId: serverId)
-        let uuids = events.compactMap { $0.uuid }
-        await CloudKitSyncService.shared.deletePlayEvents(uuids: uuids, force: true)
+        await CloudKitSyncService.shared.deleteZone(force: true)
 
         await PlayLogService.shared.resetLog(serverId: serverId)
         await PlayLogService.shared.resetRegistry(serverId: serverId)

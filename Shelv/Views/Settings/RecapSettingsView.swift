@@ -36,6 +36,18 @@ struct RecapSettingsView: View {
     @State private var exportError: String?
     @State private var totalPlays: Int = 0
 
+    @State private var weekRetentionDraft: Int = 1
+    @State private var monthRetentionDraft: Int = 12
+    @State private var yearRetentionDraft: Int = 3
+    @State private var pendingRetention: PendingRetentionChange?
+
+    private struct PendingRetentionChange: Identifiable {
+        let id = UUID()
+        let type: RecapPeriod.PeriodType
+        let newValue: Int
+        let excess: Int
+    }
+
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
     var body: some View {
@@ -46,22 +58,25 @@ struct RecapSettingsView: View {
                     title: tr("Weekly", "Wöchentlich"),
                     icon: "calendar",
                     enabled: $recapWeeklyEnabled,
-                    retention: $recapWeeklyRetention,
-                    retentionRange: 1...52
+                    retention: $weekRetentionDraft,
+                    retentionRange: 1...52,
+                    type: .week
                 )
                 recapPeriodRow(
                     title: tr("Monthly", "Monatlich"),
                     icon: "calendar.badge.clock",
                     enabled: $recapMonthlyEnabled,
-                    retention: $recapMonthlyRetention,
-                    retentionRange: 1...24
+                    retention: $monthRetentionDraft,
+                    retentionRange: 1...24,
+                    type: .month
                 )
                 recapPeriodRow(
                     title: tr("Yearly", "Jährlich"),
                     icon: "calendar.badge.checkmark",
                     enabled: $recapYearlyEnabled,
-                    retention: $recapYearlyRetention,
-                    retentionRange: 1...10
+                    retention: $yearRetentionDraft,
+                    retentionRange: 1...10,
+                    type: .year
                 )
                 Picker(selection: $recapThreshold) {
                     ForEach([10, 20, 30, 40, 50], id: \.self) { pct in
@@ -220,6 +235,14 @@ struct RecapSettingsView: View {
                         }
                     }
                     NavigationLink(destination:
+                        RecapCreationLogView()
+                            .environmentObject(ckStatus)
+                    ) {
+                        Label { Text(tr("Recap log", "Recap-Protokoll")) } icon: {
+                            Image(systemName: "sparkles.rectangle.stack").foregroundStyle(accentColor)
+                        }
+                    }
+                    NavigationLink(destination:
                         RecapSyncLogView()
                             .environmentObject(ckStatus)
                     ) {
@@ -287,8 +310,51 @@ struct RecapSettingsView: View {
             if show { showSyncReport = true; recapStore.showSyncReport = false }
         }
         .task(id: serverStore.activeServerID) { await refreshTotalPlays() }
+        .task {
+            weekRetentionDraft  = recapWeeklyRetention
+            monthRetentionDraft = recapMonthlyRetention
+            yearRetentionDraft  = recapYearlyRetention
+        }
         .onReceive(NotificationCenter.default.publisher(for: .recapRegistryUpdated)) { _ in
             Task { await refreshTotalPlays() }
+        }
+        .onChange(of: ckStatus.lastSyncDate) { _, _ in
+            Task { await refreshTotalPlays() }
+        }
+        .alert(
+            pendingRetention.map {
+                tr(
+                    "Delete \($0.excess) \(periodTypeName($0.type))?",
+                    "\($0.excess) \(periodTypeName($0.type)) löschen?"
+                )
+            } ?? "",
+            isPresented: Binding(
+                get: { pendingRetention != nil },
+                set: { if !$0 { pendingRetention = nil } }
+            ),
+            presenting: pendingRetention
+        ) { pending in
+            Button(tr("Delete", "Löschen"), role: .destructive) {
+                guard let sid = serverStore.activeServer?.stableId else { return }
+                let type = pending.type
+                let newValue = pending.newValue
+                Task {
+                    await recapStore.applyRetention(
+                        periodType: type, limit: newValue, serverId: sid
+                    )
+                    setStoredRetention(type, newValue)
+                }
+                pendingRetention = nil
+            }
+            Button(tr("Cancel", "Abbrechen"), role: .cancel) {
+                setDraft(pending.type, storedRetention(for: pending.type))
+                pendingRetention = nil
+            }
+        } message: { _ in
+            Text(tr(
+                "These playlists will be permanently deleted from Navidrome and iCloud.",
+                "Diese Playlists werden unwiderruflich aus Navidrome und iCloud gelöscht."
+            ))
         }
     }
 
@@ -307,7 +373,8 @@ struct RecapSettingsView: View {
         title: String, icon: String,
         enabled: Binding<Bool>,
         retention: Binding<Int>,
-        retentionRange: ClosedRange<Int>
+        retentionRange: ClosedRange<Int>,
+        type: RecapPeriod.PeriodType
     ) -> some View {
         Toggle(isOn: enabled) {
             Label { Text(title) } icon: {
@@ -325,6 +392,64 @@ struct RecapSettingsView: View {
                 }
             }
             .padding(.leading, 36)
+            .onChange(of: retention.wrappedValue) { _, newValue in
+                handleRetentionChange(type: type, newValue: newValue)
+            }
+        }
+    }
+
+    private func storedRetention(for type: RecapPeriod.PeriodType) -> Int {
+        switch type {
+        case .week:  return recapWeeklyRetention
+        case .month: return recapMonthlyRetention
+        case .year:  return recapYearlyRetention
+        }
+    }
+
+    private func setStoredRetention(_ type: RecapPeriod.PeriodType, _ value: Int) {
+        switch type {
+        case .week:  recapWeeklyRetention = value
+        case .month: recapMonthlyRetention = value
+        case .year:  recapYearlyRetention = value
+        }
+    }
+
+    private func setDraft(_ type: RecapPeriod.PeriodType, _ value: Int) {
+        switch type {
+        case .week:  weekRetentionDraft = value
+        case .month: monthRetentionDraft = value
+        case .year:  yearRetentionDraft = value
+        }
+    }
+
+    private func handleRetentionChange(type: RecapPeriod.PeriodType, newValue: Int) {
+        let current = storedRetention(for: type)
+        guard newValue != current else { return }
+        guard newValue < current else {
+            setStoredRetention(type, newValue)
+            return
+        }
+        guard let sid = serverStore.activeServer?.stableId else {
+            setDraft(type, current)
+            return
+        }
+        Task {
+            let excess = await recapStore.excessRetentionCount(
+                periodType: type, limit: newValue, serverId: sid
+            )
+            if excess > 0 {
+                pendingRetention = PendingRetentionChange(type: type, newValue: newValue, excess: excess)
+            } else {
+                setStoredRetention(type, newValue)
+            }
+        }
+    }
+
+    private func periodTypeName(_ type: RecapPeriod.PeriodType) -> String {
+        switch type {
+        case .week:  return tr("weekly recaps", "Wochen-Recaps")
+        case .month: return tr("monthly recaps", "Monats-Recaps")
+        case .year:  return tr("yearly recaps", "Jahres-Recaps")
         }
     }
 

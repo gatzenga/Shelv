@@ -122,8 +122,8 @@ Beyond the main settings, Shelv offers several tools in *Recap Settings*:
 Three clearly separated reset options, each with confirmation:
 
 - **Reset local database** — clears only the local cache on this device. Nothing on iCloud or Navidrome is touched. On the next sync, the local database is re-filled from iCloud.
-- **Delete iCloud data** — removes all CloudKit records for the current server. Local database and Navidrome playlists stay intact. If sync is on, the next upload will re-populate iCloud from the local state.
-- **Delete everything** — removes the Navidrome Recap playlists for this server, the local database, and the iCloud records. This bypasses the iCloud sync toggle.
+- **Delete iCloud data** — wipes all Recap data from iCloud for the current server. Local databases and Navidrome playlists stay intact on every device. On the next sync, each device automatically re-uploads its local plays, so iCloud refills with the union of all devices' histories. Useful when iCloud's state is corrupted or you want to start the cloud side fresh without losing anything.
+- **Delete everything** — removes the Navidrome Recap playlists, the local database, and the iCloud data — **on this device**. Other devices keep their local plays and will re-upload them on the next sync, and those plays then flow back down to this device. This is not a cross-device wipe; to fully clear history across all devices, run *Delete everything* on each device. Bypasses the iCloud sync toggle.
 
 ### Generate test recap
 
