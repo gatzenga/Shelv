@@ -110,10 +110,23 @@ struct InsightsView: View {
         } else {
             List {
                 ForEach(Array(topArtists.enumerated()), id: \.element.id) { idx, entry in
-                    artistRow(rank: idx + 1, entry: entry)
-                        .listRowSeparator(.hidden)
-                        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
-                        .listRowBackground(Color.clear)
+                    ZStack {
+                        NavigationLink(destination: ArtistDetailView(artist: Artist(
+                            id: entry.id,
+                            name: entry.name,
+                            albumCount: nil,
+                            coverArt: entry.coverArt,
+                            starred: nil
+                        ))) {
+                            EmptyView()
+                        }
+                        .opacity(0)
+
+                        artistRow(rank: idx + 1, entry: entry)
+                    }
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                    .listRowBackground(Color.clear)
                 }
             }
             .listStyle(.plain)
@@ -128,10 +141,17 @@ struct InsightsView: View {
         } else {
             List {
                 ForEach(Array(topAlbums.enumerated()), id: \.element.id) { idx, entry in
-                    albumRow(rank: idx + 1, entry: entry)
-                        .listRowSeparator(.hidden)
-                        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
-                        .listRowBackground(Color.clear)
+                    ZStack {
+                        NavigationLink(destination: AlbumDetailView(album: entry.album)) {
+                            EmptyView()
+                        }
+                        .opacity(0)
+
+                        albumRow(rank: idx + 1, entry: entry)
+                    }
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                    .listRowBackground(Color.clear)
                 }
             }
             .listStyle(.plain)
@@ -154,10 +174,16 @@ struct InsightsView: View {
         } else {
             List {
                 ForEach(Array(topSongs.enumerated()), id: \.element.id) { idx, song in
-                    songRow(rank: idx + 1, song: song)
-                        .listRowSeparator(.hidden)
-                        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
-                        .listRowBackground(Color.clear)
+                    Button {
+                        AudioPlayerService.shared.play(songs: topSongs, startIndex: idx)
+                        dismiss()
+                    } label: {
+                        songRow(rank: idx + 1, song: song)
+                    }
+                    .buttonStyle(.plain)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                    .listRowBackground(Color.clear)
                 }
             }
             .listStyle(.plain)

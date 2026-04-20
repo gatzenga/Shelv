@@ -14,9 +14,9 @@ struct RecapPeriod {
         }
 
         // Mindestwartezeit nach Periodenende – gibt Offline-Geräten Zeit zum Hochladen.
-        static let weekGraceHours  = 24
-        static let monthGraceHours = 48
-        static let yearGraceHours  = 96
+        static let weekGraceHours  = 6
+        static let monthGraceHours = 6
+        static let yearGraceHours  = 6
 
         var gracePeriodHours: Int {
             switch self {

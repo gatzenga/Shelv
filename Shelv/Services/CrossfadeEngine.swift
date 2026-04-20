@@ -22,6 +22,12 @@ final class CrossfadeEngine: ObservableObject {
     private var fadeCancellable: AnyCancellable?
     private var fadeStartDate: Date?
     private var itemFinishedObserver: NSObjectProtocol?
+    private var itemFailureObserver: NSObjectProtocol?
+    private var itemStallObserver: NSObjectProtocol?
+    private var itemStatusObservation: NSKeyValueObservation?
+    private var currentURL: URL?
+    private var retryCount: Int = 0
+    private let maxRetries: Int = 3
 
     init() {
         let a = AVPlayer()
@@ -38,11 +44,20 @@ final class CrossfadeEngine: ObservableObject {
         cancelFade()
         removeTimeObserver()
         removeItemFinishedObserver()
+        itemStatusObservation?.invalidate()
+        if let obs = itemFailureObserver { NotificationCenter.default.removeObserver(obs) }
+        if let obs = itemStallObserver { NotificationCenter.default.removeObserver(obs) }
     }
 
     // MARK: - Public API
 
     func play(url: URL) {
+        currentURL = url
+        retryCount = 0
+        loadAndPlay(url: url)
+    }
+
+    private func loadAndPlay(url: URL) {
         cancelFade()
         isCrossfading = false
 
@@ -58,6 +73,51 @@ final class CrossfadeEngine: ObservableObject {
         isPlaying = true
         setupTimeObserver()
         setupItemFinishedObserver()
+        setupFailureObservation(item: item, url: url)
+    }
+
+    private func setupFailureObservation(item: AVPlayerItem, url: URL) {
+        itemStatusObservation?.invalidate()
+        itemStatusObservation = item.observe(\.status, options: [.new]) { [weak self] observedItem, _ in
+            guard let self else { return }
+            if observedItem.status == .failed {
+                Task { @MainActor in self.scheduleRetry(for: url) }
+            }
+        }
+
+        if let obs = itemFailureObserver { NotificationCenter.default.removeObserver(obs) }
+        itemFailureObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemFailedToPlayToEndTime,
+            object: item,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            Task { @MainActor in self.scheduleRetry(for: url) }
+        }
+
+        if let obs = itemStallObserver { NotificationCenter.default.removeObserver(obs) }
+        itemStallObserver = NotificationCenter.default.addObserver(
+            forName: AVPlayerItem.playbackStalledNotification,
+            object: item,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self, let currentItem = self.activePlayer.currentItem else { return }
+            if currentItem.status == .failed {
+                Task { @MainActor in self.scheduleRetry(for: url) }
+            }
+        }
+    }
+
+    @MainActor
+    private func scheduleRetry(for url: URL) {
+        guard currentURL == url else { return }
+        guard retryCount < maxRetries else { return }
+        retryCount += 1
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(600))
+            guard self.currentURL == url else { return }
+            self.loadAndPlay(url: url)
+        }
     }
 
     func triggerCrossfade(nextURL: URL) {
@@ -97,6 +157,9 @@ final class CrossfadeEngine: ObservableObject {
         cancelFade()
         removeTimeObserver()
         removeItemFinishedObserver()
+        removeFailureObservation()
+        currentURL = nil
+        retryCount = 0
         activePlayer.pause()
         activePlayer.replaceCurrentItem(with: nil)
         inactivePlayer.pause()
@@ -106,6 +169,19 @@ final class CrossfadeEngine: ObservableObject {
         isCrossfading = false
         currentTime = 0
         duration = 0
+    }
+
+    private func removeFailureObservation() {
+        itemStatusObservation?.invalidate()
+        itemStatusObservation = nil
+        if let obs = itemFailureObserver {
+            NotificationCenter.default.removeObserver(obs)
+            itemFailureObserver = nil
+        }
+        if let obs = itemStallObserver {
+            NotificationCenter.default.removeObserver(obs)
+            itemStallObserver = nil
+        }
     }
 
     // MARK: - Crossfade

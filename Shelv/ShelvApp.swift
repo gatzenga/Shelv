@@ -23,6 +23,14 @@ struct ShelvApp: App {
     @AppStorage("appAppearance") private var appAppearance = "system"
     @Environment(\.scenePhase) private var scenePhase
 
+    init() {
+        UserDefaults.standard.register(defaults: [
+            "recapWeeklyEnabled": true,
+            "recapMonthlyEnabled": true,
+            "recapYearlyEnabled": true,
+        ])
+    }
+
     private var preferredScheme: ColorScheme? {
         switch appAppearance {
         case "light": return .light

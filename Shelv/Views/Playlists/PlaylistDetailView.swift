@@ -18,6 +18,7 @@ struct PlaylistDetailView: View {
     @State private var isEditMode = false
     @State private var showRenameAlert = false
     @State private var newName = ""
+    @State private var newComment = ""
     @State private var showDeleteConfirm = false
     @State private var currentToast: ShelveToast?
     @State private var isSyncing = false
@@ -169,6 +170,7 @@ struct PlaylistDetailView: View {
 
                         Button {
                             newName = playlist.name
+                            newComment = playlist.comment ?? ""
                             showRenameAlert = true
                         } label: {
                             Label(tr("Rename", "Umbenennen"), systemImage: "pencil.line")
@@ -226,12 +228,14 @@ struct PlaylistDetailView: View {
         }
         .shelveToast($currentToast)
         .alert(tr("Rename Playlist", "Playlist umbenennen"), isPresented: $showRenameAlert) {
-            TextField(playlist.name, text: $newName)
+            TextField(tr("Name", "Name"), text: $newName)
+            TextField(tr("Comment", "Kommentar"), text: $newComment)
             Button(tr("Save", "Speichern")) {
                 let name = newName.trimmingCharacters(in: .whitespaces)
                 guard !name.isEmpty else { return }
+                let comment = newComment.trimmingCharacters(in: .whitespaces)
                 Task {
-                    await libraryStore.renamePlaylist(playlist, newName: name)
+                    await libraryStore.renamePlaylist(playlist, newName: name, newComment: comment)
                     displayName = name
                 }
             }

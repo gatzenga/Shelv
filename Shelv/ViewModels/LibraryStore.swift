@@ -363,12 +363,12 @@ class LibraryStore: ObservableObject {
         }
     }
 
-    func renamePlaylist(_ playlist: Playlist, newName: String) async {
+    func renamePlaylist(_ playlist: Playlist, newName: String, newComment: String? = nil) async {
         do {
-            try await api.updatePlaylist(id: playlist.id, name: newName)
+            try await api.updatePlaylist(id: playlist.id, name: newName, comment: newComment)
             if let idx = playlists.firstIndex(where: { $0.id == playlist.id }) {
                 let updated = Playlist(
-                    id: playlist.id, name: newName, comment: playlist.comment,
+                    id: playlist.id, name: newName, comment: newComment ?? playlist.comment,
                     songCount: playlist.songCount, duration: playlist.duration, coverArt: playlist.coverArt
                 )
                 playlists[idx] = updated

@@ -52,10 +52,18 @@ struct RecapDetailView: View {
             } else {
                 List {
                     ForEach(Array(songs.enumerated()), id: \.element.id) { idx, entry in
-                        songRow(rank: idx + 1, entry: entry)
-                            .listRowSeparator(.hidden)
-                            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
-                            .listRowBackground(Color.clear)
+                        Button {
+                            AudioPlayerService.shared.play(
+                                songs: songs.map { $0.song },
+                                startIndex: idx
+                            )
+                        } label: {
+                            songRow(rank: idx + 1, entry: entry)
+                        }
+                        .buttonStyle(.plain)
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                        .listRowBackground(Color.clear)
                     }
                     PlayerBottomSpacer()
                         .listRowInsets(EdgeInsets())

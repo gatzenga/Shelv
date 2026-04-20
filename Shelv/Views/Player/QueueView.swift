@@ -9,17 +9,26 @@ struct QueueView: View {
     @State private var editMode = EditMode.inactive
     @State private var showClearConfirm = false
 
-    private var remainingAlbumTracks: [(queueIndex: Int, song: Song)] {
-        let start = player.currentIndex + 1
-        guard start < player.queue.count else { return [] }
-        return player.queue[start...].enumerated().map { (start + $0.offset, $0.element) }
-    }
+    @State private var localPlayNext: [Song] = []
+    @State private var localAlbum: [Song] = []
+    @State private var localUserQueue: [Song] = []
 
     private var totalCount: Int {
         if player.isShuffled {
-            return remainingAlbumTracks.count
+            return localAlbum.count
         }
-        return player.playNextQueue.count + remainingAlbumTracks.count + player.userQueue.count
+        return localPlayNext.count + localAlbum.count + localUserQueue.count
+    }
+
+    private func syncFromPlayer() {
+        localPlayNext = player.playNextQueue
+        localUserQueue = player.userQueue
+        let start = player.currentIndex + 1
+        if start < player.queue.count {
+            localAlbum = Array(player.queue[start...])
+        } else {
+            localAlbum = []
+        }
     }
 
     var body: some View {
@@ -38,88 +47,110 @@ struct QueueView: View {
                 } else {
                     List {
                         if player.isShuffled {
-                            if !remainingAlbumTracks.isEmpty {
+                            if !localAlbum.isEmpty {
                                 Section(tr("Shuffled Queue", "Gemischte Warteschlange")) {
-                                    ForEach(Array(remainingAlbumTracks.enumerated()), id: \.element.queueIndex) { _, item in
-                                        songRow(item.song)
-                                            .onTapGesture {
-                                                guard editMode == .inactive else { return }
-                                                player.jumpToQueueTrack(at: item.queueIndex)
+                                    ForEach(localAlbum) { song in
+                                        Button {
+                                            guard editMode == .inactive else { return }
+                                            if let idx = localAlbum.firstIndex(where: { $0.id == song.id }) {
+                                                player.jumpToQueueTrack(at: player.currentIndex + 1 + idx)
                                                 dismiss()
                                             }
+                                        } label: {
+                                            songRow(song)
+                                        }
+                                        .buttonStyle(.plain)
                                     }
                                     .onDelete { offsets in
                                         let offset = player.currentIndex + 1
                                         offsets.sorted(by: >).forEach { player.removeFromPlayQueue(at: $0 + offset) }
+                                        syncFromPlayer()
                                     }
                                     .onMove { from, to in
+                                        localAlbum.move(fromOffsets: from, toOffset: to)
                                         player.moveInQueue(from: from, to: to)
                                     }
                                 }
                             }
                         } else {
-                            if !player.playNextQueue.isEmpty {
+                            if !localPlayNext.isEmpty {
                                 Section(tr("Play Next", "Als nächstes")) {
-                                    ForEach(Array(player.playNextQueue.enumerated()), id: \.element.id) { index, song in
-                                        songRow(song)
-                                            .id("pn_\(index)_\(song.id)")
-                                            .onTapGesture {
-                                                guard editMode == .inactive else { return }
-                                                player.jumpToPlayNext(at: index)
+                                    ForEach(localPlayNext) { song in
+                                        Button {
+                                            guard editMode == .inactive else { return }
+                                            if let idx = localPlayNext.firstIndex(where: { $0.id == song.id }) {
+                                                player.jumpToPlayNext(at: idx)
                                                 dismiss()
                                             }
+                                        } label: {
+                                            songRow(song)
+                                        }
+                                        .buttonStyle(.plain)
                                     }
                                     .onDelete { offsets in
                                         offsets.sorted(by: >).forEach { player.removeFromPlayNextQueue(at: $0) }
+                                        syncFromPlayer()
                                     }
                                     .onMove { from, to in
+                                        localPlayNext.move(fromOffsets: from, toOffset: to)
                                         player.moveInPlayNextQueue(from: from, to: to)
                                     }
                                 }
                             }
 
-                            if !remainingAlbumTracks.isEmpty {
+                            if !localAlbum.isEmpty {
                                 Section(tr("Up Next", "Nächste Titel")) {
-                                    ForEach(Array(remainingAlbumTracks.enumerated()), id: \.element.queueIndex) { _, item in
-                                        songRow(item.song)
-                                            .onTapGesture {
-                                                guard editMode == .inactive else { return }
-                                                player.jumpToQueueTrack(at: item.queueIndex)
+                                    ForEach(localAlbum) { song in
+                                        Button {
+                                            guard editMode == .inactive else { return }
+                                            if let idx = localAlbum.firstIndex(where: { $0.id == song.id }) {
+                                                player.jumpToQueueTrack(at: player.currentIndex + 1 + idx)
                                                 dismiss()
                                             }
+                                        } label: {
+                                            songRow(song)
+                                        }
+                                        .buttonStyle(.plain)
                                     }
                                     .onDelete { offsets in
                                         let offset = player.currentIndex + 1
                                         offsets.sorted(by: >).forEach { player.removeFromPlayQueue(at: $0 + offset) }
+                                        syncFromPlayer()
                                     }
                                     .onMove { from, to in
+                                        localAlbum.move(fromOffsets: from, toOffset: to)
                                         player.moveInQueue(from: from, to: to)
                                     }
                                 }
                             }
 
-                            if !player.userQueue.isEmpty {
-                                Section(tr("Next in Queue", "Nächste in Warteschlange")) {
-                                    ForEach(Array(player.userQueue.enumerated()), id: \.element.id) { index, song in
-                                        songRow(song)
-                                            .id("uq_\(index)_\(song.id)")
-                                            .onTapGesture {
-                                                guard editMode == .inactive else { return }
-                                                player.jumpToUserQueue(at: index)
+                            if !localUserQueue.isEmpty {
+                                Section(tr("Your Queue", "Deine Warteschlange")) {
+                                    ForEach(localUserQueue) { song in
+                                        Button {
+                                            guard editMode == .inactive else { return }
+                                            if let idx = localUserQueue.firstIndex(where: { $0.id == song.id }) {
+                                                player.jumpToUserQueue(at: idx)
                                                 dismiss()
                                             }
+                                        } label: {
+                                            songRow(song)
+                                        }
+                                        .buttonStyle(.plain)
                                     }
                                     .onDelete { offsets in
                                         offsets.sorted(by: >).forEach { player.removeFromUserQueue(at: $0) }
+                                        syncFromPlayer()
                                     }
                                     .onMove { from, to in
+                                        localUserQueue.move(fromOffsets: from, toOffset: to)
                                         player.moveInUserQueue(from: from, to: to)
                                     }
                                 }
                             }
                         }
                     }
-                    .listStyle(.insetGrouped)
+                    .listStyle(.plain)
                     .scrollIndicators(.hidden)
                     .environment(\.editMode, $editMode)
                 }
@@ -156,10 +187,17 @@ struct QueueView: View {
                 }
             }
         }
+        .task { syncFromPlayer() }
+        .onChange(of: player.playNextQueue) { _, _ in syncFromPlayer() }
+        .onChange(of: player.userQueue) { _, _ in syncFromPlayer() }
+        .onChange(of: player.queue) { _, _ in syncFromPlayer() }
+        .onChange(of: player.currentIndex) { _, _ in syncFromPlayer() }
+        .onChange(of: player.isShuffled) { _, _ in syncFromPlayer() }
         .alert(tr("Clear Queue?", "Warteschlange leeren?"), isPresented: $showClearConfirm) {
             Button(tr("Clear", "Leeren"), role: .destructive) {
                 player.clearUpcomingPlayQueue()
                 player.clearUserQueue()
+                syncFromPlayer()
             }
             Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
         } message: {

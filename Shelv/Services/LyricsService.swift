@@ -101,7 +101,15 @@ actor LyricsService {
     }
 
     nonisolated static func diskSizeBytes() -> Int {
-        (try? dbURL.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
+        // SQLite im WAL-Modus: Haupt-DB + -wal + -shm zusammen zählen.
+        let base = dbURL
+        let suffixes = ["", "-wal", "-shm"]
+        return suffixes.reduce(0) { total, suffix in
+            let url = base.deletingLastPathComponent()
+                .appendingPathComponent(base.lastPathComponent + suffix)
+            let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
+            return total + size
+        }
     }
 
     // MARK: - Read / Write
@@ -142,6 +150,13 @@ actor LyricsService {
         }) ?? 0
     }
 
+    func totalRowCount() -> Int {
+        guard let pool else { return 0 }
+        return (try? pool.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM lyrics")
+        }) ?? 0
+    }
+
     // MARK: - Metadata Backfill
 
     func updateMetadata(songId: String, serverId: String, title: String, artist: String?, coverArt: String?) {
@@ -161,6 +176,17 @@ actor LyricsService {
     func reset(serverId: String) {
         safeWrite { db in
             try db.execute(sql: "DELETE FROM lyrics WHERE serverId = ?", arguments: [serverId])
+        }
+        guard let pool else { return }
+        // VACUUM + WAL-Checkpoint(TRUNCATE): schrumpft sowohl .db als auch .db-wal.
+        // Beides muss außerhalb einer Transaktion laufen.
+        do {
+            try pool.writeWithoutTransaction { db in
+                try db.execute(sql: "PRAGMA wal_checkpoint(TRUNCATE)")
+                try db.execute(sql: "VACUUM")
+            }
+        } catch {
+            DBErrorLog.logLyrics("reset VACUUM: \(error.localizedDescription)")
         }
     }
 
@@ -279,7 +305,8 @@ actor LyricsService {
             plainText: plain, syncedLrc: lrc,
             isSynced: entry.synced && lrc != nil,
             isInstrumental: false, language: entry.lang,
-            fetchedAt: Date().timeIntervalSince1970
+            fetchedAt: Date().timeIntervalSince1970,
+            songTitle: song.title, artistName: song.artist, coverArt: song.coverArt
         )
     }
 
@@ -294,19 +321,33 @@ actor LyricsService {
         comps.queryItems = items
         guard let url = comps.url else { return .indeterminate }
 
-        var req = URLRequest(url: url, timeoutInterval: 8)
+        var req = URLRequest(url: url, timeoutInterval: 10)
         req.setValue("Shelv/1.0 (https://github.com/gatzenga/Shelv)", forHTTPHeaderField: "User-Agent")
 
-        let data: Data
-        let resp: URLResponse
-        do {
-            (data, resp) = try await Self.lrcLibSession.data(for: req)
-        } catch {
-            return .indeterminate
+        // Retry bei transient errors (Timeout, 5xx, 429) mit exponential backoff + jitter.
+        // Jitter verhindert, dass 5 parallele Bulk-Requests synchron retry'n.
+        let backoffsMs: [UInt64] = [0, 400, 1500]
+        var data = Data()
+        var http: HTTPURLResponse?
+        for (attempt, delay) in backoffsMs.enumerated() {
+            if delay > 0 {
+                let jitter = UInt64.random(in: 0...250)
+                try? await Task.sleep(nanoseconds: (delay + jitter) * 1_000_000)
+            }
+            do {
+                let (d, resp) = try await Self.lrcLibSession.data(for: req)
+                guard let h = resp as? HTTPURLResponse else { continue }
+                http = h
+                data = d
+                if h.statusCode == 404 { return .notFound }
+                if h.statusCode == 200 { break }
+                // 429, 5xx → nächster Versuch
+                if attempt == backoffsMs.count - 1 { return .indeterminate }
+            } catch {
+                if attempt == backoffsMs.count - 1 { return .indeterminate }
+            }
         }
-        guard let http = resp as? HTTPURLResponse else { return .indeterminate }
-        if http.statusCode == 404 { return .notFound }
-        guard http.statusCode == 200 else { return .indeterminate }
+        guard http?.statusCode == 200 else { return .indeterminate }
 
         guard let lrc = try? JSONDecoder().decode(LrcLibResponse.self, from: data) else {
             return .indeterminate

@@ -10,9 +10,11 @@ class LyricsStore: ObservableObject {
     @Published var downloadFetched: Int = 0
     @Published var downloadTotal: Int = 0
     @Published var dbSize: String = "—"
+    @Published var fetchedCount: Int = 0
 
     private var loadTask: Task<Void, Never>?
     private var downloadTask: Task<Void, Never>?
+    private var currentDownloadServerId: String?
 
     // MARK: - Setup
 
@@ -45,6 +47,7 @@ class LyricsStore: ObservableObject {
         isDownloading = true
         downloadFetched = 0
         downloadTotal = 0
+        currentDownloadServerId = serverId
 
         let api = SubsonicAPIService.shared
         let svc = LyricsService.shared
@@ -54,6 +57,7 @@ class LyricsStore: ObservableObject {
                 Task { @MainActor [weak self] in
                     self?.isDownloading = false
                     self?.refreshDbSize()
+                    await self?.refreshFetchedCount(serverId: serverId)
                 }
             }
 
@@ -93,7 +97,7 @@ class LyricsStore: ObservableObject {
             await MainActor.run { [weak self] in self?.downloadTotal = totalCount }
 
             await withTaskGroup(of: Void.self) { group in
-                let maxConcurrent = 20
+                let maxConcurrent = 5
                 var iterator = allSongs.makeIterator()
                 var active = 0
                 while active < maxConcurrent, let song = iterator.next() {
@@ -125,6 +129,9 @@ class LyricsStore: ObservableObject {
         downloadTask?.cancel()
         downloadTask = nil
         isDownloading = false
+        if let sid = currentDownloadServerId {
+            Task { await self.refreshFetchedCount(serverId: sid) }
+        }
     }
 
     // MARK: - Reset
@@ -134,19 +141,25 @@ class LyricsStore: ObservableObject {
         currentLyrics = nil
         downloadFetched = 0
         downloadTotal = 0
+        fetchedCount = 0
         refreshDbSize()
     }
 
     // MARK: - Stats
 
-    func fetchedCount(serverId: String) async -> Int {
-        await LyricsService.shared.fetchedCount(serverId: serverId)
+    func refreshFetchedCount(serverId: String) async {
+        let count = await LyricsService.shared.fetchedCount(serverId: serverId)
+        self.fetchedCount = count
     }
 
     func refreshDbSize() {
         let bytes = LyricsService.diskSizeBytes()
-        dbSize = bytes > 0
-            ? ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
-            : tr("Empty", "Leer")
+        Task {
+            let rows = await LyricsService.shared.totalRowCount()
+            let text = rows == 0
+                ? tr("Empty", "Leer")
+                : ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
+            await MainActor.run { self.dbSize = text }
+        }
     }
 }

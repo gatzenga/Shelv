@@ -40,7 +40,6 @@ struct SettingsView: View {
     @State private var showClearCacheConfirm = false
     @State private var showResetLyricsConfirm = false
     @State private var cacheSize = "—"
-    @State private var lyricsFetchedCount: Int = 0
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
@@ -179,7 +178,7 @@ struct SettingsView: View {
                             if lyricsStore.isDownloading {
                                 Text("\(lyricsStore.downloadFetched) / \(lyricsStore.downloadTotal)")
                             } else {
-                                Text("\(lyricsFetchedCount) · \(lyricsStore.dbSize)")
+                                Text("\(lyricsStore.fetchedCount) · \(lyricsStore.dbSize)")
                             }
                         }
                         .font(.caption)
@@ -315,7 +314,7 @@ struct SettingsView: View {
             .task {
                 await recalculateCacheSize()
                 if let sid = serverStore.activeServerID?.uuidString {
-                    lyricsFetchedCount = await lyricsStore.fetchedCount(serverId: sid)
+                    await lyricsStore.refreshFetchedCount(serverId: sid)
                 }
                 lyricsStore.refreshDbSize()
             }

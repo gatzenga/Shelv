@@ -27,14 +27,22 @@ struct PlaylistsView: View {
                     ProgressView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if visiblePlaylists.isEmpty {
-                    ContentUnavailableView(
-                        tr("No Playlists", "Keine Playlists"),
-                        systemImage: "music.note.list",
-                        description: Text(tr(
-                            "Create a playlist to get started.",
-                            "Erstelle eine Playlist, um loszulegen."
-                        ))
-                    )
+                    List {
+                        ContentUnavailableView(
+                            tr("No Playlists", "Keine Playlists"),
+                            systemImage: "music.note.list",
+                            description: Text(tr(
+                                "Create a playlist to get started.",
+                                "Erstelle eine Playlist, um loszulegen."
+                            ))
+                        )
+                        .frame(maxWidth: .infinity, minHeight: 400)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(EdgeInsets())
+                    }
+                    .listStyle(.plain)
+                    .scrollIndicators(.hidden)
                 } else {
                     List {
                         Section {

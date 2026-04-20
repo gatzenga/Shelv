@@ -67,24 +67,22 @@ struct DiscoverView: View {
             .navigationTitle("Shelv")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showRecap = true
-                    } label: {
-                        Image(systemName: "calendar.badge.clock")
-                    }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showInsights = true
-                    } label: {
-                        Image(systemName: "chart.bar.xaxis")
-                    }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showSearch = true
-                    } label: {
-                        Image(systemName: "magnifyingglass")
+                    HStack(spacing: 16) {
+                        Button {
+                            showRecap = true
+                        } label: {
+                            Image(systemName: "calendar.badge.clock")
+                        }
+                        Button {
+                            showInsights = true
+                        } label: {
+                            Image(systemName: "chart.bar.xaxis")
+                        }
+                        Button {
+                            showSearch = true
+                        } label: {
+                            Image(systemName: "magnifyingglass")
+                        }
                     }
                 }
             }
