@@ -101,7 +101,10 @@ class LibraryStore: ObservableObject {
             var result: [Album] = []
             var offset = 0
             let pageSize = 500
-            let apiSortBy = sortBy == "year" ? "alphabeticalByName" : sortBy
+            // "year" und "frequent" client-seitig sortieren, damit auch Alben ohne Plays/Jahr
+            // in der Liste erscheinen. "newest" bleibt serverseitig (dateAdded).
+            let useClientSort = (sortBy == "year" || sortBy == "frequent")
+            let apiSortBy = useClientSort ? "alphabeticalByName" : sortBy
             while true {
                 let page = try await api.getAllAlbums(size: pageSize, offset: offset, sortBy: apiSortBy)
                 result.append(contentsOf: page)
@@ -110,6 +113,8 @@ class LibraryStore: ObservableObject {
             }
             if sortBy == "year" {
                 result = result.sorted { ($0.year ?? 0) > ($1.year ?? 0) }
+            } else if sortBy == "frequent" {
+                result = result.sorted { ($0.playCount ?? 0) > ($1.playCount ?? 0) }
             }
             albums = result
             if let id = activeServerID {

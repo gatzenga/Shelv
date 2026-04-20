@@ -1,0 +1,12 @@
+{
+  "data" : [
+    {
+      "filename" : "AppTheme.swift",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

@@ -8,10 +8,32 @@ enum AlbumSortOption: String, CaseIterable {
 
     var label: String {
         switch self {
-        case .alphabetical: return tr("Name (A–Z)", "Name (A–Z)")
+        case .alphabetical: return tr("Name", "Name")
         case .frequent:     return tr("Most Played", "Meist gespielt")
         case .newest:       return tr("Recently Added", "Kürzlich hinzugefügt")
-        case .year:         return tr("Year (newest)", "Jahr (neueste zuerst)")
+        case .year:         return tr("Year", "Jahr")
+        }
+    }
+}
+
+enum ArtistSortOption: String, CaseIterable {
+    case alphabetical, frequent
+
+    var label: String {
+        switch self {
+        case .alphabetical: return tr("Name", "Name")
+        case .frequent:     return tr("Most Played", "Meist gespielt")
+        }
+    }
+}
+
+enum SortDirection: String, CaseIterable {
+    case ascending, descending
+
+    var label: String {
+        switch self {
+        case .ascending:  return tr("Ascending", "Aufsteigend")
+        case .descending: return tr("Descending", "Absteigend")
         }
     }
 }
@@ -33,6 +55,12 @@ struct LibraryView: View {
     @State private var playlistSongIds: [String] = []
     @AppStorage("albumSortOption") private var sortOptionRaw: String = AlbumSortOption.alphabetical.rawValue
     private var sortOption: AlbumSortOption { AlbumSortOption(rawValue: sortOptionRaw) ?? .alphabetical }
+    @AppStorage("albumSortDirection") private var albumDirectionRaw: String = SortDirection.ascending.rawValue
+    private var albumDirection: SortDirection { SortDirection(rawValue: albumDirectionRaw) ?? .ascending }
+    @AppStorage("artistSortOption") private var artistSortRaw: String = ArtistSortOption.alphabetical.rawValue
+    private var artistSortOption: ArtistSortOption { ArtistSortOption(rawValue: artistSortRaw) ?? .alphabetical }
+    @AppStorage("artistSortDirection") private var artistDirectionRaw: String = SortDirection.ascending.rawValue
+    private var artistDirection: SortDirection { SortDirection(rawValue: artistDirectionRaw) ?? .ascending }
     @AppStorage("albumViewIsGrid") private var albumIsGrid = true
     @AppStorage("artistViewIsGrid") private var artistIsGrid = false
     @State private var albumScrollID: String?
@@ -96,7 +124,7 @@ struct LibraryView: View {
                 Spacer()
             } else if albumIsGrid {
                 indexedScrollView(
-                    letters: albumGroups.map(\.letter),
+                    letters: albumGroups.map(\.letter).filter { !$0.isEmpty },
                     idPrefix: "alb",
                     scrollID: $albumScrollID
                 ) { albumContent }
@@ -110,7 +138,7 @@ struct LibraryView: View {
                 Spacer()
             } else if artistIsGrid {
                 indexedScrollView(
-                    letters: artistGroups.map(\.letter),
+                    letters: artistGroups.map(\.letter).filter { !$0.isEmpty },
                     idPrefix: "art",
                     scrollID: $artistScrollID
                 ) { artistGridContent }
@@ -154,7 +182,7 @@ struct LibraryView: View {
 
     @ToolbarContentBuilder
     private var libraryToolbar: some ToolbarContent {
-        if segment == .albums {
+        if segment == .albums || segment == .artists {
             ToolbarItem(placement: .topBarTrailing) { sortMenu }
         }
         if segment != .favorites {
@@ -192,19 +220,72 @@ struct LibraryView: View {
 
     private var stackContent: some View {
         stackBase
-        .onAppear {
-            albumGroups = groupByFirstLetter(libraryStore.albums, name: \.name)
-            artistGroups = groupByFirstLetter(libraryStore.artists, name: \.name)
-        }
-        .onChange(of: libraryStore.albums) { _, albums in
-            albumGroups = groupByFirstLetter(albums, name: \.name)
-        }
-        .onChange(of: libraryStore.artists) { _, artists in
-            artistGroups = groupByFirstLetter(artists, name: \.name)
-        }
+        .onAppear { rebuildGroups() }
+        .onChange(of: libraryStore.albums) { _, _ in rebuildGroups() }
+        .onChange(of: libraryStore.artists) { _, _ in rebuildGroups() }
+        .onChange(of: albumDirectionRaw) { _, _ in rebuildGroups() }
+        .onChange(of: artistSortRaw) { _, _ in rebuildGroups() }
+        .onChange(of: artistDirectionRaw) { _, _ in rebuildGroups() }
         .onChange(of: enableFavorites) { _, enabled in
             let isFavorites = segment == .favorites
             if !enabled && isFavorites { segment = .albums }
+        }
+    }
+
+    private func rebuildGroups() {
+        // Albums
+        if sortOption == .alphabetical {
+            // Name immer A-Z (keine Richtung)
+            albumGroups = groupByFirstLetter(libraryStore.albums, name: \.name)
+        } else {
+            // Server liefert non-alphabetische Sortierung bereits absteigend (natural).
+            // Direction.desc → as-is; Direction.asc → umdrehen.
+            let items = albumDirection == .descending
+                ? libraryStore.albums
+                : Array(libraryStore.albums.reversed())
+            albumGroups = items.isEmpty ? [] : [(letter: "", items: items)]
+        }
+
+        // Artists
+        let artistsBase = sortedArtists()
+        if artistSortOption == .alphabetical {
+            // Name immer A-Z
+            artistGroups = groupByFirstLetter(artistsBase, name: \.name)
+        } else {
+            // sortedArtists liefert Most-Played bereits absteigend (natural).
+            let items = artistDirection == .descending
+                ? artistsBase
+                : Array(artistsBase.reversed())
+            artistGroups = items.isEmpty ? [] : [(letter: "", items: items)]
+        }
+    }
+
+    private func sortedArtists() -> [Artist] {
+        let base: [Artist]
+        switch artistSortOption {
+        case .alphabetical:
+            base = libraryStore.artists
+        case .frequent:
+            let counts = Dictionary(
+                grouping: libraryStore.albums,
+                by: { $0.artistId ?? "" }
+            ).mapValues { $0.compactMap { $0.playCount }.reduce(0, +) }
+            base = libraryStore.artists.sorted {
+                (counts[$0.id] ?? 0) > (counts[$1.id] ?? 0)
+            }
+        }
+        return base
+    }
+
+    private func applyDirection<T>(
+        _ groups: [(letter: String, items: [T])],
+        direction: SortDirection
+    ) -> [(letter: String, items: [T])] {
+        switch direction {
+        case .ascending:
+            return groups
+        case .descending:
+            return groups.reversed().map { ($0.letter, Array($0.items.reversed())) }
         }
     }
 
@@ -367,9 +448,12 @@ struct LibraryView: View {
                             }
                         }
                         .padding(.horizontal)
+                        .padding(.top, group.letter.isEmpty ? 12 : 0)
                         .padding(.bottom, 14)
                     } header: {
-                        letterHeader(group.letter, id: "alb-\(group.letter)")
+                        if !group.letter.isEmpty {
+                            letterHeader(group.letter, id: "alb-\(group.letter)")
+                        }
                     }
                 }
                 bottomSpacer
@@ -378,13 +462,15 @@ struct LibraryView: View {
             ScrollViewReader { proxy in
                 List {
                     ForEach(albumGroups, id: \.letter) { group in
-                        Text(group.letter)
-                            .font(.title2.weight(.bold))
-                            .foregroundStyle(.secondary)
-                            .id("alb-\(group.letter)")
-                            .listRowInsets(EdgeInsets(top: 20, leading: 16, bottom: 4, trailing: 0))
-                            .listRowSeparator(.hidden)
-                            .listRowBackground(Color.clear)
+                        if !group.letter.isEmpty {
+                            Text(group.letter)
+                                .font(.title2.weight(.bold))
+                                .foregroundStyle(.secondary)
+                                .id("alb-\(group.letter)")
+                                .listRowInsets(EdgeInsets(top: 20, leading: 16, bottom: 4, trailing: 0))
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(Color.clear)
+                        }
                         ForEach(group.items) { album in
                             Button { navigateToAlbum = album } label: {
                                 albumListRowContent(album)
@@ -422,12 +508,15 @@ struct LibraryView: View {
                 .scrollIndicators(.hidden)
                 .contentMargins(.trailing, 20, for: .scrollContent)
                 .overlay(alignment: .trailing) {
-                    AlphabetIndexBar(letters: albumGroups.map(\.letter)) { letter in
-                        proxy.scrollTo("alb-\(letter)", anchor: .top)
+                    let letters = albumGroups.map(\.letter).filter { !$0.isEmpty }
+                    if !letters.isEmpty {
+                        AlphabetIndexBar(letters: letters) { letter in
+                            proxy.scrollTo("alb-\(letter)", anchor: .top)
+                        }
+                        .frame(width: 14)
+                        .padding(.vertical, 16)
+                        .padding(.trailing, 2)
                     }
-                    .frame(width: 14)
-                    .padding(.vertical, 16)
-                    .padding(.trailing, 2)
                 }
                 .navigationDestination(item: $navigateToAlbum) { album in
                     AlbumDetailView(album: album)
@@ -451,9 +540,12 @@ struct LibraryView: View {
                         }
                     }
                     .padding(.horizontal)
+                    .padding(.top, group.letter.isEmpty ? 12 : 0)
                     .padding(.bottom, 14)
                 } header: {
-                    letterHeader(group.letter, id: "art-\(group.letter)")
+                    if !group.letter.isEmpty {
+                        letterHeader(group.letter, id: "art-\(group.letter)")
+                    }
                 }
             }
             bottomSpacer
@@ -465,13 +557,15 @@ struct LibraryView: View {
         ScrollViewReader { proxy in
             List {
                 ForEach(artistGroups, id: \.letter) { group in
-                    Text(group.letter)
-                        .font(.title2.weight(.bold))
-                        .foregroundStyle(.secondary)
-                        .id("art-\(group.letter)")
-                        .listRowInsets(EdgeInsets(top: 20, leading: 16, bottom: 4, trailing: 0))
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
+                    if !group.letter.isEmpty {
+                        Text(group.letter)
+                            .font(.title2.weight(.bold))
+                            .foregroundStyle(.secondary)
+                            .id("art-\(group.letter)")
+                            .listRowInsets(EdgeInsets(top: 20, leading: 16, bottom: 4, trailing: 0))
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
+                    }
                     ForEach(group.items) { artist in
                         Button { navigateToArtist = artist } label: {
                             artistListRow(artist)
@@ -515,12 +609,15 @@ struct LibraryView: View {
             .scrollIndicators(.hidden)
             .contentMargins(.trailing, 20, for: .scrollContent)
             .overlay(alignment: .trailing) {
-                AlphabetIndexBar(letters: artistGroups.map(\.letter)) { letter in
-                    proxy.scrollTo("art-\(letter)", anchor: .top)
+                let letters = artistGroups.map(\.letter).filter { !$0.isEmpty }
+                if !letters.isEmpty {
+                    AlphabetIndexBar(letters: letters) { letter in
+                        proxy.scrollTo("art-\(letter)", anchor: .top)
+                    }
+                    .frame(width: 14)
+                    .padding(.vertical, 16)
+                    .padding(.trailing, 2)
                 }
-                .frame(width: 14)
-                .padding(.vertical, 16)
-                .padding(.trailing, 2)
             }
             .navigationDestination(item: $navigateToArtist) { artist in
                 ArtistDetailView(artist: artist)
@@ -846,18 +943,65 @@ struct LibraryView: View {
         }
     }
 
+    @ViewBuilder
     private var sortMenu: some View {
+        switch segment {
+        case .albums:
+            albumSortMenu
+        case .artists:
+            artistSortMenu
+        case .favorites:
+            EmptyView()
+        }
+    }
+
+    private var albumSortMenu: some View {
         Menu {
-            ForEach(AlbumSortOption.allCases, id: \.rawValue) { option in
-                Button {
-                    sortOptionRaw = option.rawValue
-                    Task { await libraryStore.loadAlbums(sortBy: option.rawValue) }
-                } label: {
-                    if sortOption == option {
-                        Label(option.label, systemImage: "checkmark")
-                    } else {
-                        Text(option.label)
+            Picker(selection: Binding(
+                get: { sortOptionRaw },
+                set: { newValue in
+                    sortOptionRaw = newValue
+                    Task { await libraryStore.loadAlbums(sortBy: newValue) }
+                }
+            )) {
+                ForEach(AlbumSortOption.allCases, id: \.rawValue) { option in
+                    Text(option.label).tag(option.rawValue)
+                }
+            } label: {
+                Label(tr("Sort", "Sortieren"), systemImage: "arrow.up.arrow.down")
+            }
+
+            if sortOption != .alphabetical {
+                Picker(selection: $albumDirectionRaw) {
+                    ForEach(SortDirection.allCases, id: \.rawValue) { dir in
+                        Text(dir.label).tag(dir.rawValue)
                     }
+                } label: {
+                    Label(tr("Direction", "Richtung"), systemImage: "arrow.up.and.down")
+                }
+            }
+        } label: {
+            Image(systemName: "arrow.up.arrow.down")
+        }
+    }
+
+    private var artistSortMenu: some View {
+        Menu {
+            Picker(selection: $artistSortRaw) {
+                ForEach(ArtistSortOption.allCases, id: \.rawValue) { option in
+                    Text(option.label).tag(option.rawValue)
+                }
+            } label: {
+                Label(tr("Sort", "Sortieren"), systemImage: "arrow.up.arrow.down")
+            }
+
+            if artistSortOption != .alphabetical {
+                Picker(selection: $artistDirectionRaw) {
+                    ForEach(SortDirection.allCases, id: \.rawValue) { dir in
+                        Text(dir.label).tag(dir.rawValue)
+                    }
+                } label: {
+                    Label(tr("Direction", "Richtung"), systemImage: "arrow.up.and.down")
                 }
             }
         } label: {
