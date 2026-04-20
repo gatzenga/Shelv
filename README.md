@@ -1,6 +1,7 @@
-<p align="left">
-  <img src="icon.png" width="150" alt="App Logo"/>
-</p>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="dark.png">
+  <img src="light.png" alt="Shelv" width="128">
+</picture>
 
 # Shelv
 
