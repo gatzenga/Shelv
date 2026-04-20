@@ -12,9 +12,10 @@ struct Album: Identifiable, Codable, Hashable {
     let genre: String?
     let playCount: Int?
     let starred: Date?
+    let created: Date?
     var songs: [Song]?
 
     enum CodingKeys: String, CodingKey {
-        case id, name, artist, artistId, coverArt, songCount, duration, year, genre, playCount, starred
+        case id, name, artist, artistId, coverArt, songCount, duration, year, genre, playCount, starred, created
     }
 }

@@ -61,7 +61,12 @@ struct ArtistDetailView: View {
         case .frequent:
             let base = albums.sorted { ($0.playCount ?? 0) < ($1.playCount ?? 0) }
             return direction == .ascending ? base : Array(base.reversed())
-        case .newest, .year:
+        case .newest:
+            let base = albums.sorted {
+                ($0.created ?? .distantPast) < ($1.created ?? .distantPast)
+            }
+            return direction == .ascending ? base : Array(base.reversed())
+        case .year:
             let base = albums.sorted { ($0.year ?? 0) < ($1.year ?? 0) }
             return direction == .ascending ? base : Array(base.reversed())
         }

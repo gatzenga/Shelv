@@ -41,6 +41,7 @@ struct PlayerView: View {
             genre: song.genre,
             playCount: nil,
             starred: nil,
+            created: nil,
             songs: nil
         )
     }

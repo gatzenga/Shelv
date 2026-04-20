@@ -18,18 +18,20 @@ struct AlbumArtView: View {
     @State private var didCheck = false
 
     var body: some View {
-        let content = Group {
-            if let uiImage {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .scaledToFill()
-            } else if loading {
-                Color.gray.opacity(0.2)
-                    .overlay(ProgressView().tint(.secondary))
-            } else {
-                placeholder
+        let content = Color.clear
+            .aspectRatio(1, contentMode: .fit)
+            .overlay {
+                if let uiImage {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFill()
+                } else if loading {
+                    Color.gray.opacity(0.2)
+                        .overlay(ProgressView().tint(.secondary))
+                } else {
+                    placeholder
+                }
             }
-        }
         return Group {
             if isCircle {
                 content.clipShape(Circle())
@@ -37,7 +39,6 @@ struct AlbumArtView: View {
                 content.clipShape(RoundedRectangle(cornerRadius: cornerRadius))
             }
         }
-        .aspectRatio(1, contentMode: .fit)
         .onAppear {
             guard !didCheck else { return }
             didCheck = true
