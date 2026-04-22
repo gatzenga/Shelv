@@ -135,7 +135,7 @@ actor PlayLogService {
             try m.migrate(p)
             pool = p
         } catch {
-            print("[PlayLogService] DB setup failed: \(error)")
+            DBErrorLog.logPlayLog("DB setup failed: \(error.localizedDescription)")
         }
     }
 
@@ -463,6 +463,12 @@ actor PlayLogService {
         }
         let destination = try DatabaseQueue(path: dest.path)
         try pool.backup(to: destination)
+        let attrs = try FileManager.default.attributesOfItem(atPath: dest.path)
+        let size = (attrs[.size] as? NSNumber)?.intValue ?? 0
+        guard size > 0 else {
+            throw NSError(domain: "PlayLogService", code: 5,
+                          userInfo: [NSLocalizedDescriptionKey: "Rollback backup was created but is empty"])
+        }
     }
 
     func applyImportRollback() throws {
@@ -470,6 +476,12 @@ actor PlayLogService {
         guard FileManager.default.fileExists(atPath: backup.path) else {
             throw NSError(domain: "PlayLogService", code: 2,
                           userInfo: [NSLocalizedDescriptionKey: "No rollback backup found"])
+        }
+        let attrs = try FileManager.default.attributesOfItem(atPath: backup.path)
+        let size = (attrs[.size] as? NSNumber)?.intValue ?? 0
+        guard size > 0 else {
+            throw NSError(domain: "PlayLogService", code: 3,
+                          userInfo: [NSLocalizedDescriptionKey: "Rollback backup is empty — refusing to replace live database"])
         }
         pool = nil
         let dest = Self.dbURL
@@ -485,6 +497,10 @@ actor PlayLogService {
         )
         try FileManager.default.copyItem(at: backup, to: dest)
         setup()
+        guard pool != nil else {
+            throw NSError(domain: "PlayLogService", code: 4,
+                          userInfo: [NSLocalizedDescriptionKey: "Database failed to open after rollback — backup preserved at \(backup.path)"])
+        }
     }
 
     func cleanupImportRollback() {

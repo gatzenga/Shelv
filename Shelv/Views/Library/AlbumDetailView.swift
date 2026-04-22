@@ -205,14 +205,9 @@ struct AlbumDetailView: View {
                     .multilineTextAlignment(.center)
                 if let artist = album.artist {
                     Button { resolveArtist(artist) } label: {
-                        HStack(spacing: 6) {
-                            Text(artist)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                            if isResolvingArtist {
-                                ProgressView().scaleEffect(0.7)
-                            }
-                        }
+                        Text(artist)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
                 }

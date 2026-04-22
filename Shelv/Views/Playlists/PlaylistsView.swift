@@ -8,9 +8,7 @@ struct PlaylistsView: View {
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
     private var visiblePlaylists: [Playlist] {
-        libraryStore.playlists.filter {
-            !recapStore.recapPlaylistIds.contains($0.id) && $0.comment != "Shelv Recap"
-        }
+        libraryStore.playlists.filter { !recapStore.recapPlaylistIds.contains($0.id) }
     }
 
     @State private var showCreateSheet = false

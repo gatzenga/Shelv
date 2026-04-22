@@ -15,9 +15,7 @@ struct AddToPlaylistSheet: View {
     @FocusState private var nameFieldFocused: Bool
 
     private var visiblePlaylists: [Playlist] {
-        libraryStore.playlists.filter {
-            !recapStore.recapPlaylistIds.contains($0.id) && $0.comment != "Shelv Recap"
-        }
+        libraryStore.playlists.filter { !recapStore.recapPlaylistIds.contains($0.id) }
     }
 
     var body: some View {

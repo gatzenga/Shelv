@@ -291,6 +291,20 @@ struct SettingsView: View {
                             }
                         }
                     }
+                    if let url = URL(string: "https://discord.gg/a8VvwDeR") {
+                        Link(destination: url) {
+                            HStack {
+                                Image(systemName: "bubble.left.and.bubble.right")
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 24)
+                                Text("Discord")
+                                Spacer()
+                                Image(systemName: "arrow.up.right")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
                 }
 
                 Section(tr("Info", "Info")) {

@@ -180,8 +180,27 @@ class RecapStore: ObservableObject {
             showSyncReport = true
             NotificationCenter.default.post(name: .recapRegistryUpdated, object: nil)
         } catch {
-            await PlayLogService.shared.cleanupImportRollback()
-            syncReports = [RecapSyncReport(message: error.localizedDescription, isError: true)]
+            let importError = error.localizedDescription
+            do {
+                try await PlayLogService.shared.applyImportRollback()
+                await PlayLogService.shared.cleanupImportRollback()
+                await loadEntries(serverId: serverId)
+                syncReports = [RecapSyncReport(
+                    message: tr(
+                        "Import failed — previous state restored.\n\(importError)",
+                        "Import fehlgeschlagen — vorheriger Zustand wiederhergestellt.\n\(importError)"
+                    ),
+                    isError: true
+                )]
+            } catch let rollbackError {
+                syncReports = [RecapSyncReport(
+                    message: tr(
+                        "Import failed and rollback failed. Backup preserved for manual recovery.\nImport: \(importError)\nRollback: \(rollbackError.localizedDescription)",
+                        "Import fehlgeschlagen, Rollback fehlgeschlagen. Backup bleibt erhalten.\nImport: \(importError)\nRollback: \(rollbackError.localizedDescription)"
+                    ),
+                    isError: true
+                )]
+            }
             showSyncReport = true
         }
     }
@@ -252,12 +271,12 @@ class RecapStore: ObservableObject {
     func cancelImport(serverId: String) async {
         do {
             try await PlayLogService.shared.applyImportRollback()
+            await PlayLogService.shared.cleanupImportRollback()
             await loadEntries(serverId: serverId)
         } catch {
             syncReports = [RecapSyncReport(message: error.localizedDescription, isError: true)]
             showSyncReport = true
         }
-        await PlayLogService.shared.cleanupImportRollback()
     }
 
     func completeImport() async {
