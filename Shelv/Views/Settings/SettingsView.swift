@@ -291,7 +291,7 @@ struct SettingsView: View {
                             }
                         }
                     }
-                    if let url = URL(string: "https://discord.gg/a8VvwDeR") {
+                    if let url = URL(string: "https://discord.gg/UdJK5mpmZu") {
                         Link(destination: url) {
                             HStack {
                                 Image(systemName: "bubble.left.and.bubble.right")

@@ -8,7 +8,7 @@
 A native, album and artist focused iOS and iPadOS client for [Navidrome](https://www.navidrome.org/) and Subsonic-compatible music servers, built with SwiftUI. Includes **Recap** — automatic weekly, monthly, and yearly playlists of your most-played songs, synced across iPhone, iPad, and Mac via iCloud. Also available as a [native macOS app](https://github.com/gatzenga/Shelv-Desktop).
 
 **TestFlight:** https://testflight.apple.com/join/5y4tN6NB  
-**Discord:** https://discord.gg/a8VvwDeR
+**Discord:** https://discord.gg/afVZ2UbMnh
 
 ![Platform](https://img.shields.io/badge/platform-iOS%20%7C%20iPadOS-lightgrey)
 ![Swift](https://img.shields.io/badge/swift-5-orange)
