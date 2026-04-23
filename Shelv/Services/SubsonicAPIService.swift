@@ -276,12 +276,12 @@ class SubsonicAPIService: ObservableObject {
         ]
     }
 
-    private func makeSalt() -> String {
+    nonisolated private func makeSalt() -> String {
         let chars = "abcdefghijklmnopqrstuvwxyz0123456789"
         return String((0..<8).map { _ in chars.randomElement()! })
     }
 
-    private func makeToken(password: String, salt: String) -> String {
+    nonisolated private func makeToken(password: String, salt: String) -> String {
         let digest = Insecure.MD5.hash(data: Data((password + salt).utf8))
         return digest.map { String(format: "%02x", $0) }.joined()
     }
@@ -334,7 +334,7 @@ class SubsonicAPIService: ObservableObject {
         }
     }
 
-    private func authParams(for server: SubsonicServer, password: String) -> [URLQueryItem] {
+    nonisolated private func authParams(for server: SubsonicServer, password: String) -> [URLQueryItem] {
         let s = makeSalt()
         let t = makeToken(password: password, salt: s)
         return [
@@ -347,7 +347,7 @@ class SubsonicAPIService: ObservableObject {
         ]
     }
 
-    private func buildURL(for server: SubsonicServer, password: String, path: String, extra: [URLQueryItem] = []) throws -> URL {
+    nonisolated private func buildURL(for server: SubsonicServer, password: String, path: String, extra: [URLQueryItem] = []) throws -> URL {
         var base = server.baseURL
         if base.hasSuffix("/") { base.removeLast() }
         guard var comps = URLComponents(string: "\(base)/rest/\(path)") else {
@@ -538,9 +538,49 @@ class SubsonicAPIService: ObservableObject {
     }
 
     func streamURL(for songId: String) -> URL? {
+        var extras = [URLQueryItem(name: "id", value: songId)]
+        if let fmt = TranscodingPolicy.currentStreamFormat() {
+            extras.append(URLQueryItem(name: "format", value: fmt.codec.rawValue))
+            extras.append(URLQueryItem(name: "maxBitRate", value: "\(fmt.bitrate)"))
+            extras.append(URLQueryItem(name: "estimateContentLength", value: "true"))
+        } else {
+            extras.append(URLQueryItem(name: "format", value: "raw"))
+        }
+        return try? buildURL(path: "stream", extra: extras)
+    }
+
+    func rawStreamURL(for songId: String) -> URL? {
         try? buildURL(path: "stream", extra: [
             URLQueryItem(name: "id", value: songId),
             URLQueryItem(name: "format", value: "raw")
+        ])
+    }
+
+    func downloadURL(for songId: String) -> URL? {
+        try? buildURL(path: "download", extra: [
+            URLQueryItem(name: "id", value: songId)
+        ])
+    }
+
+    nonisolated func downloadURL(for songId: String, server: SubsonicServer, password: String,
+                                 transcoding: (codec: TranscodingCodec, bitrate: Int)? = nil) -> URL? {
+        if let t = transcoding {
+            return try? buildURL(for: server, password: password, path: "stream", extra: [
+                URLQueryItem(name: "id", value: songId),
+                URLQueryItem(name: "format", value: t.codec.rawValue),
+                URLQueryItem(name: "maxBitRate", value: "\(t.bitrate)"),
+                URLQueryItem(name: "estimateContentLength", value: "true")
+            ])
+        }
+        return try? buildURL(for: server, password: password, path: "download", extra: [
+            URLQueryItem(name: "id", value: songId)
+        ])
+    }
+
+    nonisolated func coverArtURL(for artId: String, server: SubsonicServer, password: String, size: Int = 600) -> URL? {
+        try? buildURL(for: server, password: password, path: "getCoverArt", extra: [
+            URLQueryItem(name: "id", value: artId),
+            URLQueryItem(name: "size", value: "\(size)")
         ])
     }
 

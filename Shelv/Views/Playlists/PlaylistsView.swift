@@ -1,10 +1,14 @@
 import SwiftUI
 
 struct PlaylistsView: View {
-    @EnvironmentObject var libraryStore: LibraryStore
+    @ObservedObject var libraryStore = LibraryStore.shared
     @EnvironmentObject var recapStore: RecapStore
+    @ObservedObject var downloadStore = DownloadStore.shared
+    @ObservedObject var offlineMode = OfflineModeService.shared
     private let player = AudioPlayerService.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
+    @AppStorage("enableDownloads") private var enableDownloads = false
+    @AppStorage("enablePlaylists") private var enablePlaylists = true
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
     private var visiblePlaylists: [Playlist] {
@@ -50,13 +54,8 @@ struct PlaylistsView: View {
                                 NavigationLink(destination: PlaylistDetailView(playlist: playlist)) {
                                     playlistRow(playlist)
                                 }
+                                .contextMenu { playlistContextMenu(playlist) }
                                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                    Button(role: .destructive) {
-                                        playlistToDelete = playlist
-                                        showDeleteConfirm = true
-                                    } label: {
-                                        Image(systemName: "trash")
-                                    }
                                     Button {
                                         Task {
                                             if let loaded = await libraryStore.loadPlaylistDetail(id: playlist.id),
@@ -81,6 +80,17 @@ struct PlaylistsView: View {
                                         }
                                     } label: { Image(systemName: "text.insert") }
                                     .tint(.orange)
+                                    if enableDownloads {
+                                        playlistDownloadSwipe(playlist)
+                                    }
+                                }
+                                .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                                    Button(role: .destructive) {
+                                        playlistToDelete = playlist
+                                        showDeleteConfirm = true
+                                    } label: {
+                                        Image(systemName: "trash")
+                                    }
                                 }
                             }
                         }
@@ -141,6 +151,135 @@ struct PlaylistsView: View {
             .shelveToast($currentToast)
             .sheet(isPresented: $showCreateSheet) {
                 createPlaylistSheet
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func playlistContextMenu(_ playlist: Playlist) -> some View {
+        Button {
+            Task {
+                if let loaded = await libraryStore.loadPlaylistDetail(id: playlist.id),
+                   let songs = loaded.songs, !songs.isEmpty {
+                    await MainActor.run { player.play(songs: songs, startIndex: 0) }
+                }
+            }
+        } label: { Label(tr("Play", "Abspielen"), systemImage: "play.fill") }
+
+        Button {
+            Task {
+                if let loaded = await libraryStore.loadPlaylistDetail(id: playlist.id),
+                   let songs = loaded.songs, !songs.isEmpty {
+                    await MainActor.run { player.playShuffled(songs: songs) }
+                }
+            }
+        } label: { Label(tr("Shuffle", "Zufällig"), systemImage: "shuffle") }
+
+        Divider()
+
+        Button {
+            Task {
+                if let loaded = await libraryStore.loadPlaylistDetail(id: playlist.id),
+                   let songs = loaded.songs, !songs.isEmpty {
+                    await MainActor.run {
+                        player.addPlayNext(songs)
+                        currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
+                    }
+                }
+            }
+        } label: { Label(tr("Play Next", "Als nächstes"), systemImage: "text.insert") }
+
+        Button {
+            Task {
+                if let loaded = await libraryStore.loadPlaylistDetail(id: playlist.id),
+                   let songs = loaded.songs, !songs.isEmpty {
+                    await MainActor.run {
+                        player.addToQueue(songs)
+                        currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+                    }
+                }
+            }
+        } label: { Label(tr("Add to Queue", "Zur Warteschlange"), systemImage: "text.badge.plus") }
+
+        if enablePlaylists {
+            Button {
+                Task {
+                    if let loaded = await libraryStore.loadPlaylistDetail(id: playlist.id),
+                       let songs = loaded.songs, !songs.isEmpty {
+                        NotificationCenter.default.post(name: .addSongsToPlaylist, object: songs.map(\.id))
+                    }
+                }
+            } label: { Label(tr("Add to Playlist…", "Zur Playlist hinzufügen…"), systemImage: "music.note.list") }
+        }
+
+        if enableDownloads {
+            Divider()
+            if !offlineMode.isOffline {
+                Button {
+                    Task {
+                        if let loaded = await libraryStore.loadPlaylistDetail(id: playlist.id),
+                           let songs = loaded.songs, !songs.isEmpty {
+                            let missing = songs.filter { !downloadStore.isDownloaded(songId: $0.id) }
+                            if !missing.isEmpty { downloadStore.enqueueSongs(missing) }
+                            currentToast = ShelveToast(message: tr("Download started", "Download gestartet"))
+                        }
+                    }
+                } label: { Label(tr("Download Playlist", "Playlist herunterladen"), systemImage: "arrow.down.circle") }
+            }
+
+            if isPlaylistFullyDownloaded(playlist) {
+                Button(role: .destructive) {
+                    deletePlaylistDownloads(playlist)
+                } label: {
+                    Label { Text(tr("Delete Downloads", "Downloads löschen")) } icon: { DeleteDownloadIcon(tint: .red) }
+                }
+            }
+        }
+
+        Divider()
+
+        Button(role: .destructive) {
+            playlistToDelete = playlist
+            showDeleteConfirm = true
+        } label: { Label(tr("Delete Playlist", "Playlist löschen"), systemImage: "trash") }
+    }
+
+    @ViewBuilder
+    private func playlistDownloadSwipe(_ playlist: Playlist) -> some View {
+        if isPlaylistFullyDownloaded(playlist) {
+            Button(role: .destructive) {
+                deletePlaylistDownloads(playlist)
+            } label: { DeleteDownloadIcon() }
+            .tint(.red)
+        } else if !offlineMode.isOffline {
+            Button {
+                Task {
+                    if let loaded = await libraryStore.loadPlaylistDetail(id: playlist.id),
+                       let songs = loaded.songs, !songs.isEmpty {
+                        let missing = songs.filter { !downloadStore.isDownloaded(songId: $0.id) }
+                        if !missing.isEmpty { downloadStore.enqueueSongs(missing) }
+                    }
+                }
+            } label: { Image(systemName: "arrow.down.circle") }
+            .tint(accentColor)
+        }
+    }
+
+    private func isPlaylistFullyDownloaded(_ playlist: Playlist) -> Bool {
+        guard let total = playlist.songCount, total > 0 else { return false }
+        // Heuristik: Wenn wir ≥ Gesamtzahl an Songs dieser Playlist lokal haben.
+        // Sauberer wäre eine Cross-Referenz der Playlist-Song-IDs; für Swipe/Menu reicht das.
+        let downloaded = downloadStore.songs.count
+        return downloaded >= total
+    }
+
+    private func deletePlaylistDownloads(_ playlist: Playlist) {
+        Task {
+            if let loaded = await libraryStore.loadPlaylistDetail(id: playlist.id),
+               let songs = loaded.songs {
+                for song in songs where downloadStore.isDownloaded(songId: song.id) {
+                    downloadStore.deleteSong(song.id)
+                }
             }
         }
     }

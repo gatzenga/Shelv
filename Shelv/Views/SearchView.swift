@@ -1,12 +1,16 @@
 import SwiftUI
 
 struct SearchView: View {
-    @EnvironmentObject var libraryStore: LibraryStore
+    @ObservedObject var libraryStore = LibraryStore.shared
+    @ObservedObject var offlineMode = OfflineModeService.shared
+    @EnvironmentObject var serverStore: ServerStore
     private let player = AudioPlayerService.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
     @AppStorage("enableFavorites") private var enableFavorites = true
     @AppStorage("enablePlaylists") private var enablePlaylists = true
+    @AppStorage("enableDownloads") private var enableDownloads = false
+    @ObservedObject var downloadStore = DownloadStore.shared
 
     @State private var query = ""
     @State private var result: SearchResult?
@@ -69,7 +73,7 @@ struct SearchView: View {
                                             .tint(.orange)
                                     }
                                     .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                                        if enableFavorites {
+                                        if enableFavorites && !offlineMode.isOffline {
                                             Button {
                                                 Task { await libraryStore.toggleStarArtist(artist) }
                                             } label: {
@@ -106,18 +110,20 @@ struct SearchView: View {
                                             .tint(.orange)
                                     }
                                     .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                                        if enableFavorites {
-                                            Button {
-                                                Task { await libraryStore.toggleStarAlbum(album) }
-                                            } label: {
-                                                let starred = libraryStore.isAlbumStarred(album)
-                                                Image(systemName: starred ? "heart.slash" : "heart.fill")
+                                        if !offlineMode.isOffline {
+                                            if enableFavorites {
+                                                Button {
+                                                    Task { await libraryStore.toggleStarAlbum(album) }
+                                                } label: {
+                                                    let starred = libraryStore.isAlbumStarred(album)
+                                                    Image(systemName: starred ? "heart.slash" : "heart.fill")
+                                                }
+                                                .tint(.pink)
                                             }
-                                            .tint(.pink)
-                                        }
-                                        if enablePlaylists {
-                                            Button { addAlbumToPlaylist(album) } label: { Image(systemName: "music.note.list") }
-                                                .tint(.purple)
+                                            if enablePlaylists {
+                                                Button { addAlbumToPlaylist(album) } label: { Image(systemName: "music.note.list") }
+                                                    .tint(.purple)
+                                            }
                                         }
                                     }
                                 }
@@ -170,7 +176,7 @@ struct SearchView: View {
                                             player.addToQueue(song)
                                             currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
                                         } label: { Label(tr("Add to Queue", "Zur Warteschlange"), systemImage: "text.badge.plus") }
-                                        if enableFavorites || enablePlaylists {
+                                        if !offlineMode.isOffline && (enableFavorites || enablePlaylists) {
                                             Divider()
                                             if enableFavorites {
                                                 Button {
@@ -205,9 +211,22 @@ struct SearchView: View {
                                             currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
                                         } label: { Image(systemName: "text.insert") }
                                         .tint(.orange)
+                                        if enableDownloads {
+                                            if downloadStore.isDownloaded(songId: song.id) {
+                                                Button(role: .destructive) {
+                                                    downloadStore.deleteSong(song.id)
+                                                } label: { DeleteDownloadIcon() }
+                                                .tint(.red)
+                                            } else if !offlineMode.isOffline {
+                                                Button {
+                                                    downloadStore.enqueueSongs([song])
+                                                } label: { Image(systemName: "arrow.down.circle") }
+                                                .tint(accentColor)
+                                            }
+                                        }
                                     }
                                     .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                                        if enableFavorites {
+                                        if enableFavorites && !offlineMode.isOffline {
                                             Button {
                                                 Task { await libraryStore.toggleStarSong(song) }
                                             } label: {
@@ -215,7 +234,7 @@ struct SearchView: View {
                                             }
                                             .tint(.pink)
                                         }
-                                        if enablePlaylists {
+                                        if enablePlaylists && !offlineMode.isOffline {
                                             Button {
                                                 playlistSongIds = [song.id]
                                                 showAddToPlaylist = true
@@ -400,6 +419,11 @@ struct SearchView: View {
 
     private func performSearch(query: String) async {
         isSearching = true
+        if offlineMode.isOffline {
+            await performOfflineSearch(query: query)
+            isSearching = false
+            return
+        }
         do {
             result = try await SubsonicAPIService.shared.search(query: query)
         } catch {
@@ -436,5 +460,30 @@ struct SearchView: View {
                 }
             }
         }
+    }
+
+    private func performOfflineSearch(query: String) async {
+        guard let sid = serverStore.activeServer?.stableId, !sid.isEmpty else {
+            result = SearchResult(artist: [], album: [], song: [])
+            lyricsResults = []
+            return
+        }
+        let records = await DownloadDatabase.shared.search(serverId: sid, query: query, limit: 100)
+        let songs = records.map { $0.toDownloadedSong().asSong() }
+        let albumsSet = Dictionary(grouping: records) { $0.albumId }.map { key, group -> Album in
+            let first = group.first!
+            return Album(id: key, name: first.albumTitle, artist: first.artistName,
+                         artistId: first.artistId, coverArt: first.coverArtId,
+                         songCount: group.count, duration: nil, year: nil, genre: nil,
+                         playCount: nil, starred: nil, created: nil, songs: nil)
+        }
+        let artistsSet = Dictionary(grouping: records) { $0.artistName }.compactMap { name, group -> Artist? in
+            let first = group.first!
+            return Artist(id: first.artistId ?? "name:\(name)", name: name,
+                          albumCount: Set(group.map(\.albumId)).count,
+                          coverArt: first.coverArtId, starred: nil)
+        }
+        result = SearchResult(artist: artistsSet, album: albumsSet, song: songs)
+        lyricsResults = []
     }
 }

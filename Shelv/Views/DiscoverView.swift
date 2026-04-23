@@ -1,7 +1,8 @@
 import SwiftUI
 
 struct DiscoverView: View {
-    @EnvironmentObject var libraryStore: LibraryStore
+    @ObservedObject var libraryStore = LibraryStore.shared
+    @ObservedObject var offlineMode = OfflineModeService.shared
     private let player = AudioPlayerService.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
@@ -18,7 +19,9 @@ struct DiscoverView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 28) {
-                    if libraryStore.isLoadingDiscover && libraryStore.recentlyAdded.isEmpty {
+                    if offlineMode.isOffline {
+                        offlineEmptyState
+                    } else if libraryStore.isLoadingDiscover && libraryStore.recentlyAdded.isEmpty {
                         ProgressView()
                             .frame(maxWidth: .infinity)
                             .padding(.top, 60)
@@ -68,15 +71,17 @@ struct DiscoverView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     HStack(spacing: 16) {
-                        Button {
-                            showRecap = true
-                        } label: {
-                            Image(systemName: "calendar.badge.clock")
-                        }
-                        Button {
-                            showInsights = true
-                        } label: {
-                            Image(systemName: "chart.bar.xaxis")
+                        if !offlineMode.isOffline {
+                            Button {
+                                showRecap = true
+                            } label: {
+                                Image(systemName: "calendar.badge.clock")
+                            }
+                            Button {
+                                showInsights = true
+                            } label: {
+                                Image(systemName: "chart.bar.xaxis")
+                            }
                         }
                         Button {
                             showSearch = true
@@ -125,6 +130,39 @@ struct DiscoverView: View {
                 Text(msg)
             }
         }
+    }
+
+    @ViewBuilder
+    private var offlineEmptyState: some View {
+        VStack(spacing: 18) {
+            Image(systemName: "wifi.slash")
+                .font(.system(size: 56))
+                .foregroundStyle(.tertiary)
+            Text(tr("You are offline", "Du bist offline"))
+                .font(.title3).bold()
+            Text(tr(
+                "Downloads are still available. Tap the magnifying glass to search your library.",
+                "Downloads sind weiterhin verfügbar. Tippe auf die Lupe um in deiner Bibliothek zu suchen."
+            ))
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 32)
+            Button {
+                offlineMode.exitOfflineMode()
+            } label: {
+                Label(tr("Go Online", "Online gehen"), systemImage: "wifi")
+                    .font(.subheadline.bold())
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 10)
+                    .background(accentColor.opacity(0.15))
+                    .clipShape(Capsule())
+                    .foregroundStyle(accentColor)
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 80)
     }
 
     @ViewBuilder

@@ -43,12 +43,15 @@ enum LibrarySegment: Int {
 }
 
 struct LibraryView: View {
-    @EnvironmentObject var libraryStore: LibraryStore
+    @ObservedObject var libraryStore = LibraryStore.shared
+    @ObservedObject var offlineMode = OfflineModeService.shared
+    @EnvironmentObject var serverStore: ServerStore
     private let player = AudioPlayerService.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
     @AppStorage("enableFavorites") private var enableFavorites = true
     @AppStorage("enablePlaylists") private var enablePlaylists = true
+    @AppStorage("enableDownloads") private var enableDownloads = false
 
     @State private var segment: LibrarySegment = .albums
     @State private var showAddToPlaylist = false
@@ -72,6 +75,11 @@ struct LibraryView: View {
     @State private var currentToast: ShelveToast?
     @State private var albumGroups: [(letter: String, items: [Album])] = []
     @State private var artistGroups: [(letter: String, items: [Artist])] = []
+    @State private var downloadedAlbumIds: Set<String> = []
+    @State private var downloadedArtistNames: Set<String> = []
+    @State private var downloadedSongIds: Set<String> = []
+    @State private var downloadedAlbums: [DownloadedAlbum] = []
+    @State private var downloadedArtists: [DownloadedArtist] = []
 
     private let columns = [GridItem(.adaptive(minimum: 150, maximum: 200), spacing: 14)]
 
@@ -147,9 +155,9 @@ struct LibraryView: View {
             }
         case .favorites:
             let isLoadingFavorites = libraryStore.isLoadingStarred
-                && libraryStore.starredSongs.isEmpty
-                && libraryStore.starredAlbums.isEmpty
-                && libraryStore.starredArtists.isEmpty
+                && displayStarredSongs.isEmpty
+                && displayStarredAlbums.isEmpty
+                && displayStarredArtists.isEmpty
             if isLoadingFavorites {
                 Spacer()
                 ProgressView()
@@ -195,7 +203,7 @@ struct LibraryView: View {
             segmentPicker
             segmentContent
         }
-        .navigationTitle(tr("Library", "Bibliothek"))
+        .navigationTitle(offlineMode.isOffline ? tr("Downloads", "Downloads") : tr("Library", "Bibliothek"))
         .toolbar { libraryToolbar }
         .task(id: libraryStore.reloadID) {
             switch segment {
@@ -223,6 +231,12 @@ struct LibraryView: View {
         .onAppear { rebuildGroups() }
         .onChange(of: libraryStore.albums) { _, _ in rebuildGroups() }
         .onChange(of: libraryStore.artists) { _, _ in rebuildGroups() }
+        .onChange(of: offlineMode.isOffline) { _, _ in rebuildGroups() }
+        .onReceive(NotificationCenter.default.publisher(for: .downloadsLibraryChanged)) { _ in
+            refreshDownloadState()
+            rebuildGroups()
+        }
+        .task { refreshDownloadState() }
         .onChange(of: albumDirectionRaw) { _, _ in rebuildGroups() }
         .onChange(of: artistSortRaw) { _, _ in rebuildGroups() }
         .onChange(of: artistDirectionRaw) { _, _ in rebuildGroups() }
@@ -232,27 +246,31 @@ struct LibraryView: View {
         }
     }
 
+    private func refreshDownloadState() {
+        downloadedAlbumIds = Set(DownloadStore.shared.albums.map { $0.albumId })
+        downloadedArtistNames = Set(DownloadStore.shared.artists.map { $0.name })
+        downloadedSongIds = Set(DownloadStore.shared.songs.map { $0.id })
+        downloadedAlbums = DownloadStore.shared.albums
+        downloadedArtists = DownloadStore.shared.artists
+    }
+
     private func rebuildGroups() {
         // Albums
+        let albumsSource = displayAlbums
         if sortOption == .alphabetical {
-            // Name immer A-Z (keine Richtung)
-            albumGroups = groupByFirstLetter(libraryStore.albums, name: \.name)
+            albumGroups = groupByFirstLetter(albumsSource, name: \.name)
         } else {
-            // Server liefert non-alphabetische Sortierung bereits absteigend (natural).
-            // Direction.desc → as-is; Direction.asc → umdrehen.
             let items = albumDirection == .descending
-                ? libraryStore.albums
-                : Array(libraryStore.albums.reversed())
+                ? albumsSource
+                : Array(albumsSource.reversed())
             albumGroups = items.isEmpty ? [] : [(letter: "", items: items)]
         }
 
         // Artists
         let artistsBase = sortedArtists()
         if artistSortOption == .alphabetical {
-            // Name immer A-Z
             artistGroups = groupByFirstLetter(artistsBase, name: \.name)
         } else {
-            // sortedArtists liefert Most-Played bereits absteigend (natural).
             let items = artistDirection == .descending
                 ? artistsBase
                 : Array(artistsBase.reversed())
@@ -260,21 +278,30 @@ struct LibraryView: View {
         }
     }
 
+    private var displayAlbums: [Album] {
+        guard offlineMode.isOffline else { return libraryStore.albums }
+        if libraryStore.albums.isEmpty { return downloadedAlbums.map { $0.asAlbum() } }
+        return libraryStore.albums.filter { downloadedAlbumIds.contains($0.id) }
+    }
+
+    private var displayArtists: [Artist] {
+        guard offlineMode.isOffline else { return libraryStore.artists }
+        if libraryStore.artists.isEmpty { return downloadedArtists.map { $0.asArtist() } }
+        return libraryStore.artists.filter { downloadedArtistNames.contains($0.name) }
+    }
+
     private func sortedArtists() -> [Artist] {
-        let base: [Artist]
+        let source = displayArtists
         switch artistSortOption {
         case .alphabetical:
-            base = libraryStore.artists
+            return source
         case .frequent:
             let counts = Dictionary(
                 grouping: libraryStore.albums,
                 by: { $0.artistId ?? "" }
             ).mapValues { $0.compactMap { $0.playCount }.reduce(0, +) }
-            base = libraryStore.artists.sorted {
-                (counts[$0.id] ?? 0) > (counts[$1.id] ?? 0)
-            }
+            return source.sorted { (counts[$0.id] ?? 0) > (counts[$1.id] ?? 0) }
         }
-        return base
     }
 
     private func applyDirection<T>(
@@ -482,19 +509,22 @@ struct LibraryView: View {
                                     .tint(accentColor)
                                 Button { playNextAlbum(album) } label: { Image(systemName: "text.insert") }
                                     .tint(.orange)
+                                albumDownloadSwipeButton(album)
                             }
                             .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                                if enableFavorites {
-                                    Button {
-                                        Task { await libraryStore.toggleStarAlbum(album) }
-                                    } label: {
-                                        Image(systemName: libraryStore.isAlbumStarred(album) ? "heart.slash" : "heart.fill")
+                                if !offlineMode.isOffline {
+                                    if enableFavorites {
+                                        Button {
+                                            Task { await libraryStore.toggleStarAlbum(album) }
+                                        } label: {
+                                            Image(systemName: libraryStore.isAlbumStarred(album) ? "heart.slash" : "heart.fill")
+                                        }
+                                        .tint(.pink)
                                     }
-                                    .tint(.pink)
-                                }
-                                if enablePlaylists {
-                                    Button { addAlbumToPlaylist(album) } label: { Image(systemName: "music.note.list") }
-                                        .tint(.purple)
+                                    if enablePlaylists {
+                                        Button { addAlbumToPlaylist(album) } label: { Image(systemName: "music.note.list") }
+                                            .tint(.purple)
+                                    }
                                 }
                             }
                         }
@@ -577,25 +607,28 @@ struct LibraryView: View {
                                 .tint(accentColor)
                             Button { playNextArtist(artist) } label: { Image(systemName: "text.insert") }
                                 .tint(.orange)
+                            artistDownloadSwipeButton(artist)
                         }
                         .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                            if enableFavorites {
-                                Button {
-                                    Task { await libraryStore.toggleStarArtist(artist) }
-                                } label: {
-                                    Image(systemName: libraryStore.isArtistStarred(artist) ? "heart.slash" : "heart.fill")
-                                }
-                                .tint(.pink)
-                            }
-                            if enablePlaylists {
-                                Button {
-                                    Task {
-                                        let songs = await libraryStore.fetchAllSongs(for: artist)
-                                        guard !songs.isEmpty else { return }
-                                        NotificationCenter.default.post(name: .addSongsToPlaylist, object: songs.map(\.id))
+                            if !offlineMode.isOffline {
+                                if enableFavorites {
+                                    Button {
+                                        Task { await libraryStore.toggleStarArtist(artist) }
+                                    } label: {
+                                        Image(systemName: libraryStore.isArtistStarred(artist) ? "heart.slash" : "heart.fill")
                                     }
-                                } label: { Image(systemName: "music.note.list") }
-                                .tint(.purple)
+                                    .tint(.pink)
+                                }
+                                if enablePlaylists {
+                                    Button {
+                                        Task {
+                                            let songs = await libraryStore.fetchAllSongs(for: artist)
+                                            guard !songs.isEmpty else { return }
+                                            NotificationCenter.default.post(name: .addSongsToPlaylist, object: songs.map(\.id))
+                                        }
+                                    } label: { Image(systemName: "music.note.list") }
+                                    .tint(.purple)
+                                }
                             }
                         }
                     }
@@ -627,8 +660,19 @@ struct LibraryView: View {
 
     private func artistGridCell(_ artist: Artist) -> some View {
         VStack(spacing: 8) {
-            AlbumArtView(coverArtId: artist.coverArt, size: 300, isCircle: true)
-                .aspectRatio(1, contentMode: .fit)
+            ZStack(alignment: .bottomTrailing) {
+                AlbumArtView(coverArtId: artist.coverArt, size: 300, isCircle: true)
+                    .aspectRatio(1, contentMode: .fit)
+                if downloadedArtistNames.contains(artist.name) {
+                    Image(systemName: "arrow.down.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.white)
+                        .padding(4)
+                        .background(accentColor, in: Circle())
+                        .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
+                        .padding(6)
+                }
+            }
             Text(artist.name)
                 .font(.caption)
                 .lineLimit(2)
@@ -652,19 +696,42 @@ struct LibraryView: View {
                 }
             }
             Spacer()
+            if downloadedArtistNames.contains(artist.name) {
+                Image(systemName: "arrow.down.circle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.white)
+                    .padding(4)
+                    .background(accentColor, in: Circle())
+            }
             Image(systemName: "chevron.right")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
         }
         .padding(.horizontal)
         .padding(.vertical, 9)
+        .contentShape(Rectangle())
+    }
+
+    private var displayStarredSongs: [Song] {
+        guard offlineMode.isOffline else { return libraryStore.starredSongs }
+        return libraryStore.starredSongs.filter { downloadedSongIds.contains($0.id) }
+    }
+
+    private var displayStarredAlbums: [Album] {
+        guard offlineMode.isOffline else { return libraryStore.starredAlbums }
+        return libraryStore.starredAlbums.filter { downloadedAlbumIds.contains($0.id) }
+    }
+
+    private var displayStarredArtists: [Artist] {
+        guard offlineMode.isOffline else { return libraryStore.starredArtists }
+        return libraryStore.starredArtists.filter { downloadedArtistNames.contains($0.name) }
     }
 
     @ViewBuilder
     private var favoritesContent: some View {
-        let hasSongs   = !libraryStore.starredSongs.isEmpty
-        let hasAlbums  = !libraryStore.starredAlbums.isEmpty
-        let hasArtists = !libraryStore.starredArtists.isEmpty
+        let hasSongs   = !displayStarredSongs.isEmpty
+        let hasAlbums  = !displayStarredAlbums.isEmpty
+        let hasArtists = !displayStarredArtists.isEmpty
 
         if !hasSongs && !hasAlbums && !hasArtists {
             ContentUnavailableView(
@@ -679,7 +746,7 @@ struct LibraryView: View {
             List {
                 if hasArtists {
                     Section(tr("Artists", "Künstler")) {
-                        ForEach(libraryStore.starredArtists) { artist in
+                        ForEach(displayStarredArtists) { artist in
                             NavigationLink(destination: ArtistDetailView(artist: artist)) {
                                 favArtistRow(artist)
                             }
@@ -700,7 +767,7 @@ struct LibraryView: View {
                 }
                 if hasAlbums {
                     Section(tr("Albums", "Alben")) {
-                        ForEach(libraryStore.starredAlbums) { album in
+                        ForEach(displayStarredAlbums) { album in
                             NavigationLink(destination: AlbumDetailView(album: album)) {
                                 favAlbumRow(album)
                             }
@@ -712,15 +779,18 @@ struct LibraryView: View {
                                     .tint(accentColor)
                                 Button { playNextAlbum(album) } label: { Image(systemName: "text.insert") }
                                     .tint(.orange)
+                                albumDownloadSwipeButton(album)
                             }
                             .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                                Button {
-                                    Task { await libraryStore.toggleStarAlbum(album) }
-                                } label: { Image(systemName: "heart.slash") }
-                                .tint(.pink)
-                                if enablePlaylists {
-                                    Button { addAlbumToPlaylist(album) } label: { Image(systemName: "music.note.list") }
-                                        .tint(.purple)
+                                if !offlineMode.isOffline {
+                                    Button {
+                                        Task { await libraryStore.toggleStarAlbum(album) }
+                                    } label: { Image(systemName: "heart.slash") }
+                                    .tint(.pink)
+                                    if enablePlaylists {
+                                        Button { addAlbumToPlaylist(album) } label: { Image(systemName: "music.note.list") }
+                                            .tint(.purple)
+                                    }
                                 }
                             }
                         }
@@ -728,7 +798,7 @@ struct LibraryView: View {
                 }
                 if hasSongs {
                     Section(tr("Songs", "Titel")) {
-                        ForEach(libraryStore.starredSongs) { song in
+                        ForEach(displayStarredSongs) { song in
                             Button { player.playSong(song) } label: {
                                 starredSongRow(song)
                             }
@@ -744,18 +814,33 @@ struct LibraryView: View {
                                     currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
                                 } label: { Image(systemName: "text.insert") }
                                 .tint(.orange)
+                                if enableDownloads {
+                                    if downloadedSongIds.contains(song.id) {
+                                        Button(role: .destructive) {
+                                            DownloadStore.shared.deleteSong(song.id)
+                                        } label: { DeleteDownloadIcon() }
+                                        .tint(.red)
+                                    } else if !offlineMode.isOffline {
+                                        Button {
+                                            DownloadStore.shared.enqueueSongs([song])
+                                        } label: { Image(systemName: "arrow.down.circle") }
+                                        .tint(accentColor)
+                                    }
+                                }
                             }
                             .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                                Button {
-                                    Task { await libraryStore.toggleStarSong(song) }
-                                } label: { Image(systemName: "heart.slash") }
-                                .tint(.pink)
-                                if enablePlaylists {
+                                if !offlineMode.isOffline {
                                     Button {
-                                        playlistSongIds = [song.id]
-                                        showAddToPlaylist = true
-                                    } label: { Image(systemName: "music.note.list") }
-                                    .tint(.purple)
+                                        Task { await libraryStore.toggleStarSong(song) }
+                                    } label: { Image(systemName: "heart.slash") }
+                                    .tint(.pink)
+                                    if enablePlaylists {
+                                        Button {
+                                            playlistSongIds = [song.id]
+                                            showAddToPlaylist = true
+                                        } label: { Image(systemName: "music.note.list") }
+                                        .tint(.purple)
+                                    }
                                 }
                             }
                         }
@@ -786,7 +871,7 @@ struct LibraryView: View {
         Button { queueAlbum(album) } label: {
             Label(tr("Add to Queue", "Zur Warteschlange"), systemImage: "text.badge.plus")
         }
-        if enableFavorites || enablePlaylists {
+        if !offlineMode.isOffline && (enableFavorites || enablePlaylists) {
             Divider()
             if enableFavorites {
                 Button {
@@ -805,6 +890,74 @@ struct LibraryView: View {
                     Label(tr("Add to Playlist…", "Zur Playlist hinzufügen…"), systemImage: "music.note.list")
                 }
             }
+        }
+        if enableDownloads {
+            Divider()
+            albumDownloadMenuItems(album)
+        }
+    }
+
+    @ViewBuilder
+    private func albumDownloadSwipeButton(_ album: Album) -> some View {
+        if enableDownloads {
+            let status = DownloadStore.shared.albumDownloadStatus(albumId: album.id,
+                                                                  totalSongs: album.songCount ?? 0)
+            switch status {
+            case .none, .partial:
+                if !offlineMode.isOffline {
+                    Button {
+                        DownloadStore.shared.enqueueAlbum(album)
+                    } label: { Image(systemName: "arrow.down.circle") }
+                    .tint(accentColor)
+                }
+            case .complete:
+                Button(role: .destructive) {
+                    DownloadStore.shared.deleteAlbum(album.id)
+                } label: { DeleteDownloadIcon() }
+                .tint(.red)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func artistDownloadSwipeButton(_ artist: Artist) -> some View {
+        if enableDownloads {
+            if downloadedArtistNames.contains(artist.name) {
+                Button(role: .destructive) {
+                    if let match = downloadedArtists.first(where: { $0.name == artist.name }) {
+                        DownloadStore.shared.deleteArtist(match.artistId)
+                    }
+                } label: { DeleteDownloadIcon() }
+                .tint(.red)
+            } else if !offlineMode.isOffline {
+                Button {
+                    let sid = serverStore.activeServer?.stableId ?? ""
+                    Task { await DownloadService.shared.enqueueArtist(artist: artist, serverId: sid) }
+                } label: { Image(systemName: "arrow.down.circle") }
+                .tint(accentColor)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func albumDownloadMenuItems(_ album: Album) -> some View {
+        let status = DownloadStore.shared.albumDownloadStatus(albumId: album.id, totalSongs: album.songCount ?? 0)
+        switch status {
+        case .none:
+            if !offlineMode.isOffline {
+                Button { DownloadStore.shared.enqueueAlbum(album) } label: {
+                    Label(tr("Download Album", "Album herunterladen"), systemImage: "arrow.down.circle")
+                }
+            }
+        case .partial:
+            if !offlineMode.isOffline {
+                Button { DownloadStore.shared.enqueueAlbum(album) } label: {
+                    Label(tr("Download Remaining", "Rest herunterladen"), systemImage: "arrow.down.circle")
+                }
+            }
+            Button(role: .destructive) { DownloadStore.shared.deleteAlbum(album.id) } label: { Label { Text(tr("Delete Downloads", "Downloads löschen")) } icon: { DeleteDownloadIcon(tint: .red) } }
+        case .complete:
+            Button(role: .destructive) { DownloadStore.shared.deleteAlbum(album.id) } label: { Label { Text(tr("Delete Downloads", "Downloads löschen")) } icon: { DeleteDownloadIcon(tint: .red) } }
         }
     }
 
@@ -835,7 +988,7 @@ struct LibraryView: View {
             Label(tr("Add to Queue", "Zur Warteschlange"), systemImage: "text.badge.plus")
         }
 
-        if enableFavorites || enablePlaylists {
+        if !offlineMode.isOffline && (enableFavorites || enablePlaylists) {
             Divider()
             if enableFavorites {
                 Button {
@@ -859,6 +1012,26 @@ struct LibraryView: View {
                 } label: { Label(tr("Add to Playlist…", "Zur Playlist hinzufügen…"), systemImage: "music.note.list") }
             }
         }
+        if enableDownloads {
+            Divider()
+            if !offlineMode.isOffline {
+                Button {
+                    let sid = serverStore.activeServer?.stableId ?? ""
+                    Task { await DownloadService.shared.enqueueArtist(artist: artist, serverId: sid) }
+                } label: {
+                    Label(tr("Download Artist", "Künstler herunterladen"), systemImage: "arrow.down.circle")
+                }
+            }
+            if downloadedArtistNames.contains(artist.name) {
+                Button(role: .destructive) {
+                    if let match = downloadedArtists.first(where: { $0.name == artist.name }) {
+                        DownloadStore.shared.deleteArtist(match.artistId)
+                    }
+                } label: {
+                    Label { Text(tr("Delete Downloads", "Downloads löschen")) } icon: { DeleteDownloadIcon(tint: .red) }
+                }
+            }
+        }
     }
 
     private func albumListRowContent(_ album: Album) -> some View {
@@ -879,6 +1052,7 @@ struct LibraryView: View {
                 }
             }
             Spacer()
+            AlbumDownloadBadge(albumId: album.id)
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())

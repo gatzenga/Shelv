@@ -3,12 +3,15 @@ import SwiftUI
 struct PlaylistDetailView: View {
     let playlist: Playlist
 
-    @EnvironmentObject var libraryStore: LibraryStore
+    @ObservedObject var libraryStore = LibraryStore.shared
+    @ObservedObject var downloadStore = DownloadStore.shared
+    @ObservedObject var offlineMode = OfflineModeService.shared
     private let player = AudioPlayerService.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
     @AppStorage("enableFavorites") private var enableFavorites = true
     @AppStorage("enablePlaylists") private var enablePlaylists = true
+    @AppStorage("enableDownloads") private var enableDownloads = false
 
     @State private var songs: [Song] = []
     @State private var displayName: String = ""
@@ -79,6 +82,7 @@ struct PlaylistDetailView: View {
                                 }
                                 Spacer()
                                 if !isEditMode {
+                                    DownloadStatusIcon(songId: song.id)
                                     Text(song.durationFormatted)
                                         .font(.caption2)
                                         .foregroundStyle(.secondary)
@@ -111,9 +115,27 @@ struct PlaylistDetailView: View {
                                 Image(systemName: "text.insert")
                             }
                             .tint(.orange)
+
+                            if enableDownloads {
+                                if downloadStore.isDownloaded(songId: song.id) {
+                                    Button(role: .destructive) {
+                                        downloadStore.deleteSong(song.id)
+                                    } label: {
+                                        DeleteDownloadIcon()
+                                    }
+                                    .tint(.red)
+                                } else if !offlineMode.isOffline {
+                                    Button {
+                                        downloadStore.enqueueSongs([song])
+                                    } label: {
+                                        Image(systemName: "arrow.down.circle")
+                                    }
+                                    .tint(accentColor)
+                                }
+                            }
                         }
                         .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                            if enableFavorites {
+                            if enableFavorites && !offlineMode.isOffline {
                                 Button {
                                     Task { await libraryStore.toggleStarSong(song) }
                                 } label: {
@@ -121,7 +143,7 @@ struct PlaylistDetailView: View {
                                 }
                                 .tint(.pink)
                             }
-                            if enablePlaylists {
+                            if enablePlaylists && !offlineMode.isOffline {
                                 Button {
                                     playlistSongIds = [song.id]
                                     showAddToPlaylist = true
@@ -288,39 +310,88 @@ struct PlaylistDetailView: View {
             }
             .padding(.horizontal)
 
-            HStack(spacing: 14) {
-                Button {
-                    if !songs.isEmpty { player.play(songs: songs, startIndex: 0) }
-                } label: {
-                    Label(tr("Play", "Abspielen"), systemImage: "play.fill")
-                        .font(.body).bold()
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(accentColor)
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
-                }
-                .buttonStyle(.plain)
-                .disabled(songs.isEmpty)
+            VStack(spacing: 8) {
+                HStack(spacing: 14) {
+                    Button {
+                        if !songs.isEmpty { player.play(songs: songs, startIndex: 0) }
+                    } label: {
+                        Label(tr("Play", "Abspielen"), systemImage: "play.fill")
+                            .font(.body).bold()
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(accentColor)
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(songs.isEmpty)
 
-                Button {
-                    if !songs.isEmpty { player.playShuffled(songs: songs) }
-                } label: {
-                    Label(tr("Shuffle", "Zufällig"), systemImage: "shuffle")
-                        .font(.body).bold()
-                        .foregroundStyle(accentColor)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(accentColor.opacity(0.15))
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                    Button {
+                        if !songs.isEmpty { player.playShuffled(songs: songs) }
+                    } label: {
+                        Label(tr("Shuffle", "Zufällig"), systemImage: "shuffle")
+                            .font(.body).bold()
+                            .foregroundStyle(accentColor)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(accentColor.opacity(0.15))
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(songs.isEmpty)
                 }
-                .buttonStyle(.plain)
-                .disabled(songs.isEmpty)
+                if enableDownloads && !songs.isEmpty {
+                    downloadHeaderButtons()
+                }
             }
             .padding(.horizontal)
             .padding(.bottom, 8)
         }
         .padding(.top, 16)
+    }
+
+    @ViewBuilder
+    private func downloadHeaderButtons() -> some View {
+        let downloadedCount = songs.filter { downloadStore.isDownloaded(songId: $0.id) }.count
+        HStack(spacing: 10) {
+            if downloadedCount < songs.count && !offlineMode.isOffline {
+                Button {
+                    let missing = songs.filter { !downloadStore.isDownloaded(songId: $0.id) }
+                    downloadStore.enqueueSongs(missing)
+                    currentToast = ShelveToast(message: tr("Download started", "Download gestartet"))
+                } label: {
+                    Label(
+                        downloadedCount == 0
+                            ? tr("Download", "Herunterladen")
+                            : tr("Rest (\(songs.count - downloadedCount))", "Rest (\(songs.count - downloadedCount))"),
+                        systemImage: "arrow.down.circle"
+                    )
+                    .font(.subheadline).bold()
+                    .foregroundStyle(accentColor)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(accentColor.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+                .buttonStyle(.plain)
+            }
+            if downloadedCount > 0 {
+                Button {
+                    for song in songs where downloadStore.isDownloaded(songId: song.id) {
+                        downloadStore.deleteSong(song.id)
+                    }
+                } label: {
+                    Label(tr("Delete Downloads", "Downloads löschen"), systemImage: "arrow.down.circle")
+                        .font(.subheadline).bold()
+                        .foregroundStyle(.red)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(Color.red.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+                .buttonStyle(.plain)
+            }
+        }
     }
 
     private func loadSongs() async {

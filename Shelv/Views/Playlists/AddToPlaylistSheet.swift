@@ -2,7 +2,7 @@ import SwiftUI
 
 struct AddToPlaylistSheet: View {
     let songIds: [String]
-    @EnvironmentObject var libraryStore: LibraryStore
+    @ObservedObject var libraryStore = LibraryStore.shared
     @EnvironmentObject var recapStore: RecapStore
     @AppStorage("themeColor") private var themeColorName = "violet"
     private var accentColor: Color { AppTheme.color(for: themeColorName) }

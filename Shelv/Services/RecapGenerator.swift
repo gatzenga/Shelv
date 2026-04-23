@@ -274,20 +274,29 @@ actor RecapGenerator {
                 entry.ckRecordName = recordName
             case .conflict(let existingPlaylistId):
                 CloudKitSyncService.recapLog("[RecapGen] Step 7: CONFLICT — iCloud already has playlistId=\(existingPlaylistId)")
-                CloudKitSyncService.recapLog("[RecapGen] Step 7a: deleting own Navidrome playlist \(playlist.id)")
-                try? await SubsonicAPIService.shared.deletePlaylist(id: playlist.id)
-                CloudKitSyncService.recapLog("[RecapGen] Step 7b: adopting remote playlistId=\(existingPlaylistId)")
-                entry = RecapRegistryRecord(
-                    playlistId: existingPlaylistId,
-                    serverId: serverId,
-                    periodType: period.type.rawValue,
-                    periodStart: period.start.timeIntervalSince1970,
-                    periodEnd: period.end.timeIntervalSince1970,
-                    ckRecordName: recordName,
-                    isTest: isTest
-                )
-                resultTag = "CONFLICT_RESOLVED"
-                outcome = .adopted
+                let remoteExists = (try? await SubsonicAPIService.shared.getPlaylist(id: existingPlaylistId)) != nil
+                if remoteExists {
+                    CloudKitSyncService.recapLog("[RecapGen] Step 7a: iCloud playlistId exists on Navidrome — deleting own \(playlist.id), adopting \(existingPlaylistId)")
+                    try? await SubsonicAPIService.shared.deletePlaylist(id: playlist.id)
+                    entry = RecapRegistryRecord(
+                        playlistId: existingPlaylistId,
+                        serverId: serverId,
+                        periodType: period.type.rawValue,
+                        periodStart: period.start.timeIntervalSince1970,
+                        periodEnd: period.end.timeIntervalSince1970,
+                        ckRecordName: recordName,
+                        isTest: isTest
+                    )
+                    resultTag = "CONFLICT_RESOLVED"
+                    outcome = .adopted
+                } else {
+                    CloudKitSyncService.recapLog("[RecapGen] Step 7a: iCloud playlistId=\(existingPlaylistId) MISSING on Navidrome — overwriting stale marker with own \(playlist.id)")
+                    await CloudKitSyncService.shared.deleteRecapMarker(ckRecordName: recordName)
+                    if case .created = try? await CloudKitSyncService.shared.saveRecapMarker(entry, periodKey: periodKey) {
+                        entry.ckRecordName = recordName
+                    }
+                    resultTag = "STALE_OVERWRITTEN"
+                }
             }
         } else {
             CloudKitSyncService.recapLog("[RecapGen] Step 7: saveRecapMarker returned nil (iCloud disabled or error)")

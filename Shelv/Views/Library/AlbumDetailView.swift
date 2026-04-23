@@ -2,12 +2,15 @@ import SwiftUI
 
 struct AlbumDetailView: View {
     let album: Album
-    @EnvironmentObject var libraryStore: LibraryStore
+    @ObservedObject var libraryStore = LibraryStore.shared
+    @ObservedObject var downloadStore = DownloadStore.shared
+    @ObservedObject var offlineMode = OfflineModeService.shared
     private let player = AudioPlayerService.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
     @AppStorage("enableFavorites") private var enableFavorites = true
     @AppStorage("enablePlaylists") private var enablePlaylists = true
+    @AppStorage("enableDownloads") private var enableDownloads = false
 
     @State private var detail: AlbumDetail?
     @State private var showAddToPlaylist = false
@@ -57,6 +60,7 @@ struct AlbumDetailView: View {
                                     .foregroundStyle(.primary)
                                     .lineLimit(1)
                                 Spacer()
+                                DownloadStatusIcon(songId: song.id)
                                 Text(song.durationFormatted)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
@@ -82,9 +86,13 @@ struct AlbumDetailView: View {
                                 Image(systemName: "text.insert")
                             }
                             .tint(.orange)
+
+                            if enableDownloads {
+                                downloadSwipeButton(for: song)
+                            }
                         }
                         .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                            if enableFavorites {
+                            if enableFavorites && !offlineMode.isOffline {
                                 Button {
                                     Task { await libraryStore.toggleStarSong(song) }
                                 } label: {
@@ -92,7 +100,7 @@ struct AlbumDetailView: View {
                                 }
                                 .tint(.pink)
                             }
-                            if enablePlaylists {
+                            if enablePlaylists && !offlineMode.isOffline {
                                 Button {
                                     playlistSongIds = [song.id]
                                     showAddToPlaylist = true
@@ -130,7 +138,7 @@ struct AlbumDetailView: View {
         .navigationTitle(album.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if enableFavorites {
+            if enableFavorites && !offlineMode.isOffline {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         Task { await libraryStore.toggleStarAlbum(album) }
@@ -162,7 +170,7 @@ struct AlbumDetailView: View {
                     }
                     .disabled(detail == nil)
 
-                    if enablePlaylists {
+                    if enablePlaylists && !offlineMode.isOffline {
                         Divider()
                         Button {
                             playlistSongIds = detail?.song?.map(\.id) ?? []
@@ -220,43 +228,135 @@ struct AlbumDetailView: View {
             }
             .padding(.horizontal)
 
-            HStack(spacing: 14) {
-                Button {
-                    if let songs = detail?.song, !songs.isEmpty {
-                        player.play(songs: songs, startIndex: 0)
+            VStack(spacing: 8) {
+                HStack(spacing: 14) {
+                    Button {
+                        if let songs = detail?.song, !songs.isEmpty {
+                            player.play(songs: songs, startIndex: 0)
+                        }
+                    } label: {
+                        Label(tr("Play", "Abspielen"), systemImage: "play.fill")
+                            .font(.body).bold()
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(accentColor)
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
                     }
-                } label: {
-                    Label(tr("Play", "Abspielen"), systemImage: "play.fill")
-                        .font(.body).bold()
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(accentColor)
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
-                }
-                .buttonStyle(.plain)
-                .disabled(detail == nil)
+                    .buttonStyle(.plain)
+                    .disabled(detail == nil)
 
-                Button {
-                    if let songs = detail?.song {
-                        player.playShuffled(songs: songs)
+                    Button {
+                        if let songs = detail?.song {
+                            player.playShuffled(songs: songs)
+                        }
+                    } label: {
+                        Label(tr("Shuffle", "Zufällig"), systemImage: "shuffle")
+                            .font(.body).bold()
+                            .foregroundStyle(accentColor)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(accentColor.opacity(0.15))
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
                     }
-                } label: {
-                    Label(tr("Shuffle", "Zufällig"), systemImage: "shuffle")
-                        .font(.body).bold()
-                        .foregroundStyle(accentColor)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(accentColor.opacity(0.15))
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                    .buttonStyle(.plain)
+                    .disabled(detail == nil)
                 }
-                .buttonStyle(.plain)
-                .disabled(detail == nil)
+
+                if enableDownloads {
+                    downloadHeaderButtons()
+                }
             }
             .padding(.horizontal)
-            .padding(.bottom, 8)
         }
         .padding(.top, 16)
+        .padding(.bottom, 8)
+    }
+
+    @ViewBuilder
+    private func downloadHeaderButtons() -> some View {
+        let total = detail?.song?.count ?? album.songCount ?? 0
+        let status = downloadStore.albumDownloadStatus(albumId: album.id, totalSongs: total)
+        HStack(spacing: 10) {
+            switch status {
+            case .none:
+                if !offlineMode.isOffline {
+                    Button {
+                        downloadStore.enqueueAlbum(album)
+                        currentToast = ShelveToast(message: tr("Download started", "Download gestartet"))
+                    } label: {
+                        Label(tr("Download", "Herunterladen"), systemImage: "arrow.down.circle")
+                            .font(.subheadline).bold()
+                            .foregroundStyle(accentColor)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(accentColor.opacity(0.12))
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
+                    .buttonStyle(.plain)
+                }
+            case .partial(let done, let tot):
+                if !offlineMode.isOffline {
+                    Button {
+                        downloadStore.enqueueAlbum(album)
+                    } label: {
+                        Label(tr("Rest (\(tot - done))", "Rest (\(tot - done))"), systemImage: "arrow.down.circle")
+                            .font(.subheadline).bold()
+                            .foregroundStyle(accentColor)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(accentColor.opacity(0.12))
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
+                    .buttonStyle(.plain)
+                }
+                Button {
+                    downloadStore.deleteAlbum(album.id)
+                } label: {
+                    Label(tr("Delete", "Löschen"), systemImage: "arrow.down.circle")
+                        .font(.subheadline).bold()
+                        .foregroundStyle(.red)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(Color.red.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+                .buttonStyle(.plain)
+            case .complete:
+                Button {
+                    downloadStore.deleteAlbum(album.id)
+                    currentToast = ShelveToast(message: tr("Downloads deleted", "Downloads gelöscht"))
+                } label: {
+                    Label(tr("Delete Downloads", "Downloads löschen"), systemImage: "arrow.down.circle")
+                        .font(.subheadline).bold()
+                        .foregroundStyle(.red)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(Color.red.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func downloadSwipeButton(for song: Song) -> some View {
+        if downloadStore.isDownloaded(songId: song.id) {
+            Button(role: .destructive) {
+                downloadStore.deleteSong(song.id)
+            } label: {
+                DeleteDownloadIcon()
+            }
+            .tint(.red)
+        } else if !offlineMode.isOffline {
+            Button {
+                downloadStore.enqueueSongs([song])
+            } label: {
+                Image(systemName: "arrow.down.circle")
+            }
+            .tint(accentColor)
+        }
     }
 
     private func resolveArtist(_ artistName: String) {
@@ -281,11 +381,35 @@ struct AlbumDetailView: View {
 
     private func loadDetail() async {
         isLoading = true
+        if offlineMode.isOffline {
+            populateFromLocal()
+            isLoading = false
+            return
+        }
         do {
             detail = try await SubsonicAPIService.shared.getAlbum(id: album.id)
         } catch {
-            errorMessage = error.localizedDescription
+            populateFromLocal()
+            if detail == nil {
+                errorMessage = error.localizedDescription
+            }
         }
         isLoading = false
+    }
+
+    private func populateFromLocal() {
+        guard let local = downloadStore.albums.first(where: { $0.albumId == album.id }) else { return }
+        let songs = local.songs.map { $0.asSong() }
+        detail = AlbumDetail(
+            id: local.albumId,
+            name: local.title,
+            artist: local.artistName,
+            artistId: local.artistId,
+            coverArt: local.coverArtId,
+            songCount: songs.count,
+            duration: songs.reduce(0) { $0 + ($1.duration ?? 0) },
+            year: nil, genre: nil,
+            song: songs
+        )
     }
 }

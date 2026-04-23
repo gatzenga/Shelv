@@ -4,6 +4,8 @@ import Combine
 
 @MainActor
 class LibraryStore: ObservableObject {
+    static let shared = LibraryStore()
+
     @Published var albums: [Album] = []
     @Published var artists: [Artist] = []
     @Published var recentlyAdded: [Album] = []
@@ -121,10 +123,24 @@ class LibraryStore: ObservableObject {
                 save(result, name: "albums", serverID: id)
                 UserDefaults.standard.set(result.count, forKey: "shelv_albumCount_\(id)")
             }
+            await reconcileDownloadedAlbums(serverAlbumIds: Set(result.map(\.id)))
         } catch {
             if !(error is CancellationError) { errorMessage = error.localizedDescription }
         }
         isLoadingAlbums = false
+    }
+
+    /// Entfernt Downloads deren Album nicht mehr auf dem Server existiert.
+    /// Einmalige Fehl-Antwort führt zu sofortigem Cleanup — akzeptiert, damit lokale Downloads
+    /// nie Server-Content divergieren. Ein versehentlich gelöschter Download kann vom User
+    /// erneut angestoßen werden.
+    private func reconcileDownloadedAlbums(serverAlbumIds: Set<String>) async {
+        guard let stableId = api.activeServer?.stableId, !stableId.isEmpty else { return }
+        let downloadedAlbumIds = await DownloadDatabase.shared.allAlbumIds(serverId: stableId)
+        let missing = downloadedAlbumIds.subtracting(serverAlbumIds)
+        for albumId in missing {
+            await DownloadService.shared.deleteAlbum(albumId: albumId, serverId: stableId)
+        }
     }
 
     func loadArtists() async {
@@ -145,6 +161,11 @@ class LibraryStore: ObservableObject {
                 save(result, name: "artists", serverID: id)
                 UserDefaults.standard.set(result.count, forKey: "shelv_artistCount_\(id)")
             }
+            let map = Dictionary(uniqueKeysWithValues: result.compactMap { artist -> (String, String)? in
+                guard let cover = artist.coverArt else { return nil }
+                return (artist.name, cover)
+            })
+            NotificationCenter.default.post(name: .libraryArtistsLoaded, object: map)
         } catch {
             if !(error is CancellationError) { errorMessage = error.localizedDescription }
         }
@@ -219,6 +240,11 @@ class LibraryStore: ObservableObject {
                 save(starredSongs,   name: "starred_songs",   serverID: id)
                 save(starredAlbums,  name: "starred_albums",  serverID: id)
                 save(starredArtists, name: "starred_artists", serverID: id)
+            }
+            if let stable = api.activeServer?.stableId, !stable.isEmpty {
+                let starredIds = Set(starredSongs.map(\.id))
+                await DownloadDatabase.shared.syncFavorites(serverId: stable, starredSongIds: starredIds)
+                NotificationCenter.default.post(name: .downloadsLibraryChanged, object: nil)
             }
         } catch {
             if !(error is CancellationError) { errorMessage = error.localizedDescription }

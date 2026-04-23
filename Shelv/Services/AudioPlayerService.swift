@@ -5,6 +5,13 @@ import UIKit
 import SwiftUI
 import Network
 
+extension URL {
+    func queryParam(_ name: String) -> String? {
+        URLComponents(url: self, resolvingAgainstBaseURL: false)?
+            .queryItems?.first(where: { $0.name == name })?.value
+    }
+}
+
 enum RepeatMode: String {
     case off, all, one
 
@@ -39,6 +46,10 @@ class AudioPlayerService: ObservableObject {
     @Published var isSeeking: Bool = false
     @Published var isShuffled: Bool = false
     @Published var repeatMode: RepeatMode = .off
+    @Published var actualStreamFormat: ActualStreamFormat?
+
+    private var formatProbeTask: Task<Void, Never>?
+    private var playbackWatchdog: Task<Void, Never>?
 
     var hasNextTrack: Bool {
         !playNextQueue.isEmpty ||
@@ -105,9 +116,8 @@ class AudioPlayerService: ObservableObject {
 
     private func setupNetworkMonitor() {
         networkMonitor.pathUpdateHandler = { [weak self] path in
-            DispatchQueue.main.async {
-                self?.isNetworkAvailable = path.status == .satisfied
-            }
+            let isAvailable = path.status == .satisfied
+            Task { @MainActor [weak self] in self?.isNetworkAvailable = isAvailable }
         }
         networkMonitor.start(queue: networkMonitorQueue)
     }
@@ -222,7 +232,7 @@ class AudioPlayerService: ObservableObject {
             let type = AVAudioSession.InterruptionType(rawValue: typeRaw)
         else { return }
 
-        DispatchQueue.main.async { [weak self] in
+        Task { @MainActor [weak self] in
             guard let self else { return }
             switch type {
             case .began:
@@ -252,7 +262,7 @@ class AudioPlayerService: ObservableObject {
             $0.portType == .bluetoothLE ||
             $0.portType == .bluetoothHFP
         }
-        DispatchQueue.main.async { self.isAirPlayActive = active }
+        Task { @MainActor [weak self] in self?.isAirPlayActive = active }
     }
 
     private func setupRemoteControls() {
@@ -320,8 +330,99 @@ class AudioPlayerService: ObservableObject {
         saveState()
     }
 
+    private func probeStreamFormat(for song: Song, url: URL) {
+        formatProbeTask?.cancel()
+        if url.isFileURL {
+            let path = url.path
+            let size = (try? FileManager.default.attributesOfItem(atPath: path)[.size] as? NSNumber)?.int64Value ?? 0
+            let dur = Double(song.duration ?? 0)
+            let bitrate: Int? = (size > 0 && dur > 1) ? Int(Double(size) * 8 / dur / 1000) : nil
+            let codec = url.pathExtension.uppercased()
+            actualStreamFormat = ActualStreamFormat(
+                codecLabel: codec.isEmpty ? "?" : codec,
+                bitrateKbps: bitrate
+            )
+            return
+        }
+        actualStreamFormat = nil
+        let songDuration = Double(song.duration ?? 0)
+        let songId = song.id
+        let isTranscoded = url.queryParam("format").map { $0 != "raw" } ?? false
+        formatProbeTask = Task { [weak self] in
+            var req = URLRequest(url: url)
+            req.httpMethod = "HEAD"
+            req.timeoutInterval = 8
+            do {
+                let (_, response) = try await URLSession.shared.data(for: req)
+                guard !Task.isCancelled, let http = response as? HTTPURLResponse else { return }
+                if http.statusCode != 200, isTranscoded {
+                    print("[Transcoding] HEAD status \(http.statusCode) → fallback to raw")
+                    await MainActor.run { self?.fallbackToRawStream(songId: songId) }
+                    return
+                }
+                let codec = ActualStreamFormat.codecLabel(forMime: http.mimeType)
+                let length = http.expectedContentLength
+                var bitrate: Int? = nil
+                if length > 0, songDuration > 1 {
+                    bitrate = Int(Double(length) * 8 / songDuration / 1000)
+                }
+                await MainActor.run {
+                    self?.actualStreamFormat = ActualStreamFormat(codecLabel: codec, bitrateKbps: bitrate)
+                }
+            } catch {
+                guard !Task.isCancelled else { return }
+                if isTranscoded {
+                    print("[Transcoding] HEAD failed (\(error.localizedDescription)) → fallback to raw")
+                    await MainActor.run { self?.fallbackToRawStream(songId: songId) }
+                }
+            }
+        }
+    }
+
+    private func fallbackToRawStream(songId: String) {
+        guard let song = currentSong, song.id == songId else { return }
+        guard let raw = SubsonicAPIService.shared.rawStreamURL(for: songId) else { return }
+        playbackWatchdog?.cancel()
+        let resumeAt = currentTime
+        crossfadeTriggered = false
+        crossfadeSeekSuppressed = false
+        isBuffering = true
+        engine.play(url: raw)
+        if resumeAt > 1 { engine.seek(to: resumeAt) }
+        isEngineLoaded = true
+        probeStreamFormat(for: song, url: raw)
+    }
+
+    /// Wenn AVPlayer nach 5s den Transcoded-Stream nicht abspielt, fallback auf raw.
+    /// Geprüft wird isPlaying UND currentTime — manche Player-Status-Reports sind unzuverlässig.
+    private func schedulePlaybackWatchdog(for song: Song, url: URL) {
+        playbackWatchdog?.cancel()
+        guard let fmt = url.queryParam("format"), fmt != "raw" else { return }
+        let songId = song.id
+        playbackWatchdog = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                guard let self, self.currentSong?.id == songId else { return }
+                let stuck = !self.isPlaying || self.currentTime < 0.1
+                guard stuck else { return }
+                print("[Transcoding] Playback watchdog timeout (isPlaying=\(self.isPlaying) currentTime=\(self.currentTime)) → fallback to raw")
+                self.fallbackToRawStream(songId: songId)
+            }
+        }
+    }
+
+    private func resolveURL(for song: Song) -> URL? {
+        let serverId = SubsonicAPIService.shared.activeServer?.stableId ?? ""
+        if !serverId.isEmpty,
+           let local = LocalDownloadIndex.shared.url(songId: song.id, serverId: serverId) {
+            return local
+        }
+        return SubsonicAPIService.shared.streamURL(for: song.id)
+    }
+
     private func startPlayback(song: Song) {
-        guard let url = SubsonicAPIService.shared.streamURL(for: song.id) else { return }
+        guard let url = resolveURL(for: song) else { return }
 
         crossfadeTriggered = false
         crossfadeSeekSuppressed = false
@@ -329,6 +430,8 @@ class AudioPlayerService: ObservableObject {
         isBuffering = true
         currentTime = 0
         if let d = song.duration { duration = Double(d) }
+        probeStreamFormat(for: song, url: url)
+        schedulePlaybackWatchdog(for: song, url: url)
 
         let seekTo = pendingSeekTime
         pendingSeekTime = 0
@@ -361,6 +464,9 @@ class AudioPlayerService: ObservableObject {
         currentSong = nil
         currentTime = 0
         duration = 0
+        formatProbeTask?.cancel()
+        playbackWatchdog?.cancel()
+        actualStreamFormat = nil
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
     }
 
@@ -532,9 +638,7 @@ class AudioPlayerService: ObservableObject {
         updateNowPlayingTime(seconds)
         crossfadeSeekSuppressed = crossfadeEnabled && duration > 0 && seconds >= duration - crossfadeDuration
         engine.seek(to: seconds) { [weak self] _ in
-            DispatchQueue.main.async {
-                self?.isSeeking = false
-            }
+            Task { @MainActor [weak self] in self?.isSeeking = false }
         }
     }
 
@@ -743,29 +847,38 @@ class AudioPlayerService: ObservableObject {
 
         engine.$currentTime
             .sink { [weak self] time in
-                guard let self, !self.isSeeking else { return }
-                self.currentTime = time
-                self.timePublisher.send((time: time, duration: self.duration))
-                self.updateNowPlayingTime(time)
-                if !self.crossfadeTriggered {
-                    self.checkCrossfadeTrigger(currentTime: time)
+                Task { @MainActor [weak self] in
+                    guard let self, !self.isSeeking else { return }
+                    self.currentTime = time
+                    self.timePublisher.send((time: time, duration: self.duration))
+                    self.updateNowPlayingTime(time)
+                    if !self.crossfadeTriggered {
+                        self.checkCrossfadeTrigger(currentTime: time)
+                    }
                 }
             }
             .store(in: &engineSubscriptions)
 
         engine.$duration
             .sink { [weak self] d in
-                guard let self, d > 0 else { return }
-                self.duration = d
-                self.timePublisher.send((time: self.currentTime, duration: d))
+                Task { @MainActor [weak self] in
+                    guard let self, d > 0 else { return }
+                    self.duration = d
+                    self.timePublisher.send((time: self.currentTime, duration: d))
+                }
             }
             .store(in: &engineSubscriptions)
 
         engine.$isPlaying
             .sink { [weak self] playing in
-                guard let self else { return }
-                if playing { self.isBuffering = false }
-                self.isPlaying = playing
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    if playing {
+                        self.isBuffering = false
+                        self.playbackWatchdog?.cancel()
+                    }
+                    self.isPlaying = playing
+                }
             }
             .store(in: &engineSubscriptions)
     }
@@ -797,7 +910,7 @@ class AudioPlayerService: ObservableObject {
     }
 
     private func crossfadeToSong(_ song: Song) {
-        guard let url = SubsonicAPIService.shared.streamURL(for: song.id) else { return }
+        guard let url = resolveURL(for: song) else { return }
 
         engine.crossfadeDuration = crossfadeDuration
         engine.triggerCrossfade(nextURL: url)
@@ -807,6 +920,8 @@ class AudioPlayerService: ObservableObject {
         currentTime = 0
         isEngineLoaded = true
         if let d = song.duration { duration = Double(d) }
+        probeStreamFormat(for: song, url: url)
+        schedulePlaybackWatchdog(for: song, url: url)
 
         updateNowPlayingInfo(song: song)
         MPNowPlayingInfoCenter.default().playbackState = .playing
@@ -859,8 +974,8 @@ class AudioPlayerService: ObservableObject {
             artworkTask = URLSession.shared.dataTask(with: artURL) { [weak self] data, _, _ in
                 guard let data, let image = UIImage(data: data) else { return }
                 let artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
-                self?.currentArtwork = artwork
-                DispatchQueue.main.async {
+                Task { @MainActor [weak self] in
+                    self?.currentArtwork = artwork
                     var updated = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? info
                     updated[MPMediaItemPropertyArtwork] = artwork
                     MPNowPlayingInfoCenter.default().nowPlayingInfo = updated

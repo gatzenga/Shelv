@@ -16,7 +16,6 @@ private struct ActivityView: UIViewControllerRepresentable {
 
 struct SettingsView: View {
     @EnvironmentObject var serverStore: ServerStore
-    @EnvironmentObject var libraryStore: LibraryStore
     private let player = AudioPlayerService.shared
     @EnvironmentObject var lyricsStore: LyricsStore
     @EnvironmentObject var recapStore: RecapStore
@@ -30,6 +29,11 @@ struct SettingsView: View {
     @AppStorage("autoFetchLyrics") private var autoFetchLyrics = true
     @AppStorage("recapEnabled") private var recapEnabled = false
     @AppStorage("iCloudSyncEnabled") private var iCloudSyncEnabled = true
+    @AppStorage("enableDownloads") private var enableDownloads = false
+    @AppStorage("offlineModeEnabled") private var offlineModeEnabled = false
+    @AppStorage("maxBulkDownloadStorageGB") private var maxBulkStorageGB = 10
+    @AppStorage("transcodingEnabled") private var transcodingEnabled = false
+    @ObservedObject var offlineMode = OfflineModeService.shared
 
     @State private var showAddServer = false
     @State private var editingServer: SubsonicServer?
@@ -40,6 +44,9 @@ struct SettingsView: View {
     @State private var showClearCacheConfirm = false
     @State private var showResetLyricsConfirm = false
     @State private var cacheSize = "—"
+    @State private var showBulkDownloadSheet = false
+    @State private var showDeleteAllDownloadsConfirm = false
+    @State private var downloadStats: DownloadStorageStats?
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
@@ -93,6 +100,22 @@ struct SettingsView: View {
                         }
                     }
                     .tint(accentColor)
+                }
+
+                Section(tr("Transcoding", "Transcoding")) {
+                    Toggle(isOn: $transcodingEnabled) {
+                        Label { Text(tr("Transcoding", "Transcoding")) } icon: {
+                            Image(systemName: "waveform.badge.magnifyingglass").foregroundStyle(accentColor)
+                        }
+                    }
+                    .tint(accentColor)
+                    if transcodingEnabled {
+                        NavigationLink(destination: TranscodingSettingsView()) {
+                            Label { Text(tr("Settings", "Einstellungen")) } icon: {
+                                Image(systemName: "slider.horizontal.3").foregroundStyle(accentColor)
+                            }
+                        }
+                    }
                 }
 
                 Section(tr("Crossfade", "Crossfade")) {
@@ -168,6 +191,12 @@ struct SettingsView: View {
                     }
                 }
 
+                downloadsSection
+                    .onAppear { Task { await refreshStats() } }
+                    .onReceive(NotificationCenter.default.publisher(for: .downloadsLibraryChanged)) { _ in
+                        Task { await refreshStats() }
+                    }
+
                 Section(tr("Lyrics", "Lyrics")) {
                     HStack {
                         Label { Text(tr("Database", "Datenbank")) } icon: {
@@ -197,9 +226,11 @@ struct SettingsView: View {
 
                     if lyricsStore.isDownloading {
                         VStack(alignment: .leading, spacing: 8) {
+                            let lyrTotal = max(lyricsStore.downloadTotal, 1)
+                            let lyrDone = max(0, min(lyricsStore.downloadFetched, lyrTotal))
                             ProgressView(
-                                value: Double(lyricsStore.downloadFetched),
-                                total: Double(max(lyricsStore.downloadTotal, 1))
+                                value: Double(lyrDone),
+                                total: Double(lyrTotal)
                             )
                             .tint(accentColor)
                             Button(tr("Cancel download", "Download abbrechen")) {
@@ -350,9 +381,15 @@ struct SettingsView: View {
                         server: server,
                         password: serverStore.password(for: server)
                     )
-                    .environmentObject(libraryStore)
+                    .environmentObject(LibraryStore.shared)
                     .tint(accentColor)
                 }
+            }
+            .sheet(isPresented: $showBulkDownloadSheet) {
+                BulkDownloadSheet(maxBytes: Int64(maxBulkStorageGB) * 1024 * 1024 * 1024)
+                    .presentationDetents([.large])
+                    .presentationCornerRadius(24)
+                    .tint(accentColor)
             }
             .alert(
                 tr("Delete Server?", "Server löschen?"),
@@ -423,6 +460,23 @@ struct SettingsView: View {
         .clipShape(RoundedRectangle(cornerRadius: 22))
     }
 
+    @MainActor private func refreshStats() async {
+        let albums = LibraryStore.shared.albums
+        let counts = Dictionary(uniqueKeysWithValues: albums.compactMap { album -> (String, Int)? in
+            guard let c = album.songCount else { return nil }
+            return (album.id, c)
+        })
+        let artistAlbums: [String: Set<String>] = Dictionary(
+            grouping: albums.compactMap { album -> (String, String)? in
+                guard let aid = album.artistId else { return nil }
+                return (aid, album.id)
+            },
+            by: { $0.0 }
+        ).mapValues { Set($0.map(\.1)) }
+        downloadStats = await DownloadStore.shared.computeStats(albumSongCounts: counts,
+                                                               artistAlbumIds: artistAlbums)
+    }
+
     private func recalculateCacheSize() async {
         let imgBytes = await ImageCacheService.shared.diskUsageBytes()
         let libBytes = LibraryStore.diskCacheSizeBytes()
@@ -433,7 +487,7 @@ struct SettingsView: View {
     }
 
     private func clearCache() async {
-        libraryStore.clearCache()
+        LibraryStore.shared.clearCache()
         await ImageCacheService.shared.clearAll()
         await recalculateCacheSize()
         withAnimation { showClearToast = true }
@@ -496,6 +550,168 @@ struct SettingsView: View {
         .contentShape(Rectangle())
         .onTapGesture {
             serverStore.activate(server: server)
+        }
+    }
+
+    // MARK: - Downloads Section
+
+    @ViewBuilder
+    private var downloadsSection: some View {
+        Section(tr("Downloads", "Downloads")) {
+            Toggle(isOn: $enableDownloads) {
+                Label { Text(tr("Enable Downloads", "Downloads aktivieren")) } icon: {
+                    Image(systemName: "arrow.down.circle").foregroundStyle(accentColor)
+                }
+            }
+            .tint(accentColor)
+
+            if enableDownloads {
+                Toggle(isOn: Binding(
+                    get: { offlineMode.isOffline },
+                    set: { newValue in
+                        if newValue { offlineMode.enterOfflineMode() } else { offlineMode.exitOfflineMode() }
+                    }
+                )) {
+                    Label { Text(tr("Offline Mode", "Offline-Modus")) } icon: {
+                        Image(systemName: "wifi.slash").foregroundStyle(accentColor)
+                    }
+                }
+                .tint(accentColor)
+
+                Button {
+                    showBulkDownloadSheet = true
+                } label: {
+                    Label { Text(tr("Download Everything", "Alles herunterladen")) } icon: {
+                        Image(systemName: "square.and.arrow.down.on.square").foregroundStyle(accentColor)
+                    }
+                }
+                .disabled(offlineMode.isOffline)
+
+                HStack {
+                    Label { Text(tr("Max Storage", "Max. Speicher")) } icon: {
+                        Image(systemName: "externaldrive").foregroundStyle(accentColor)
+                    }
+                    Spacer()
+                    Stepper("\(maxBulkStorageGB) GB",
+                            value: $maxBulkStorageGB,
+                            in: 10...500,
+                            step: 10)
+                        .labelsHidden()
+                    Text("\(maxBulkStorageGB) GB")
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+
+                Button(role: .destructive) {
+                    showDeleteAllDownloadsConfirm = true
+                } label: {
+                    Label { Text(tr("Delete All Downloads", "Alle Downloads löschen")) } icon: {
+                        Image(systemName: "trash")
+                    }
+                    .foregroundStyle(.red)
+                }
+                .tint(.red)
+
+                ActiveDownloadProgressCell()
+
+                if let stats = downloadStats {
+                    downloadStatistics(stats)
+                }
+            }
+        }
+        .alert(
+            tr("Delete all downloads?", "Alle Downloads löschen?"),
+            isPresented: $showDeleteAllDownloadsConfirm
+        ) {
+            Button(tr("Delete", "Löschen"), role: .destructive) {
+                DownloadStore.shared.deleteAll()
+            }
+            Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+        } message: {
+            Text(tr(
+                "All downloaded songs, albums and artists will be removed from this device.",
+                "Alle heruntergeladenen Songs, Alben und Künstler werden von diesem Gerät entfernt."
+            ))
+        }
+        .task(id: enableDownloads) {
+            guard enableDownloads, LibraryStore.shared.albums.isEmpty else { return }
+            await LibraryStore.shared.loadAlbums()
+        }
+    }
+
+
+    @ViewBuilder
+    private func downloadStatistics(_ stats: DownloadStorageStats) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(tr("Used", "Belegt"))
+                Spacer()
+                Text(ByteCountFormatter.string(fromByteCount: stats.totalBytes, countStyle: .file))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            if let free = stats.freeDiskBytes {
+                HStack {
+                    Text(tr("Free on device", "Frei auf Gerät"))
+                    Spacer()
+                    Text(ByteCountFormatter.string(fromByteCount: free, countStyle: .file))
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+            }
+            HStack {
+                Text(tr("Songs", "Songs"))
+                Spacer()
+                Text("\(stats.songCount)").foregroundStyle(.secondary).monospacedDigit()
+            }
+            HStack {
+                Text(tr("Albums", "Alben"))
+                Spacer()
+                Text("\(stats.albumCount)").foregroundStyle(.secondary).monospacedDigit()
+            }
+            HStack {
+                Text(tr("Artists", "Künstler"))
+                Spacer()
+                Text("\(stats.artistCount)").foregroundStyle(.secondary).monospacedDigit()
+            }
+        }
+        .font(.subheadline)
+    }
+}
+
+private struct ActiveDownloadProgressCell: View {
+    @ObservedObject private var store = DownloadStore.shared
+    @AppStorage("themeColor") private var themeColorName = "violet"
+    private var accentColor: Color { AppTheme.color(for: themeColorName) }
+
+    var body: some View {
+        if let progress = store.batchProgress {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text(tr("Active Downloads", "Aktive Downloads"))
+                        .font(.subheadline.bold())
+                    Spacer()
+                    Text("\(progress.completed) / \(progress.total)")
+                        .font(.subheadline)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+                ProgressView(value: progress.fraction)
+                    .tint(accentColor)
+                HStack {
+                    if progress.failed > 0 {
+                        Text(tr("\(progress.failed) failed", "\(progress.failed) fehlgeschlagen"))
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+                    Spacer()
+                    Button(tr("Cancel download", "Download abbrechen")) {
+                        Task { await DownloadService.shared.cancelBatch() }
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                }
+            }
         }
     }
 }

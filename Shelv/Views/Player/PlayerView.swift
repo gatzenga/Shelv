@@ -3,8 +3,9 @@ import AVKit
 
 struct PlayerView: View {
     @ObservedObject var player = AudioPlayerService.shared
-    @EnvironmentObject var libraryStore: LibraryStore
+    @ObservedObject var libraryStore = LibraryStore.shared
     @EnvironmentObject var lyricsStore: LyricsStore
+    @ObservedObject private var offlineMode = OfflineModeService.shared
     @Environment(\.dismiss) var dismiss
     @Environment(\.colorScheme) var colorScheme
 
@@ -219,7 +220,7 @@ struct PlayerView: View {
                 .padding(.bottom, vPad(h, large: 36, small: 20))
 
                 HStack {
-                    if enableFavorites, let song = player.currentSong {
+                    if enableFavorites && !offlineMode.isOffline, let song = player.currentSong {
                         Button {
                             Task { await libraryStore.toggleStarSong(song) }
                         } label: {
@@ -266,7 +267,7 @@ struct PlayerView: View {
                     }
                     .buttonStyle(.plain)
 
-                    if enablePlaylists {
+                    if enablePlaylists && !offlineMode.isOffline {
                         Spacer()
 
                         Button {
@@ -396,7 +397,12 @@ struct PlayerView: View {
     }
 
     private var audioBadge: String? {
+        // 1) Wenn wir das tatsächliche Format vom Server kennen → das zeigen (Vorrang vor allem anderen)
+        if let actual = player.actualStreamFormat {
+            return actual.displayString
+        }
         guard let song = player.currentSong else { return nil }
+        // 2) Während HEAD-Probe noch läuft: Fallback auf Metadaten
         var parts: [String] = []
         if let suffix = song.suffix { parts.append(suffix.uppercased()) }
         if let bitRate = song.bitRate { parts.append("\(bitRate) kbps") }

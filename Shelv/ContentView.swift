@@ -6,7 +6,8 @@ extension Notification.Name {
 
 struct ContentView: View {
     @EnvironmentObject var serverStore: ServerStore
-    @EnvironmentObject var libraryStore: LibraryStore
+    @ObservedObject var libraryStore = LibraryStore.shared
+    @ObservedObject var offlineMode = OfflineModeService.shared
     @Environment(\.horizontalSizeClass) var horizontalSizeClass
     @State private var selectedTab = 0
     @State private var showPlayer = false
@@ -14,6 +15,7 @@ struct ContentView: View {
     @State private var playlistSongIds: [String]? = nil
     @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage("enablePlaylists") private var enablePlaylists = true
+    @AppStorage("enableDownloads") private var enableDownloads = false
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
     private var isRegularWidth: Bool { horizontalSizeClass == .regular }
@@ -26,7 +28,13 @@ struct ContentView: View {
                         .tabItem { Label(tr("Discover", "Entdecken"), systemImage: "sparkles") }
                         .tag(0)
                     LibraryView()
-                        .tabItem { Label(tr("Library", "Bibliothek"), systemImage: "books.vertical.fill") }
+                        .tabItem {
+                            if offlineMode.isOffline && enableDownloads {
+                                Label(tr("Downloads", "Downloads"), systemImage: "arrow.down.circle.fill")
+                            } else {
+                                Label(tr("Library", "Bibliothek"), systemImage: "books.vertical.fill")
+                            }
+                        }
                         .tag(1)
                     if enablePlaylists {
                         PlaylistsView()
@@ -44,10 +52,23 @@ struct ContentView: View {
                     showPlayer: $showPlayer,
                     bottomInset: geometry.safeAreaInsets.bottom
                 )
+
+                VStack {
+                    ServerErrorBanner()
+                        .padding(.top, geometry.safeAreaInsets.top + 4)
+                        .animation(.easeInOut, value: offlineMode.serverErrorBannerVisible)
+                    Spacer()
+                }
+                .allowsHitTesting(offlineMode.serverErrorBannerVisible)
+                .ignoresSafeArea(edges: .top)
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             PlayerBarInset(isRegularWidth: isRegularWidth, showPlayer: $showPlayer)
+        }
+        .onChange(of: libraryStore.errorMessage) { _, msg in
+            guard let msg, enableDownloads else { return }
+            offlineMode.notifyServerError(msg)
         }
         .sheet(isPresented: $showPlayer) {
             PlayerView()

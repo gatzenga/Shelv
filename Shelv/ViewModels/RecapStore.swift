@@ -249,16 +249,26 @@ class RecapStore: ObservableObject {
                     case .created:
                         newEntry.ckRecordName = recordName
                     case .conflict(let existingPlaylistId):
-                        try? await api.deletePlaylist(id: newPlaylist.id)
-                        newEntry = RecapRegistryRecord(
-                            playlistId: existingPlaylistId,
-                            serverId: serverId,
-                            periodType: entry.periodType,
-                            periodStart: entry.periodStart,
-                            periodEnd: entry.periodEnd,
-                            ckRecordName: recordName,
-                            isTest: entry.isTest
-                        )
+                        let remoteExists = (try? await api.getPlaylist(id: existingPlaylistId)) != nil
+                        if remoteExists {
+                            CloudKitSyncService.debugLog("[RecreateMissing] conflict: iCloud playlistId=\(existingPlaylistId) exists — adopting, discarding newly created \(newPlaylist.id)")
+                            try? await api.deletePlaylist(id: newPlaylist.id)
+                            newEntry = RecapRegistryRecord(
+                                playlistId: existingPlaylistId,
+                                serverId: serverId,
+                                periodType: entry.periodType,
+                                periodStart: entry.periodStart,
+                                periodEnd: entry.periodEnd,
+                                ckRecordName: recordName,
+                                isTest: entry.isTest
+                            )
+                        } else {
+                            CloudKitSyncService.debugLog("[RecreateMissing] conflict: iCloud playlistId=\(existingPlaylistId) MISSING on Navidrome — overwriting stale marker with new local \(newPlaylist.id)")
+                            await CloudKitSyncService.shared.deleteRecapMarker(ckRecordName: recordName)
+                            if case .created = try? await CloudKitSyncService.shared.saveRecapMarker(newEntry, periodKey: periodKey) {
+                                newEntry.ckRecordName = recordName
+                            }
+                        }
                     }
                 }
                 await PlayLogService.shared.registerPlaylist(newEntry)
@@ -366,16 +376,26 @@ class RecapStore: ObservableObject {
                         case .created:
                             updatedEntry.ckRecordName = recordName
                         case .conflict(let existingPlaylistId):
-                            try? await api.deletePlaylist(id: newPlaylist.id)
-                            updatedEntry = RecapRegistryRecord(
-                                playlistId: existingPlaylistId,
-                                serverId: serverId,
-                                periodType: entry.periodType,
-                                periodStart: entry.periodStart,
-                                periodEnd: entry.periodEnd,
-                                ckRecordName: recordName,
-                                isTest: entry.isTest
-                            )
+                            let remoteExists = (try? await api.getPlaylist(id: existingPlaylistId)) != nil
+                            if remoteExists {
+                                CloudKitSyncService.debugLog("[VerifyRepair] conflict: iCloud playlistId=\(existingPlaylistId) exists — adopting, discarding newly created \(newPlaylist.id)")
+                                try? await api.deletePlaylist(id: newPlaylist.id)
+                                updatedEntry = RecapRegistryRecord(
+                                    playlistId: existingPlaylistId,
+                                    serverId: serverId,
+                                    periodType: entry.periodType,
+                                    periodStart: entry.periodStart,
+                                    periodEnd: entry.periodEnd,
+                                    ckRecordName: recordName,
+                                    isTest: entry.isTest
+                                )
+                            } else {
+                                CloudKitSyncService.debugLog("[VerifyRepair] conflict: iCloud playlistId=\(existingPlaylistId) MISSING on Navidrome — overwriting stale marker with new local \(newPlaylist.id)")
+                                await CloudKitSyncService.shared.deleteRecapMarker(ckRecordName: recordName)
+                                if case .created = try? await CloudKitSyncService.shared.saveRecapMarker(updatedEntry, periodKey: periodKey) {
+                                    updatedEntry.ckRecordName = recordName
+                                }
+                            }
                         }
                     }
 
@@ -576,16 +596,26 @@ class RecapStore: ObservableObject {
                 case .created:
                     newEntry.ckRecordName = recordName
                 case .conflict(let existingPlaylistId):
-                    try? await api.deletePlaylist(id: newPlaylist.id)
-                    newEntry = RecapRegistryRecord(
-                        playlistId: existingPlaylistId,
-                        serverId: serverId,
-                        periodType: diff.entry.periodType,
-                        periodStart: diff.entry.periodStart,
-                        periodEnd: diff.entry.periodEnd,
-                        ckRecordName: recordName,
-                        isTest: diff.entry.isTest
-                    )
+                    let remoteExists = (try? await api.getPlaylist(id: existingPlaylistId)) != nil
+                    if remoteExists {
+                        CloudKitSyncService.debugLog("[ApplyDiff] conflict: iCloud playlistId=\(existingPlaylistId) exists — adopting, discarding newly created \(newPlaylist.id)")
+                        try? await api.deletePlaylist(id: newPlaylist.id)
+                        newEntry = RecapRegistryRecord(
+                            playlistId: existingPlaylistId,
+                            serverId: serverId,
+                            periodType: diff.entry.periodType,
+                            periodStart: diff.entry.periodStart,
+                            periodEnd: diff.entry.periodEnd,
+                            ckRecordName: recordName,
+                            isTest: diff.entry.isTest
+                        )
+                    } else {
+                        CloudKitSyncService.debugLog("[ApplyDiff] conflict: iCloud playlistId=\(existingPlaylistId) MISSING on Navidrome — overwriting stale marker with new local \(newPlaylist.id)")
+                        await CloudKitSyncService.shared.deleteRecapMarker(ckRecordName: recordName)
+                        if case .created = try? await CloudKitSyncService.shared.saveRecapMarker(newEntry, periodKey: periodKey) {
+                            newEntry.ckRecordName = recordName
+                        }
+                    }
                 }
             }
 

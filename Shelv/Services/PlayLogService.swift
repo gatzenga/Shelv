@@ -134,9 +134,23 @@ actor PlayLogService {
             }
             try m.migrate(p)
             pool = p
+            Self.applyDataProtection(at: url)
         } catch {
             DBErrorLog.logPlayLog("DB setup failed: \(error.localizedDescription)")
         }
+    }
+
+    private static func applyDataProtection(at url: URL) {
+        #if os(iOS)
+        for suffix in ["", "-wal", "-shm"] {
+            let path = url.path + suffix
+            guard FileManager.default.fileExists(atPath: path) else { continue }
+            try? FileManager.default.setAttributes(
+                [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
+                ofItemAtPath: path
+            )
+        }
+        #endif
     }
 
     static var dbURL: URL {

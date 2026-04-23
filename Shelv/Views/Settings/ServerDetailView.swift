@@ -4,7 +4,7 @@ struct ServerDetailView: View {
     let server: SubsonicServer
     let password: String?
 
-    @EnvironmentObject var libraryStore: LibraryStore
+    @ObservedObject var libraryStore = LibraryStore.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
 
     @State private var isScanning = false

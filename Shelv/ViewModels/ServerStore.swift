@@ -81,9 +81,11 @@ class ServerStore: ObservableObject {
                 await PlayLogService.shared.resetLog(serverId: serverStableId)
                 await PlayLogService.shared.resetRegistry(serverId: serverStableId)
                 await PlayLogService.shared.removeScrobbles(serverId: serverStableId)
+                await DownloadService.shared.deleteAllForServer(serverStableId)
                 await CloudKitSyncService.shared.updatePendingCounts()
                 await MainActor.run {
                     NotificationCenter.default.post(name: .recapRegistryUpdated, object: nil)
+                    NotificationCenter.default.post(name: .downloadsLibraryChanged, object: nil)
                 }
             }
         }
