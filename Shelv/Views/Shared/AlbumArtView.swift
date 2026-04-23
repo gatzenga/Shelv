@@ -65,41 +65,37 @@ struct AlbumArtView: View {
 
         let key = "\(id)_\(size)"
 
-        // Gecachtes Bild sofort setzen — kein Flash, kein Spinner
         if let cached = ImageCacheService.shared.cachedImage(key: key) {
-            uiImage = cached
-            loading = false
-            return
+            uiImage = cached; loading = false; return
         }
 
-        // Kein Cache → altes Cover wegräumen, neu laden
         uiImage = nil
         loading = true
 
-        // Im Offline-Modus: nur Disk-Cache, kein Netzwerk, kein Retry
+        if let localPath = LocalArtworkIndex.shared.localPath(for: id) {
+            if let img = await Task.detached(priority: .medium) {
+                UIImage(contentsOfFile: localPath)
+            }.value {
+                ImageCacheService.shared.cache(img, key: key)
+                uiImage = img; loading = false; return
+            }
+        }
+
         if UserDefaults.standard.bool(forKey: "offlineModeEnabled") {
             uiImage = await ImageCacheService.shared.diskOnlyImage(key: key)
             loading = false
             return
         }
 
-        // Bis zu 3 Versuche bei fehlgeschlagenem Laden
         for attempt in 0..<3 {
             if attempt > 0 {
                 try? await Task.sleep(for: .milliseconds(Int64(500 * attempt)))
             }
             guard !Task.isCancelled else { return }
-
             let image = await ImageCacheService.shared.image(url: url, key: key)
             guard !Task.isCancelled else { return }
-
-            if let image {
-                uiImage = image
-                loading = false
-                return
-            }
+            if let image { uiImage = image; loading = false; return }
         }
-
         loading = false
     }
 
