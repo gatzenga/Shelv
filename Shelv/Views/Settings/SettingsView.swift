@@ -331,6 +331,20 @@ struct SettingsView: View {
                             }
                         }
                     }
+                    if let url = URL(string: "https://ko-fi.com/Shelv") {
+                        Link(destination: url) {
+                            HStack {
+                                Image(systemName: "cup.and.saucer")
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 24)
+                                Text(tr("Support my work", "Support my work"))
+                                Spacer()
+                                Image(systemName: "arrow.up.right")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
                 }
 
                 Section(tr("Info", "Info")) {
