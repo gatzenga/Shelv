@@ -5,7 +5,6 @@ struct AlbumContextMenuModifier: ViewModifier {
     var showPreview: Bool = true
 
     @ObservedObject var libraryStore = LibraryStore.shared
-    @ObservedObject var downloadStore = DownloadStore.shared
     @ObservedObject var offlineMode = OfflineModeService.shared
     @AppStorage("enableFavorites") private var enableFavorites = true
     @AppStorage("enablePlaylists") private var enablePlaylists = true
@@ -101,7 +100,7 @@ struct AlbumContextMenuModifier: ViewModifier {
 
     @ViewBuilder
     private var albumDownloadMenuItems: some View {
-        let status = downloadStore.albumDownloadStatus(
+        let status = DownloadStore.shared.albumDownloadStatus(
             albumId: album.id,
             totalSongs: album.songCount ?? 0
         )
@@ -109,7 +108,7 @@ struct AlbumContextMenuModifier: ViewModifier {
         case .none:
             if !offlineMode.isOffline {
                 Button {
-                    downloadStore.enqueueAlbum(album)
+                    DownloadStore.shared.enqueueAlbum(album)
                 } label: {
                     Label(tr("Download Album", "Album herunterladen"),
                           systemImage: "arrow.down.circle")
@@ -118,20 +117,20 @@ struct AlbumContextMenuModifier: ViewModifier {
         case .partial:
             if !offlineMode.isOffline {
                 Button {
-                    downloadStore.enqueueAlbum(album)
+                    DownloadStore.shared.enqueueAlbum(album)
                 } label: {
                     Label(tr("Download Remaining", "Rest herunterladen"),
                           systemImage: "arrow.down.circle")
                 }
             }
             Button(role: .destructive) {
-                downloadStore.deleteAlbum(album.id)
+                DownloadStore.shared.deleteAlbum(album.id)
             } label: {
                 Label { Text(tr("Delete Downloads", "Downloads löschen")) } icon: { DeleteDownloadIcon(tint: .red) }
             }
         case .complete:
             Button(role: .destructive) {
-                downloadStore.deleteAlbum(album.id)
+                DownloadStore.shared.deleteAlbum(album.id)
             } label: {
                 Label { Text(tr("Delete Downloads", "Downloads löschen")) } icon: { DeleteDownloadIcon(tint: .red) }
             }

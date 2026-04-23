@@ -123,7 +123,6 @@ class LibraryStore: ObservableObject {
                 save(result, name: "albums", serverID: id)
                 UserDefaults.standard.set(result.count, forKey: "shelv_albumCount_\(id)")
             }
-            await reconcileDownloadedAlbums(serverAlbumIds: Set(result.map(\.id)))
         } catch {
             if !(error is CancellationError) { errorMessage = error.localizedDescription }
         }

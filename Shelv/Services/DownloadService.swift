@@ -209,7 +209,7 @@ actor DownloadService {
         await DownloadDatabase.shared.delete(songId: songId, serverId: serverId)
         let key = Self.key(songId: songId, serverId: serverId)
         stateSubject.send((key, .none))
-        notifyLibraryChanged()
+        await DownloadStore.shared.removeRecord(songId: songId)
     }
 
     func deleteAlbum(albumId: String, serverId: String) async {
@@ -500,7 +500,7 @@ actor DownloadService {
         await DownloadDatabase.shared.upsert(record)
         publishProgress(key: key, value: nil)
         stateSubject.send((key, .completed))
-        notifyLibraryChanged()
+        await DownloadStore.shared.insertRecord(record)
         incrementBatchCompleted()
         startNextJobs()
     }

@@ -17,9 +17,11 @@ final class DownloadStore: ObservableObject {
     @Published private(set) var batchProgress: BatchProgress? = nil
     @Published private(set) var isLoading: Bool = false
 
+    private var songById: [String: DownloadedSong] = [:]
+    private var recordsByAlbumId: [String: [DownloadedSong]] = [:]
+
     private var serverId: String = ""
     private var cancellables = Set<AnyCancellable>()
-    /// Mapping artistName → coverArtId aus der Library (gefüllt vom LibraryStore)
     private var artistCoverByName: [String: String] = [:]
     private var pendingReload = false
 
@@ -84,6 +86,8 @@ final class DownloadStore: ObservableObject {
     func reload() async {
         guard !serverId.isEmpty else {
             songs = []; albums = []; artists = []; favoriteSongs = []; totalBytes = 0
+            songById = [:]; recordsByAlbumId = [:]
+            DownloadStatusCache.shared.rebuild(albumIds: [])
             return
         }
         guard !isLoading else { pendingReload = true; return }
@@ -94,16 +98,26 @@ final class DownloadStore: ObservableObject {
         let total = await DownloadDatabase.shared.totalBytes(serverId: sid)
         let mappedSongs = records.map { $0.toDownloadedSong() }
 
-        // Gruppieren
-        let albumsGrouped = Dictionary(grouping: mappedSongs) { $0.albumId }
+        var newSongById: [String: DownloadedSong] = [:]
+        var newRecordsByAlbumId: [String: [DownloadedSong]] = [:]
+        for song in mappedSongs {
+            newSongById[song.songId] = song
+            newRecordsByAlbumId[song.albumId, default: []].append(song)
+        }
+        for key in newRecordsByAlbumId.keys {
+            newRecordsByAlbumId[key]?.sort { ($0.disc ?? 0, $0.track ?? 0) < ($1.disc ?? 0, $1.track ?? 0) }
+        }
+        songById = newSongById
+        recordsByAlbumId = newRecordsByAlbumId
+
+        let albumsGrouped = newRecordsByAlbumId
             .map { (albumId, group) -> DownloadedAlbum in
-                let sorted = group.sorted { ($0.track ?? 0) < ($1.track ?? 0) }
-                let first = sorted.first!
+                let first = group.first!
                 return DownloadedAlbum(
                     albumId: albumId, serverId: sid,
                     title: first.albumTitle, artistName: first.artistName,
                     artistId: first.artistId, coverArtId: first.coverArtId,
-                    songs: sorted
+                    songs: group
                 )
             }
             .sorted {
@@ -113,17 +127,16 @@ final class DownloadStore: ObservableObject {
                 return $0.title.lowercased() < $1.title.lowercased()
             }
 
-        // Künstler — Gruppieren über artistName (artistId kann nil sein)
         let artistsGrouped = Dictionary(grouping: albumsGrouped) { $0.artistName }
-            .map { (artistName, albums) -> DownloadedArtist in
-                let first = albums.first!
+            .map { (artistName, albumsList) -> DownloadedArtist in
+                let first = albumsList.first!
                 let cover = artistCoverByName[artistName] ?? first.coverArtId
                 return DownloadedArtist(
                     artistId: first.artistId ?? "name:\(artistName)",
                     serverId: sid,
                     name: artistName,
                     coverArtId: cover,
-                    albums: albums
+                    albums: albumsList
                 )
             }
             .sorted { $0.name.lowercased() < $1.name.lowercased() }
@@ -139,6 +152,7 @@ final class DownloadStore: ObservableObject {
             paths[LocalDownloadIndex.key(songId: song.songId, serverId: song.serverId)] = song.filePath
         }
         LocalDownloadIndex.shared.update(paths: paths)
+        DownloadStatusCache.shared.rebuild(albumIds: Set(newRecordsByAlbumId.keys))
 
         isLoading = false
         if pendingReload {
@@ -147,10 +161,147 @@ final class DownloadStore: ObservableObject {
         }
     }
 
+    // MARK: - Incremental Mutations
+
+    func insertRecord(_ record: DownloadRecord) {
+        guard record.serverId == serverId else { return }
+        if isLoading { pendingReload = true; return }
+        let song = record.toDownloadedSong()
+        let albumId = song.albumId
+        let artistName = song.artistName
+
+        if let old = songById[song.songId] { totalBytes -= old.bytes }
+        songById[song.songId] = song
+        totalBytes += song.bytes
+
+        if var albumSongs = recordsByAlbumId[albumId] {
+            if let idx = albumSongs.firstIndex(where: { $0.songId == song.songId }) {
+                albumSongs[idx] = song
+            } else {
+                albumSongs.append(song)
+            }
+            albumSongs.sort { ($0.disc ?? 0, $0.track ?? 0) < ($1.disc ?? 0, $1.track ?? 0) }
+            recordsByAlbumId[albumId] = albumSongs
+        } else {
+            recordsByAlbumId[albumId] = [song]
+        }
+
+        if let idx = songs.firstIndex(where: { $0.songId == song.songId }) {
+            songs[idx] = song
+        } else {
+            songs.append(song)
+        }
+
+        if song.isFavorite {
+            if let idx = favoriteSongs.firstIndex(where: { $0.songId == song.songId }) {
+                favoriteSongs[idx] = song
+            } else {
+                favoriteSongs.append(song)
+            }
+        } else {
+            favoriteSongs.removeAll { $0.songId == song.songId }
+        }
+
+        let updatedAlbum = DownloadedAlbum(
+            albumId: albumId, serverId: serverId,
+            title: song.albumTitle, artistName: artistName,
+            artistId: song.artistId, coverArtId: song.coverArtId,
+            songs: recordsByAlbumId[albumId]!
+        )
+        let isNewAlbum: Bool
+        if let albumIdx = albums.firstIndex(where: { $0.albumId == albumId }) {
+            albums[albumIdx] = updatedAlbum
+            isNewAlbum = false
+        } else {
+            let artistLower = artistName.lowercased()
+            let albumLower = song.albumTitle.lowercased()
+            let insertIdx = albums.firstIndex { e in
+                let ea = e.artistName.lowercased()
+                if ea != artistLower { return ea > artistLower }
+                return e.title.lowercased() > albumLower
+            } ?? albums.endIndex
+            albums.insert(updatedAlbum, at: insertIdx)
+            isNewAlbum = true
+            DownloadStatusCache.shared.addAlbum(albumId)
+        }
+
+        if let artistIdx = artists.firstIndex(where: { $0.name == artistName }) {
+            let artistAlbums = albums.filter { $0.artistName == artistName }
+            let old = artists[artistIdx]
+            artists[artistIdx] = DownloadedArtist(
+                artistId: old.artistId, serverId: old.serverId,
+                name: old.name, coverArtId: old.coverArtId,
+                albums: artistAlbums
+            )
+        } else if isNewAlbum {
+            let artistAlbums = albums.filter { $0.artistName == artistName }
+            let cover = artistCoverByName[artistName] ?? song.coverArtId
+            let newArtist = DownloadedArtist(
+                artistId: song.artistId ?? "name:\(artistName)",
+                serverId: serverId,
+                name: artistName,
+                coverArtId: cover,
+                albums: artistAlbums
+            )
+            let insertIdx = artists.firstIndex { $0.name.lowercased() > artistName.lowercased() } ?? artists.endIndex
+            artists.insert(newArtist, at: insertIdx)
+        }
+
+        LocalDownloadIndex.shared.setPath(songId: song.songId, serverId: song.serverId, path: song.filePath)
+    }
+
+    func removeRecord(songId: String) {
+        if isLoading { pendingReload = true; return }
+        guard let song = songById[songId] else { return }
+        let albumId = song.albumId
+        let artistName = song.artistName
+
+        songById.removeValue(forKey: songId)
+        totalBytes -= song.bytes
+
+        recordsByAlbumId[albumId]?.removeAll { $0.songId == songId }
+        let albumNowEmpty = recordsByAlbumId[albumId]?.isEmpty ?? true
+        if albumNowEmpty { recordsByAlbumId.removeValue(forKey: albumId) }
+
+        songs.removeAll { $0.songId == songId }
+        favoriteSongs.removeAll { $0.songId == songId }
+
+        if let albumIdx = albums.firstIndex(where: { $0.albumId == albumId }) {
+            if albumNowEmpty {
+                albums.remove(at: albumIdx)
+                DownloadStatusCache.shared.removeAlbum(albumId)
+            } else {
+                let old = albums[albumIdx]
+                albums[albumIdx] = DownloadedAlbum(
+                    albumId: old.albumId, serverId: old.serverId,
+                    title: old.title, artistName: old.artistName,
+                    artistId: old.artistId, coverArtId: old.coverArtId,
+                    songs: recordsByAlbumId[albumId]!
+                )
+            }
+        }
+
+        if let artistIdx = artists.firstIndex(where: { $0.name == artistName }) {
+            let remainingAlbums = albums.filter { $0.artistName == artistName }
+            if remainingAlbums.isEmpty {
+                artists.remove(at: artistIdx)
+            } else {
+                let old = artists[artistIdx]
+                artists[artistIdx] = DownloadedArtist(
+                    artistId: old.artistId, serverId: old.serverId,
+                    name: old.name, coverArtId: old.coverArtId,
+                    albums: remainingAlbums
+                )
+            }
+        }
+
+        LocalDownloadIndex.shared.setPath(songId: songId, serverId: serverId, path: nil)
+    }
+
     // MARK: - Lookups
 
     func isDownloaded(songId: String) -> Bool {
-        songs.contains(where: { $0.songId == songId })
+        songById[songId] != nil
     }
 
     func downloadState(songId: String) -> DownloadState {
@@ -166,25 +317,25 @@ final class DownloadStore: ObservableObject {
     }
 
     func localURL(for songId: String) -> URL? {
-        guard let record = songs.first(where: { $0.songId == songId }) else { return nil }
+        guard let record = songById[songId] else { return nil }
         let url = record.fileURL
         return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
 
     func coverURL(for songId: String) -> URL? {
-        guard let record = songs.first(where: { $0.songId == songId }) else { return nil }
+        guard let record = songById[songId] else { return nil }
         let path = DownloadService.coverPath(forFilePath: record.filePath)
         return FileManager.default.fileExists(atPath: path) ? URL(fileURLWithPath: path) : nil
     }
 
     func albumDownloadStatus(albumId: String, totalSongs: Int) -> AlbumDownloadStatus {
-        let downloaded = songs.filter { $0.albumId == albumId }.count
+        let downloaded = recordsByAlbumId[albumId]?.count ?? 0
         if downloaded == 0 { return .none }
         if downloaded >= totalSongs { return .complete }
         return .partial(downloaded: downloaded, total: totalSongs)
     }
 
-    // MARK: - Actions (Convenience)
+    // MARK: - Actions
 
     func enqueueSongs(_ songs: [Song]) {
         let sid = serverId
@@ -222,9 +373,6 @@ final class DownloadStore: ObservableObject {
 
     // MARK: - Stats
 
-    /// `albumSongCounts` = Mapping albumId → songCount aus Library (Subsonic).
-    /// `artistAlbumIds`  = Mapping artistId → Set aller Album-IDs dieses Künstlers aus Library.
-    /// Alben/Künstler werden nur gezählt wenn sie **vollständig** heruntergeladen sind.
     func computeStats(albumSongCounts: [String: Int] = [:],
                       artistAlbumIds: [String: Set<String>] = [:]) async -> DownloadStorageStats {
         let sid = serverId
@@ -233,11 +381,8 @@ final class DownloadStore: ObservableObject {
             .resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]))?
             .volumeAvailableCapacityForImportantUsage
 
-        let downloadedByAlbum = Dictionary(grouping: songs) { $0.albumId }
-            .mapValues { $0.count }
-
-        let completeAlbumIds = Set(downloadedByAlbum.compactMap { (albumId, count) -> String? in
-            guard let total = albumSongCounts[albumId], total > 0, count >= total else { return nil }
+        let completeAlbumIds = Set(recordsByAlbumId.compactMap { (albumId, albumSongs) -> String? in
+            guard let total = albumSongCounts[albumId], total > 0, albumSongs.count >= total else { return nil }
             return albumId
         })
 
