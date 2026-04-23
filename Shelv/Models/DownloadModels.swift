@@ -30,6 +30,7 @@ struct DownloadedSong: Identifiable, Hashable {
     let duration: Int?
     let bytes: Int64
     let coverArtId: String?
+    let artistCoverArtId: String?
     let isFavorite: Bool
     let filePath: String
     let fileExtension: String

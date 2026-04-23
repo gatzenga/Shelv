@@ -16,6 +16,7 @@ struct DownloadRecord: Codable, FetchableRecord, PersistableRecord {
     var duration: Int?
     var bytes: Int64
     var coverArtId: String?
+    var artistCoverArtId: String?
     var isFavorite: Bool
     var filePath: String
     var fileExtension: String
@@ -37,6 +38,7 @@ struct DownloadRecord: Codable, FetchableRecord, PersistableRecord {
             duration: duration,
             bytes: bytes,
             coverArtId: coverArtId,
+            artistCoverArtId: artistCoverArtId,
             isFavorite: isFavorite,
             filePath: filePath,
             fileExtension: fileExtension,
@@ -149,6 +151,11 @@ actor DownloadDatabase {
                 t.column("strikeCount", .integer).notNull()
                 t.column("lastStrikeAt", .double).notNull()
                 t.primaryKey(["songId", "serverId"])
+            }
+        }
+        m.registerMigration("v2_add_artist_cover") { db in
+            try db.alter(table: "downloads") { t in
+                t.add(column: "artistCoverArtId", .text)
             }
         }
         try m.migrate(p)
