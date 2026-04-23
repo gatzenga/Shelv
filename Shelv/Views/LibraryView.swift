@@ -79,11 +79,7 @@ struct LibraryView: View {
     @State private var currentToast: ShelveToast?
     @State private var albumGroups: [(letter: String, items: [Album])] = []
     @State private var artistGroups: [(letter: String, items: [Artist])] = []
-    @State private var downloadedAlbumIds: Set<String> = []
-    @State private var downloadedArtistNames: Set<String> = []
-    @State private var downloadedSongIds: Set<String> = []
-    @State private var downloadedAlbums: [DownloadedAlbum] = []
-    @State private var downloadedArtists: [DownloadedArtist] = []
+    @ObservedObject private var downloadStore = DownloadStore.shared
 
     private let columns = [GridItem(.adaptive(minimum: 150, maximum: 200), spacing: 14)]
 
@@ -243,10 +239,8 @@ struct LibraryView: View {
             rebuildGroups()
         }
         .onReceive(NotificationCenter.default.publisher(for: .downloadsLibraryChanged)) { _ in
-            refreshDownloadState()
             rebuildGroups()
         }
-        .task { refreshDownloadState() }
         .onChange(of: albumDirectionRaw) { _, _ in rebuildGroups() }
         .onChange(of: artistSortRaw) { _, _ in rebuildGroups() }
         .onChange(of: artistDirectionRaw) { _, _ in rebuildGroups() }
@@ -254,14 +248,6 @@ struct LibraryView: View {
             let isFavorites = segment == .favorites
             if !enabled && isFavorites { segment = .albums }
         }
-    }
-
-    private func refreshDownloadState() {
-        downloadedAlbumIds = Set(DownloadStore.shared.albums.map { $0.albumId })
-        downloadedArtistNames = Set(DownloadStore.shared.artists.map { $0.name })
-        downloadedSongIds = Set(DownloadStore.shared.songs.map { $0.id })
-        downloadedAlbums = DownloadStore.shared.albums
-        downloadedArtists = DownloadStore.shared.artists
     }
 
     private func rebuildGroups() {
@@ -288,15 +274,25 @@ struct LibraryView: View {
         }
     }
 
+    private var downloadedAlbumIds: Set<String> {
+        Set(downloadStore.albums.map { $0.albumId })
+    }
+    private var downloadedArtistNames: Set<String> {
+        Set(downloadStore.artists.map { $0.name })
+    }
+    private var downloadedSongIds: Set<String> {
+        Set(downloadStore.songs.map { $0.id })
+    }
+
     private var displayAlbums: [Album] {
         guard offlineMode.isOffline else { return libraryStore.albums }
-        if libraryStore.albums.isEmpty { return downloadedAlbums.map { $0.asAlbum() } }
+        if libraryStore.albums.isEmpty { return downloadStore.albums.map { $0.asAlbum() } }
         return libraryStore.albums.filter { downloadedAlbumIds.contains($0.id) }
     }
 
     private var displayArtists: [Artist] {
         guard offlineMode.isOffline else { return libraryStore.artists }
-        if libraryStore.artists.isEmpty { return downloadedArtists.map { $0.asArtist() } }
+        if libraryStore.artists.isEmpty { return downloadStore.artists.map { $0.asArtist() } }
         return libraryStore.artists.filter { downloadedArtistNames.contains($0.name) }
     }
 
@@ -934,7 +930,7 @@ struct LibraryView: View {
         if enableDownloads {
             if downloadedArtistNames.contains(artist.name) {
                 Button(role: .destructive) {
-                    if let match = downloadedArtists.first(where: { $0.name == artist.name }) {
+                    if let match = downloadStore.artists.first(where: { $0.name == artist.name }) {
                         DownloadStore.shared.deleteArtist(match.artistId)
                     }
                 } label: { DeleteDownloadIcon() }
@@ -1034,7 +1030,7 @@ struct LibraryView: View {
             }
             if downloadedArtistNames.contains(artist.name) {
                 Button(role: .destructive) {
-                    if let match = downloadedArtists.first(where: { $0.name == artist.name }) {
+                    if let match = downloadStore.artists.first(where: { $0.name == artist.name }) {
                         DownloadStore.shared.deleteArtist(match.artistId)
                     }
                 } label: {
