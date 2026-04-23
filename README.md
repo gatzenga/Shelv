@@ -58,6 +58,21 @@ A native, album and artist focused iOS and iPadOS client for [Navidrome](https:/
 - **Auto-load** — when enabled in Settings, lyrics are fetched in the background as soon as a song starts playing
 - **Bulk download** — a one-tap option in Settings pre-fetches lyrics for your entire library in the background, with a live progress counter
 
+### Downloads & Offline Mode *(optional)*
+- Download albums and artists to your device for playback without a network connection
+- **Bulk download** — queue your entire library in one tap; Shelv prioritises frequently played, recently played, and starred content first
+- Configurable storage limit; download badges on album covers show full or partial download status
+- **Offline Mode** — when active, the app plays exclusively from local downloads with no server requests; library views show only downloaded content
+- Downloads continue in the background when you switch apps or lock your screen
+- Can be enabled or disabled in Settings; when disabled, all download UI is hidden
+
+### Transcoding *(optional)*
+- Set separate audio format and bitrate policies for Wi-Fi streaming, cellular streaming, and downloads
+- Supported formats: `raw` (original file), `mp3`, `opus`
+- Useful for saving storage on downloaded files or reducing cellular data usage
+- Falls back to `raw` automatically if the server doesn't support the chosen format
+- Can be enabled or disabled independently of Downloads
+
 ### Recap
 - Automatic weekly, monthly, and yearly playlists of your most-played songs, created directly on your Navidrome server
 - Configurable play threshold (10–50%): a track only counts once you've heard enough of it
@@ -74,6 +89,8 @@ A native, album and artist focused iOS and iPadOS client for [Navidrome](https:/
 - **Servers** — Add, edit, and switch between multiple Subsonic/Navidrome servers; run a full library scan with progress indicator and last-sync timestamp per server
 - **Appearance** — Choose between Light, Dark, and System mode; pick one of ten accent colors
 - **Cache** — See the current cover art cache size and clear it with a single tap
+- **Downloads** — Enable downloads, set storage limit, run a bulk download, toggle Offline Mode, manage downloaded content
+- **Transcoding** — Enable transcoding and configure format and bitrate per network type and for downloads
 - **Favorites & Playlists** — Toggle each feature on or off independently
 
 ### Cover Art

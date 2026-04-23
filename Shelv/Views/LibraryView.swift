@@ -14,6 +14,8 @@ enum AlbumSortOption: String, CaseIterable {
         case .year:         return tr("Year", "Jahr")
         }
     }
+
+    var requiresServer: Bool { self == .frequent || self == .newest }
 }
 
 enum ArtistSortOption: String, CaseIterable {
@@ -25,6 +27,8 @@ enum ArtistSortOption: String, CaseIterable {
         case .frequent:     return tr("Most Played", "Meist gespielt")
         }
     }
+
+    var requiresServer: Bool { self == .frequent }
 }
 
 enum SortDirection: String, CaseIterable {
@@ -231,7 +235,13 @@ struct LibraryView: View {
         .onAppear { rebuildGroups() }
         .onChange(of: libraryStore.albums) { _, _ in rebuildGroups() }
         .onChange(of: libraryStore.artists) { _, _ in rebuildGroups() }
-        .onChange(of: offlineMode.isOffline) { _, _ in rebuildGroups() }
+        .onChange(of: offlineMode.isOffline) { _, isOffline in
+            if isOffline {
+                if sortOption.requiresServer { sortOptionRaw = AlbumSortOption.alphabetical.rawValue }
+                if artistSortOption.requiresServer { artistSortRaw = ArtistSortOption.alphabetical.rawValue }
+            }
+            rebuildGroups()
+        }
         .onReceive(NotificationCenter.default.publisher(for: .downloadsLibraryChanged)) { _ in
             refreshDownloadState()
             rebuildGroups()
@@ -1138,7 +1148,7 @@ struct LibraryView: View {
                     Task { await libraryStore.loadAlbums(sortBy: newValue) }
                 }
             )) {
-                ForEach(AlbumSortOption.allCases, id: \.rawValue) { option in
+                ForEach(AlbumSortOption.allCases.filter { !offlineMode.isOffline || !$0.requiresServer }, id: \.rawValue) { option in
                     Text(option.label).tag(option.rawValue)
                 }
             } label: {
@@ -1162,7 +1172,7 @@ struct LibraryView: View {
     private var artistSortMenu: some View {
         Menu {
             Picker(selection: $artistSortRaw) {
-                ForEach(ArtistSortOption.allCases, id: \.rawValue) { option in
+                ForEach(ArtistSortOption.allCases.filter { !offlineMode.isOffline || !$0.requiresServer }, id: \.rawValue) { option in
                     Text(option.label).tag(option.rawValue)
                 }
             } label: {

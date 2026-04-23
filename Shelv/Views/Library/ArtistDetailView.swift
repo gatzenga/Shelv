@@ -104,6 +104,11 @@ struct ArtistDetailView: View {
             }
         }
         .shelveToast($currentToast)
+        .onChange(of: offlineMode.isOffline) { _, isOffline in
+            if isOffline && sortOption.requiresServer {
+                sortRaw = AlbumSortOption.alphabetical.rawValue
+            }
+        }
         .task {
             await loadDetail()
         }
@@ -420,7 +425,7 @@ struct ArtistDetailView: View {
 
             Menu {
                 Picker(selection: $sortRaw) {
-                    ForEach(AlbumSortOption.allCases, id: \.rawValue) { option in
+                    ForEach(AlbumSortOption.allCases.filter { !offlineMode.isOffline || !$0.requiresServer }, id: \.rawValue) { option in
                         Text(option.label).tag(option.rawValue)
                     }
                 } label: { EmptyView() }

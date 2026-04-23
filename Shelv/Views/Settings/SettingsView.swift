@@ -46,7 +46,6 @@ struct SettingsView: View {
     @State private var cacheSize = "—"
     @State private var showBulkDownloadSheet = false
     @State private var showDeleteAllDownloadsConfirm = false
-    @State private var downloadStats: DownloadStorageStats?
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
@@ -192,10 +191,6 @@ struct SettingsView: View {
                 }
 
                 downloadsSection
-                    .onAppear { Task { await refreshStats() } }
-                    .onReceive(NotificationCenter.default.publisher(for: .downloadsLibraryChanged)) { _ in
-                        Task { await refreshStats() }
-                    }
 
                 Section(tr("Lyrics", "Lyrics")) {
                     HStack {
@@ -460,22 +455,7 @@ struct SettingsView: View {
         .clipShape(RoundedRectangle(cornerRadius: 22))
     }
 
-    @MainActor private func refreshStats() async {
-        let albums = LibraryStore.shared.albums
-        let counts = Dictionary(uniqueKeysWithValues: albums.compactMap { album -> (String, Int)? in
-            guard let c = album.songCount else { return nil }
-            return (album.id, c)
-        })
-        let artistAlbums: [String: Set<String>] = Dictionary(
-            grouping: albums.compactMap { album -> (String, String)? in
-                guard let aid = album.artistId else { return nil }
-                return (aid, album.id)
-            },
-            by: { $0.0 }
-        ).mapValues { Set($0.map(\.1)) }
-        downloadStats = await DownloadStore.shared.computeStats(albumSongCounts: counts,
-                                                               artistAlbumIds: artistAlbums)
-    }
+
 
     private func recalculateCacheSize() async {
         let imgBytes = await ImageCacheService.shared.diskUsageBytes()
@@ -614,9 +594,7 @@ struct SettingsView: View {
 
                 ActiveDownloadProgressCell()
 
-                if let stats = downloadStats {
-                    downloadStatistics(stats)
-                }
+                DownloadStatsCell()
             }
         }
         .alert(
@@ -640,42 +618,71 @@ struct SettingsView: View {
     }
 
 
-    @ViewBuilder
-    private func downloadStatistics(_ stats: DownloadStorageStats) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(tr("Used", "Belegt"))
-                Spacer()
-                Text(ByteCountFormatter.string(fromByteCount: stats.totalBytes, countStyle: .file))
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-            }
-            if let free = stats.freeDiskBytes {
-                HStack {
-                    Text(tr("Free on device", "Frei auf Gerät"))
-                    Spacer()
-                    Text(ByteCountFormatter.string(fromByteCount: free, countStyle: .file))
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
+}
+
+private struct DownloadStatsCell: View {
+    @ObservedObject private var downloadStore = DownloadStore.shared
+    @State private var stats: DownloadStorageStats?
+
+    var body: some View {
+        Group {
+            if let stats {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text(tr("Used", "Belegt"))
+                        Spacer()
+                        Text(ByteCountFormatter.string(fromByteCount: stats.totalBytes, countStyle: .file))
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                    if let free = stats.freeDiskBytes {
+                        HStack {
+                            Text(tr("Free on device", "Frei auf Gerät"))
+                            Spacer()
+                            Text(ByteCountFormatter.string(fromByteCount: free, countStyle: .file))
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
+                    }
+                    HStack {
+                        Text(tr("Songs", "Songs"))
+                        Spacer()
+                        Text("\(stats.songCount)").foregroundStyle(.secondary).monospacedDigit()
+                    }
+                    HStack {
+                        Text(tr("Albums", "Alben"))
+                        Spacer()
+                        Text("\(stats.albumCount)").foregroundStyle(.secondary).monospacedDigit()
+                    }
+                    HStack {
+                        Text(tr("Artists", "Künstler"))
+                        Spacer()
+                        Text("\(stats.artistCount)").foregroundStyle(.secondary).monospacedDigit()
+                    }
                 }
-            }
-            HStack {
-                Text(tr("Songs", "Songs"))
-                Spacer()
-                Text("\(stats.songCount)").foregroundStyle(.secondary).monospacedDigit()
-            }
-            HStack {
-                Text(tr("Albums", "Alben"))
-                Spacer()
-                Text("\(stats.albumCount)").foregroundStyle(.secondary).monospacedDigit()
-            }
-            HStack {
-                Text(tr("Artists", "Künstler"))
-                Spacer()
-                Text("\(stats.artistCount)").foregroundStyle(.secondary).monospacedDigit()
+                .font(.subheadline)
             }
         }
-        .font(.subheadline)
+        .task { await refresh() }
+        .onChange(of: downloadStore.totalBytes) { _, _ in Task { await refresh() } }
+        .onChange(of: downloadStore.songs.count) { _, _ in Task { await refresh() } }
+    }
+
+    @MainActor private func refresh() async {
+        let albums = LibraryStore.shared.albums
+        let counts = Dictionary(uniqueKeysWithValues: albums.compactMap { album -> (String, Int)? in
+            guard let c = album.songCount else { return nil }
+            return (album.id, c)
+        })
+        let artistAlbums: [String: Set<String>] = Dictionary(
+            grouping: albums.compactMap { album -> (String, String)? in
+                guard let aid = album.artistId else { return nil }
+                return (aid, album.id)
+            },
+            by: { $0.0 }
+        ).mapValues { Set($0.map(\.1)) }
+        stats = await DownloadStore.shared.computeStats(albumSongCounts: counts,
+                                                       artistAlbumIds: artistAlbums)
     }
 }
 
