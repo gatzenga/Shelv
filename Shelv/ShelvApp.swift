@@ -96,6 +96,9 @@ struct ShelvApp: App {
                     if let active = serverStore.activeServer {
                         await downloadStore.setActiveServer(active.stableId)
                     }
+                    // DB ist jetzt bereit — sicherstellt dass Downloads geladen werden,
+                    // auch wenn setActiveServer oben durch den Guard blockiert wurde
+                    await downloadStore.reload()
                     for server in serverStore.servers where server.remoteUserId == nil {
                         guard let pw = serverStore.password(for: server) else { continue }
                         do {

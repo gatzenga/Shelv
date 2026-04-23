@@ -255,6 +255,7 @@ final class DownloadStore: ObservableObject {
         guard let song = songById[songId] else { return }
         let albumId = song.albumId
         let artistName = song.artistName
+        let songServerId = song.serverId
 
         songById.removeValue(forKey: songId)
         totalBytes -= song.bytes
@@ -295,7 +296,7 @@ final class DownloadStore: ObservableObject {
             }
         }
 
-        LocalDownloadIndex.shared.setPath(songId: songId, serverId: serverId, path: nil)
+        LocalDownloadIndex.shared.setPath(songId: songId, serverId: songServerId, path: nil)
     }
 
     // MARK: - Lookups

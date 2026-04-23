@@ -76,6 +76,13 @@ struct AlbumArtView: View {
         uiImage = nil
         loading = true
 
+        // Im Offline-Modus: nur Disk-Cache, kein Netzwerk, kein Retry
+        if UserDefaults.standard.bool(forKey: "offlineModeEnabled") {
+            uiImage = await ImageCacheService.shared.diskOnlyImage(key: key)
+            loading = false
+            return
+        }
+
         // Bis zu 3 Versuche bei fehlgeschlagenem Laden
         for attempt in 0..<3 {
             if attempt > 0 {

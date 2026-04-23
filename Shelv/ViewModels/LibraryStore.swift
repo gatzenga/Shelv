@@ -63,6 +63,7 @@ class LibraryStore: ObservableObject {
     private var activeServerID: UUID? { api.activeServer?.id }
 
     func loadDiscover() async {
+        guard !OfflineModeService.shared.isOffline else { return }
         isLoadingDiscover = true
         do {
             async let added    = api.getRecentlyAdded(size: 20)
@@ -81,6 +82,7 @@ class LibraryStore: ObservableObject {
     }
 
     func refreshRandomAlbums() async {
+        guard !OfflineModeService.shared.isOffline else { return }
         do {
             randomAlbums = try await api.getAlbumList(type: "random", size: 20)
         } catch {
@@ -96,6 +98,8 @@ class LibraryStore: ObservableObject {
             }.value
             if let cached, !cached.isEmpty { albums = cached }
         }
+
+        guard !OfflineModeService.shared.isOffline else { isLoadingAlbums = false; return }
 
         isLoadingAlbums = albums.isEmpty
 
@@ -149,6 +153,19 @@ class LibraryStore: ObservableObject {
                 Self.readFromDisk([Artist].self, name: "artists", serverID: serverID)
             }.value
             if let cached, !cached.isEmpty { artists = cached }
+        }
+
+        guard !OfflineModeService.shared.isOffline else {
+            // Notification auch aus Disk-Cache feuern damit DownloadStore.artistCoverByName befüllt wird
+            let map = Dictionary(uniqueKeysWithValues: artists.compactMap { artist -> (String, String)? in
+                guard let cover = artist.coverArt else { return nil }
+                return (artist.name, cover)
+            })
+            if !map.isEmpty {
+                NotificationCenter.default.post(name: .libraryArtistsLoaded, object: map)
+            }
+            isLoadingArtists = false
+            return
         }
 
         isLoadingArtists = artists.isEmpty
@@ -228,6 +245,8 @@ class LibraryStore: ObservableObject {
                 starredArtists = cached.artist ?? []
             }
         }
+
+        guard !OfflineModeService.shared.isOffline else { isLoadingStarred = false; return }
 
         isLoadingStarred = starredSongs.isEmpty && starredAlbums.isEmpty && starredArtists.isEmpty
         do {
@@ -343,6 +362,8 @@ class LibraryStore: ObservableObject {
             }.value
             if let cached, !cached.isEmpty { playlists = cached }
         }
+
+        guard !OfflineModeService.shared.isOffline else { isLoadingPlaylists = false; return }
 
         isLoadingPlaylists = playlists.isEmpty
         do {

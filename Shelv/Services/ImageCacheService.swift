@@ -26,6 +26,36 @@ actor ImageCacheService {
         memory.object(forKey: key as NSString)
     }
 
+    func diskOnlyImage(key: String) async -> UIImage? {
+        if let hit = memory.object(forKey: key as NSString) { return hit }
+        let diskURL = cacheDir.appendingPathComponent(key)
+        let dir = cacheDir
+        let mem = memory
+        return await Task.detached(priority: .medium) { () -> UIImage? in
+            if let data = try? Data(contentsOf: diskURL),
+               let img = UIImage(data: data) {
+                let cost = Int(img.size.width * img.size.height * 4)
+                mem.setObject(img, forKey: key as NSString, cost: cost)
+                return img
+            }
+            // Fallback: gleiche Cover-ID, andere gecachte Größe
+            guard let lastUnderscore = key.lastIndex(of: "_") else { return nil }
+            let idPrefix = String(key[key.startIndex..<lastUnderscore]) + "_"
+            let fallbackSizes = [300, 600, 200, 150, 120, 100, 80, 50]
+            for size in fallbackSizes {
+                let fallbackKey = "\(idPrefix)\(size)"
+                guard fallbackKey != key else { continue }
+                let fallbackURL = dir.appendingPathComponent(fallbackKey)
+                guard let data = try? Data(contentsOf: fallbackURL),
+                      let img = UIImage(data: data) else { continue }
+                let cost = Int(img.size.width * img.size.height * 4)
+                mem.setObject(img, forKey: key as NSString, cost: cost)
+                return img
+            }
+            return nil
+        }.value
+    }
+
     func image(url: URL, key: String) async -> UIImage? {
         if let hit = memory.object(forKey: key as NSString) { return hit }
 
