@@ -1,12 +1,9 @@
 import Foundation
 
-/// Synchronous, thread-safe lookup for locally cached artwork.
-/// Updated by ImageCacheService when artwork is written to disk.
-/// Queried synchronously by AlbumArtView for offline/cached image paths.
 final class LocalArtworkIndex {
     static let shared = LocalArtworkIndex()
     private let lock = NSLock()
-    private var index: [String: String] = [:]  // artId → absolute file path
+    private var index: [String: String] = [:]
 
     private init() {}
 
