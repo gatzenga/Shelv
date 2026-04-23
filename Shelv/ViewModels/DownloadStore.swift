@@ -130,7 +130,7 @@ final class DownloadStore: ObservableObject {
         let artistsGrouped = Dictionary(grouping: albumsGrouped) { $0.artistName }
             .map { (artistName, albumsList) -> DownloadedArtist in
                 let first = albumsList.first!
-                let cover = artistCoverByName[artistName] ?? first.coverArtId
+                let cover = first.songs.first?.artistCoverArtId ?? artistCoverByName[artistName] ?? first.coverArtId
                 return DownloadedArtist(
                     artistId: first.artistId ?? "name:\(artistName)",
                     serverId: sid,
@@ -152,6 +152,18 @@ final class DownloadStore: ObservableObject {
             paths[LocalDownloadIndex.key(songId: song.songId, serverId: song.serverId)] = song.filePath
         }
         LocalDownloadIndex.shared.update(paths: paths)
+        var artPaths: [String: String] = [:]
+        for song in mappedSongs {
+            if let artId = song.coverArtId {
+                let p = DownloadService.coverPath(forFilePath: song.filePath)
+                if FileManager.default.fileExists(atPath: p) { artPaths[artId] = p }
+            }
+            if let artId = song.artistCoverArtId {
+                let p = DownloadService.artistCoverPath(serverId: song.serverId, artId: artId)
+                if FileManager.default.fileExists(atPath: p) { artPaths[artId] = p }
+            }
+        }
+        LocalArtworkIndex.shared.update(paths: artPaths)
         DownloadStatusCache.shared.rebuild(albumIds: Set(newRecordsByAlbumId.keys))
 
         isLoading = false
@@ -235,7 +247,7 @@ final class DownloadStore: ObservableObject {
             )
         } else if isNewAlbum {
             let artistAlbums = albums.filter { $0.artistName == artistName }
-            let cover = artistCoverByName[artistName] ?? song.coverArtId
+            let cover = song.artistCoverArtId ?? artistCoverByName[artistName] ?? song.coverArtId
             let newArtist = DownloadedArtist(
                 artistId: song.artistId ?? "name:\(artistName)",
                 serverId: serverId,
@@ -248,6 +260,14 @@ final class DownloadStore: ObservableObject {
         }
 
         LocalDownloadIndex.shared.setPath(songId: song.songId, serverId: song.serverId, path: song.filePath)
+        if let artId = song.coverArtId {
+            let p = DownloadService.coverPath(forFilePath: song.filePath)
+            if FileManager.default.fileExists(atPath: p) { LocalArtworkIndex.shared.set(artId: artId, path: p) }
+        }
+        if let artId = song.artistCoverArtId {
+            let p = DownloadService.artistCoverPath(serverId: song.serverId, artId: artId)
+            if FileManager.default.fileExists(atPath: p) { LocalArtworkIndex.shared.set(artId: artId, path: p) }
+        }
     }
 
     func removeRecord(songId: String) {

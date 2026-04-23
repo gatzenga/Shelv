@@ -26,6 +26,11 @@ actor ImageCacheService {
         memory.object(forKey: key as NSString)
     }
 
+    nonisolated func cache(_ img: UIImage, key: String) {
+        let cost = Int(img.size.width * img.size.height * 4)
+        memory.setObject(img, forKey: key as NSString, cost: cost)
+    }
+
     func diskOnlyImage(key: String) async -> UIImage? {
         if let hit = memory.object(forKey: key as NSString) { return hit }
         let diskURL = cacheDir.appendingPathComponent(key)
