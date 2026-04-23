@@ -54,11 +54,11 @@ final class DownloadStore: ObservableObject {
             .store(in: &cancellables)
 
         NotificationCenter.default.publisher(for: .downloadsLibraryChanged)
-            .sink { [weak self] _ in Task { await self?.reload() } }
+            .sink { [weak self] _ in Task { @MainActor [weak self] in await self?.reload() } }
             .store(in: &cancellables)
 
         DownloadService.shared.batchUpdates
-            .receive(on: RunLoop.main)
+            .receive(on: DispatchQueue.main)
             .sink { [weak self] progress in self?.batchProgress = progress }
             .store(in: &cancellables)
 
@@ -86,8 +86,9 @@ final class DownloadStore: ObservableObject {
             songs = []; albums = []; artists = []; favoriteSongs = []; totalBytes = 0
             return
         }
-        guard !isLoading else { return }
+        guard !isLoading else { pendingReload = true; return }
         isLoading = true
+        pendingReload = false
         let sid = serverId
         let records = await DownloadDatabase.shared.allRecords(serverId: sid)
         let total = await DownloadDatabase.shared.totalBytes(serverId: sid)
@@ -140,6 +141,10 @@ final class DownloadStore: ObservableObject {
         LocalDownloadIndex.shared.update(paths: paths)
 
         isLoading = false
+        if pendingReload {
+            pendingReload = false
+            await reload()
+        }
     }
 
     // MARK: - Lookups
