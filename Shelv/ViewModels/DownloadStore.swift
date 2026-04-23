@@ -152,17 +152,20 @@ final class DownloadStore: ObservableObject {
             paths[LocalDownloadIndex.key(songId: song.songId, serverId: song.serverId)] = song.filePath
         }
         LocalDownloadIndex.shared.update(paths: paths)
-        var artPaths: [String: String] = [:]
-        for song in mappedSongs {
-            if let artId = song.coverArtId {
-                let p = DownloadService.coverPath(forFilePath: song.filePath)
-                if FileManager.default.fileExists(atPath: p) { artPaths[artId] = p }
+        let artPaths = await Task.detached(priority: .utility) { () -> [String: String] in
+            var dict: [String: String] = [:]
+            for song in mappedSongs {
+                if let artId = song.coverArtId {
+                    let p = DownloadService.coverPath(forFilePath: song.filePath)
+                    if FileManager.default.fileExists(atPath: p) { dict[artId] = p }
+                }
+                if let artId = song.artistCoverArtId {
+                    let p = DownloadService.artistCoverPath(serverId: song.serverId, artId: artId)
+                    if FileManager.default.fileExists(atPath: p) { dict[artId] = p }
+                }
             }
-            if let artId = song.artistCoverArtId {
-                let p = DownloadService.artistCoverPath(serverId: song.serverId, artId: artId)
-                if FileManager.default.fileExists(atPath: p) { artPaths[artId] = p }
-            }
-        }
+            return dict
+        }.value
         LocalArtworkIndex.shared.update(paths: artPaths)
         DownloadStatusCache.shared.rebuild(albumIds: Set(newRecordsByAlbumId.keys))
 
