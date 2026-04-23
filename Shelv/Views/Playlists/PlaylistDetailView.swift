@@ -116,23 +116,6 @@ struct PlaylistDetailView: View {
                             }
                             .tint(.orange)
 
-                            if enableDownloads {
-                                if downloadStore.isDownloaded(songId: song.id) {
-                                    Button(role: .destructive) {
-                                        downloadStore.deleteSong(song.id)
-                                    } label: {
-                                        DeleteDownloadIcon()
-                                    }
-                                    .tint(.red)
-                                } else if !offlineMode.isOffline {
-                                    Button {
-                                        downloadStore.enqueueSongs([song])
-                                    } label: {
-                                        Image(systemName: "arrow.down.circle")
-                                    }
-                                    .tint(accentColor)
-                                }
-                            }
                         }
                         .swipeActions(edge: .leading, allowsFullSwipe: false) {
                             if enableFavorites && !offlineMode.isOffline {
@@ -280,8 +263,9 @@ struct PlaylistDetailView: View {
                 .environmentObject(libraryStore)
                 .tint(accentColor)
         }
-        .task {
+        .task(id: playlist.id) {
             displayName = playlist.name
+            songs = []
             await loadSongs()
         }
     }
@@ -358,6 +342,7 @@ struct PlaylistDetailView: View {
                 Button {
                     let missing = songs.filter { !downloadStore.isDownloaded(songId: $0.id) }
                     downloadStore.enqueueSongs(missing)
+                    downloadStore.addOfflinePlaylist(playlist.id)
                     currentToast = ShelveToast(message: tr("Download started", "Download gestartet"))
                 } label: {
                     Label(
@@ -380,6 +365,7 @@ struct PlaylistDetailView: View {
                     for song in songs where downloadStore.isDownloaded(songId: song.id) {
                         downloadStore.deleteSong(song.id)
                     }
+                    downloadStore.removeOfflinePlaylist(playlist.id)
                 } label: {
                     Label(tr("Delete Downloads", "Downloads löschen"), systemImage: "arrow.down.circle")
                         .font(.subheadline).bold()

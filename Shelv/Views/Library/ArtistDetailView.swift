@@ -108,6 +108,7 @@ struct ArtistDetailView: View {
             if isOffline && sortOption.requiresServer {
                 sortRaw = AlbumSortOption.alphabetical.rawValue
             }
+            Task { await loadDetail() }
         }
         .task {
             await loadDetail()
@@ -122,7 +123,7 @@ struct ArtistDetailView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(artist.name)
                         .font(.title2).bold()
-                    if let count = artist.albumCount {
+                    if let count = detail?.albumCount ?? artist.albumCount {
                         Text("\(count) \(tr("Albums", "Alben"))")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
@@ -479,6 +480,9 @@ struct ArtistDetailView: View {
     }
 
     private func fetchAllSongs(from albums: [Album]) async -> [Song] {
+        if offlineMode.isOffline {
+            return albums.compactMap(\.songs).flatMap { $0 }
+        }
         let indexed = Array(albums.enumerated())
         return await withTaskGroup(of: (Int, [Song]).self) { group in
             for (i, album) in indexed {

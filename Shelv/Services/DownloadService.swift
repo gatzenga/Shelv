@@ -19,6 +19,9 @@ private struct DownloadJob {
     let coverArtId: String?
     let artistCoverArtId: String?
     let artistCoverURL: URL?
+    let albumArtistName: String?
+    let albumCoverArtId: String?
+    let albumCoverURL: URL?
     let albumId: String
     let albumTitle: String
     let artistName: String
@@ -98,7 +101,7 @@ actor DownloadService {
 
     // MARK: - Enqueueing
 
-    func enqueue(songs: [Song], serverId: String) async {
+    func enqueue(songs: [Song], serverId: String, albumArtistOverride: String? = nil, albumCoverArtIdOverride: String? = nil) async {
         guard !songs.isEmpty else { return }
         guard let api = await currentAPI(for: serverId) else { return }
         let downloadedIds = await DownloadDatabase.shared.allSongIds(serverId: serverId)
@@ -121,6 +124,10 @@ actor DownloadService {
             let artistCoverURL: URL? = artistCoverArtId.flatMap {
                 api.api.coverArtURL(for: $0, server: api.server, password: api.password, size: 600)
             }
+            let albumCoverId = albumCoverArtIdOverride
+            let albumCoverURL: URL? = albumCoverId.flatMap {
+                api.api.coverArtURL(for: $0, server: api.server, password: api.password, size: 600)
+            }
             let initialExt: String = {
                 if let t = transcoding { return t.codec.fileExtension }
                 return (song.suffix?.isEmpty == false) ? song.suffix! : "mp3"
@@ -133,6 +140,9 @@ actor DownloadService {
                 coverArtId: song.coverArt,
                 artistCoverArtId: artistCoverArtId,
                 artistCoverURL: artistCoverURL,
+                albumArtistName: albumArtistOverride,
+                albumCoverArtId: albumCoverId,
+                albumCoverURL: albumCoverURL,
                 albumId: song.albumId ?? "",
                 albumTitle: song.album ?? "",
                 artistName: song.artist ?? "",
@@ -158,7 +168,6 @@ actor DownloadService {
         do {
             let detail = try await api.api.getAlbum(id: album.id)
             let songs = (detail.song ?? []).map { song -> Song in
-                // Anreichern mit Album-Artist falls am Song fehlt
                 if song.artist != nil { return song }
                 return Song(
                     id: song.id, title: song.title,
@@ -169,7 +178,10 @@ actor DownloadService {
                     starred: song.starred, suffix: song.suffix, bitRate: song.bitRate
                 )
             }
-            await enqueue(songs: songs, serverId: serverId)
+            let albumArtist = detail.artist ?? album.artist
+            await enqueue(songs: songs, serverId: serverId,
+                         albumArtistOverride: albumArtist,
+                         albumCoverArtIdOverride: detail.coverArt)
         } catch {
             DBErrorLog.logPlayLog("DownloadService.enqueueAlbum: \(error.localizedDescription)")
         }
@@ -505,6 +517,8 @@ actor DownloadService {
             bytes: bytes,
             coverArtId: job.coverArtId,
             artistCoverArtId: job.artistCoverArtId,
+            albumArtistName: job.albumArtistName,
+            albumCoverArtId: job.albumCoverArtId,
             isFavorite: job.isFavorite,
             filePath: finalURL.path,
             fileExtension: actualExt,
@@ -611,10 +625,19 @@ actor DownloadService {
                 try? data.write(to: URL(fileURLWithPath: coverPath), options: .atomic)
             }
         }
+        let artDir = Self.artworkDirectory(serverId: job.serverId)
         if let artId = job.artistCoverArtId, let artURL = job.artistCoverURL {
             let artPath = Self.artistCoverPath(serverId: job.serverId, artId: artId)
             if !FileManager.default.fileExists(atPath: artPath) {
-                let artDir = Self.artworkDirectory(serverId: job.serverId)
+                try? FileManager.default.createDirectory(at: artDir, withIntermediateDirectories: true)
+                if let (data, _) = try? await coverSession.data(from: artURL) {
+                    try? data.write(to: URL(fileURLWithPath: artPath), options: .atomic)
+                }
+            }
+        }
+        if let artId = job.albumCoverArtId, let artURL = job.albumCoverURL {
+            let artPath = Self.artistCoverPath(serverId: job.serverId, artId: artId)
+            if !FileManager.default.fileExists(atPath: artPath) {
                 try? FileManager.default.createDirectory(at: artDir, withIntermediateDirectories: true)
                 if let (data, _) = try? await coverSession.data(from: artURL) {
                     try? data.write(to: URL(fileURLWithPath: artPath), options: .atomic)

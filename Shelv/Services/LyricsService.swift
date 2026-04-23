@@ -16,6 +16,7 @@ struct LyricsRecord: Codable, FetchableRecord, PersistableRecord {
     var songTitle: String?   = nil
     var artistName: String?  = nil
     var coverArt: String?    = nil
+    var songDuration: Int?   = nil
 
     static let databaseTableName = "lyrics"
 }
@@ -29,6 +30,7 @@ struct LyricsSearchResult: Identifiable {
     let artistName: String?
     let coverArt: String?
     let snippet: String
+    let duration: Int?
 }
 
 // MARK: - LRCLIB Response
@@ -85,6 +87,11 @@ actor LyricsService {
                     t.add(column: "songTitle",  .text)
                     t.add(column: "artistName", .text)
                     t.add(column: "coverArt",   .text)
+                }
+            }
+            m.registerMigration("v3_addDuration") { db in
+                try db.alter(table: "lyrics") { t in
+                    t.add(column: "songDuration", .integer)
                 }
             }
             try m.migrate(p)
@@ -159,14 +166,14 @@ actor LyricsService {
 
     // MARK: - Metadata Backfill
 
-    func updateMetadata(songId: String, serverId: String, title: String, artist: String?, coverArt: String?) {
+    func updateMetadata(songId: String, serverId: String, title: String, artist: String?, coverArt: String?, duration: Int? = nil) {
         safeWrite { db in
             try db.execute(
                 sql: """
-                    UPDATE lyrics SET songTitle = ?, artistName = ?, coverArt = ?
+                    UPDATE lyrics SET songTitle = ?, artistName = ?, coverArt = ?, songDuration = COALESCE(?, songDuration)
                     WHERE songId = ? AND serverId = ?
                 """,
-                arguments: [title, artist, coverArt, songId, serverId]
+                arguments: [title, artist, coverArt, duration, songId, serverId]
             )
         }
     }
@@ -203,10 +210,11 @@ actor LyricsService {
         if var cached = lyrics(songId: song.id, serverId: serverId),
            cached.source != "none",
            Date().timeIntervalSince1970 - cached.fetchedAt < sixMonths {
-            if cached.songTitle == nil || cached.artistName == nil || cached.coverArt == nil {
+            if cached.songTitle == nil || cached.artistName == nil || cached.coverArt == nil || cached.songDuration == nil {
                 cached.songTitle = cached.songTitle ?? song.title
                 cached.artistName = cached.artistName ?? song.artist
                 cached.coverArt = cached.coverArt ?? song.coverArt
+                cached.songDuration = cached.songDuration ?? song.duration
                 save(cached)
             }
             return cached
@@ -226,7 +234,8 @@ actor LyricsService {
                 plainText: nil, syncedLrc: nil, isSynced: false,
                 isInstrumental: false, language: nil,
                 fetchedAt: Date().timeIntervalSince1970,
-                songTitle: song.title, artistName: song.artist, coverArt: song.coverArt
+                songTitle: song.title, artistName: song.artist, coverArt: song.coverArt,
+                songDuration: song.duration
             )
             save(none)
             return none
@@ -236,7 +245,8 @@ actor LyricsService {
                 plainText: nil, syncedLrc: nil, isSynced: false,
                 isInstrumental: false, language: nil,
                 fetchedAt: Date().timeIntervalSince1970,
-                songTitle: song.title, artistName: song.artist, coverArt: song.coverArt
+                songTitle: song.title, artistName: song.artist, coverArt: song.coverArt,
+                songDuration: song.duration
             )
         }
     }
@@ -248,7 +258,7 @@ actor LyricsService {
         let pattern = "%\(text)%"
         return (try? pool.read { db in
             try Row.fetchAll(db, sql: """
-                SELECT songId, songTitle, artistName, coverArt, plainText
+                SELECT songId, songTitle, artistName, coverArt, plainText, songDuration
                 FROM lyrics
                 WHERE serverId = ?
                   AND source != 'none'
@@ -266,7 +276,8 @@ actor LyricsService {
                     songId: songId,
                     songTitle: songTitle,
                     artistName: row["artistName"], coverArt: row["coverArt"],
-                    snippet: snippet
+                    snippet: snippet,
+                    duration: row["songDuration"]
                 )
             }
         }) ?? []

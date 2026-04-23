@@ -418,11 +418,17 @@ class AudioPlayerService: ObservableObject {
            let local = LocalDownloadIndex.shared.url(songId: song.id, serverId: serverId) {
             return local
         }
+        guard !OfflineModeService.shared.isOffline else { return nil }
         return SubsonicAPIService.shared.streamURL(for: song.id)
     }
 
     private func startPlayback(song: Song) {
-        guard let url = resolveURL(for: song) else { return }
+        guard let url = resolveURL(for: song) else {
+            if OfflineModeService.shared.isOffline {
+                NotificationCenter.default.post(name: .offlinePlaybackBlocked, object: nil)
+            }
+            return
+        }
 
         crossfadeTriggered = false
         crossfadeSeekSuppressed = false

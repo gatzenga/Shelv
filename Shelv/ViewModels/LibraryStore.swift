@@ -377,8 +377,33 @@ class LibraryStore: ObservableObject {
     }
 
     func loadPlaylistDetail(id: String) async -> Playlist? {
+        if OfflineModeService.shared.isOffline {
+            guard let serverID = activeServerID else { return nil }
+            var playlist = await Task.detached(priority: .utility) {
+                Self.readFromDisk(Playlist.self, name: "playlist_\(id)", serverID: serverID)
+            }.value
+            let songs = await Task.detached(priority: .utility) {
+                Self.readFromDisk([Song].self, name: "playlist_songs_\(id)", serverID: serverID)
+            }.value
+            playlist?.songs = songs
+            return playlist
+        }
         do {
-            return try await api.getPlaylist(id: id)
+            let result = try await api.getPlaylist(id: id)
+            if let serverID = activeServerID {
+                save(result, name: "playlist_\(id)", serverID: serverID)
+                if let songs = result.songs {
+                    save(songs, name: "playlist_songs_\(id)", serverID: serverID)
+                }
+                if !playlists.contains(where: { $0.id == id }) {
+                    playlists.append(Playlist(
+                        id: result.id, name: result.name, comment: result.comment,
+                        songCount: result.songCount, duration: result.duration, coverArt: result.coverArt
+                    ))
+                    save(playlists, name: "playlists", serverID: serverID)
+                }
+            }
+            return result
         } catch {
             if !(error is CancellationError) { errorMessage = error.localizedDescription }
             return nil

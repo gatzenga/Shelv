@@ -277,6 +277,13 @@ struct SearchView: View {
                                                     .lineLimit(1)
                                                     .italic()
                                             }
+                                            Spacer()
+                                            if let dur = item.duration {
+                                                Text(String(format: "%d:%02d", dur / 60, dur % 60))
+                                                    .font(.caption)
+                                                    .foregroundStyle(.secondary)
+                                                    .monospacedDigit()
+                                            }
                                         }
                                         .contentShape(Rectangle())
                                     }
@@ -393,12 +400,13 @@ struct SearchView: View {
             if let song = try? await SubsonicAPIService.shared.getSong(id: item.songId) {
                 player.playSong(song)
                 // Metadaten in DB nachfüllen, damit künftige Suchen den echten Namen zeigen
-                if item.songTitle == nil || item.artistName == nil || item.coverArt == nil,
+                if item.songTitle == nil || item.artistName == nil || item.coverArt == nil || item.duration == nil,
                    let serverId = SubsonicAPIService.shared.activeServer?.id.uuidString {
                     Task.detached(priority: .utility) {
                         await LyricsService.shared.updateMetadata(
                             songId: item.songId, serverId: serverId,
-                            title: song.title, artist: song.artist, coverArt: song.coverArt
+                            title: song.title, artist: song.artist, coverArt: song.coverArt,
+                            duration: song.duration
                         )
                     }
                 }
@@ -441,20 +449,22 @@ struct SearchView: View {
         if let serverId = SubsonicAPIService.shared.activeServer?.id.uuidString {
             let results = await LyricsService.shared.searchLyrics(text: query, serverId: serverId)
             lyricsResults = results
-            let missing = results.filter { $0.songTitle == nil }
+            let missing = results.filter { $0.songTitle == nil || $0.duration == nil }
             if !missing.isEmpty {
                 for item in missing {
                     guard !Task.isCancelled else { break }
                     guard let song = try? await SubsonicAPIService.shared.getSong(id: item.songId) else { continue }
                     await LyricsService.shared.updateMetadata(
                         songId: item.songId, serverId: serverId,
-                        title: song.title, artist: song.artist, coverArt: song.coverArt
+                        title: song.title, artist: song.artist, coverArt: song.coverArt,
+                        duration: song.duration
                     )
                     if let idx = lyricsResults.firstIndex(where: { $0.songId == item.songId }) {
                         lyricsResults[idx] = LyricsSearchResult(
                             songId: item.songId,
                             songTitle: song.title, artistName: song.artist,
-                            coverArt: song.coverArt, snippet: item.snippet
+                            coverArt: song.coverArt, snippet: item.snippet,
+                            duration: song.duration
                         )
                     }
                 }
@@ -470,20 +480,17 @@ struct SearchView: View {
         }
         let records = await DownloadDatabase.shared.search(serverId: sid, query: query, limit: 100)
         let songs = records.map { $0.toDownloadedSong().asSong() }
-        let albumsSet = Dictionary(grouping: records) { $0.albumId }.map { key, group -> Album in
-            let first = group.first!
-            return Album(id: key, name: first.albumTitle, artist: first.artistName,
-                         artistId: first.artistId, coverArt: first.coverArtId,
-                         songCount: group.count, duration: nil, year: nil, genre: nil,
-                         playCount: nil, starred: nil, created: nil, songs: nil)
-        }
-        let artistsSet = Dictionary(grouping: records) { $0.artistName }.compactMap { name, group -> Artist? in
-            let first = group.first!
-            return Artist(id: first.artistId ?? "name:\(name)", name: name,
-                          albumCount: Set(group.map(\.albumId)).count,
-                          coverArt: first.coverArtId, starred: nil)
-        }
-        result = SearchResult(artist: artistsSet, album: albumsSet, song: songs)
-        lyricsResults = []
+        let q = query.lowercased()
+        let matchedAlbums = DownloadStore.shared.albums
+            .filter { $0.title.lowercased().contains(q) || $0.artistName.lowercased().contains(q) }
+            .map { $0.asAlbum() }
+        let matchedArtists = DownloadStore.shared.artists
+            .filter { $0.name.lowercased().contains(q) }
+            .map { $0.asArtist() }
+        result = SearchResult(artist: matchedArtists, album: matchedAlbums, song: songs)
+        let lyricsSid = serverStore.activeServer?.id.uuidString ?? sid
+        let allLyrics = await LyricsService.shared.searchLyrics(text: query, serverId: lyricsSid)
+        let downloadedIds = Set(DownloadStore.shared.songs.map { $0.songId })
+        lyricsResults = allLyrics.filter { downloadedIds.contains($0.songId) }
     }
 }

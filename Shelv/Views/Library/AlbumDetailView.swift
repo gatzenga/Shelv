@@ -50,10 +50,6 @@ struct AlbumDetailView: View {
                             player.play(songs: songs, startIndex: index)
                         } label: {
                             HStack(spacing: 14) {
-                                if let songCover = song.coverArt, songCover != album.coverArt {
-                                    AlbumArtView(coverArtId: songCover, size: 44, cornerRadius: 4)
-                                        .frame(width: 44, height: 44)
-                                }
                                 NowPlayingIndicator(
                                     songId: song.id,
                                     fallbackIndex: song.track ?? (index + 1),

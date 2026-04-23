@@ -661,6 +661,8 @@ private struct DownloadStatsCell: View {
                     }
                 }
                 .font(.subheadline)
+            } else {
+                ProgressView()
             }
         }
         .task { await refresh() }

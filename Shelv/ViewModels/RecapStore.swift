@@ -85,7 +85,10 @@ class RecapStore: ObservableObject {
     @Published var syncReports: [RecapSyncReport] = []
     @Published var showSyncReport: Bool = false
     @Published var entries: [RecapRegistryRecord] = []
-    @Published var recapPlaylistIds: Set<String> = []
+    @Published var recapPlaylistIds: Set<String> = {
+        let cached = UserDefaults.standard.stringArray(forKey: "shelv_recap_playlist_ids") ?? []
+        return Set(cached)
+    }()
     @Published var isImporting: Bool = false
 
     private enum GenKey {
@@ -106,6 +109,7 @@ class RecapStore: ObservableObject {
         let all = await PlayLogService.shared.allRegistryEntries(serverId: serverId)
         entries = all
         recapPlaylistIds = Set(all.map { $0.playlistId })
+        UserDefaults.standard.set(Array(recapPlaylistIds), forKey: "shelv_recap_playlist_ids")
     }
 
     func refreshWithCleanup(serverId: String) async {

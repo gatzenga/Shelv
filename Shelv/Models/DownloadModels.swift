@@ -25,6 +25,8 @@ struct DownloadedSong: Identifiable, Hashable {
     let title: String
     let albumTitle: String
     let artistName: String
+    let albumArtistName: String?
+    let albumCoverArtId: String?
     let track: Int?
     let disc: Int?
     let duration: Int?

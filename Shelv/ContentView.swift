@@ -2,6 +2,7 @@ import SwiftUI
 
 extension Notification.Name {
     static let addSongsToPlaylist = Notification.Name("addSongsToPlaylist")
+    static let offlinePlaybackBlocked = Notification.Name("shelv.offlinePlaybackBlocked")
 }
 
 struct ContentView: View {
@@ -13,6 +14,7 @@ struct ContentView: View {
     @State private var showPlayer = false
     @State private var showAddServer = false
     @State private var playlistSongIds: [String]? = nil
+    @State private var offlineToast: ShelveToast?
     @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage("enablePlaylists") private var enablePlaylists = true
     @AppStorage("enableDownloads") private var enableDownloads = false
@@ -97,6 +99,10 @@ struct ContentView: View {
                 playlistSongIds = ids
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .offlinePlaybackBlocked)) { _ in
+            offlineToast = ShelveToast(message: tr("Not available offline", "Offline nicht verfügbar"), isError: true)
+        }
+        .shelveToast($offlineToast)
         .onChange(of: serverStore.activeServerID) { _, _ in
             AudioPlayerService.shared.stop()
             libraryStore.resetInMemory()

@@ -63,9 +63,10 @@ struct AddToPlaylistSheet: View {
                                         ProgressView()
                                     }
                                 }
+                                .contentShape(Rectangle())
                             }
-                            .buttonStyle(.plain)
-                            .disabled(addingToPlaylistId != nil)
+                            .foregroundStyle(.primary)
+                            .disabled(addingToPlaylistId != nil && addingToPlaylistId != playlist.id)
                         }
                     }
                 }

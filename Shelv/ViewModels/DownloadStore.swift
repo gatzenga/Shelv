@@ -16,6 +16,7 @@ final class DownloadStore: ObservableObject {
     nonisolated let progressPublisher = PassthroughSubject<Void, Never>()
     @Published private(set) var batchProgress: BatchProgress? = nil
     @Published private(set) var isLoading: Bool = false
+    @Published private(set) var offlinePlaylistIds: Set<String> = []
 
     private var songById: [String: DownloadedSong] = [:]
     private var recordsByAlbumId: [String: [DownloadedSong]] = [:]
@@ -75,7 +76,19 @@ final class DownloadStore: ObservableObject {
     func setActiveServer(_ serverId: String) async {
         guard self.serverId != serverId else { return }
         self.serverId = serverId
+        let saved = UserDefaults.standard.stringArray(forKey: "shelv_offline_playlists_\(serverId)") ?? []
+        offlinePlaylistIds = Set(saved)
         await reload()
+    }
+
+    func addOfflinePlaylist(_ id: String) {
+        offlinePlaylistIds.insert(id)
+        UserDefaults.standard.set(Array(offlinePlaylistIds), forKey: "shelv_offline_playlists_\(serverId)")
+    }
+
+    func removeOfflinePlaylist(_ id: String) {
+        offlinePlaylistIds.remove(id)
+        UserDefaults.standard.set(Array(offlinePlaylistIds), forKey: "shelv_offline_playlists_\(serverId)")
     }
 
     func updateArtistCovers(_ map: [String: String]) {
@@ -115,8 +128,10 @@ final class DownloadStore: ObservableObject {
                 let first = group.first!
                 return DownloadedAlbum(
                     albumId: albumId, serverId: sid,
-                    title: first.albumTitle, artistName: first.artistName,
-                    artistId: first.artistId, coverArtId: first.coverArtId,
+                    title: first.albumTitle,
+                    artistName: first.albumArtistName ?? first.artistName,
+                    artistId: first.artistId,
+                    coverArtId: first.albumCoverArtId ?? first.coverArtId,
                     songs: group
                 )
             }
@@ -130,7 +145,7 @@ final class DownloadStore: ObservableObject {
         let artistsGrouped = Dictionary(grouping: albumsGrouped) { $0.artistName }
             .map { (artistName, albumsList) -> DownloadedArtist in
                 let first = albumsList.first!
-                let cover = first.songs.first?.artistCoverArtId ?? artistCoverByName[artistName] ?? first.coverArtId
+                let cover = first.songs.first?.artistCoverArtId ?? artistCoverByName[artistName]
                 return DownloadedArtist(
                     artistId: first.artistId ?? "name:\(artistName)",
                     serverId: sid,
@@ -154,13 +169,16 @@ final class DownloadStore: ObservableObject {
         LocalDownloadIndex.shared.update(paths: paths)
         let artPaths = await Task.detached(priority: .utility) { () -> [String: String] in
             var dict: [String: String] = [:]
+            let artDir = DownloadService.artworkDirectory(serverId: sid)
+            if let files = try? FileManager.default.contentsOfDirectory(atPath: artDir.path) {
+                for file in files where file.hasSuffix(".jpg") {
+                    let artId = String(file.dropLast(4))
+                    dict[artId] = artDir.appendingPathComponent(file).path
+                }
+            }
             for song in mappedSongs {
                 if let artId = song.coverArtId {
                     let p = DownloadService.coverPath(forFilePath: song.filePath)
-                    if FileManager.default.fileExists(atPath: p) { dict[artId] = p }
-                }
-                if let artId = song.artistCoverArtId {
-                    let p = DownloadService.artistCoverPath(serverId: song.serverId, artId: artId)
                     if FileManager.default.fileExists(atPath: p) { dict[artId] = p }
                 }
             }
@@ -183,7 +201,7 @@ final class DownloadStore: ObservableObject {
         if isLoading { pendingReload = true; return }
         let song = record.toDownloadedSong()
         let albumId = song.albumId
-        let artistName = song.artistName
+        let albumArtist = song.albumArtistName ?? song.artistName
 
         if let old = songById[song.songId] { totalBytes -= old.bytes }
         songById[song.songId] = song
@@ -219,8 +237,9 @@ final class DownloadStore: ObservableObject {
 
         let updatedAlbum = DownloadedAlbum(
             albumId: albumId, serverId: serverId,
-            title: song.albumTitle, artistName: artistName,
-            artistId: song.artistId, coverArtId: song.coverArtId,
+            title: song.albumTitle, artistName: albumArtist,
+            artistId: song.artistId,
+            coverArtId: song.albumCoverArtId ?? song.coverArtId,
             songs: recordsByAlbumId[albumId]!
         )
         let isNewAlbum: Bool
@@ -228,11 +247,11 @@ final class DownloadStore: ObservableObject {
             albums[albumIdx] = updatedAlbum
             isNewAlbum = false
         } else {
-            let artistLower = artistName.lowercased()
+            let albumArtistLower = albumArtist.lowercased()
             let albumLower = song.albumTitle.lowercased()
             let insertIdx = albums.firstIndex { e in
                 let ea = e.artistName.lowercased()
-                if ea != artistLower { return ea > artistLower }
+                if ea != albumArtistLower { return ea > albumArtistLower }
                 return e.title.lowercased() > albumLower
             } ?? albums.endIndex
             albums.insert(updatedAlbum, at: insertIdx)
@@ -240,8 +259,8 @@ final class DownloadStore: ObservableObject {
             DownloadStatusCache.shared.addAlbum(albumId)
         }
 
-        if let artistIdx = artists.firstIndex(where: { $0.name == artistName }) {
-            let artistAlbums = albums.filter { $0.artistName == artistName }
+        if let artistIdx = artists.firstIndex(where: { $0.name == albumArtist }) {
+            let artistAlbums = albums.filter { $0.artistName == albumArtist }
             let old = artists[artistIdx]
             artists[artistIdx] = DownloadedArtist(
                 artistId: old.artistId, serverId: old.serverId,
@@ -249,16 +268,16 @@ final class DownloadStore: ObservableObject {
                 albums: artistAlbums
             )
         } else if isNewAlbum {
-            let artistAlbums = albums.filter { $0.artistName == artistName }
-            let cover = song.artistCoverArtId ?? artistCoverByName[artistName] ?? song.coverArtId
+            let artistAlbums = albums.filter { $0.artistName == albumArtist }
+            let cover = artistCoverByName[albumArtist] ?? song.artistCoverArtId
             let newArtist = DownloadedArtist(
-                artistId: song.artistId ?? "name:\(artistName)",
+                artistId: song.artistId ?? "name:\(albumArtist)",
                 serverId: serverId,
-                name: artistName,
+                name: albumArtist,
                 coverArtId: cover,
                 albums: artistAlbums
             )
-            let insertIdx = artists.firstIndex { $0.name.lowercased() > artistName.lowercased() } ?? artists.endIndex
+            let insertIdx = artists.firstIndex { $0.name.lowercased() > albumArtist.lowercased() } ?? artists.endIndex
             artists.insert(newArtist, at: insertIdx)
         }
 
@@ -277,7 +296,7 @@ final class DownloadStore: ObservableObject {
         if isLoading { pendingReload = true; return }
         guard let song = songById[songId] else { return }
         let albumId = song.albumId
-        let artistName = song.artistName
+        let albumArtist = albums.first(where: { $0.albumId == albumId })?.artistName ?? song.artistName
         let songServerId = song.serverId
 
         songById.removeValue(forKey: songId)
@@ -305,8 +324,8 @@ final class DownloadStore: ObservableObject {
             }
         }
 
-        if let artistIdx = artists.firstIndex(where: { $0.name == artistName }) {
-            let remainingAlbums = albums.filter { $0.artistName == artistName }
+        if let artistIdx = artists.firstIndex(where: { $0.name == albumArtist }) {
+            let remainingAlbums = albums.filter { $0.artistName == albumArtist }
             if remainingAlbums.isEmpty {
                 artists.remove(at: artistIdx)
             } else {

@@ -12,7 +12,11 @@ struct PlaylistsView: View {
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
     private var visiblePlaylists: [Playlist] {
-        libraryStore.playlists.filter { !recapStore.recapPlaylistIds.contains($0.id) }
+        let noRecap = libraryStore.playlists.filter { !recapStore.recapPlaylistIds.contains($0.id) }
+        if offlineMode.isOffline {
+            return noRecap.filter { downloadStore.offlinePlaylistIds.contains($0.id) }
+        }
+        return noRecap
     }
 
     @State private var showCreateSheet = false
@@ -51,7 +55,7 @@ struct PlaylistsView: View {
                     List {
                         Section {
                             ForEach(visiblePlaylists) { playlist in
-                                NavigationLink(destination: PlaylistDetailView(playlist: playlist)) {
+                                NavigationLink(value: playlist) {
                                     playlistRow(playlist)
                                 }
                                 .contextMenu { playlistContextMenu(playlist) }
@@ -106,6 +110,10 @@ struct PlaylistsView: View {
                 }
             }
             .navigationTitle(tr("Playlists", "Playlists"))
+            .navigationDestination(for: Playlist.self) { playlist in
+                PlaylistDetailView(playlist: playlist)
+                    .id(playlist.id)
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -221,13 +229,14 @@ struct PlaylistsView: View {
                            let songs = loaded.songs, !songs.isEmpty {
                             let missing = songs.filter { !downloadStore.isDownloaded(songId: $0.id) }
                             if !missing.isEmpty { downloadStore.enqueueSongs(missing) }
+                            downloadStore.addOfflinePlaylist(playlist.id)
                             currentToast = ShelveToast(message: tr("Download started", "Download gestartet"))
                         }
                     }
                 } label: { Label(tr("Download Playlist", "Playlist herunterladen"), systemImage: "arrow.down.circle") }
             }
 
-            if isPlaylistFullyDownloaded(playlist) {
+            if downloadStore.offlinePlaylistIds.contains(playlist.id) {
                 Button(role: .destructive) {
                     deletePlaylistDownloads(playlist)
                 } label: {
@@ -246,7 +255,7 @@ struct PlaylistsView: View {
 
     @ViewBuilder
     private func playlistDownloadSwipe(_ playlist: Playlist) -> some View {
-        if isPlaylistFullyDownloaded(playlist) {
+        if downloadStore.offlinePlaylistIds.contains(playlist.id) {
             Button(role: .destructive) {
                 deletePlaylistDownloads(playlist)
             } label: { DeleteDownloadIcon() }
@@ -258,19 +267,12 @@ struct PlaylistsView: View {
                        let songs = loaded.songs, !songs.isEmpty {
                         let missing = songs.filter { !downloadStore.isDownloaded(songId: $0.id) }
                         if !missing.isEmpty { downloadStore.enqueueSongs(missing) }
+                        downloadStore.addOfflinePlaylist(playlist.id)
                     }
                 }
             } label: { Image(systemName: "arrow.down.circle") }
             .tint(accentColor)
         }
-    }
-
-    private func isPlaylistFullyDownloaded(_ playlist: Playlist) -> Bool {
-        guard let total = playlist.songCount, total > 0 else { return false }
-        // Heuristik: Wenn wir ≥ Gesamtzahl an Songs dieser Playlist lokal haben.
-        // Sauberer wäre eine Cross-Referenz der Playlist-Song-IDs; für Swipe/Menu reicht das.
-        let downloaded = downloadStore.songs.count
-        return downloaded >= total
     }
 
     private func deletePlaylistDownloads(_ playlist: Playlist) {
@@ -281,6 +283,7 @@ struct PlaylistsView: View {
                     downloadStore.deleteSong(song.id)
                 }
             }
+            downloadStore.removeOfflinePlaylist(playlist.id)
         }
     }
 
