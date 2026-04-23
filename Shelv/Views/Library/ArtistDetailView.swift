@@ -110,6 +110,10 @@ struct ArtistDetailView: View {
             }
             Task { await loadDetail() }
         }
+        .onChange(of: downloadStore.songs.count) { _, _ in
+            guard offlineMode.isOffline else { return }
+            populateFromLocal()
+        }
         .task {
             await loadDetail()
         }

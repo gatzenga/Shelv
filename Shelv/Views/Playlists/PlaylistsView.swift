@@ -222,14 +222,14 @@ struct PlaylistsView: View {
 
         if enableDownloads {
             Divider()
-            if !offlineMode.isOffline {
+            if !offlineMode.isOffline && !downloadStore.offlinePlaylistIds.contains(playlist.id) {
                 Button {
                     Task {
                         if let loaded = await libraryStore.loadPlaylistDetail(id: playlist.id),
                            let songs = loaded.songs, !songs.isEmpty {
                             let missing = songs.filter { !downloadStore.isDownloaded(songId: $0.id) }
                             if !missing.isEmpty { downloadStore.enqueueSongs(missing) }
-                            downloadStore.addOfflinePlaylist(playlist.id)
+                            downloadStore.addOfflinePlaylist(playlist.id, songIds: songs.map(\.id))
                             currentToast = ShelveToast(message: tr("Download started", "Download gestartet"))
                         }
                     }
@@ -267,7 +267,7 @@ struct PlaylistsView: View {
                        let songs = loaded.songs, !songs.isEmpty {
                         let missing = songs.filter { !downloadStore.isDownloaded(songId: $0.id) }
                         if !missing.isEmpty { downloadStore.enqueueSongs(missing) }
-                        downloadStore.addOfflinePlaylist(playlist.id)
+                        downloadStore.addOfflinePlaylist(playlist.id, songIds: songs.map(\.id))
                     }
                 }
             } label: { Image(systemName: "arrow.down.circle") }
@@ -296,7 +296,10 @@ struct PlaylistsView: View {
                     .font(.body)
                     .lineLimit(1)
                     .foregroundStyle(.primary)
-                if let count = playlist.songCount {
+                let count = offlineMode.isOffline
+                    ? downloadStore.downloadedCount(for: playlist.id)
+                    : playlist.songCount
+                if let count {
                     Text("\(count) \(tr("Songs", "Titel"))")
                         .font(.caption)
                         .foregroundStyle(.secondary)

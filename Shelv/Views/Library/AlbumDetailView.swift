@@ -195,6 +195,10 @@ struct AlbumDetailView: View {
         .task {
             await loadDetail()
         }
+        .onChange(of: downloadStore.songs.count) { _, _ in
+            guard offlineMode.isOffline else { return }
+            populateFromLocal()
+        }
         .onDisappear {
             artistResolveTask?.cancel()
             artistResolveTask = nil
@@ -203,7 +207,7 @@ struct AlbumDetailView: View {
 
     private var headerView: some View {
         VStack(spacing: 16) {
-            AlbumArtView(coverArtId: album.coverArt, size: 600, cornerRadius: 16)
+            AlbumArtView(coverArtId: detail?.coverArt ?? album.coverArt, size: 600, cornerRadius: 16)
                 .frame(width: 260, height: 260)
                 .shadow(color: .black.opacity(0.3), radius: 20, y: 10)
 
@@ -211,7 +215,7 @@ struct AlbumDetailView: View {
                 Text(album.name)
                     .font(.title2).bold()
                     .multilineTextAlignment(.center)
-                if let artist = album.artist {
+                if let artist = detail?.artist ?? album.artist {
                     Button { resolveArtist(artist) } label: {
                         Text(artist)
                             .font(.subheadline)
@@ -220,8 +224,8 @@ struct AlbumDetailView: View {
                     .buttonStyle(.plain)
                 }
                 HStack(spacing: 12) {
-                    if let year = album.year  { Text(String(year)) }
-                    if let genre = album.genre { Text(genre) }
+                    if let year = detail?.year ?? album.year  { Text(String(year)) }
+                    if let genre = detail?.genre ?? album.genre { Text(genre) }
                 }
                 .font(.caption)
                 .foregroundStyle(.tertiary)

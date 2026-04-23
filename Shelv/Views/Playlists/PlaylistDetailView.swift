@@ -268,6 +268,14 @@ struct PlaylistDetailView: View {
             songs = []
             await loadSongs()
         }
+        .onChange(of: offlineMode.isOffline) { _, _ in
+            songs = []
+            Task { await loadSongs() }
+        }
+        .onChange(of: downloadStore.songs.count) { _, _ in
+            guard offlineMode.isOffline else { return }
+            Task { await loadSongs() }
+        }
     }
 
     private var headerView: some View {
@@ -336,31 +344,26 @@ struct PlaylistDetailView: View {
 
     @ViewBuilder
     private func downloadHeaderButtons() -> some View {
-        let downloadedCount = songs.filter { downloadStore.isDownloaded(songId: $0.id) }.count
+        let isMarked = downloadStore.offlinePlaylistIds.contains(playlist.id)
         HStack(spacing: 10) {
-            if downloadedCount < songs.count && !offlineMode.isOffline {
+            if !isMarked && !offlineMode.isOffline {
                 Button {
                     let missing = songs.filter { !downloadStore.isDownloaded(songId: $0.id) }
-                    downloadStore.enqueueSongs(missing)
-                    downloadStore.addOfflinePlaylist(playlist.id)
+                    if !missing.isEmpty { downloadStore.enqueueSongs(missing) }
+                    downloadStore.addOfflinePlaylist(playlist.id, songIds: songs.map(\.id))
                     currentToast = ShelveToast(message: tr("Download started", "Download gestartet"))
                 } label: {
-                    Label(
-                        downloadedCount == 0
-                            ? tr("Download", "Herunterladen")
-                            : tr("Rest (\(songs.count - downloadedCount))", "Rest (\(songs.count - downloadedCount))"),
-                        systemImage: "arrow.down.circle"
-                    )
-                    .font(.subheadline).bold()
-                    .foregroundStyle(accentColor)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(accentColor.opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    Label(tr("Download", "Herunterladen"), systemImage: "arrow.down.circle")
+                        .font(.subheadline).bold()
+                        .foregroundStyle(accentColor)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(accentColor.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
                 }
                 .buttonStyle(.plain)
             }
-            if downloadedCount > 0 {
+            if isMarked {
                 Button {
                     for song in songs where downloadStore.isDownloaded(songId: song.id) {
                         downloadStore.deleteSong(song.id)
@@ -383,7 +386,15 @@ struct PlaylistDetailView: View {
     private func loadSongs() async {
         isLoading = true
         if let loaded = await libraryStore.loadPlaylistDetail(id: playlist.id) {
-            songs = loaded.songs ?? []
+            let allSongs = loaded.songs ?? []
+            songs = offlineMode.isOffline
+                ? allSongs.filter { downloadStore.isDownloaded(songId: $0.id) }
+                : allSongs
+        }
+        if !offlineMode.isOffline && downloadStore.offlinePlaylistIds.contains(playlist.id) {
+            if songs.contains(where: { !downloadStore.isDownloaded(songId: $0.id) }) {
+                downloadStore.removeOfflinePlaylist(playlist.id)
+            }
         }
         isLoading = false
     }

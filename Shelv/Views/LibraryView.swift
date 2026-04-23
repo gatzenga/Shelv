@@ -695,8 +695,9 @@ struct LibraryView: View {
                     .font(.body)
                     .lineLimit(1)
                     .foregroundStyle(.primary)
-                if let count = artist.albumCount {
-                    Text("\(count) \(tr("Albums", "Alben"))")
+                let localCount = displayAlbums.filter { $0.artistId == artist.id }.count
+                if localCount > 0 {
+                    Text("\(localCount) \(tr("Albums", "Alben"))")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

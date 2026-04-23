@@ -288,6 +288,90 @@ struct SearchView: View {
                                         .contentShape(Rectangle())
                                     }
                                     .buttonStyle(.plain)
+                                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                        Button {
+                                            let song = Song(
+                                                id: item.songId,
+                                                title: item.songTitle ?? item.songId,
+                                                artist: item.artistName, album: nil, albumId: nil,
+                                                track: nil, duration: item.duration, coverArt: item.coverArt,
+                                                year: nil, genre: nil, playCount: nil,
+                                                starred: nil, suffix: nil, bitRate: nil
+                                            )
+                                            player.addToQueue(song)
+                                            currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+                                        } label: { Image(systemName: "text.badge.plus") }
+                                        .tint(accentColor)
+                                        Button {
+                                            let song = Song(
+                                                id: item.songId,
+                                                title: item.songTitle ?? item.songId,
+                                                artist: item.artistName, album: nil, albumId: nil,
+                                                track: nil, duration: item.duration, coverArt: item.coverArt,
+                                                year: nil, genre: nil, playCount: nil,
+                                                starred: nil, suffix: nil, bitRate: nil
+                                            )
+                                            player.addPlayNext(song)
+                                            currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
+                                        } label: { Image(systemName: "text.insert") }
+                                        .tint(.orange)
+                                        if enableDownloads {
+                                            if downloadStore.isDownloaded(songId: item.songId) {
+                                                Button(role: .destructive) {
+                                                    downloadStore.deleteSong(item.songId)
+                                                } label: { DeleteDownloadIcon() }
+                                                .tint(.red)
+                                            } else if !offlineMode.isOffline {
+                                                Button {
+                                                    let song = Song(
+                                                        id: item.songId,
+                                                        title: item.songTitle ?? item.songId,
+                                                        artist: item.artistName, album: nil, albumId: nil,
+                                                        track: nil, duration: item.duration, coverArt: item.coverArt,
+                                                        year: nil, genre: nil, playCount: nil,
+                                                        starred: nil, suffix: nil, bitRate: nil
+                                                    )
+                                                    downloadStore.enqueueSongs([song])
+                                                } label: { Image(systemName: "arrow.down.circle") }
+                                                .tint(accentColor)
+                                            }
+                                        }
+                                    }
+                                    .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                                        if enableFavorites && !offlineMode.isOffline {
+                                            Button {
+                                                let song = Song(
+                                                    id: item.songId,
+                                                    title: item.songTitle ?? item.songId,
+                                                    artist: item.artistName, album: nil, albumId: nil,
+                                                    track: nil, duration: item.duration, coverArt: item.coverArt,
+                                                    year: nil, genre: nil, playCount: nil,
+                                                    starred: nil, suffix: nil, bitRate: nil
+                                                )
+                                                Task { await libraryStore.toggleStarSong(song) }
+                                            } label: {
+                                                let song = Song(
+                                                    id: item.songId,
+                                                    title: item.songTitle ?? item.songId,
+                                                    artist: item.artistName, album: nil, albumId: nil,
+                                                    track: nil, duration: item.duration, coverArt: item.coverArt,
+                                                    year: nil, genre: nil, playCount: nil,
+                                                    starred: nil, suffix: nil, bitRate: nil
+                                                )
+                                                Image(systemName: libraryStore.isSongStarred(song) ? "heart.slash" : "heart.fill")
+                                            }
+                                            .tint(.pink)
+                                        }
+                                        if enablePlaylists && !offlineMode.isOffline {
+                                            Button {
+                                                playlistSongIds = [item.songId]
+                                                showAddToPlaylist = true
+                                            } label: {
+                                                Image(systemName: "music.note.list")
+                                            }
+                                            .tint(.purple)
+                                        }
+                                    }
                                 }
                             }
                         }

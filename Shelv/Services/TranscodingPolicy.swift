@@ -11,7 +11,7 @@ enum TranscodingCodec: String, CaseIterable, Identifiable {
         case .aac:  return "AAC"
         }
     }
-    var fileExtension: String {
+    nonisolated var fileExtension: String {
         switch self {
         case .raw:  return ""
         case .opus: return "opus"

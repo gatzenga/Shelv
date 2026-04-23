@@ -17,6 +17,7 @@ final class DownloadStore: ObservableObject {
     @Published private(set) var batchProgress: BatchProgress? = nil
     @Published private(set) var isLoading: Bool = false
     @Published private(set) var offlinePlaylistIds: Set<String> = []
+    @Published private(set) var playlistSongIds: [String: [String]] = [:]
 
     private var songById: [String: DownloadedSong] = [:]
     private var recordsByAlbumId: [String: [DownloadedSong]] = [:]
@@ -78,17 +79,27 @@ final class DownloadStore: ObservableObject {
         self.serverId = serverId
         let saved = UserDefaults.standard.stringArray(forKey: "shelv_offline_playlists_\(serverId)") ?? []
         offlinePlaylistIds = Set(saved)
+        playlistSongIds = UserDefaults.standard.dictionary(forKey: "shelv_offline_playlist_songs_\(serverId)") as? [String: [String]] ?? [:]
         await reload()
     }
 
-    func addOfflinePlaylist(_ id: String) {
+    func addOfflinePlaylist(_ id: String, songIds: [String]) {
         offlinePlaylistIds.insert(id)
+        playlistSongIds[id] = songIds
         UserDefaults.standard.set(Array(offlinePlaylistIds), forKey: "shelv_offline_playlists_\(serverId)")
+        UserDefaults.standard.set(playlistSongIds, forKey: "shelv_offline_playlist_songs_\(serverId)")
     }
 
     func removeOfflinePlaylist(_ id: String) {
         offlinePlaylistIds.remove(id)
+        playlistSongIds.removeValue(forKey: id)
         UserDefaults.standard.set(Array(offlinePlaylistIds), forKey: "shelv_offline_playlists_\(serverId)")
+        UserDefaults.standard.set(playlistSongIds, forKey: "shelv_offline_playlist_songs_\(serverId)")
+    }
+
+    func downloadedCount(for playlistId: String) -> Int {
+        guard let ids = playlistSongIds[playlistId] else { return 0 }
+        return ids.filter { isDownloaded(songId: $0) }.count
     }
 
     func updateArtistCovers(_ map: [String: String]) {

@@ -86,6 +86,7 @@ struct ShelvApp: App {
                 .task { await lyricsStore.setup() }
                 .task(id: serverStore.activeServerID) {
                     guard let server = serverStore.activeServer else { return }
+                    await PlayLogService.shared.setup()
                     await recapStore.setup(serverId: server.stableId)
                     await downloadStore.setActiveServer(server.stableId)
                 }

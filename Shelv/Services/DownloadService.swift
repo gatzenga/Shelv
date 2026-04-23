@@ -116,7 +116,7 @@ actor DownloadService {
             if downloadedIds.contains(song.id) { continue }
             if inflightJobs.values.contains(where: { Self.key(songId: $0.song.id, serverId: $0.serverId) == key }) { continue }
             if pendingJobKeys.contains(key) { continue }
-            let transcoding = TranscodingPolicy.currentDownloadFormat()
+            let transcoding = await TranscodingPolicy.currentDownloadFormat()
             guard let url = api.api.downloadURL(for: song.id, server: api.server, password: api.password,
                                                 transcoding: transcoding) else { continue }
             let cover = song.coverArt.flatMap { api.api.coverArtURL(for: $0, server: api.server, password: api.password, size: 600) }
@@ -483,7 +483,7 @@ actor DownloadService {
         let key = Self.key(songId: job.song.id, serverId: job.serverId)
         let serverDir = Self.serverDirectory(serverId: job.serverId)
         // Wenn der Server nicht das angeforderte Format liefert, mit korrekter Extension speichern.
-        let actualExt = TranscodingPolicy.extensionFor(mimeType: mimeType) ?? job.fileExtension
+        let actualExt = await TranscodingPolicy.extensionFor(mimeType: mimeType) ?? job.fileExtension
         let finalURL = serverDir.appendingPathComponent("\(job.song.id).\(actualExt)")
         do {
             try FileManager.default.createDirectory(at: serverDir, withIntermediateDirectories: true)
@@ -665,11 +665,11 @@ actor DownloadService {
     }
 
     private func currentAPI(for serverId: String) async -> ResolvedAPI? {
-        let api = SubsonicAPIService.shared
+        let api = await SubsonicAPIService.shared
         let snapshot: (SubsonicServer?, String?) = await MainActor.run {
             (api.activeServer, api.activePassword)
         }
-        guard let server = snapshot.0, server.stableId == serverId,
+        guard let server = snapshot.0, await server.stableId == serverId,
               let pw = snapshot.1 else { return nil }
         return ResolvedAPI(api: api, server: server, password: pw)
     }

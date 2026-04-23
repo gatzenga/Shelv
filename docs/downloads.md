@@ -18,9 +18,15 @@ Every album detail page has a download button. Tapping it queues all songs in th
 
 From the Artists view, you can download or delete an entire artist's discography at once. Shelv fetches all albums for the artist first, then queues all songs.
 
-Download badges appear on album covers throughout the app:
-- A **checkmark** means all songs in the album are downloaded.
-- A **partial bar** means some songs are downloaded, but not all.
+A **download badge** (filled circle with arrow) appears on album covers throughout the app whenever at least one song in the album is stored locally. The album's context menu shows whether the download is partial — offering a **Download Remaining** option — or complete, showing only the delete option.
+
+### Playlists
+
+Every playlist detail page has a download button that saves all songs in the playlist to your device. Once a playlist is marked for offline use, the button changes to a delete option.
+
+In Offline Mode, the Playlists tab shows **only** playlists that have been downloaded — playlists without a download marker are hidden entirely.
+
+When you go back online, Shelv checks whether all songs in a marked playlist are still present. If any are missing the download marker is removed automatically and the download button reappears, so you can re-download the playlist.
 
 ### Bulk download
 

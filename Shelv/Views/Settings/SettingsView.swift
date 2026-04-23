@@ -34,6 +34,7 @@ struct SettingsView: View {
     @AppStorage("maxBulkDownloadStorageGB") private var maxBulkStorageGB = 10
     @AppStorage("transcodingEnabled") private var transcodingEnabled = false
     @ObservedObject var offlineMode = OfflineModeService.shared
+    @Environment(\.openURL) private var openURL
 
     @State private var showAddServer = false
     @State private var editingServer: SubsonicServer?
@@ -276,74 +277,89 @@ struct SettingsView: View {
 
                 Section(tr("Links & Contact", "Links & Kontakt")) {
                     if let url = URL(string: "https://github.com/gatzenga/Shelv") {
-                        Link(destination: url) {
-                            HStack {
+                        Button { openURL(url) } label: {
+                            Label {
+                                HStack {
+                                    Text("GitHub")
+                                    Spacer()
+                                    Image(systemName: "arrow.up.right")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            } icon: {
                                 Image(systemName: "chevron.left.forwardslash.chevron.right")
-                                    .foregroundStyle(.secondary)
-                                    .frame(width: 24)
-                                Text("GitHub")
-                                Spacer()
-                                Image(systemName: "arrow.up.right")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(accentColor)
                             }
                         }
+                        .foregroundStyle(.primary)
                     }
                     if let url = URL(string: "https://gatzenga.github.io/Shelv/privacy.html") {
-                        Link(destination: url) {
-                            HStack {
+                        Button { openURL(url) } label: {
+                            Label {
+                                HStack {
+                                    Text(tr("Privacy Policy", "Datenschutz"))
+                                    Spacer()
+                                    Image(systemName: "arrow.up.right")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            } icon: {
                                 Image(systemName: "hand.raised")
-                                    .foregroundStyle(.secondary)
-                                    .frame(width: 24)
-                                Text(tr("Privacy Policy", "Datenschutz"))
-                                Spacer()
-                                Image(systemName: "arrow.up.right")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(accentColor)
                             }
                         }
+                        .foregroundStyle(.primary)
                     }
                     if let url = URL(string: "mailto:kontakt@vkugler.ch") {
-                        Link(destination: url) {
-                            HStack {
+                        Button { openURL(url) } label: {
+                            Label {
+                                HStack {
+                                    Text(tr("Contact", "Kontakt"))
+                                    Spacer()
+                                    Image(systemName: "arrow.up.right")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            } icon: {
                                 Image(systemName: "envelope")
-                                    .foregroundStyle(.secondary)
-                                    .frame(width: 24)
-                                Text(tr("Contact", "Kontakt"))
-                                Spacer()
-                                Image(systemName: "arrow.up.right")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(accentColor)
                             }
                         }
+                        .foregroundStyle(.primary)
                     }
                     if let url = URL(string: "https://discord.gg/UdJK5mpmZu") {
-                        Link(destination: url) {
-                            HStack {
+                        Button { openURL(url) } label: {
+                            Label {
+                                HStack {
+                                    Text("Discord")
+                                    Spacer()
+                                    Image(systemName: "arrow.up.right")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            } icon: {
                                 Image(systemName: "bubble.left.and.bubble.right")
-                                    .foregroundStyle(.secondary)
-                                    .frame(width: 24)
-                                Text("Discord")
-                                Spacer()
-                                Image(systemName: "arrow.up.right")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(accentColor)
                             }
                         }
+                        .foregroundStyle(.primary)
                     }
                     if let url = URL(string: "https://ko-fi.com/Shelv") {
-                        Link(destination: url) {
-                            HStack {
+                        Button { openURL(url) } label: {
+                            Label {
+                                HStack {
+                                    Text(tr("Support my work", "Support my work"))
+                                    Spacer()
+                                    Image(systemName: "arrow.up.right")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            } icon: {
                                 Image(systemName: "cup.and.saucer")
-                                    .foregroundStyle(.secondary)
-                                    .frame(width: 24)
-                                Text(tr("Support my work", "Support my work"))
-                                Spacer()
-                                Image(systemName: "arrow.up.right")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(accentColor)
                             }
                         }
+                        .foregroundStyle(.primary)
                     }
                 }
 
