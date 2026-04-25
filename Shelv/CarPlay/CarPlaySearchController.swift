@@ -3,16 +3,28 @@ import CarPlay
 @MainActor
 final class CarPlaySearchController: NSObject {
     private let interfaceController: CPInterfaceController
-    let rootTemplate: CPSearchTemplate
+    let rootTemplate: CPListTemplate        // CPTabBarTemplate only allows CPListTemplate/CPGridTemplate
+    private let searchTemplate: CPSearchTemplate
     private var searchTask: Task<Void, Never>?
     private var lastResults: CarPlaySearchResults = .empty
 
     init(interfaceController: CPInterfaceController) {
         self.interfaceController = interfaceController
-        rootTemplate = CPSearchTemplate()
+        searchTemplate = CPSearchTemplate()
+        let tab = CPListTemplate(title: tr("Search", "Suche"), sections: [])
+        tab.tabImage = UIImage(systemName: "magnifyingglass")
+        rootTemplate = tab
         super.init()
-        rootTemplate.delegate = self
-        rootTemplate.tabImage = UIImage(systemName: "magnifyingglass")
+        searchTemplate.delegate = self
+        // Push search template when tab is selected (empty list triggers immediate push)
+        let searchRow = CPListItem(text: tr("Search…", "Suchen…"), detailText: nil)
+        searchRow.setImage(UIImage(systemName: "magnifyingglass")?.withTintColor(.label, renderingMode: .alwaysOriginal) ?? UIImage())
+        searchRow.handler = { [weak self] _, c in
+            guard let self else { c(); return }
+            self.interfaceController.pushTemplate(self.searchTemplate, animated: true, completion: nil)
+            c()
+        }
+        tab.updateSections([CPListSection(items: [searchRow])])
     }
 
     func cancel() {
