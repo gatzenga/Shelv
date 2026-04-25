@@ -30,7 +30,7 @@ struct ShelvApp: App {
     @StateObject private var libraryStore = LibraryStore.shared
     @StateObject private var player = AudioPlayerService.shared
     @StateObject private var lyricsStore = LyricsStore()
-    @StateObject private var recapStore = RecapStore()
+    @StateObject private var recapStore = RecapStore.shared
     @StateObject private var ckStatus = CloudKitSyncService.shared.status
     @StateObject private var downloadStore = DownloadStore.shared
     @StateObject private var offlineMode = OfflineModeService.shared

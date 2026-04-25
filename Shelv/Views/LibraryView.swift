@@ -231,6 +231,8 @@ struct LibraryView: View {
         .onAppear { rebuildGroups() }
         .onChange(of: libraryStore.albums) { _, _ in rebuildGroups() }
         .onChange(of: libraryStore.artists) { _, _ in rebuildGroups() }
+        .onChange(of: downloadStore.albums) { _, _ in rebuildGroups() }
+        .onChange(of: downloadStore.artists) { _, _ in rebuildGroups() }
         .onChange(of: offlineMode.isOffline) { _, isOffline in
             if isOffline {
                 if sortOption.requiresServer { sortOptionRaw = AlbumSortOption.alphabetical.rawValue }
@@ -287,13 +289,23 @@ struct LibraryView: View {
     private var displayAlbums: [Album] {
         guard offlineMode.isOffline else { return libraryStore.albums }
         if libraryStore.albums.isEmpty { return downloadStore.albums.map { $0.asAlbum() } }
-        return libraryStore.albums.filter { downloadedAlbumIds.contains($0.id) }
+        let fromLibrary = libraryStore.albums.filter { downloadedAlbumIds.contains($0.id) }
+        let coveredIds = Set(fromLibrary.map { $0.id })
+        let extras = downloadStore.albums
+            .filter { !coveredIds.contains($0.albumId) }
+            .map { $0.asAlbum() }
+        return fromLibrary + extras
     }
 
     private var displayArtists: [Artist] {
         guard offlineMode.isOffline else { return libraryStore.artists }
         if libraryStore.artists.isEmpty { return downloadStore.artists.map { $0.asArtist() } }
-        return libraryStore.artists.filter { downloadedArtistNames.contains($0.name) }
+        let fromLibrary = libraryStore.artists.filter { downloadedArtistNames.contains($0.name) }
+        let coveredNames = Set(fromLibrary.map { $0.name })
+        let extras = downloadStore.artists
+            .filter { !coveredNames.contains($0.name) }
+            .map { $0.asArtist() }
+        return fromLibrary + extras
     }
 
     private func sortedArtists() -> [Artist] {
@@ -457,7 +469,9 @@ struct LibraryView: View {
         .overlay(alignment: .trailing) {
             if !letters.isEmpty {
                 AlphabetIndexBar(letters: letters) { letter in
-                    scrollID.wrappedValue = "\(idPrefix)-\(letter)"
+                    withAnimation(.none) {
+                        scrollID.wrappedValue = "\(idPrefix)-\(letter)"
+                    }
                 }
                 .frame(width: 14)
                 .padding(.vertical, 16)
@@ -547,7 +561,9 @@ struct LibraryView: View {
                     let letters = albumGroups.map(\.letter).filter { !$0.isEmpty }
                     if !letters.isEmpty {
                         AlphabetIndexBar(letters: letters) { letter in
-                            proxy.scrollTo("alb-\(letter)", anchor: .top)
+                            withAnimation(.none) {
+                                proxy.scrollTo("alb-\(letter)", anchor: .top)
+                            }
                         }
                         .frame(width: 14)
                         .padding(.vertical, 16)
@@ -651,7 +667,9 @@ struct LibraryView: View {
                 let letters = artistGroups.map(\.letter).filter { !$0.isEmpty }
                 if !letters.isEmpty {
                     AlphabetIndexBar(letters: letters) { letter in
-                        proxy.scrollTo("art-\(letter)", anchor: .top)
+                        withAnimation(.none) {
+                            proxy.scrollTo("art-\(letter)", anchor: .top)
+                        }
                     }
                     .frame(width: 14)
                     .padding(.vertical, 16)

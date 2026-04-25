@@ -3,9 +3,20 @@ import SwiftUI
 struct DiscoverView: View {
     @ObservedObject var libraryStore = LibraryStore.shared
     @ObservedObject var offlineMode = OfflineModeService.shared
+    @ObservedObject var downloadStore = DownloadStore.shared
+    @EnvironmentObject var recapStore: RecapStore
     private let player = AudioPlayerService.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
+    @AppStorage("recapEnabled") private var recapEnabled = false
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
+
+    private var recapButtonVisible: Bool {
+        // Wenn Recap deaktiviert ist, soll der Eintrag komplett aus der UI verschwinden.
+        guard recapEnabled else { return false }
+        if !offlineMode.isOffline { return true }
+        // Offline: nur wenn mindestens eine Recap-Playlist heruntergeladen ist.
+        return !recapStore.recapPlaylistIds.isDisjoint(with: downloadStore.offlinePlaylistIds)
+    }
 
     @State private var mixLoading: String?
     @State private var errorMessage: String?
@@ -71,12 +82,14 @@ struct DiscoverView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     HStack(spacing: 16) {
-                        if !offlineMode.isOffline {
+                        if recapButtonVisible {
                             Button {
                                 showRecap = true
                             } label: {
                                 Image(systemName: "calendar.badge.clock")
                             }
+                        }
+                        if !offlineMode.isOffline {
                             Button {
                                 showInsights = true
                             } label: {

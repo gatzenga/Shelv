@@ -110,6 +110,26 @@ actor DownloadService {
                 a.coverArt.map { (a.name, $0) }
             })
         }
+
+        // Album-Metadata pro Song-AlbumId nachschlagen wenn kein Override vorliegt.
+        // Das verhindert dass beim Single-Song-/Playlist-Download der erste Song "gewinnt"
+        // und das Album mit Track-Künstler/Track-Cover statt Album-Künstler/Album-Cover anlegt.
+        var albumDetails: [String: (artist: String?, coverArt: String?)] = [:]
+        if albumArtistOverride == nil || albumCoverArtIdOverride == nil {
+            let neededIds = Set(songs.compactMap { $0.albumId }).filter { !$0.isEmpty }
+            await withTaskGroup(of: (String, String?, String?)?.self) { group in
+                for albumId in neededIds {
+                    group.addTask {
+                        guard let detail = try? await api.api.getAlbum(id: albumId) else { return nil }
+                        return (albumId, detail.artist, detail.coverArt)
+                    }
+                }
+                for await result in group {
+                    if let (id, artist, cover) = result { albumDetails[id] = (artist, cover) }
+                }
+            }
+        }
+
         var added = 0
         for song in songs {
             let key = Self.key(songId: song.id, serverId: serverId)
@@ -124,8 +144,11 @@ actor DownloadService {
             let artistCoverURL: URL? = artistCoverArtId.flatMap {
                 api.api.coverArtURL(for: $0, server: api.server, password: api.password, size: 600)
             }
-            let albumCoverId = albumCoverArtIdOverride
-            let albumCoverURL: URL? = albumCoverId.flatMap {
+            // Override > Lookup > nil
+            let lookedUp = song.albumId.flatMap { albumDetails[$0] }
+            let resolvedAlbumArtist = albumArtistOverride ?? lookedUp?.artist
+            let resolvedAlbumCover  = albumCoverArtIdOverride ?? lookedUp?.coverArt
+            let albumCoverURL: URL? = resolvedAlbumCover.flatMap {
                 api.api.coverArtURL(for: $0, server: api.server, password: api.password, size: 600)
             }
             let initialExt: String = {
@@ -140,8 +163,8 @@ actor DownloadService {
                 coverArtId: song.coverArt,
                 artistCoverArtId: artistCoverArtId,
                 artistCoverURL: artistCoverURL,
-                albumArtistName: albumArtistOverride,
-                albumCoverArtId: albumCoverId,
+                albumArtistName: resolvedAlbumArtist,
+                albumCoverArtId: resolvedAlbumCover,
                 albumCoverURL: albumCoverURL,
                 albumId: song.albumId ?? "",
                 albumTitle: song.album ?? "",
@@ -246,8 +269,8 @@ actor DownloadService {
             try? FileManager.default.removeItem(atPath: Self.coverPath(forFilePath: r.filePath))
             await DownloadDatabase.shared.delete(songId: r.songId, serverId: serverId)
             stateSubject.send((Self.key(songId: r.songId, serverId: serverId), .none))
+            await DownloadStore.shared.removeRecord(songId: r.songId)
         }
-        notifyLibraryChanged()
     }
 
     func deleteArtist(artistId: String, serverId: String) async {
@@ -265,8 +288,8 @@ actor DownloadService {
             try? FileManager.default.removeItem(atPath: Self.coverPath(forFilePath: r.filePath))
             await DownloadDatabase.shared.delete(songId: r.songId, serverId: serverId)
             stateSubject.send((Self.key(songId: r.songId, serverId: serverId), .none))
+            await DownloadStore.shared.removeRecord(songId: r.songId)
         }
-        notifyLibraryChanged()
     }
 
     func cancelBatch() {

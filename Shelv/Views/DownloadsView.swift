@@ -277,6 +277,7 @@ private struct DownloadedArtistRow: View {
 struct DownloadedAlbumDetailView: View {
     let album: DownloadedAlbum
     @ObservedObject var downloadStore = DownloadStore.shared
+    @Environment(\.dismiss) private var dismiss
     @AppStorage("themeColor") private var themeColorName = "violet"
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
     private let player = AudioPlayerService.shared
@@ -352,12 +353,16 @@ struct DownloadedAlbumDetailView: View {
         .navigationTitle(album.title)
         .navigationBarTitleDisplayMode(.inline)
         .shelveToast($currentToast)
+        .onChange(of: downloadStore.albums.contains(where: { $0.albumId == album.albumId })) { _, exists in
+            if !exists { dismiss() }
+        }
     }
 }
 
 struct DownloadedArtistDetailView: View {
     let artist: DownloadedArtist
     @ObservedObject var downloadStore = DownloadStore.shared
+    @Environment(\.dismiss) private var dismiss
 
     private var currentArtist: DownloadedArtist? {
         downloadStore.artists.first(where: { $0.artistId == artist.artistId })
@@ -365,7 +370,7 @@ struct DownloadedArtistDetailView: View {
 
     var body: some View {
         List {
-            ForEach(currentArtist?.albums ?? artist.albums) { album in
+            ForEach(currentArtist?.albums ?? []) { album in
                 NavigationLink(value: album) {
                     DownloadedAlbumRow(album: album)
                 }
@@ -385,6 +390,9 @@ struct DownloadedArtistDetailView: View {
         .listStyle(.plain)
         .navigationTitle(artist.name)
         .navigationBarTitleDisplayMode(.inline)
+        .onChange(of: downloadStore.artists.contains(where: { $0.artistId == artist.artistId })) { _, exists in
+            if !exists { dismiss() }
+        }
     }
 }
 

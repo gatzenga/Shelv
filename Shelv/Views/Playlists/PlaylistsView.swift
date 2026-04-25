@@ -276,14 +276,17 @@ struct PlaylistsView: View {
     }
 
     private func deletePlaylistDownloads(_ playlist: Playlist) {
+        // Marker zuerst entfernen — Row verschwindet sofort aus der Liste,
+        // verhindert dass weiteres Swipe/Tap auf der gerade verschwindenden Row crasht.
+        let playlistId = playlist.id
+        downloadStore.removeOfflinePlaylist(playlistId)
         Task {
-            if let loaded = await libraryStore.loadPlaylistDetail(id: playlist.id),
+            if let loaded = await libraryStore.loadPlaylistDetail(id: playlistId),
                let songs = loaded.songs {
                 for song in songs where downloadStore.isDownloaded(songId: song.id) {
                     downloadStore.deleteSong(song.id)
                 }
             }
-            downloadStore.removeOfflinePlaylist(playlist.id)
         }
     }
 

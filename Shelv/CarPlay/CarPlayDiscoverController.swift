@@ -1,6 +1,8 @@
 import CarPlay
 import Combine
 
+private let kPreviewCount = 4
+
 @MainActor
 final class CarPlayDiscoverController {
     private let interfaceController: CPInterfaceController
@@ -49,16 +51,16 @@ final class CarPlayDiscoverController {
 
     private func showOffline() {
         let goOnline = CPListItem(text: tr("Go Online", "Online gehen"), detailText: nil)
+        goOnline.setImage(cpIcon("wifi"))
         goOnline.handler = { _, c in
             Task { @MainActor in OfflineModeService.shared.exitOfflineMode() }
             c()
         }
-        let section = CPListSection(
+        rootTemplate.updateSections([CPListSection(
             items: [goOnline],
             header: tr("You are offline", "Du bist offline"),
             sectionIndexTitle: nil
-        )
-        rootTemplate.updateSections([section])
+        )])
     }
 
     private func fetchAndBuild() async {
@@ -74,84 +76,114 @@ final class CarPlayDiscoverController {
             return
         }
 
-        let sections = buildSections()
-        rootTemplate.updateSections(sections)
+        rootTemplate.updateSections(buildSections())
         guard !Task.isCancelled else { return }
         await enrichWithCovers()
     }
 
     private func showNoConnection() {
-        let enableOffline = CPListItem(text: tr("Enable Offline Mode", "Offline-Modus aktivieren"), detailText: nil)
-        enableOffline.handler = { _, c in
+        let enable = CPListItem(text: tr("Enable Offline Mode", "Offline-Modus aktivieren"), detailText: nil)
+        enable.setImage(cpIcon("wifi.slash"))
+        enable.handler = { _, c in
             Task { @MainActor in OfflineModeService.shared.enterOfflineMode() }
             c()
         }
-        let section = CPListSection(
-            items: [enableOffline],
+        rootTemplate.updateSections([CPListSection(
+            items: [enable],
             header: tr("No connection", "Keine Verbindung"),
             sectionIndexTitle: nil
-        )
-        rootTemplate.updateSections([section])
+        )])
     }
 
     private func buildSections(imageMap: [String: UIImage] = [:]) -> [CPListSection] {
         var sections: [CPListSection] = []
 
-        let mixItems: [CPListItem] = [
-            makeMixItem(tr("Mix: Newest Tracks", "Mix: Neueste Titel"), type: "newest"),
-            makeMixItem(tr("Mix: Frequently Played", "Mix: Häufig gespielt"), type: "frequent"),
-            makeMixItem(tr("Mix: Recently Played", "Mix: Kürzlich gespielt"), type: "recent"),
-        ]
-        sections.append(CPListSection(items: mixItems, header: "Mixes", sectionIndexTitle: nil))
+        // Mixes — reine Textzeilen, sauber untereinander
+        sections.append(CPListSection(items: [
+            makeMixItem(tr("Mix: Newest Tracks",     "Mix: Neueste Titel"),     type: "newest"),
+            makeMixItem(tr("Mix: Frequently Played", "Mix: Häufig gespielt"),   type: "frequent"),
+            makeMixItem(tr("Mix: Recently Played",   "Mix: Kürzlich gespielt"), type: "recent"),
+        ], header: "Mixes", sectionIndexTitle: nil))
 
+        // Category image rows: each category = one CPListImageRowItem with 4 covers
         let categories: [(String, [Album])] = [
-            (tr("Recently Added", "Zuletzt hinzugefügt"), LibraryStore.shared.recentlyAdded),
-            (tr("Recently Played", "Zuletzt gespielt"),   LibraryStore.shared.recentlyPlayed),
-            (tr("Frequently Played", "Häufig gespielt"),  LibraryStore.shared.frequentlyPlayed),
+            (tr("Recently Added",    "Zuletzt hinzugefügt"), LibraryStore.shared.recentlyAdded),
+            (tr("Recently Played",   "Zuletzt gespielt"),    LibraryStore.shared.recentlyPlayed),
+            (tr("Frequently Played", "Häufig gespielt"),     LibraryStore.shared.frequentlyPlayed),
         ]
-        for (header, albums) in categories where !albums.isEmpty {
-            let items = albums.map { album -> CPListItem in
-                let item = albumListItem(album) { [weak self] _, c in
-                    guard let self else { c(); return }
-                    CarPlayNavigation.openAlbum(album, from: self.interfaceController)
-                    c()
-                }
-                if let id = album.coverArt, let img = imageMap[id] { item.setImage(img) }
-                return item
-            }
-            sections.append(CPListSection(items: items, header: header, sectionIndexTitle: nil))
+
+        var categoryRows: [any CPListTemplateItem] = []
+        for (title, albums) in categories where !albums.isEmpty {
+            categoryRows.append(coverRowItem(title: title, albums: albums, imageMap: imageMap))
+        }
+        if !categoryRows.isEmpty {
+            sections.append(CPListSection(items: categoryRows, header: nil, sectionIndexTitle: nil))
         }
 
+        // Random
         let random = LibraryStore.shared.randomAlbums
         if !random.isEmpty {
-            let refreshIcon = (UIImage(systemName: "arrow.clockwise") ?? UIImage())
-                .withTintColor(.label, renderingMode: .alwaysOriginal)
-            let refreshItem = CPListItem(text: tr("Refresh", "Aktualisieren"), detailText: nil)
-            refreshItem.setImage(refreshIcon)
-            refreshItem.handler = { [weak self] _, c in
+            let refreshItem = actionListItem(title: tr("Refresh", "Aktualisieren"), systemImage: "arrow.clockwise") { [weak self] _, c in
                 Task { @MainActor [weak self] in
                     guard let self else { return }
                     await LibraryStore.shared.refreshRandomAlbums()
-                    let s = self.buildSections()
-                    self.rootTemplate.updateSections(s)
+                    self.rootTemplate.updateSections(self.buildSections())
                     await self.enrichWithCovers()
                 }
                 c()
             }
-            var items: [CPListItem] = [refreshItem]
-            items += random.map { album -> CPListItem in
-                let item = albumListItem(album) { [weak self] _, c in
-                    guard let self else { c(); return }
-                    CarPlayNavigation.openAlbum(album, from: self.interfaceController)
-                    c()
-                }
-                if let id = album.coverArt, let img = imageMap[id] { item.setImage(img) }
-                return item
-            }
-            sections.append(CPListSection(items: items, header: tr("Random", "Zufällig"), sectionIndexTitle: nil))
+            let randomRow = coverRowItem(title: tr("Random", "Zufällig"), albums: random, imageMap: imageMap)
+            let randomItems: [any CPListTemplateItem] = [refreshItem, randomRow]
+            sections.append(CPListSection(items: randomItems, header: tr("Random", "Zufällig"), sectionIndexTitle: nil))
         }
 
         return sections
+    }
+
+    private func coverRowItem(title: String, albums: [Album], imageMap: [String: UIImage]) -> CPListImageRowItem {
+        let preview = Array(albums.prefix(kPreviewCount))
+        let covers: [UIImage] = preview.map { album in
+            if let id = album.coverArt, let img = imageMap[id] { return img }
+            return cpPlaceholder
+        }
+        let row = makeImageRowItem(text: title, images: covers)
+        row.listImageRowHandler = { [weak self] _, idx, c in
+            guard let self, idx < preview.count else { c(); return }
+            CarPlayNavigation.openAlbum(preview[idx], from: self.interfaceController)
+            c()
+        }
+        row.handler = { [weak self] _, c in
+            guard let self else { c(); return }
+            self.pushFullAlbumList(title: title, albums: albums)
+            c()
+        }
+        return row
+    }
+
+    private func pushFullAlbumList(title: String, albums: [Album]) {
+        let template = CPListTemplate(title: title, sections: [
+            CPListSection(items: makeAlbumItems(albums, imageMap: [:]), header: nil, sectionIndexTitle: nil)
+        ])
+        CarPlayNavigation.safePush(template, on: interfaceController)
+        Task { [weak self] in
+            guard let self else { return }
+            await applyCoversAsync(template: template, coverArtIds: albums.map { $0.coverArt }) { [weak self] map in
+                guard let self else { return [] }
+                return [CPListSection(items: self.makeAlbumItems(albums, imageMap: map), header: nil, sectionIndexTitle: nil)]
+            }
+        }
+    }
+
+    private func makeAlbumItems(_ albums: [Album], imageMap: [String: UIImage]) -> [CPListItem] {
+        albums.map { album -> CPListItem in
+            let item = albumListItem(album) { [weak self] _, c in
+                guard let self else { c(); return }
+                CarPlayNavigation.openAlbum(album, from: self.interfaceController)
+                c()
+            }
+            if let id = album.coverArt, let img = imageMap[id] { item.setImage(img) }
+            return item
+        }
     }
 
     private func enrichWithCovers() async {
@@ -159,35 +191,53 @@ final class CarPlayDiscoverController {
             + LibraryStore.shared.recentlyPlayed
             + LibraryStore.shared.frequentlyPlayed
             + LibraryStore.shared.randomAlbums
-        let pairs = all.map { (item: CPListItem(text: "", detailText: nil), coverArtId: $0.coverArt) }
-        let imageMap = await batchLoadCovers(pairs)
-        guard !imageMap.isEmpty, !Task.isCancelled else { return }
-        rootTemplate.updateSections(buildSections(imageMap: imageMap))
+        let ids = all.map { $0.coverArt }
+        await applyCoversAsync(template: rootTemplate, coverArtIds: ids) { [weak self] map in
+            self?.buildSections(imageMap: map) ?? []
+        }
     }
 
     private func makeMixItem(_ title: String, type: String) -> CPListItem {
-        let icon = (UIImage(systemName: "waveform.badge.magnifyingglass") ?? UIImage())
-            .withTintColor(.label, renderingMode: .alwaysOriginal)
-        let item = CPListItem(text: title, detailText: nil, image: icon, accessoryImage: nil, accessoryType: .none)
-        item.handler = { _, c in
-            Task {
+        let item = CPListItem(text: title, detailText: nil)
+        item.handler = { [weak self] _, c in
+            // c() in den Task verschoben → CarPlay zeigt Loading-Spinner bis Aufruf zurück.
+            Task { [weak self] in
                 do {
                     let albums = try await SubsonicAPIService.shared.getAlbumList(type: type, size: 50)
                     var songs: [Song] = []
                     try await withThrowingTaskGroup(of: [Song].self) { group in
                         for album in albums.prefix(20) {
-                            group.addTask {
-                                (try? await SubsonicAPIService.shared.getAlbum(id: album.id).song) ?? []
-                            }
+                            group.addTask { (try? await SubsonicAPIService.shared.getAlbum(id: album.id).song) ?? [] }
                         }
                         for try await s in group { songs.append(contentsOf: s) }
                     }
-                    guard !songs.isEmpty else { return }
+                    guard !songs.isEmpty else {
+                        await MainActor.run { self?.presentMixError(title: title, message: tr("No tracks found.", "Keine Titel gefunden.")) }
+                        c()
+                        return
+                    }
                     await MainActor.run { AudioPlayerService.shared.play(songs: songs, startIndex: 0) }
-                } catch { /* network error — user can retry */ }
+                    c()
+                } catch {
+                    await MainActor.run { self?.presentMixError(title: title, message: error.localizedDescription) }
+                    c()
+                }
             }
-            c()
         }
         return item
+    }
+
+    private func presentMixError(title: String, message: String) {
+        // titleVariants nach Display-Breite — längste zuerst, fallback auf kurze.
+        let long  = "\(title) — \(message)"
+        let alert = CPAlertTemplate(
+            titleVariants: [long, title, tr("Mix failed", "Mix fehlgeschlagen")],
+            actions: [
+                CPAlertAction(title: tr("OK", "OK"), style: .default) { [weak self] _ in
+                    self?.interfaceController.dismissTemplate(animated: true, completion: nil)
+                }
+            ]
+        )
+        interfaceController.presentTemplate(alert, animated: true, completion: nil)
     }
 }

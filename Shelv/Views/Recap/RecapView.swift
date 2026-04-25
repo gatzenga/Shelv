@@ -4,17 +4,21 @@ struct RecapView: View {
     @EnvironmentObject var recapStore: RecapStore
     @EnvironmentObject var serverStore: ServerStore
     @ObservedObject var libraryStore = LibraryStore.shared
+    @ObservedObject var downloadStore = DownloadStore.shared
+    @ObservedObject var offlineMode = OfflineModeService.shared
     @Environment(\.dismiss) private var dismiss
     @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage("recapEnabled") private var recapEnabled = false
     @AppStorage("recapWeeklyEnabled") private var weeklyEnabled = true
     @AppStorage("recapMonthlyEnabled") private var monthlyEnabled = true
     @AppStorage("recapYearlyEnabled") private var yearlyEnabled = true
+    @AppStorage("enableDownloads") private var enableDownloads = false
 
     @State private var segment: RecapPeriod.PeriodType = .week
     @State private var selectedEntry: RecapRegistryRecord?
     @State private var entryToDelete: RecapRegistryRecord?
     @State private var showDeleteConfirm = false
+    @State private var currentToast: ShelveToast?
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
@@ -27,7 +31,12 @@ struct RecapView: View {
     }
 
     private var filteredEntries: [RecapRegistryRecord] {
-        recapStore.entries.filter { $0.periodType == segment.rawValue }
+        let typed = recapStore.entries.filter { $0.periodType == segment.rawValue }
+        // Im Offline-Modus nur Recap-Playlists anzeigen, die heruntergeladen sind —
+        // ungeladene Recaps sind ohne Server unspielbar.
+        return offlineMode.isOffline
+            ? typed.filter { downloadStore.offlinePlaylistIds.contains($0.playlistId) }
+            : typed
     }
 
     var body: some View {
@@ -68,6 +77,19 @@ struct RecapView: View {
                                 .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
                                 .listRowBackground(Color.clear)
                                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                    Button {
+                                        Task { await addRecapToQueue(entry) }
+                                    } label: { Image(systemName: "text.badge.plus") }
+                                    .tint(accentColor)
+                                    Button {
+                                        Task { await playRecapNext(entry) }
+                                    } label: { Image(systemName: "text.insert") }
+                                    .tint(.orange)
+                                    if enableDownloads {
+                                        recapDownloadSwipe(entry)
+                                    }
+                                }
+                                .swipeActions(edge: .leading, allowsFullSwipe: false) {
                                     Button(role: .destructive) {
                                         entryToDelete = entry
                                         showDeleteConfirm = true
@@ -109,6 +131,7 @@ struct RecapView: View {
             }
         }
         .tint(accentColor)
+        .shelveToast($currentToast)
         .alert(
             tr("Delete Recap?", "Recap löschen?"),
             isPresented: $showDeleteConfirm,
@@ -241,6 +264,65 @@ struct RecapView: View {
                 .padding(.horizontal, 32)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Swipe-Actions
+
+    @ViewBuilder
+    private func recapDownloadSwipe(_ entry: RecapRegistryRecord) -> some View {
+        if downloadStore.offlinePlaylistIds.contains(entry.playlistId) {
+            Button(role: .destructive) {
+                deleteRecapDownloads(entry)
+            } label: { DeleteDownloadIcon() }
+            .tint(.red)
+        } else if !offlineMode.isOffline {
+            Button {
+                Task { await downloadRecap(entry) }
+            } label: { Image(systemName: "arrow.down.circle") }
+            .tint(accentColor)
+        }
+    }
+
+    private func addRecapToQueue(_ entry: RecapRegistryRecord) async {
+        guard let loaded = await libraryStore.loadPlaylistDetail(id: entry.playlistId),
+              let songs = loaded.songs, !songs.isEmpty else { return }
+        await MainActor.run {
+            AudioPlayerService.shared.addToQueue(songs)
+            currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+        }
+    }
+
+    private func playRecapNext(_ entry: RecapRegistryRecord) async {
+        guard let loaded = await libraryStore.loadPlaylistDetail(id: entry.playlistId),
+              let songs = loaded.songs, !songs.isEmpty else { return }
+        await MainActor.run {
+            AudioPlayerService.shared.addPlayNext(songs)
+            currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
+        }
+    }
+
+    private func downloadRecap(_ entry: RecapRegistryRecord) async {
+        guard let loaded = await libraryStore.loadPlaylistDetail(id: entry.playlistId),
+              let songs = loaded.songs, !songs.isEmpty else { return }
+        let missing = songs.filter { !downloadStore.isDownloaded(songId: $0.id) }
+        if !missing.isEmpty { downloadStore.enqueueSongs(missing) }
+        downloadStore.addOfflinePlaylist(entry.playlistId, songIds: songs.map(\.id))
+        await MainActor.run {
+            currentToast = ShelveToast(message: tr("Download started", "Download gestartet"))
+        }
+    }
+
+    private func deleteRecapDownloads(_ entry: RecapRegistryRecord) {
+        let pid = entry.playlistId
+        downloadStore.removeOfflinePlaylist(pid)
+        Task {
+            if let loaded = await libraryStore.loadPlaylistDetail(id: pid),
+               let songs = loaded.songs {
+                for song in songs where downloadStore.isDownloaded(songId: song.id) {
+                    downloadStore.deleteSong(song.id)
+                }
+            }
+        }
     }
 }
 

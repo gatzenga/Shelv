@@ -80,6 +80,8 @@ enum RecapProcessedWeeks {
 
 @MainActor
 class RecapStore: ObservableObject {
+    static let shared = RecapStore()
+
     @Published var isGenerating: Bool = false
     @Published var generationError: String?
     @Published var syncReports: [RecapSyncReport] = []

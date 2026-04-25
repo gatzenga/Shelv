@@ -57,9 +57,11 @@ struct AlphabetIndexBar: View {
                     throttleTask?.cancel()
                     throttleTask = nil
                     throttled = false
-                    guard !letters.isEmpty else { lastSelected = ""; return }
-                    let index = min(max(Int(value.location.y / itemHeight), 0), letters.count - 1)
-                    onSelect(letters[index])
+                    if !pendingLetter.isEmpty {
+                        guard !letters.isEmpty else { lastSelected = ""; pendingLetter = ""; return }
+                        let index = min(max(Int(value.location.y / itemHeight), 0), letters.count - 1)
+                        onSelect(letters[index])
+                    }
                     lastSelected = ""
                     pendingLetter = ""
                 }

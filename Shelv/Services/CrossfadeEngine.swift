@@ -7,7 +7,7 @@ final class CrossfadeEngine: ObservableObject {
     @Published private(set) var currentTime: TimeInterval = 0
     @Published private(set) var duration: TimeInterval = 0
     @Published private(set) var isPlaying: Bool = false
-    private(set) var isCrossfading: Bool = false
+    @Published private(set) var isCrossfading: Bool = false
 
     var crossfadeDuration: TimeInterval = 5
     var onTrackFinished: (() -> Void)?
@@ -34,6 +34,8 @@ final class CrossfadeEngine: ObservableObject {
         let b = AVPlayer()
         a.allowsExternalPlayback = false
         b.allowsExternalPlayback = false
+        a.automaticallyWaitsToMinimizeStalling = false
+        b.automaticallyWaitsToMinimizeStalling = false
         playerA = a
         playerB = b
         activePlayer = a
@@ -65,7 +67,7 @@ final class CrossfadeEngine: ObservableObject {
         inactivePlayer.replaceCurrentItem(with: nil)
         inactivePlayer.volume = 1.0
 
-        let item = AVPlayerItem(url: url)
+        let item = makePlayerItem(url: url)
         activePlayer.replaceCurrentItem(with: item)
         activePlayer.volume = 1.0
         activePlayer.play()
@@ -121,7 +123,8 @@ final class CrossfadeEngine: ObservableObject {
     }
 
     func triggerCrossfade(nextURL: URL) {
-        inactivePlayer.replaceCurrentItem(with: AVPlayerItem(url: nextURL))
+        inactivePlayer.pause()
+        inactivePlayer.replaceCurrentItem(with: makePlayerItem(url: nextURL))
         inactivePlayer.volume = 0
         beginFade()
     }
@@ -171,6 +174,19 @@ final class CrossfadeEngine: ObservableObject {
         duration = 0
     }
 
+    private func makePlayerItem(url: URL) -> AVPlayerItem {
+        let asset: AVURLAsset
+        if url.isFileURL {
+            asset = AVURLAsset(url: url)
+        } else {
+            let headers: [String: String] = ["Range": "bytes=0-"]
+            asset = AVURLAsset(url: url, options: ["AVURLAssetHTTPHeaderFieldsKey": headers])
+        }
+        let item = AVPlayerItem(asset: asset)
+        item.preferredForwardBufferDuration = 10
+        return item
+    }
+
     private func removeFailureObservation() {
         itemStatusObservation?.invalidate()
         itemStatusObservation = nil
@@ -202,7 +218,8 @@ final class CrossfadeEngine: ObservableObject {
         let progress = min(Date().timeIntervalSince(start) / crossfadeDuration, 1.0)
         activePlayer.volume = Float(1.0 - progress)
         inactivePlayer.volume = Float(progress)
-        currentTime = inactivePlayer.currentTime().seconds
+        let t = inactivePlayer.currentTime().seconds
+        if t.isFinite { currentTime = t }
         if progress >= 1.0 { completeFade() }
     }
 
@@ -243,8 +260,9 @@ final class CrossfadeEngine: ObservableObject {
             queue: .main
         ) { [weak self] time in
             guard let self else { return }
-            self.currentTime = time.seconds
             self.refreshDuration()
+            guard !self.isCrossfading else { return }
+            self.currentTime = time.seconds
         }
         timeObserverPlayer = player
     }

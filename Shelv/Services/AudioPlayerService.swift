@@ -47,6 +47,7 @@ class AudioPlayerService: ObservableObject {
     @Published var isShuffled: Bool = false
     @Published var repeatMode: RepeatMode = .off
     @Published var actualStreamFormat: ActualStreamFormat?
+    @Published var isCrossfading: Bool = false
 
     private var formatProbeTask: Task<Void, Never>?
     private var playbackWatchdog: Task<Void, Never>?
@@ -868,7 +869,7 @@ class AudioPlayerService: ObservableObject {
         engine.$duration
             .sink { [weak self] d in
                 Task { @MainActor [weak self] in
-                    guard let self, d > 0 else { return }
+                    guard let self, d > 0, !self.crossfadeTriggered else { return }
                     self.duration = d
                     self.timePublisher.send((time: self.currentTime, duration: d))
                 }
@@ -884,6 +885,14 @@ class AudioPlayerService: ObservableObject {
                         self.playbackWatchdog?.cancel()
                     }
                     self.isPlaying = playing
+                }
+            }
+            .store(in: &engineSubscriptions)
+
+        engine.$isCrossfading
+            .sink { [weak self] crossfading in
+                Task { @MainActor [weak self] in
+                    self?.isCrossfading = crossfading
                 }
             }
             .store(in: &engineSubscriptions)
@@ -955,11 +964,21 @@ class AudioPlayerService: ObservableObject {
         guard currentTime >= triggerAt else { return }
         guard !(repeatMode == .one && playNextQueue.isEmpty) else { return }
         guard let nextSong = peekNextSong() else { return }
+        guard !isCrossfadeIncompatibleRoute else { return }
 
         crossfadeTriggered = true
         advanceQueueState()
         crossfadeToSong(nextSong)
         saveState()
+    }
+
+    private var isCrossfadeIncompatibleRoute: Bool {
+        let outputs = AVAudioSession.sharedInstance().currentRoute.outputs
+        guard !outputs.isEmpty else { return false }
+        let hasLocallyMixableOutput = outputs.contains { output in
+            output.portType != .airPlay && output.portType != .carAudio
+        }
+        return !hasLocallyMixableOutput
     }
 
     private func updateNowPlayingInfo(song: Song) {

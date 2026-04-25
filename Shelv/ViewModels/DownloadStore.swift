@@ -198,6 +198,14 @@ final class DownloadStore: ObservableObject {
         LocalArtworkIndex.shared.update(paths: artPaths)
         DownloadStatusCache.shared.rebuild(albumIds: Set(newRecordsByAlbumId.keys))
 
+        // Orphan-Playlist-Marker aufräumen: Marker, deren Songs alle nicht mehr lokal sind,
+        // entfernen — sonst Geist-Eintrag im Offline-Modus (z.B. nach „Delete All Downloads").
+        let orphanedPlaylistIds = offlinePlaylistIds.filter { id in
+            guard let ids = playlistSongIds[id], !ids.isEmpty else { return true }
+            return !ids.contains { newSongById[$0] != nil }
+        }
+        for id in orphanedPlaylistIds { removeOfflinePlaylist(id) }
+
         isLoading = false
         if pendingReload {
             pendingReload = false
@@ -350,6 +358,15 @@ final class DownloadStore: ObservableObject {
         }
 
         LocalDownloadIndex.shared.setPath(songId: songId, serverId: songServerId, path: nil)
+
+        // Offline-Playlist-Marker aufräumen: wenn keine Songs der Playlist mehr lokal sind,
+        // Marker entfernen damit die Playlist nicht als "Geist" in der Offline-Liste bleibt.
+        let affectedPlaylists = playlistSongIds.compactMap { (id, ids) in
+            ids.contains(songId) ? id : nil
+        }
+        for playlistId in affectedPlaylists where downloadedCount(for: playlistId) == 0 {
+            removeOfflinePlaylist(playlistId)
+        }
     }
 
     // MARK: - Lookups
