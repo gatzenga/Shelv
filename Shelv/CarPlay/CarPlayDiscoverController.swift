@@ -31,6 +31,19 @@ final class CarPlayDiscoverController {
             .sink { [weak self] _ in self?.reload() }
             .store(in: &cancellables)
 
+        var lastThemeColor = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
+        NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                let current = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
+                guard current != lastThemeColor else { return }
+                lastThemeColor = current
+                guard !OfflineModeService.shared.isOffline else { return }
+                self.rootTemplate.updateSections(self.buildSections())
+            }
+            .store(in: &cancellables)
+
         reload()
     }
 
@@ -151,8 +164,8 @@ final class CarPlayDiscoverController {
         let row = makeImageRowItem(text: title, images: covers)
         row.listImageRowHandler = { [weak self] _, idx, c in
             guard let self, idx < preview.count else { c(); return }
-            CarPlayNavigation.openAlbum(preview[idx], from: self.interfaceController)
             c()
+            CarPlayNavigation.openAlbum(preview[idx], from: self.interfaceController)
         }
         row.handler = { [weak self] _, c in
             guard let self else { c(); return }
@@ -163,30 +176,23 @@ final class CarPlayDiscoverController {
     }
 
     private func pushFullAlbumList(title: String, albums: [Album]) {
-        let template = CPListTemplate(title: title, sections: [
-            CPListSection(items: makeAlbumItems(albums, imageMap: [:]), header: nil, sectionIndexTitle: nil)
-        ])
-        CarPlayNavigation.safePush(template, on: interfaceController)
-        coverLoadTask?.cancel()
-        coverLoadTask = Task { [weak self] in
-            guard let self else { return }
-            await applyCoversAsync(template: template, coverArtIds: albums.map { $0.coverArt }) { [weak self] map in
-                guard let self else { return [] }
-                return [CPListSection(items: self.makeAlbumItems(albums, imageMap: map), header: nil, sectionIndexTitle: nil)]
-            }
-        }
-    }
-
-    private func makeAlbumItems(_ albums: [Album], imageMap: [String: UIImage]) -> [CPListItem] {
-        albums.map { album -> CPListItem in
+        var itemsByCoverId: [String: [CPListItem]] = [:]
+        let items = albums.map { album -> CPListItem in
             let item = albumListItem(album) { [weak self] _, c in
                 guard let self else { c(); return }
-                CarPlayNavigation.openAlbum(album, from: self.interfaceController)
                 c()
+                CarPlayNavigation.openAlbum(album, from: self.interfaceController)
             }
-            if let id = album.coverArt, let img = imageMap[id] { item.setImage(img) }
+            if let id = album.coverArt { itemsByCoverId[id, default: []].append(item) }
             return item
         }
+        let template = CPListTemplate(title: title, sections: [
+            CPListSection(items: items, header: nil, sectionIndexTitle: nil)
+        ])
+        CarPlayNavigation.safePush(template, on: interfaceController)
+        guard !itemsByCoverId.isEmpty else { return }
+        coverLoadTask?.cancel()
+        coverLoadTask = Task { await streamCovers(into: itemsByCoverId) }
     }
 
     private func enrichWithCovers() async {
@@ -203,22 +209,35 @@ final class CarPlayDiscoverController {
     private func makeMixItem(_ title: String, type: String) -> CPListItem {
         let item = CPListItem(text: title, detailText: nil)
         item.handler = { [weak self] _, c in
-            c()  // FIX 5: Sofort aufrufen — CarPlay wertet verzögertes c() als fehlgeschlagenen Tap
+            c()
             Task { [weak self] in
                 do {
-                    let albums = try await SubsonicAPIService.shared.getAlbumList(type: type, size: 50)
-                    var songs: [Song] = []
-                    try await withThrowingTaskGroup(of: [Song].self) { group in
-                        for album in albums.prefix(20) {
-                            group.addTask { (try? await SubsonicAPIService.shared.getAlbum(id: album.id).song) ?? [] }
-                        }
-                        for try await s in group { songs.append(contentsOf: s) }
+                    let songs: [Song]
+                    switch type {
+                    case "newest":   songs = try await SubsonicAPIService.shared.getNewestSongs()
+                    case "frequent": songs = try await SubsonicAPIService.shared.getFrequentSongs(limit: 50)
+                    default:         songs = try await SubsonicAPIService.shared.getRecentSongs(limit: 50)
                     }
                     guard !songs.isEmpty else {
                         await MainActor.run { self?.presentMixError(title: title, message: tr("No tracks found.", "Keine Titel gefunden.")) }
                         return
                     }
-                    await MainActor.run { AudioPlayerService.shared.play(songs: songs, startIndex: 0) }
+                    if let s = self {
+                        await MainActor.run {
+                            AudioPlayerService.shared.playShuffled(songs: songs)
+                            CarPlayNavigation.presentNowPlaying(on: s.interfaceController)
+                            let snap = s.rootTemplate.sections
+                            if !snap.isEmpty {
+                                var freshSections = snap
+                                freshSections[0] = CPListSection(items: [
+                                    s.makeMixItem(tr("Mix: Newest Tracks",     "Mix: Neueste Titel"),     type: "newest"),
+                                    s.makeMixItem(tr("Mix: Frequently Played", "Mix: Häufig gespielt"),   type: "frequent"),
+                                    s.makeMixItem(tr("Mix: Recently Played",   "Mix: Kürzlich gespielt"), type: "recent"),
+                                ], header: "Mixes", sectionIndexTitle: nil)
+                                s.rootTemplate.updateSections(freshSections)
+                            }
+                        }
+                    }
                 } catch {
                     await MainActor.run { self?.presentMixError(title: title, message: error.localizedDescription) }
                 }

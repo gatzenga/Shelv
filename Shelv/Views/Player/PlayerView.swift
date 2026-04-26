@@ -215,7 +215,7 @@ struct PlayerView: View {
                         .foregroundStyle(player.repeatMode != .off ? accentColor : .secondary)
                         .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
-                        .onTapGesture { player.repeatMode = player.repeatMode.toggled }
+                        .onTapGesture { player.cycleRepeatMode() }
                 }
                 .padding(.bottom, vPad(h, large: 36, small: 20))
 

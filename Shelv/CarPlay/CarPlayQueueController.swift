@@ -8,7 +8,6 @@ final class CarPlayQueueController {
     private var coverTask: Task<Void, Never>?
     private var rebuildTask: Task<Void, Never>?
     private var lastSongIds: [String] = []
-    private var lastImageMap: [String: UIImage] = [:]
 
     init() {
         let t = CPListTemplate(title: tr("Queue", "Warteschlange"), sections: [])
@@ -48,49 +47,45 @@ final class CarPlayQueueController {
         let songs = allQueueSongs()
         let songIds = songs.map { $0.id }
 
-        if songIds == lastSongIds {
-            // Song-Liste unverändert — Sections mit vorhandenem imageMap aktualisieren, kein Cover-Reload
-            rootTemplate.updateSections(buildSections(imageMap: lastImageMap))
-            return
-        }
+        // Identische Song-Liste → kein Replace nötig. Items sind stabil mit Cover bereits gesetzt.
+        if songIds == lastSongIds { return }
         lastSongIds = songIds
-        lastImageMap = [:]
 
         coverTask?.cancel()
-        rootTemplate.updateSections(buildSections(imageMap: [:]))
-        guard !songs.isEmpty else { return }
-        coverTask = Task { [weak self] in
-            var accumulated: [String: UIImage] = [:]
-            await loadCoversIncremental(coverArtIds: songs.map { $0.coverArt }) { [weak self] chunk in
-                accumulated.merge(chunk) { _, new in new }
-                guard let self else { return }
-                self.lastImageMap = accumulated
-                self.rootTemplate.updateSections(self.buildSections(imageMap: accumulated))
-            }
+        let built = buildSections()
+        rootTemplate.updateSections(built.sections)
+        guard !built.itemsByCoverId.isEmpty else { return }
+        coverTask = Task {
+            await streamCovers(into: built.itemsByCoverId)
         }
     }
 
     // MARK: - Build (1:1 zu iPhone QueueView)
 
-    private func buildSections(imageMap: [String: UIImage]) -> [CPListSection] {
+    private func buildSections() -> (sections: [CPListSection], itemsByCoverId: [String: [CPListItem]]) {
         let player = AudioPlayerService.shared
         var sections: [CPListSection] = []
+        var itemsByCoverId: [String: [CPListItem]] = [:]
+
+        func register(_ item: CPListItem, coverArt: String?) {
+            guard let id = coverArt else { return }
+            itemsByCoverId[id, default: []].append(item)
+        }
 
         if player.isShuffled {
             let albumQueue = albumQueueSongs()
             if !albumQueue.isEmpty {
                 let items = albumQueue.enumerated().map { idx, song -> CPListItem in
-                    // FIX 3: Song-ID cachen, Index beim Ausführen live nachschlagen
                     let songId = song.id
                     let item = songListItem(song, index: idx, showCover: true) { _, c in
+                        c()
                         let svc = AudioPlayerService.shared
                         if let liveIdx = svc.queue.firstIndex(where: { $0.id == songId }),
                            liveIdx > svc.currentIndex {
                             svc.jumpToQueueTrack(at: liveIdx)
                         }
-                        c()
                     }
-                    applyCover(to: item, coverArtId: song.coverArt, map: imageMap)
+                    register(item, coverArt: song.coverArt)
                     return item
                 }
                 sections.append(CPListSection(items: items, header: tr("Shuffled Queue", "Gemischte Warteschlange"), sectionIndexTitle: nil))
@@ -100,9 +95,9 @@ final class CarPlayQueueController {
                 let songs = player.playNextQueue
                 let items = songs.enumerated().map { idx, song -> CPListItem in
                     let item = songListItem(song, index: idx, showCover: true) { _, c in
-                        AudioPlayerService.shared.jumpToPlayNext(at: idx); c()
+                        c(); AudioPlayerService.shared.jumpToPlayNext(at: idx)
                     }
-                    applyCover(to: item, coverArtId: song.coverArt, map: imageMap)
+                    register(item, coverArt: song.coverArt)
                     return item
                 }
                 sections.append(CPListSection(items: items, header: tr("Play Next", "Als nächstes"), sectionIndexTitle: nil))
@@ -111,17 +106,16 @@ final class CarPlayQueueController {
             let albumQueue = albumQueueSongs()
             if !albumQueue.isEmpty {
                 let items = albumQueue.enumerated().map { idx, song -> CPListItem in
-                    // FIX 3: Song-ID cachen, Index beim Ausführen live nachschlagen
                     let songId = song.id
                     let item = songListItem(song, index: idx, showCover: true) { _, c in
+                        c()
                         let svc = AudioPlayerService.shared
                         if let liveIdx = svc.queue.firstIndex(where: { $0.id == songId }),
                            liveIdx > svc.currentIndex {
                             svc.jumpToQueueTrack(at: liveIdx)
                         }
-                        c()
                     }
-                    applyCover(to: item, coverArtId: song.coverArt, map: imageMap)
+                    register(item, coverArt: song.coverArt)
                     return item
                 }
                 sections.append(CPListSection(items: items, header: tr("Up Next", "Nächste Titel"), sectionIndexTitle: nil))
@@ -131,9 +125,9 @@ final class CarPlayQueueController {
                 let songs = player.userQueue
                 let items = songs.enumerated().map { idx, song -> CPListItem in
                     let item = songListItem(song, index: idx, showCover: true) { _, c in
-                        AudioPlayerService.shared.jumpToUserQueue(at: idx); c()
+                        c(); AudioPlayerService.shared.jumpToUserQueue(at: idx)
                     }
-                    applyCover(to: item, coverArtId: song.coverArt, map: imageMap)
+                    register(item, coverArt: song.coverArt)
                     return item
                 }
                 sections.append(CPListSection(items: items, header: tr("Your Queue", "Deine Warteschlange"), sectionIndexTitle: nil))
@@ -144,7 +138,7 @@ final class CarPlayQueueController {
             let empty = CPListItem(text: tr("Queue is empty", "Warteschlange ist leer"), detailText: nil)
             sections.append(CPListSection(items: [empty], header: nil, sectionIndexTitle: nil))
         }
-        return sections
+        return (sections, itemsByCoverId)
     }
 
     // MARK: - Helpers
@@ -163,9 +157,5 @@ final class CarPlayQueueController {
         let start = player.currentIndex + 1
         guard start < player.queue.count else { return [] }
         return Array(player.queue[start...])
-    }
-
-    private func applyCover(to item: CPListItem, coverArtId: String?, map: [String: UIImage]) {
-        if let id = coverArtId, let img = map[id] { item.setImage(img) }
     }
 }

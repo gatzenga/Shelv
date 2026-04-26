@@ -303,6 +303,42 @@ private func firstMemoryHit(id: String, sizes: [Int]) -> UIImage? {
     return nil
 }
 
+/// Füllt bereits im Memory-Cache vorhandene Covers synchron in neue Items —
+/// verhindert Placeholder-Flackern wenn Sections vor dem streamCovers-Task gesetzt werden.
+@MainActor
+func prefillCoversFromCache(_ itemsByCoverId: [String: [CPListItem]], size: Int = 300) {
+    let fallback = [size, 150, 300, 600]
+    for (id, items) in itemsByCoverId {
+        for s in fallback {
+            if let img = ImageCacheService.shared.cachedImage(key: "\(id)_\(s)") {
+                items.forEach { $0.setImage(img) }
+                break
+            }
+        }
+    }
+}
+
+/// Streamt Covers in eine vorhandene Item-Map — mutiert die `CPListItem`-Instanzen direkt
+/// per `setImage(_:)` statt Sections neu zu bauen.
+///
+/// Wiederholte `template.updateSections(...)` während des Cover-Streamings erzeugen massiven
+/// IPC-Druck auf der CarPlay-XPC-Bridge und ersetzen Tap-Handler-Closures unter den Fingern
+/// des Users. Stattdessen halten wir die Items stabil und mutieren nur deren Bild.
+@MainActor
+func streamCovers(
+    into itemsByCoverId: [String: [CPListItem]],
+    size: Int = 300,
+    chunkSize: Int = 20
+) async {
+    guard !itemsByCoverId.isEmpty else { return }
+    let ids: [String?] = itemsByCoverId.keys.map { $0 as String? }
+    await loadCoversIncremental(coverArtIds: ids, size: size, chunkSize: chunkSize) { chunk in
+        for (id, img) in chunk {
+            itemsByCoverId[id]?.forEach { $0.setImage(img) }
+        }
+    }
+}
+
 /// Streamt Covers für eine Liste in `template` — Sections werden via `rebuild` neu erzeugt
 /// und nach jedem Cover-Chunk angewendet. Akkumuliert die Image-Map über alle Chunks.
 ///

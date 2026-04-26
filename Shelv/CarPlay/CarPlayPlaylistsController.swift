@@ -122,27 +122,31 @@ final class CarPlayPlaylistsController {
     }
 
     private func showPlaylists(_ playlists: [Playlist]) {
-        rootTemplate.updateSections([
-            CPListSection(items: makePlaylistItems(playlists, imageMap: [:]), header: nil, sectionIndexTitle: nil)
-        ])
+        func makeItems() -> (items: [CPListItem], coverMap: [String: [CPListItem]]) {
+            var coverMap: [String: [CPListItem]] = [:]
+            let items = playlists.map { playlist -> CPListItem in
+                let item = playlistListItem(playlist) { [weak self] _, c in
+                    guard let self else { c(); return }
+                    c()
+                    CarPlayNavigation.openPlaylist(playlist, from: self.interfaceController)
+                    Task { @MainActor [weak self] in
+                        guard let self else { return }
+                        let (freshItems, freshMap) = makeItems()
+                        prefillCoversFromCache(freshMap)
+                        self.rootTemplate.updateSections([CPListSection(items: freshItems, header: nil, sectionIndexTitle: nil)])
+                        self.coverLoadTask?.cancel()
+                        self.coverLoadTask = Task { await streamCovers(into: freshMap) }
+                    }
+                }
+                if let id = playlist.coverArt { coverMap[id, default: []].append(item) }
+                return item
+            }
+            return (items, coverMap)
+        }
+        let (items, coverMap) = makeItems()
+        rootTemplate.updateSections([CPListSection(items: items, header: nil, sectionIndexTitle: nil)])
+        guard !coverMap.isEmpty else { return }
         coverLoadTask?.cancel()
-        coverLoadTask = Task { [weak self, rootTemplate] in
-            await applyCoversAsync(template: rootTemplate, coverArtIds: playlists.map { $0.coverArt }) { [weak self] map in
-                guard let self else { return [] }
-                return [CPListSection(items: self.makePlaylistItems(playlists, imageMap: map), header: nil, sectionIndexTitle: nil)]
-            }
-        }
-    }
-
-    private func makePlaylistItems(_ playlists: [Playlist], imageMap: [String: UIImage]) -> [CPListItem] {
-        playlists.map { playlist -> CPListItem in
-            let item = playlistListItem(playlist) { [weak self] _, c in
-                guard let self else { c(); return }
-                CarPlayNavigation.openPlaylist(playlist, from: self.interfaceController)
-                c()
-            }
-            if let id = playlist.coverArt, let img = imageMap[id] { item.setImage(img) }
-            return item
-        }
+        coverLoadTask = Task { await streamCovers(into: coverMap) }
     }
 }

@@ -11,8 +11,12 @@ final class CarPlayLibraryController {
     // Eigene Task-Variable pro Screen — verhindert gegenseitiges Canceln (Szenario B)
     private var albumCoverTask: Task<Void, Never>?
     private var artistCoverTask: Task<Void, Never>?
-    private var coverLoadTask: Task<Void, Never>?   // für Favorites und Full-Lists
+    private var coverLoadTask: Task<Void, Never>?
     private var lastEnableFavorites: Bool = UserDefaults.standard.bool(forKey: "enableFavorites")
+    private var lastThemeColor: String = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
+    private weak var albumsTemplate: CPListTemplate?
+    private weak var artistsTemplate: CPListTemplate?
+    private weak var favoritesTemplate: CPListTemplate?
 
     init(interfaceController: CPInterfaceController) {
         self.interfaceController = interfaceController
@@ -44,10 +48,34 @@ final class CarPlayLibraryController {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self else { return }
-                let current = UserDefaults.standard.bool(forKey: "enableFavorites")
-                guard current != self.lastEnableFavorites else { return }
-                self.lastEnableFavorites = current
+                let currentFav   = UserDefaults.standard.bool(forKey: "enableFavorites")
+                let currentTheme = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
+                if currentFav != self.lastEnableFavorites {
+                    self.lastEnableFavorites = currentFav
+                    self.buildMenu()
+                }
+                if currentTheme != self.lastThemeColor {
+                    self.lastThemeColor = currentTheme
+                    self.buildMenu()
+                    self.rebuildAlbumsTemplate()
+                    self.rebuildArtistsTemplate()
+                    self.rebuildFavoritesTemplate()
+                }
+            }
+            .store(in: &cancellables)
+
+        // Offline-Start-Fix: DownloadStore lädt async — falls Alben-/Artist-Liste schon offen
+        // ist wenn reload() fertig wird, sofort neu befüllen.
+        DownloadStore.shared.$albums
+            .receive(on: DispatchQueue.main)
+            .dropFirst()
+            .filter { _ in OfflineModeService.shared.isOffline }
+            .sink { [weak self] _ in
+                guard let self else { return }
                 self.buildMenu()
+                self.rebuildAlbumsTemplate()
+                self.rebuildArtistsTemplate()
+                self.rebuildFavoritesTemplate()
             }
             .store(in: &cancellables)
 
@@ -72,15 +100,15 @@ final class CarPlayLibraryController {
 
         var items: [CPListItem] = [
             menuListItem(title: tr("Albums", "Alben"), systemImage: "square.stack") { [weak self] _, c in
-                self?.pushAlbumsList(); c()
+                c(); self?.pushAlbumsList()
             },
             menuListItem(title: tr("Artists", "Künstler"), systemImage: "music.microphone") { [weak self] _, c in
-                self?.pushArtistsList(); c()
+                c(); self?.pushArtistsList()
             },
         ]
         if UserDefaults.standard.bool(forKey: "enableFavorites") {
             items.append(menuListItem(title: tr("Favorites", "Favoriten"), systemImage: "heart") { [weak self] _, c in
-                self?.pushFavorites(); c()
+                c(); self?.pushFavorites()
             })
         }
         rootTemplate.updateSections([CPListSection(items: items, header: nil, sectionIndexTitle: nil)])
@@ -88,51 +116,107 @@ final class CarPlayLibraryController {
 
     // MARK: - Albums (alphabetische Abschnitte + Buchstabenleiste)
 
+    private func rebuildAlbumsTemplate() {
+        Task { @MainActor [weak self] in
+            guard let self, let t = self.albumsTemplate else { return }
+            let current = self.albumSource()
+            let built = self.makeAlbumSections(current)
+            prefillCoversFromCache(built.itemsByCoverId)
+            t.updateSections(built.sections)
+            self.albumCoverTask?.cancel()
+            self.albumCoverTask = Task { await streamCovers(into: built.itemsByCoverId) }
+        }
+    }
+
+    private func rebuildArtistsTemplate() {
+        Task { @MainActor [weak self] in
+            guard let self, let t = self.artistsTemplate else { return }
+            let current = self.artistSource()
+            let counts = self.albumCountByArtist()
+            let built = self.makeArtistSections(current, counts: counts)
+            prefillCoversFromCache(built.itemsByCoverId)
+            t.updateSections(built.sections)
+            self.artistCoverTask?.cancel()
+            self.artistCoverTask = Task { await streamCovers(into: built.itemsByCoverId) }
+        }
+    }
+
+    private func rebuildFavoritesTemplate() {
+        Task { @MainActor [weak self] in
+            guard let self, let t = self.favoritesTemplate else { return }
+            let songs   = self.starredSongs()
+            let albums  = self.starredAlbums()
+            let artists = self.starredArtists()
+            let counts  = self.albumCountByArtist()
+            let built = self.makeFavoriteSections(songs: songs, albums: albums, artists: artists, counts: counts)
+            prefillCoversFromCache(built.itemsByCoverId)
+            t.updateSections(built.sections)
+            self.coverLoadTask?.cancel()
+            self.coverLoadTask = Task { await streamCovers(into: built.itemsByCoverId) }
+        }
+    }
+
     private func pushAlbumsList() {
         let placeholder = CPListItem(text: tr("Loading…", "Wird geladen…"), detailText: nil)
         let template = CPListTemplate(title: tr("Albums", "Alben"), sections: [
             CPListSection(items: [placeholder], header: nil, sectionIndexTitle: nil)
         ])
+        albumsTemplate = template
         CarPlayNavigation.safePush(template, on: interfaceController)
 
         // Eigene Task-Variable — cancelt NUR einen früheren Album-Task, nie Artists
         albumCoverTask?.cancel()
         albumCoverTask = Task { [weak self] in
             guard let self else { return }
-            // Gecachte Daten sofort anzeigen, dann vollständig von der API nachladen
-            let cached = self.albumSource()
-            if !cached.isEmpty {
-                template.updateSections(self.albumSections(cached))
+            // Gecachte Daten sofort anzeigen, dann vollständig von der API nachladen.
+            // Items werden EINMAL erstellt; Covers mutieren die Items per setImage in-place,
+            // damit Tap-Handler stabil bleiben und CarPlay keine IPC-Storms abbekommt.
+            var current = self.albumSource()
+            var built = self.makeAlbumSections(current)
+            // Loading-Placeholder nur ersetzen wenn wir wirklich Inhalt zu zeigen haben.
+            if !current.isEmpty {
+                template.updateSections(built.sections)
             }
+
             if !OfflineModeService.shared.isOffline {
                 await LibraryStore.shared.loadAlbums(sortBy: "alphabeticalByName")
+                let fresh = self.albumSource()
+                if fresh.map(\.id) != current.map(\.id) {
+                    current = fresh
+                    built = self.makeAlbumSections(current)
+                    template.updateSections(built.sections)
+                }
             }
-            let albums = self.albumSource()
-            template.updateSections(self.albumSections(albums))
-            await applyCoversAsync(template: template, coverArtIds: albums.map { $0.coverArt }) { [weak self] map in
-                self?.albumSections(albums, imageMap: map) ?? []
-            }
+            await streamCovers(into: built.itemsByCoverId)
         }
     }
 
-    private func albumSections(_ albums: [Album], imageMap: [String: UIImage] = [:]) -> [CPListSection] {
+    private func makeAlbumSections(_ albums: [Album]) -> (sections: [CPListSection], itemsByCoverId: [String: [CPListItem]]) {
         let sorted = albums.sorted {
             stripArticle($0.name).localizedStandardCompare(stripArticle($1.name)) == .orderedAscending
         }
         let grouped = Dictionary(grouping: sorted) { firstSortLetter($0.name) }
         let letters = grouped.keys.sorted()
         let cap = max(20, CPListTemplate.maximumItemCount / max(1, letters.count))
-        return letters.map { letter in
-            let items = (grouped[letter] ?? []).prefix(cap).map { album -> CPListItem in
+        var itemsByCoverId: [String: [CPListItem]] = [:]
+        var sections: [CPListSection] = []
+        for letter in letters {
+            var letterItems: [CPListItem] = []
+            for album in (grouped[letter] ?? []).prefix(cap) {
                 let item = albumListItem(album) { [weak self] _, c in
-                    guard let self else { c(); return }
-                    CarPlayNavigation.openAlbum(album, from: self.interfaceController); c()
+                    c()
+                    guard let self else { return }
+                    CarPlayNavigation.openAlbum(album, from: self.interfaceController)
+                    self.rebuildAlbumsTemplate()
                 }
-                if let id = album.coverArt, let img = imageMap[id] { item.setImage(img) }
-                return item
+                if let id = album.coverArt {
+                    itemsByCoverId[id, default: []].append(item)
+                }
+                letterItems.append(item)
             }
-            return CPListSection(items: Array(items), header: letter, sectionIndexTitle: letter)
+            sections.append(CPListSection(items: letterItems, header: letter, sectionIndexTitle: letter))
         }
+        return (sections, itemsByCoverId)
     }
 
     private func albumSource() -> [Album] {
@@ -153,49 +237,61 @@ final class CarPlayLibraryController {
         let template = CPListTemplate(title: tr("Artists", "Künstler"), sections: [
             CPListSection(items: [placeholder], header: nil, sectionIndexTitle: nil)
         ])
+        artistsTemplate = template
         CarPlayNavigation.safePush(template, on: interfaceController)
 
         // Eigene Task-Variable — cancelt NUR einen früheren Artists-Task, nie Albums
         artistCoverTask?.cancel()
         artistCoverTask = Task { [weak self] in
             guard let self else { return }
-            // Gecachte Daten sofort anzeigen — erspart die ~2 s Wait-on-API beim ersten Tap.
-            let cached = self.artistSource()
-            let cachedCounts = self.albumCountByArtist()
-            if !cached.isEmpty {
-                template.updateSections(self.artistSections(cached, counts: cachedCounts))
+            var current = self.artistSource()
+            var counts = self.albumCountByArtist()
+            var built = self.makeArtistSections(current, counts: counts)
+            if !current.isEmpty {
+                template.updateSections(built.sections)
             }
-            if cached.isEmpty && !OfflineModeService.shared.isOffline {
+
+            if current.isEmpty && !OfflineModeService.shared.isOffline {
                 await LibraryStore.shared.loadArtists()
+                let fresh = self.artistSource()
+                if fresh.map(\.id) != current.map(\.id) {
+                    current = fresh
+                    counts = self.albumCountByArtist()
+                    built = self.makeArtistSections(current, counts: counts)
+                    template.updateSections(built.sections)
+                }
             }
-            let artists = self.artistSource()
-            let counts  = self.albumCountByArtist()
-            template.updateSections(self.artistSections(artists, counts: counts))
-            await applyCoversAsync(template: template, coverArtIds: artists.map { $0.coverArt }) { [weak self] map in
-                self?.artistSections(artists, counts: counts, imageMap: map) ?? []
-            }
+            await streamCovers(into: built.itemsByCoverId)
         }
     }
 
-    private func artistSections(_ artists: [Artist], counts: [String: Int], imageMap: [String: UIImage] = [:]) -> [CPListSection] {
+    private func makeArtistSections(_ artists: [Artist], counts: [String: Int]) -> (sections: [CPListSection], itemsByCoverId: [String: [CPListItem]]) {
         let sorted = artists.sorted {
             stripArticle($0.name).localizedStandardCompare(stripArticle($1.name)) == .orderedAscending
         }
         let grouped = Dictionary(grouping: sorted) { firstSortLetter($0.name) }
         let letters = grouped.keys.sorted()
         let cap = max(20, CPListTemplate.maximumItemCount / max(1, letters.count))
-        return letters.map { letter in
-            let items = (grouped[letter] ?? []).prefix(cap).map { artist -> CPListItem in
+        var itemsByCoverId: [String: [CPListItem]] = [:]
+        var sections: [CPListSection] = []
+        for letter in letters {
+            var letterItems: [CPListItem] = []
+            for artist in (grouped[letter] ?? []).prefix(cap) {
                 let count = counts[artist.id] ?? 0
                 let item = artistListItem(artist, subtitle: "\(count) \(tr("albums", "Alben"))") { [weak self] _, c in
-                    guard let self else { c(); return }
-                    CarPlayNavigation.openArtist(artist, from: self.interfaceController); c()
+                    c()
+                    guard let self else { return }
+                    CarPlayNavigation.openArtist(artist, from: self.interfaceController)
+                    self.rebuildArtistsTemplate()
                 }
-                if let id = artist.coverArt, let img = imageMap[id] { item.setImage(img) }
-                return item
+                if let id = artist.coverArt {
+                    itemsByCoverId[id, default: []].append(item)
+                }
+                letterItems.append(item)
             }
-            return CPListSection(items: Array(items), header: letter, sectionIndexTitle: letter)
+            sections.append(CPListSection(items: letterItems, header: letter, sectionIndexTitle: letter))
         }
+        return (sections, itemsByCoverId)
     }
 
     private func artistSource() -> [Artist] {
@@ -246,66 +342,82 @@ final class CarPlayLibraryController {
         let counts  = albumCountByArtist()
 
         let template = CPListTemplate(title: tr("Favorites", "Favoriten"), sections: [])
-        template.updateSections(favoriteSections(songs: songs, albums: albums, artists: artists, counts: counts))
+        favoritesTemplate = template
+        let built = makeFavoriteSections(songs: songs, albums: albums, artists: artists, counts: counts)
+        template.updateSections(built.sections)
         CarPlayNavigation.safePush(template, on: interfaceController)
 
-        guard !albums.isEmpty else { return }
+        guard !built.itemsByCoverId.isEmpty else { return }
         coverLoadTask?.cancel()
-        coverLoadTask = Task { [weak self] in
-            await applyCoversAsync(template: template, coverArtIds: albums.map { $0.coverArt }) { [weak self] map in
-                self?.favoriteSections(songs: songs, albums: albums, artists: artists, counts: counts, albumImageMap: map) ?? []
-            }
+        coverLoadTask = Task {
+            await streamCovers(into: built.itemsByCoverId)
         }
     }
 
-    private func favoriteSections(
+    private func makeFavoriteSections(
         songs: [Song], albums: [Album], artists: [Artist],
-        counts: [String: Int], albumImageMap: [String: UIImage] = [:]
-    ) -> [CPListSection] {
+        counts: [String: Int]
+    ) -> (sections: [CPListSection], itemsByCoverId: [String: [CPListItem]]) {
         var sections: [CPListSection] = []
+        var itemsByCoverId: [String: [CPListItem]] = [:]
 
         if !songs.isEmpty {
             var items: [CPListItem] = Array(songs.prefix(kPreviewCount)).enumerated().map { idx, song in
-                songListItem(song, index: idx) { _, c in
-                    AudioPlayerService.shared.play(songs: songs, startIndex: idx); c()
+                songListItem(song, index: idx) { [weak self] _, c in
+                    c()
+                    AudioPlayerService.shared.play(songs: songs, startIndex: idx)
+                    if let self { CarPlayNavigation.presentNowPlaying(on: self.interfaceController) }
+                    self?.rebuildFavoritesTemplate()
                 }
             }
             if songs.count > kPreviewCount {
                 items.append(showAllListItem(title: tr("Show All (\(songs.count))", "Alle anzeigen (\(songs.count))")) { [weak self] _, c in
-                    self?.pushFullFavoriteSongs(songs); c()
+                    c(); self?.pushFullFavoriteSongs(songs)
                 })
             }
             sections.append(CPListSection(items: items, header: tr("Songs", "Titel"), sectionIndexTitle: nil))
         }
 
         if !albums.isEmpty {
-            var items: [CPListItem] = Array(albums.prefix(kPreviewCount)).map { album -> CPListItem in
+            var items: [CPListItem] = []
+            for album in albums.prefix(kPreviewCount) {
                 let item = albumListItem(album) { [weak self] _, c in
-                    guard let self else { c(); return }
-                    CarPlayNavigation.openAlbum(album, from: self.interfaceController); c()
+                    c()
+                    guard let self else { return }
+                    CarPlayNavigation.openAlbum(album, from: self.interfaceController)
+                    self.rebuildFavoritesTemplate()
                 }
-                if let id = album.coverArt, let img = albumImageMap[id] { item.setImage(img) }
-                return item
+                if let id = album.coverArt {
+                    itemsByCoverId[id, default: []].append(item)
+                }
+                items.append(item)
             }
             if albums.count > kPreviewCount {
                 items.append(showAllListItem(title: tr("Show All (\(albums.count))", "Alle anzeigen (\(albums.count))")) { [weak self] _, c in
-                    self?.pushFullFavoriteAlbums(albums); c()
+                    c(); self?.pushFullFavoriteAlbums(albums)
                 })
             }
             sections.append(CPListSection(items: items, header: tr("Albums", "Alben"), sectionIndexTitle: nil))
         }
 
         if !artists.isEmpty {
-            var items: [CPListItem] = Array(artists.prefix(kPreviewCount)).map { artist -> CPListItem in
+            var items: [CPListItem] = []
+            for artist in artists.prefix(kPreviewCount) {
                 let count = counts[artist.id] ?? 0
-                return artistListItem(artist, subtitle: "\(count) \(tr("albums", "Alben"))") { [weak self] _, c in
-                    guard let self else { c(); return }
-                    CarPlayNavigation.openArtist(artist, from: self.interfaceController); c()
+                let item = artistListItem(artist, subtitle: "\(count) \(tr("albums", "Alben"))") { [weak self] _, c in
+                    c()
+                    guard let self else { return }
+                    CarPlayNavigation.openArtist(artist, from: self.interfaceController)
+                    self.rebuildFavoritesTemplate()
                 }
+                if let id = artist.coverArt {
+                    itemsByCoverId[id, default: []].append(item)
+                }
+                items.append(item)
             }
             if artists.count > kPreviewCount {
                 items.append(showAllListItem(title: tr("Show All (\(artists.count))", "Alle anzeigen (\(artists.count))")) { [weak self] _, c in
-                    self?.pushFullFavoriteArtists(artists); c()
+                    c(); self?.pushFullFavoriteArtists(artists)
                 })
             }
             sections.append(CPListSection(items: items, header: tr("Artists", "Künstler"), sectionIndexTitle: nil))
@@ -313,9 +425,9 @@ final class CarPlayLibraryController {
 
         if sections.isEmpty {
             let empty = CPListItem(text: tr("No favorites yet", "Noch keine Favoriten"), detailText: nil)
-            return [CPListSection(items: [empty], header: nil, sectionIndexTitle: nil)]
+            sections = [CPListSection(items: [empty], header: nil, sectionIndexTitle: nil)]
         }
-        return sections
+        return (sections, itemsByCoverId)
     }
 
     private func starredSongs() -> [Song] {
@@ -341,68 +453,93 @@ final class CarPlayLibraryController {
     // MARK: - Full Favorite Lists
 
     private func pushFullFavoriteSongs(_ songs: [Song]) {
-        let items = songs.enumerated().map { idx, song in
-            songListItem(song, index: idx) { _, c in
-                AudioPlayerService.shared.play(songs: songs, startIndex: idx); c()
+        weak var weakTemplate: CPListTemplate?
+        func makeSongsSection() -> CPListSection {
+            let items = songs.enumerated().map { idx, song in
+                songListItem(song, index: idx) { [weak self] _, c in
+                    c()
+                    AudioPlayerService.shared.play(songs: songs, startIndex: idx)
+                    if let self { CarPlayNavigation.presentNowPlaying(on: self.interfaceController) }
+                    Task { @MainActor in
+                        weakTemplate?.updateSections([CPListSection(items: makeSongsSection().items, header: nil, sectionIndexTitle: nil)])
+                    }
+                }
             }
+            return CPListSection(items: items, header: nil, sectionIndexTitle: nil)
         }
-        let template = CPListTemplate(title: tr("Favorite Songs", "Lieblingstitel"), sections: [
-            CPListSection(items: items, header: nil, sectionIndexTitle: nil)
-        ])
+        let template = CPListTemplate(title: tr("Favorite Songs", "Lieblingstitel"), sections: [makeSongsSection()])
+        weakTemplate = template
         CarPlayNavigation.safePush(template, on: interfaceController)
     }
 
     private func pushFullFavoriteAlbums(_ albums: [Album]) {
-        let template = CPListTemplate(title: tr("Favorite Albums", "Lieblingsalben"), sections: [
-            CPListSection(items: makeAlbumItems(albums, imageMap: [:]), header: nil, sectionIndexTitle: nil)
-        ])
-        CarPlayNavigation.safePush(template, on: interfaceController)
-        coverLoadTask?.cancel()
-        coverLoadTask = Task { [weak self] in
-            await applyCoversAsync(template: template, coverArtIds: albums.map { $0.coverArt }) { [weak self] map in
-                guard let self else { return [] }
-                return [CPListSection(items: self.makeAlbumItems(albums, imageMap: map), header: nil, sectionIndexTitle: nil)]
+        weak var weakTemplate: CPListTemplate?
+        func makeItems() -> (items: [CPListItem], coverMap: [String: [CPListItem]]) {
+            var coverMap: [String: [CPListItem]] = [:]
+            let items = albums.map { album -> CPListItem in
+                let item = albumListItem(album) { [weak self] _, c in
+                    c()
+                    guard let self else { return }
+                    CarPlayNavigation.openAlbum(album, from: self.interfaceController)
+                    Task { @MainActor [weak self] in
+                        guard let self, let t = weakTemplate else { return }
+                        let (freshItems, freshMap) = makeItems()
+                        prefillCoversFromCache(freshMap)
+                        t.updateSections([CPListSection(items: freshItems, header: nil, sectionIndexTitle: nil)])
+                        self.coverLoadTask?.cancel()
+                        self.coverLoadTask = Task { await streamCovers(into: freshMap) }
+                    }
+                }
+                if let id = album.coverArt { coverMap[id, default: []].append(item) }
+                return item
             }
+            return (items, coverMap)
         }
+        let (items, coverMap) = makeItems()
+        let template = CPListTemplate(title: tr("Favorite Albums", "Lieblingsalben"), sections: [
+            CPListSection(items: items, header: nil, sectionIndexTitle: nil)
+        ])
+        weakTemplate = template
+        CarPlayNavigation.safePush(template, on: interfaceController)
+        guard !coverMap.isEmpty else { return }
+        coverLoadTask?.cancel()
+        coverLoadTask = Task { await streamCovers(into: coverMap) }
     }
 
     private func pushFullFavoriteArtists(_ artists: [Artist]) {
         let counts = albumCountByArtist()
+        weak var weakTemplate: CPListTemplate?
+        func makeItems() -> (items: [CPListItem], coverMap: [String: [CPListItem]]) {
+            var coverMap: [String: [CPListItem]] = [:]
+            let items = artists.map { artist -> CPListItem in
+                let count = counts[artist.id] ?? 0
+                let item = artistListItem(artist, subtitle: "\(count) \(tr("albums", "Alben"))") { [weak self] _, c in
+                    c()
+                    guard let self else { return }
+                    CarPlayNavigation.openArtist(artist, from: self.interfaceController)
+                    Task { @MainActor [weak self] in
+                        guard let self, let t = weakTemplate else { return }
+                        let (freshItems, freshMap) = makeItems()
+                        prefillCoversFromCache(freshMap)
+                        t.updateSections([CPListSection(items: freshItems, header: nil, sectionIndexTitle: nil)])
+                        self.coverLoadTask?.cancel()
+                        self.coverLoadTask = Task { await streamCovers(into: freshMap) }
+                    }
+                }
+                if let id = artist.coverArt { coverMap[id, default: []].append(item) }
+                return item
+            }
+            return (items, coverMap)
+        }
+        let (items, coverMap) = makeItems()
         let template = CPListTemplate(title: tr("Favorite Artists", "Lieblingskünstler"), sections: [
-            CPListSection(items: makeArtistItems(artists, counts: counts, imageMap: [:]), header: nil, sectionIndexTitle: nil)
+            CPListSection(items: items, header: nil, sectionIndexTitle: nil)
         ])
+        weakTemplate = template
         CarPlayNavigation.safePush(template, on: interfaceController)
+        guard !coverMap.isEmpty else { return }
         coverLoadTask?.cancel()
-        coverLoadTask = Task { [weak self] in
-            await applyCoversAsync(template: template, coverArtIds: artists.map { $0.coverArt }) { [weak self] map in
-                guard let self else { return [] }
-                return [CPListSection(items: self.makeArtistItems(artists, counts: counts, imageMap: map), header: nil, sectionIndexTitle: nil)]
-            }
-        }
+        coverLoadTask = Task { await streamCovers(into: coverMap) }
     }
 
-    // MARK: - Item Builders
-
-    private func makeAlbumItems(_ albums: [Album], imageMap: [String: UIImage]) -> [CPListItem] {
-        albums.map { album -> CPListItem in
-            let item = albumListItem(album) { [weak self] _, c in
-                guard let self else { c(); return }
-                CarPlayNavigation.openAlbum(album, from: self.interfaceController); c()
-            }
-            if let id = album.coverArt, let img = imageMap[id] { item.setImage(img) }
-            return item
-        }
-    }
-
-    private func makeArtistItems(_ artists: [Artist], counts: [String: Int], imageMap: [String: UIImage]) -> [CPListItem] {
-        artists.map { artist -> CPListItem in
-            let count = counts[artist.id] ?? 0
-            let item = artistListItem(artist, subtitle: "\(count) \(tr("albums", "Alben"))") { [weak self] _, c in
-                guard let self else { c(); return }
-                CarPlayNavigation.openArtist(artist, from: self.interfaceController); c()
-            }
-            if let id = artist.coverArt, let img = imageMap[id] { item.setImage(img) }
-            return item
-        }
-    }
 }

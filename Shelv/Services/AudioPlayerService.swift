@@ -44,8 +44,26 @@ class AudioPlayerService: ObservableObject {
     let timePublisher = PassthroughSubject<(time: Double, duration: Double), Never>()
     @Published var isAirPlayActive: Bool = false
     @Published var isSeeking: Bool = false
-    @Published var isShuffled: Bool = false
-    @Published var repeatMode: RepeatMode = .off
+    @Published var isShuffled: Bool = false {
+        didSet { applyPlaybackModeToNowPlayingInfo() }
+    }
+    @Published var repeatMode: RepeatMode = .off {
+        didSet { applyPlaybackModeToNowPlayingInfo() }
+    }
+    @Published var isCarPlayActive: Bool = false {
+        didSet {
+            if isCarPlayActive && repeatMode == .one { repeatMode = .all }
+        }
+    }
+
+    func cycleRepeatMode() {
+        if isCarPlayActive {
+            repeatMode = (repeatMode == .off) ? .all : .off
+        } else {
+            repeatMode = repeatMode.toggled
+        }
+    }
+
     @Published var actualStreamFormat: ActualStreamFormat?
     @Published var isCrossfading: Bool = false
 
@@ -300,6 +318,37 @@ class AudioPlayerService: ObservableObject {
             self?.seek(to: e.positionTime)
             return .success
         }
+
+        // Apple's CPNowPlayingRepeatButton / -ShuffleButton rendern den Selected-State
+        // nur konsistent, wenn die zugehörigen MPRemoteCommands aktiviert sind und ein
+        // Target haben. Ohne das wirkt der Button beim Wechsel zwischen .all → .one
+        // wie ein Aus-Sprung. Die Targets spiegeln Auto-/Siri-/Lock-Screen-Eingaben
+        // zurück in unsere App-Logik.
+        cc.changeRepeatModeCommand.isEnabled = true
+        cc.changeRepeatModeCommand.addTarget { [weak self] event in
+            guard let e = event as? MPChangeRepeatModeCommandEvent else { return .commandFailed }
+            let mode: RepeatMode = {
+                switch e.repeatType {
+                case .off:  return .off
+                case .one:  return .one
+                case .all:  return .all
+                @unknown default: return .off
+                }
+            }()
+            Task { @MainActor in self?.repeatMode = mode }
+            return .success
+        }
+
+        cc.changeShuffleModeCommand.isEnabled = true
+        cc.changeShuffleModeCommand.addTarget { [weak self] event in
+            guard let e = event as? MPChangeShuffleModeCommandEvent else { return .commandFailed }
+            let shouldShuffle = (e.shuffleType != .off)
+            Task { @MainActor in
+                guard let self else { return }
+                if shouldShuffle != self.isShuffled { self.toggleShuffle() }
+            }
+            return .success
+        }
     }
 
     func play(songs: [Song], startIndex: Int = 0) {
@@ -487,10 +536,10 @@ class AudioPlayerService: ObservableObject {
     }
 
     func pause() {
+        MPNowPlayingInfoCenter.default().playbackState = .paused
         engine.pause()
         isPlaying = false
         updateNowPlayingPlaybackRate(0)
-        MPNowPlayingInfoCenter.default().playbackState = .paused
         saveState()
     }
 
@@ -545,7 +594,9 @@ class AudioPlayerService: ObservableObject {
     }
 
     func toggleShuffle() {
-        if isShuffled {
+        let wasShuffled = isShuffled
+        isShuffled = !wasShuffled
+        if wasShuffled {
             let remainingAlbum: Set<String> = currentIndex + 1 < queue.count
                 ? Set(queue[(currentIndex + 1)...].map { $0.id }) : []
             let remainingPN = Set(playNextQueue.map { $0.id })
@@ -568,10 +619,7 @@ class AudioPlayerService: ObservableObject {
             userQueue = truthUserQueue.filter {
                 $0.id != currentId && allRemaining.contains($0.id)
             }
-            isShuffled = false
-
         } else {
-
             let upcoming = playNextQueue
                 + (currentIndex + 1 < queue.count ? Array(queue[(currentIndex + 1)...]) : [])
                 + userQueue
@@ -580,7 +628,6 @@ class AudioPlayerService: ObservableObject {
             queue.replaceSubrange((currentIndex + 1)..., with: shuffled)
             playNextQueue = []
             userQueue = []
-            isShuffled = true
         }
         saveState()
     }
@@ -1010,6 +1057,20 @@ class AudioPlayerService: ObservableObject {
         }
 
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+    }
+
+    /// Spiegelt isShuffled / repeatMode auf MPRemoteCommandCenter, damit CarPlay die
+    /// System-Buttons (CPNowPlayingShuffleButton / CPNowPlayingRepeatButton) korrekt
+    /// aktiv/inaktiv rendert. Apple liest diese State-Werte vom RemoteCommandCenter,
+    /// nicht vom NowPlayingInfo.
+    private func applyPlaybackModeToNowPlayingInfo() {
+        let cc = MPRemoteCommandCenter.shared()
+        cc.changeShuffleModeCommand.currentShuffleType = isShuffled ? .items : .off
+        switch repeatMode {
+        case .off: cc.changeRepeatModeCommand.currentRepeatType = .off
+        case .one: cc.changeRepeatModeCommand.currentRepeatType = .one
+        case .all: cc.changeRepeatModeCommand.currentRepeatType = .all
+        }
     }
 
     private func updateNowPlayingPlaybackRate(_ rate: Double) {

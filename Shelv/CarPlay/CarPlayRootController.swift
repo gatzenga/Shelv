@@ -14,7 +14,17 @@ final class CarPlayRootController: NSObject {
     private var lastRecapEnabled: Bool = UserDefaults.standard.bool(forKey: "recapEnabled")
     private var lastEnablePlaylists: Bool = UserDefaults.standard.bool(forKey: "enablePlaylists")
     private var lastRecapTabVisible: Bool = false
-    private var lastButtonState: (songId: String?, starred: Bool, shuffled: Bool)?
+
+    // Apple's System-Buttons. EINMAL gebaut und stabil geteilt — Apple liest deren Selected-State
+    // autonom aus MPRemoteCommandCenter, der State wird in `applyPlaybackModeToNowPlayingInfo`
+    // (didSet auf isShuffled/repeatMode) gespiegelt. Würden wir die Instanzen bei jedem
+    // currentSong-Wechsel neu bauen, flackerten Shuffle/Repeat-Buttons kurz beim Track-Wechsel.
+    private let cachedShuffleButton = CPNowPlayingShuffleButton { _ in
+        AudioPlayerService.shared.toggleShuffle()
+    }
+    private let cachedRepeatButton = CPNowPlayingRepeatButton { _ in
+        AudioPlayerService.shared.cycleRepeatMode()
+    }
 
     init(interfaceController: CPInterfaceController) {
         self.interfaceController = interfaceController
@@ -45,6 +55,8 @@ final class CarPlayRootController: NSObject {
         recap.load()
         queue.load()
 
+        AudioPlayerService.shared.isCarPlayActive = true
+
         // FIX 4: Korrupten Player-State nach Crash sauber zurücksetzen
         let player = AudioPlayerService.shared
         if player.currentSong == nil && player.currentIndex > 0 {
@@ -68,6 +80,7 @@ final class CarPlayRootController: NSObject {
     }
 
     func disconnect() {
+        AudioPlayerService.shared.isCarPlayActive = false
         CPNowPlayingTemplate.shared.remove(self)
         cancellables.removeAll()
         discoverController?.cancel()
@@ -133,6 +146,8 @@ final class CarPlayRootController: NSObject {
             .store(in: &cancellables)
 
         // recapEnabled und enablePlaylists via UserDefaults — nur bei Änderung reagieren.
+        // lastRecapEnabled/lastEnablePlaylists werden ausschliesslich in refreshTabs() upgedated,
+        // damit der Vergleich dort funktioniert (sonst sind sie schon gleich, bevor refreshTabs läuft).
         NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
@@ -140,8 +155,6 @@ final class CarPlayRootController: NSObject {
                 let currentRecap = UserDefaults.standard.bool(forKey: "recapEnabled")
                 let currentPlaylists = UserDefaults.standard.bool(forKey: "enablePlaylists")
                 guard currentRecap != self.lastRecapEnabled || currentPlaylists != self.lastEnablePlaylists else { return }
-                self.lastRecapEnabled = currentRecap
-                self.lastEnablePlaylists = currentPlaylists
                 self.refreshTabs()
             }
             .store(in: &cancellables)
@@ -150,9 +163,13 @@ final class CarPlayRootController: NSObject {
     private func refreshTabs() {
         // Nur tatsächlichen Tab-Wechsel rendern — sonst unnötige IPC-Roundtrips zu CarPlay.
         let recapVisible = recapTabVisible
+        let recapEnabled = UserDefaults.standard.bool(forKey: "recapEnabled")
         let playlistsEnabled = UserDefaults.standard.bool(forKey: "enablePlaylists")
-        guard recapVisible != lastRecapTabVisible || playlistsEnabled != lastEnablePlaylists else { return }
+        guard recapVisible != lastRecapTabVisible
+              || recapEnabled != lastRecapEnabled
+              || playlistsEnabled != lastEnablePlaylists else { return }
         lastRecapTabVisible = recapVisible
+        lastRecapEnabled = recapEnabled
         lastEnablePlaylists = playlistsEnabled
         tabBar?.updateTemplates(visibleTabTemplates())
     }
@@ -170,34 +187,47 @@ final class CarPlayRootController: NSObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.updateNowPlayingButtons() }
             .store(in: &cancellables)
+        // $starredSongs feuert SOFORT beim optimistischen Toggle in toggleStarSong.
         LibraryStore.shared.$starredSongs
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.updateNowPlayingButtons() }
             .store(in: &cancellables)
+        // Bewusst KEINE Sinks auf $isShuffled / $repeatMode: Apple's System-Buttons
+        // (CPNowPlayingShuffle-/RepeatButton) lesen ihren Selected-State autonom vom
+        // MPRemoteCommandCenter. Würden wir bei jedem State-Wechsel die Buttons neu
+        // bauen, flackerte der Frame zwischen Tap-Highlight und Re-Erstellung.
+        // enableFavorites-Toggle. Filter auf den Key, sonst rauscht jeder Player-State-Save durch.
+        var lastEnableFav  = UserDefaults.standard.bool(forKey: "enableFavorites")
+        var lastThemeColor = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
         NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.updateNowPlayingButtons() }
+            .sink { [weak self] _ in
+                let currentFav   = UserDefaults.standard.bool(forKey: "enableFavorites")
+                let currentTheme = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
+                if currentFav != lastEnableFav {
+                    lastEnableFav = currentFav
+                    self?.updateNowPlayingButtons()
+                }
+                if currentTheme != lastThemeColor {
+                    lastThemeColor = currentTheme
+                    self?.updateNowPlayingButtons()
+                }
+            }
             .store(in: &cancellables)
     }
 
     private func updateNowPlayingButtons() {
-        let songId = AudioPlayerService.shared.currentSong?.id
-        let starred = AudioPlayerService.shared.currentSong
-            .map { LibraryStore.shared.isSongStarred($0) } ?? false
-        let shuffled = AudioPlayerService.shared.isShuffled
-        guard lastButtonState?.0 != songId ||
-              lastButtonState?.1 != starred ||
-              lastButtonState?.2 != shuffled else { return }
-        lastButtonState = (songId, starred, shuffled)
+        let song = AudioPlayerService.shared.currentSong
+        let starred = song.map { LibraryStore.shared.isSongStarred($0) } ?? false
 
-        var buttons: [CPNowPlayingButton] = [
-            CPNowPlayingShuffleButton { _ in AudioPlayerService.shared.toggleShuffle() },
-            CPNowPlayingRepeatButton  { _ in AudioPlayerService.shared.repeatMode = AudioPlayerService.shared.repeatMode.toggled },
-        ]
+        // Geteilte System-Buttons (immer dieselben Instanzen) + frisch gebauter Heart-Button
+        // (CPNowPlayingImageButton.image ist init-only, lässt sich nicht mutieren — daher
+        // bei Track-/Starred-Wechsel neu bauen). Shuffle/Repeat bleiben stabil.
+        var buttons: [CPNowPlayingButton] = [cachedShuffleButton, cachedRepeatButton]
         if #available(iOS 16.0, *),
            UserDefaults.standard.bool(forKey: "enableFavorites"),
-           let song = AudioPlayerService.shared.currentSong {
-            let icon = cpIcon(starred ? "heart.fill" : "heart")
+           let song {
+            let icon = UIImage(systemName: starred ? "heart.fill" : "heart") ?? UIImage()
             buttons.append(CPNowPlayingImageButton(image: icon) { _ in
                 Task { await LibraryStore.shared.toggleStarSong(song) }
             })
@@ -211,8 +241,29 @@ final class CarPlayRootController: NSObject {
 extension CarPlayRootController: CPNowPlayingTemplateObserver {
     nonisolated func nowPlayingTemplateUpNextButtonTapped(_ nowPlayingTemplate: CPNowPlayingTemplate) {
         Task { @MainActor in
-            guard let template = self.queueController?.rootTemplate else { return }
-            self.interfaceController.pushTemplate(template, animated: true, completion: nil)
+            guard let queue = self.queueController?.rootTemplate else { return }
+            let ic = self.interfaceController
+
+            // Queue ist schon top: nichts tun.
+            if ic.topTemplate === queue { return }
+
+            // Queue ist irgendwo im Stack: dorthin springen statt erneut pushen.
+            if ic.templates.contains(where: { $0 === queue }) {
+                ic.pop(to: queue, animated: true, completion: nil)
+                return
+            }
+
+            // Apple's CarPlay-Hierarchy-Limit ist 5, aber das automatisch eingeblendete
+            // CPNowPlayingTemplate belegt einen virtuellen Slot. Aus dem Player heraus
+            // immer auf den Tab-Root zurückspringen, dann frisch pushen — vermeidet
+            // den NSGenericException 'Application exceeded the hierarchy depth limit'-Crash
+            // wenn der User vorher tief navigiert war (Library > Albums > AlbumDetail).
+            if ic.templates.count >= 3 {
+                await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+                    ic.popToRootTemplate(animated: false) { _, _ in cont.resume() }
+                }
+            }
+            ic.pushTemplate(queue, animated: true, completion: nil)
         }
     }
 
