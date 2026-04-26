@@ -166,18 +166,36 @@ Pull requests are welcome. For larger changes, please open an issue first to dis
 
 See [LICENSE](LICENSE) for details.
 
-## Screenshots
+### iPhone
 
-<p align="center">
-  <img src="Screenshots/home.png" width="30%" alt="Home"/>
-  <img src="Screenshots/player.png" width="30%" alt="Player"/>
-  <img src="Screenshots/album.png" width="30%" alt="Favourites"/>
-</p>
-<p align="center">
-  <img src="Screenshots/albums.png" width="30%" alt="Albums"/>
-  <img src="Screenshots/artists.png" width="30%" alt="Artists"/>
-  <img src="Screenshots/favourites.png" width="30%" alt="Favourites"/>
-</p>
-<p align="center">
-  <img src="Screenshots/playlists.png" width="30%" alt="Album Detail"/>
-</p>
+<table>
+  <tr>
+    <td><img src="Screenshots_iPhone/home.png" width="220"/></td>
+    <td><img src="Screenshots_iPhone/player.png" width="220"/></td>
+    <td><img src="Screenshots_iPhone/albums.png" width="220"/></td>
+  </tr>
+</table>
+<table>
+  <tr>
+    <td><img src="Screenshots_iPhone/artists.png" width="220"/></td>
+    <td><img src="Screenshots_iPhone/favourites.png" width="220"/></td>
+    <td><img src="Screenshots_iPhone/playlists.png" width="220"/></td>
+  </tr>
+</table>
+
+### iPad
+
+<table>
+  <tr>
+    <td><img src="Screenshots_iPad/home.png" width="220"/></td>
+    <td><img src="Screenshots_iPad/player.png" width="220"/></td>
+    <td><img src="Screenshots_iPad/albums.png" width="220"/></td>
+  </tr>
+</table>
+<table>
+  <tr>
+    <td><img src="Screenshots_iPad/artists.png" width="220"/></td>
+    <td><img src="Screenshots_iPad/favourites.png" width="220"/></td>
+    <td><img src="Screenshots_iPad/playlists.png" width="220"/></td>
+  </tr>
+</table>
