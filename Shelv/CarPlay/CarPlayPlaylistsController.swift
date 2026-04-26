@@ -44,6 +44,10 @@ final class CarPlayPlaylistsController {
             }
             .store(in: &cancellables)
 
+        // Offline-Start-Fix: buildOfflineList() prüft !DownloadStore.shared.songs.isEmpty.
+        // Wenn songs noch nicht geladen sind (async reload nach CarPlay-Connect), zeigt die
+        // Liste fälschlicherweise "Keine Offline-Playlists". Dieser Subscriber re-triggert
+        // buildOfflineList() sobald songs befüllt werden.
         DownloadStore.shared.$songs
             .receive(on: DispatchQueue.main)
             .dropFirst()

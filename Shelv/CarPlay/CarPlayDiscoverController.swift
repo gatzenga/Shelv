@@ -39,8 +39,12 @@ final class CarPlayDiscoverController {
                 let current = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
                 guard current != lastThemeColor else { return }
                 lastThemeColor = current
-                guard !OfflineModeService.shared.isOffline else { return }
-                self.rootTemplate.updateSections(self.buildSections())
+                if OfflineModeService.shared.isOffline {
+                    self.showOffline()
+                } else {
+                    self.rootTemplate.updateSections(self.buildSections())
+                    Task { await self.enrichWithCovers() }
+                }
             }
             .store(in: &cancellables)
 

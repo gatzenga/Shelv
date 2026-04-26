@@ -49,6 +49,26 @@ final class CarPlayRootController: NSObject {
         tabBar = tabs
         interfaceController.setRootTemplate(tabs, animated: false, completion: nil)
 
+        // CarPlay-only-Start: ShelvApp's .task läuft auf dem UIWindowScene-Lifecycle.
+        // Bei reinem CarPlay-Start (iPhone-Screen bleibt dunkel) kann DownloadStore
+        // noch kein serverId haben, weil setActiveServer noch nicht aufgerufen wurde.
+        // Hier explizit bootstrappen — alle Operationen sind idempotent.
+        Task { @MainActor in
+            await DownloadDatabase.shared.setup()
+            await DownloadService.shared.setup()
+            await PlayLogService.shared.setup()
+            let tempStore = ServerStore()
+            if let server = tempStore.activeServer, !server.stableId.isEmpty {
+                await DownloadStore.shared.setActiveServer(server.stableId)
+                // Offline-Modus: Playlists und Recap aus Disk-Cache / SQLite laden,
+                // da ShelvApp's .task bei reinem CarPlay-Start ggf. nicht läuft.
+                if OfflineModeService.shared.isOffline {
+                    await LibraryStore.shared.loadPlaylists()
+                }
+                await RecapStore.shared.loadEntries(serverId: server.stableId)
+            }
+        }
+
         discover.load()
         library.load()
         playlists.load()
@@ -70,8 +90,9 @@ final class CarPlayRootController: NSObject {
 
     /// Lädt im Hintergrund Daten, die der User wahrscheinlich gleich braucht (Library →
     /// Artists). Spart die ~2 s Wait-on-API beim ersten Tap auf den Artists-Eintrag.
+    /// Im Offline-Modus: Artists aus Disk-Cache laden damit artistSource() korrekte
+    /// coverArt-IDs aus dem LibraryStore nutzt statt ggf. nil aus DownloadedArtist.
     private func prefetchHeavyData() {
-        guard !OfflineModeService.shared.isOffline else { return }
         Task.detached(priority: .utility) {
             if await LibraryStore.shared.artists.isEmpty {
                 await LibraryStore.shared.loadArtists()

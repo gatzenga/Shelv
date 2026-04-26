@@ -149,10 +149,13 @@ enum CarPlayNavigation {
 
         Task { @MainActor [weak template] in
             var lastEnabled = UserDefaults.standard.bool(forKey: "enableFavorites")
+            var lastTheme   = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
             for await _ in NotificationCenter.default.notifications(named: UserDefaults.didChangeNotification) {
-                let current = UserDefaults.standard.bool(forKey: "enableFavorites")
-                guard current != lastEnabled else { continue }
-                lastEnabled = current
+                let currentEnabled = UserDefaults.standard.bool(forKey: "enableFavorites")
+                let currentTheme   = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
+                guard currentEnabled != lastEnabled || currentTheme != lastTheme else { continue }
+                lastEnabled = currentEnabled
+                lastTheme   = currentTheme
                 guard let t = template else { return }
                 let snap = t.sections
                 guard snap.count >= 2 else { return }
@@ -272,10 +275,13 @@ enum CarPlayNavigation {
 
         Task { @MainActor [weak template] in
             var lastEnabled = UserDefaults.standard.bool(forKey: "enableFavorites")
+            var lastTheme   = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
             for await _ in NotificationCenter.default.notifications(named: UserDefaults.didChangeNotification) {
-                let current = UserDefaults.standard.bool(forKey: "enableFavorites")
-                guard current != lastEnabled else { continue }
-                lastEnabled = current
+                let currentEnabled = UserDefaults.standard.bool(forKey: "enableFavorites")
+                let currentTheme   = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
+                guard currentEnabled != lastEnabled || currentTheme != lastTheme else { continue }
+                lastEnabled = currentEnabled
+                lastTheme   = currentTheme
                 guard let t = template else { return }
                 let snap = t.sections
                 guard snap.count >= 2 else { return }
@@ -372,6 +378,19 @@ enum CarPlayNavigation {
 
         Task {
             await streamCovers(into: initialCoverMap)
+        }
+
+        Task { @MainActor [weak template] in
+            var lastTheme = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
+            for await _ in NotificationCenter.default.notifications(named: UserDefaults.didChangeNotification) {
+                let currentTheme = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
+                guard currentTheme != lastTheme else { continue }
+                lastTheme = currentTheme
+                guard let t = template else { return }
+                let snap = t.sections
+                guard snap.count >= 2 else { return }
+                t.updateSections([makeActionsSection(), snap[1]])
+            }
         }
     }
 

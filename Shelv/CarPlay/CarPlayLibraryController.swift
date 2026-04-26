@@ -64,8 +64,9 @@ final class CarPlayLibraryController {
             }
             .store(in: &cancellables)
 
-        // Offline-Start-Fix: DownloadStore lädt async — falls Alben-/Artist-Liste schon offen
-        // ist wenn reload() fertig wird, sofort neu befüllen.
+        // Offline-Start-Fix: DownloadStore lädt async — $albums und $artists sind separate
+        // @Published Properties, die getrennt feuern. Deshalb je ein eigener Subscriber,
+        // damit rebuildArtistsTemplate() erst läuft wenn artists tatsächlich befüllt sind.
         DownloadStore.shared.$albums
             .receive(on: DispatchQueue.main)
             .dropFirst()
@@ -74,9 +75,15 @@ final class CarPlayLibraryController {
                 guard let self else { return }
                 self.buildMenu()
                 self.rebuildAlbumsTemplate()
-                self.rebuildArtistsTemplate()
                 self.rebuildFavoritesTemplate()
             }
+            .store(in: &cancellables)
+
+        DownloadStore.shared.$artists
+            .receive(on: DispatchQueue.main)
+            .dropFirst()
+            .filter { _ in OfflineModeService.shared.isOffline }
+            .sink { [weak self] _ in self?.rebuildArtistsTemplate() }
             .store(in: &cancellables)
 
         buildMenu()
