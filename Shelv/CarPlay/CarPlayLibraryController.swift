@@ -8,6 +8,10 @@ final class CarPlayLibraryController {
     private let interfaceController: CPInterfaceController
     let rootTemplate: CPListTemplate
     private var cancellables = Set<AnyCancellable>()
+    // Eigene Task-Variable pro Screen — verhindert gegenseitiges Canceln (Szenario B)
+    private var albumCoverTask: Task<Void, Never>?
+    private var artistCoverTask: Task<Void, Never>?
+    private var coverLoadTask: Task<Void, Never>?   // für Favorites und Full-Lists
     private var lastEnableFavorites: Bool = UserDefaults.standard.bool(forKey: "enableFavorites")
 
     init(interfaceController: CPInterfaceController) {
@@ -51,6 +55,9 @@ final class CarPlayLibraryController {
     }
 
     func cancel() {
+        albumCoverTask?.cancel()
+        artistCoverTask?.cancel()
+        coverLoadTask?.cancel()
         cancellables.removeAll()
     }
 
@@ -88,7 +95,9 @@ final class CarPlayLibraryController {
         ])
         CarPlayNavigation.safePush(template, on: interfaceController)
 
-        Task { [weak self] in
+        // Eigene Task-Variable — cancelt NUR einen früheren Album-Task, nie Artists
+        albumCoverTask?.cancel()
+        albumCoverTask = Task { [weak self] in
             guard let self else { return }
             // Gecachte Daten sofort anzeigen, dann vollständig von der API nachladen
             let cached = self.albumSource()
@@ -146,7 +155,9 @@ final class CarPlayLibraryController {
         ])
         CarPlayNavigation.safePush(template, on: interfaceController)
 
-        Task { [weak self] in
+        // Eigene Task-Variable — cancelt NUR einen früheren Artists-Task, nie Albums
+        artistCoverTask?.cancel()
+        artistCoverTask = Task { [weak self] in
             guard let self else { return }
             // Gecachte Daten sofort anzeigen — erspart die ~2 s Wait-on-API beim ersten Tap.
             let cached = self.artistSource()
@@ -239,7 +250,8 @@ final class CarPlayLibraryController {
         CarPlayNavigation.safePush(template, on: interfaceController)
 
         guard !albums.isEmpty else { return }
-        Task { [weak self] in
+        coverLoadTask?.cancel()
+        coverLoadTask = Task { [weak self] in
             await applyCoversAsync(template: template, coverArtIds: albums.map { $0.coverArt }) { [weak self] map in
                 self?.favoriteSections(songs: songs, albums: albums, artists: artists, counts: counts, albumImageMap: map) ?? []
             }
@@ -345,7 +357,8 @@ final class CarPlayLibraryController {
             CPListSection(items: makeAlbumItems(albums, imageMap: [:]), header: nil, sectionIndexTitle: nil)
         ])
         CarPlayNavigation.safePush(template, on: interfaceController)
-        Task { [weak self] in
+        coverLoadTask?.cancel()
+        coverLoadTask = Task { [weak self] in
             await applyCoversAsync(template: template, coverArtIds: albums.map { $0.coverArt }) { [weak self] map in
                 guard let self else { return [] }
                 return [CPListSection(items: self.makeAlbumItems(albums, imageMap: map), header: nil, sectionIndexTitle: nil)]
@@ -359,7 +372,8 @@ final class CarPlayLibraryController {
             CPListSection(items: makeArtistItems(artists, counts: counts, imageMap: [:]), header: nil, sectionIndexTitle: nil)
         ])
         CarPlayNavigation.safePush(template, on: interfaceController)
-        Task { [weak self] in
+        coverLoadTask?.cancel()
+        coverLoadTask = Task { [weak self] in
             await applyCoversAsync(template: template, coverArtIds: artists.map { $0.coverArt }) { [weak self] map in
                 guard let self else { return [] }
                 return [CPListSection(items: self.makeArtistItems(artists, counts: counts, imageMap: map), header: nil, sectionIndexTitle: nil)]

@@ -230,27 +230,40 @@ func loadCoversIncremental(
     let isOffline = OfflineModeService.shared.isOffline
     let sizeFallback = [size, 150, 300, 600]
 
-    // 1) Synchrone Hits einsammeln — Memory-Cache + (offline) LocalArtworkIndex.
-    //    Beides sind In-Memory-Lookups ohne Suspension; sofort an UI weiterreichen.
+    // 1) Memory-Cache synchron abfragen (immer Main Actor, In-Memory)
     var syncHits: [String: UIImage] = [:]
     var misses: [String] = []
     for id in unique {
         if let img = firstMemoryHit(id: id, sizes: sizeFallback) {
             syncHits[id] = img
-            continue
+        } else {
+            misses.append(id)
         }
-        if isOffline,
-           let path = LocalArtworkIndex.shared.localPath(for: id),
-           let img = UIImage(contentsOfFile: path) {
-            syncHits[id] = img
-            continue
-        }
-        misses.append(id)
     }
+
+    // 2) Offline: LocalArtworkIndex-Pfade auf Main Actor sammeln, UIImage-Reads in Background (FIX 7)
+    if isOffline && !misses.isEmpty {
+        let pathsById: [String: String] = misses.reduce(into: [:]) { dict, id in
+            if let path = LocalArtworkIndex.shared.localPath(for: id) { dict[id] = path }
+        }
+        if !pathsById.isEmpty {
+            let offlineHits = await Task.detached(priority: .userInitiated) {
+                var hits: [String: UIImage] = [:]
+                for (id, path) in pathsById {
+                    if let img = UIImage(contentsOfFile: path) { hits[id] = img }
+                }
+                return hits
+            }.value
+            syncHits.merge(offlineHits) { _, new in new }
+            misses = misses.filter { syncHits[$0] == nil }
+        }
+    }
+
+    if Task.isCancelled { return }
     if !syncHits.isEmpty { onChunk(syncHits) }
     guard !misses.isEmpty else { return }
 
-    // 2) Async-Misses in Chunks laden — UI nach jedem Chunk updaten.
+    // 3) Async-Misses in Chunks laden — UI nach jedem Chunk updaten.
     let chunks = stride(from: 0, to: misses.count, by: chunkSize).map {
         Array(misses[$0..<min($0 + chunkSize, misses.count)])
     }
@@ -305,7 +318,13 @@ func applyCoversAsync(
 ) async {
     var accumulated: [String: UIImage] = [:]
     await loadCoversIncremental(coverArtIds: ids, size: size, chunkSize: chunkSize) { chunk in
-        accumulated.merge(chunk) { _, new in new }
+        // FIX 10: accumulated auf max 150 Einträge begrenzen — sonst Speicherdruck bei 500+ Songs
+        for (key, img) in chunk {
+            if accumulated.count >= 150, let oldest = accumulated.keys.first {
+                accumulated.removeValue(forKey: oldest)
+            }
+            accumulated[key] = img
+        }
         template.updateSections(rebuild(accumulated))
     }
 }
@@ -319,7 +338,7 @@ func batchLoadCovers(
 ) async -> [String: UIImage] {
     var result: [String: UIImage] = [:]
     let ids = itemsWithCovers.map { $0.coverArtId }
-    await loadCoversIncremental(coverArtIds: ids, size: size, chunkSize: max(1, ids.count)) { chunk in
+    await loadCoversIncremental(coverArtIds: ids, size: size, chunkSize: 20) { chunk in
         result.merge(chunk) { _, new in new }
     }
     return result

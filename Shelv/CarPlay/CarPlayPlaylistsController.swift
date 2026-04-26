@@ -6,6 +6,7 @@ final class CarPlayPlaylistsController {
     private let interfaceController: CPInterfaceController
     let rootTemplate: CPListTemplate
     private var loadTask: Task<Void, Never>?
+    private var coverLoadTask: Task<Void, Never>?
     private var cancellables = Set<AnyCancellable>()
 
     init(interfaceController: CPInterfaceController) {
@@ -68,6 +69,7 @@ final class CarPlayPlaylistsController {
 
     func cancel() {
         loadTask?.cancel()
+        coverLoadTask?.cancel()
         cancellables.removeAll()
     }
 
@@ -123,7 +125,8 @@ final class CarPlayPlaylistsController {
         rootTemplate.updateSections([
             CPListSection(items: makePlaylistItems(playlists, imageMap: [:]), header: nil, sectionIndexTitle: nil)
         ])
-        Task { [weak self, rootTemplate] in
+        coverLoadTask?.cancel()
+        coverLoadTask = Task { [weak self, rootTemplate] in
             await applyCoversAsync(template: rootTemplate, coverArtIds: playlists.map { $0.coverArt }) { [weak self] map in
                 guard let self else { return [] }
                 return [CPListSection(items: self.makePlaylistItems(playlists, imageMap: map), header: nil, sectionIndexTitle: nil)]

@@ -8,6 +8,7 @@ final class CarPlayDiscoverController {
     private let interfaceController: CPInterfaceController
     let rootTemplate: CPListTemplate
     private var loadTask: Task<Void, Never>?
+    private var coverLoadTask: Task<Void, Never>?
     private var cancellables = Set<AnyCancellable>()
 
     init(interfaceController: CPInterfaceController) {
@@ -35,6 +36,7 @@ final class CarPlayDiscoverController {
 
     func cancel() {
         loadTask?.cancel()
+        coverLoadTask?.cancel()
         cancellables.removeAll()
     }
 
@@ -165,7 +167,8 @@ final class CarPlayDiscoverController {
             CPListSection(items: makeAlbumItems(albums, imageMap: [:]), header: nil, sectionIndexTitle: nil)
         ])
         CarPlayNavigation.safePush(template, on: interfaceController)
-        Task { [weak self] in
+        coverLoadTask?.cancel()
+        coverLoadTask = Task { [weak self] in
             guard let self else { return }
             await applyCoversAsync(template: template, coverArtIds: albums.map { $0.coverArt }) { [weak self] map in
                 guard let self else { return [] }
@@ -200,7 +203,7 @@ final class CarPlayDiscoverController {
     private func makeMixItem(_ title: String, type: String) -> CPListItem {
         let item = CPListItem(text: title, detailText: nil)
         item.handler = { [weak self] _, c in
-            // c() in den Task verschoben → CarPlay zeigt Loading-Spinner bis Aufruf zurück.
+            c()  // FIX 5: Sofort aufrufen — CarPlay wertet verzögertes c() als fehlgeschlagenen Tap
             Task { [weak self] in
                 do {
                     let albums = try await SubsonicAPIService.shared.getAlbumList(type: type, size: 50)
@@ -213,14 +216,11 @@ final class CarPlayDiscoverController {
                     }
                     guard !songs.isEmpty else {
                         await MainActor.run { self?.presentMixError(title: title, message: tr("No tracks found.", "Keine Titel gefunden.")) }
-                        c()
                         return
                     }
                     await MainActor.run { AudioPlayerService.shared.play(songs: songs, startIndex: 0) }
-                    c()
                 } catch {
                     await MainActor.run { self?.presentMixError(title: title, message: error.localizedDescription) }
-                    c()
                 }
             }
         }

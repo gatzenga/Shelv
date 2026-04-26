@@ -5,24 +5,27 @@ enum CarPlayNavigation {
 
     // MARK: - Safe Push
 
-    /// CarPlay limitiert den Template-Stack auf 5. Vor jedem Push das Limit prüfen und
-    /// ggf. den ältesten Template durch Pop-To-Root ersetzen, bevor neu gepusht wird.
     static func safePush(_ template: CPTemplate, on ic: CPInterfaceController) {
-        let max = 5
-        if ic.templates.count >= max {
-            // Auf Root popen (Tab-Bar) und dann pushen — verhindert Crash bei tiefer Navigation.
-            ic.popToRootTemplate(animated: false) { _, _ in
-                ic.pushTemplate(template, animated: true, completion: nil)
-            }
-            return
-        }
+        // Nicht pushen wenn Stack zu tief
+        guard ic.templates.count < 4 else { return }
+        // Nicht pushen wenn bereits ein Template desselben Typs oben liegt
+        guard ic.topTemplate?.classForCoder != template.classForCoder else { return }
         ic.pushTemplate(template, animated: true, completion: nil)
     }
 
     // MARK: - Album
 
     static func openAlbum(_ album: Album, from ic: CPInterfaceController) {
-        Task {
+        Task { @MainActor in
+            // Template sofort erstellen und pushen — KEIN späteres pop/push (verhindert hierarchy-depth-crash)
+            let template = CPListTemplate(
+                title: album.name,
+                sections: [CPListSection(items: [
+                    CPListItem(text: tr("Loading…", "Wird geladen…"), detailText: nil)
+                ], header: nil, sectionIndexTitle: nil)]
+            )
+            safePush(template, on: ic)
+
             let songs: [Song]
             if OfflineModeService.shared.isOffline {
                 songs = DownloadStore.shared.albums
@@ -30,8 +33,8 @@ enum CarPlayNavigation {
             } else {
                 songs = (try? await LibraryStore.shared.fetchAlbumSongs(album)) ?? []
             }
-            let t = albumDetailTemplate(album: album, songs: songs, ic: ic)
-            safePush(t, on: ic)
+            let real = albumDetailTemplate(album: album, songs: songs, ic: ic)
+            template.updateSections(real.sections)
         }
     }
 
@@ -82,15 +85,19 @@ enum CarPlayNavigation {
         // Reaktiv: enableFavorites-Toggle
         Task { @MainActor [weak template] in
             for await _ in NotificationCenter.default.notifications(named: UserDefaults.didChangeNotification) {
-                guard let t = template, t.sections.count >= 2 else { return }
-                t.updateSections([makeActionsSection(), t.sections[1]])
+                guard let t = template else { return }
+                let snap = t.sections
+                guard snap.count >= 2 else { return }
+                t.updateSections([makeActionsSection(), snap[1]])
             }
         }
         // Reaktiv: Favorit-Status nach Toggle
         Task { @MainActor [weak template] in
             for await _ in NotificationCenter.default.notifications(named: .carPlayStarredChanged) {
-                guard let t = template, t.sections.count >= 2 else { return }
-                t.updateSections([makeActionsSection(), t.sections[1]])
+                guard let t = template else { return }
+                let snap = t.sections
+                guard snap.count >= 2 else { return }
+                t.updateSections([makeActionsSection(), snap[1]])
             }
         }
 
@@ -100,18 +107,24 @@ enum CarPlayNavigation {
     // MARK: - Artist
 
     static func openArtist(_ artist: Artist, from ic: CPInterfaceController) {
-        Task {
+        Task { @MainActor in
+            // Template sofort erstellen und pushen — KEIN späteres pop/push
+            let template = CPListTemplate(
+                title: artist.name,
+                sections: [CPListSection(items: [
+                    CPListItem(text: tr("Loading…", "Wird geladen…"), detailText: nil)
+                ], header: nil, sectionIndexTitle: nil)]
+            )
+            safePush(template, on: ic)
+
             let albums: [Album]
             if OfflineModeService.shared.isOffline {
-                // iOS-Song hat kein artistId — DownloadStore-Künstler nutzen "name:..."-IDs.
-                // Wenn der Aufrufer ein LibraryStore-Künstler-Objekt mit Server-UUID übergibt,
-                // matcht artistId nicht. Name-Match ist der zuverlässige Lookup-Key offline.
                 albums = downloadedAlbums(for: artist)
             } else {
                 albums = (try? await SubsonicAPIService.shared.getArtist(id: artist.id))?.album ?? []
             }
-            let t = artistDetailTemplate(artist: artist, albums: albums, ic: ic)
-            safePush(t, on: ic)
+            let real = artistDetailTemplate(artist: artist, albums: albums, ic: ic)
+            template.updateSections(real.sections)
         }
     }
 
@@ -180,15 +193,19 @@ enum CarPlayNavigation {
         // Reaktiv: enableFavorites-Toggle
         Task { @MainActor [weak template] in
             for await _ in NotificationCenter.default.notifications(named: UserDefaults.didChangeNotification) {
-                guard let t = template, t.sections.count >= 2 else { return }
-                t.updateSections([makeActionsSection(), t.sections[1]])
+                guard let t = template else { return }
+                let snap = t.sections
+                guard snap.count >= 2 else { return }
+                t.updateSections([makeActionsSection(), snap[1]])
             }
         }
         // Reaktiv: Favorit-Status nach Toggle
         Task { @MainActor [weak template] in
             for await _ in NotificationCenter.default.notifications(named: .carPlayStarredChanged) {
-                guard let t = template, t.sections.count >= 2 else { return }
-                t.updateSections([makeActionsSection(), t.sections[1]])
+                guard let t = template else { return }
+                let snap = t.sections
+                guard snap.count >= 2 else { return }
+                t.updateSections([makeActionsSection(), snap[1]])
             }
         }
 
@@ -198,16 +215,22 @@ enum CarPlayNavigation {
     // MARK: - Playlist
 
     static func openPlaylist(_ playlist: Playlist, from ic: CPInterfaceController) {
-        Task {
+        Task { @MainActor in
+            // Template sofort erstellen und pushen — KEIN späteres pop/push
+            let template = CPListTemplate(
+                title: playlist.name,
+                sections: [CPListSection(items: [
+                    CPListItem(text: tr("Loading…", "Wird geladen…"), detailText: nil)
+                ], header: nil, sectionIndexTitle: nil)]
+            )
+            safePush(template, on: ic)
+
             let allSongs = (await LibraryStore.shared.loadPlaylistDetail(id: playlist.id))?.songs ?? []
-            let songs: [Song]
-            if OfflineModeService.shared.isOffline {
-                songs = allSongs.filter { DownloadStore.shared.isDownloaded(songId: $0.id) }
-            } else {
-                songs = allSongs
-            }
-            let t = playlistDetailTemplate(playlist: playlist, songs: songs, ic: ic)
-            safePush(t, on: ic)
+            let songs: [Song] = OfflineModeService.shared.isOffline
+                ? allSongs.filter { DownloadStore.shared.isDownloaded(songId: $0.id) }
+                : allSongs
+            let real = playlistDetailTemplate(playlist: playlist, songs: songs, ic: ic)
+            template.updateSections(real.sections)
         }
     }
 

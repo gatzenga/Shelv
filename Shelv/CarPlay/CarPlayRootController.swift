@@ -12,7 +12,9 @@ final class CarPlayRootController: NSObject {
     private var tabBar: CPTabBarTemplate?
     private var cancellables = Set<AnyCancellable>()
     private var lastRecapEnabled: Bool = UserDefaults.standard.bool(forKey: "recapEnabled")
+    private var lastEnablePlaylists: Bool = UserDefaults.standard.bool(forKey: "enablePlaylists")
     private var lastRecapTabVisible: Bool = false
+    private var lastButtonState: (songId: String?, starred: Bool, shuffled: Bool)?
 
     init(interfaceController: CPInterfaceController) {
         self.interfaceController = interfaceController
@@ -42,6 +44,12 @@ final class CarPlayRootController: NSObject {
         playlists.load()
         recap.load()
         queue.load()
+
+        // FIX 4: Korrupten Player-State nach Crash sauber zurücksetzen
+        let player = AudioPlayerService.shared
+        if player.currentSong == nil && player.currentIndex > 0 {
+            player.stop()
+        }
 
         setupNowPlayingTemplate()
         observeRecapVisibility()
@@ -81,7 +89,10 @@ final class CarPlayRootController: NSObject {
         var templates: [CPTemplate] = []
         if let t = discoverController?.rootTemplate  { templates.append(t) }
         if let t = libraryController?.rootTemplate   { templates.append(t) }
-        if let t = playlistsController?.rootTemplate { templates.append(t) }
+        if UserDefaults.standard.bool(forKey: "enablePlaylists"),
+           let t = playlistsController?.rootTemplate {
+            templates.append(t)
+        }
         if recapTabVisible, let t = recapController?.rootTemplate {
             templates.append(t)
         }
@@ -121,15 +132,16 @@ final class CarPlayRootController: NSObject {
             }
             .store(in: &cancellables)
 
-        // recapEnabled wird via UserDefaults persistiert. Notification feuert bei jeder
-        // Mutation (Player-State-Saves) — nur bei tatsächlicher Toggle-Änderung reagieren.
+        // recapEnabled und enablePlaylists via UserDefaults — nur bei Änderung reagieren.
         NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self else { return }
-                let current = UserDefaults.standard.bool(forKey: "recapEnabled")
-                guard current != self.lastRecapEnabled else { return }
-                self.lastRecapEnabled = current
+                let currentRecap = UserDefaults.standard.bool(forKey: "recapEnabled")
+                let currentPlaylists = UserDefaults.standard.bool(forKey: "enablePlaylists")
+                guard currentRecap != self.lastRecapEnabled || currentPlaylists != self.lastEnablePlaylists else { return }
+                self.lastRecapEnabled = currentRecap
+                self.lastEnablePlaylists = currentPlaylists
                 self.refreshTabs()
             }
             .store(in: &cancellables)
@@ -137,9 +149,11 @@ final class CarPlayRootController: NSObject {
 
     private func refreshTabs() {
         // Nur tatsächlichen Tab-Wechsel rendern — sonst unnötige IPC-Roundtrips zu CarPlay.
-        let visible = recapTabVisible
-        guard visible != lastRecapTabVisible else { return }
-        lastRecapTabVisible = visible
+        let recapVisible = recapTabVisible
+        let playlistsEnabled = UserDefaults.standard.bool(forKey: "enablePlaylists")
+        guard recapVisible != lastRecapTabVisible || playlistsEnabled != lastEnablePlaylists else { return }
+        lastRecapTabVisible = recapVisible
+        lastEnablePlaylists = playlistsEnabled
         tabBar?.updateTemplates(visibleTabTemplates())
     }
 
@@ -167,6 +181,15 @@ final class CarPlayRootController: NSObject {
     }
 
     private func updateNowPlayingButtons() {
+        let songId = AudioPlayerService.shared.currentSong?.id
+        let starred = AudioPlayerService.shared.currentSong
+            .map { LibraryStore.shared.isSongStarred($0) } ?? false
+        let shuffled = AudioPlayerService.shared.isShuffled
+        guard lastButtonState?.0 != songId ||
+              lastButtonState?.1 != starred ||
+              lastButtonState?.2 != shuffled else { return }
+        lastButtonState = (songId, starred, shuffled)
+
         var buttons: [CPNowPlayingButton] = [
             CPNowPlayingShuffleButton { _ in AudioPlayerService.shared.toggleShuffle() },
             CPNowPlayingRepeatButton  { _ in AudioPlayerService.shared.repeatMode = AudioPlayerService.shared.repeatMode.toggled },
@@ -174,7 +197,6 @@ final class CarPlayRootController: NSObject {
         if #available(iOS 16.0, *),
            UserDefaults.standard.bool(forKey: "enableFavorites"),
            let song = AudioPlayerService.shared.currentSong {
-            let starred = LibraryStore.shared.isSongStarred(song)
             let icon = cpIcon(starred ? "heart.fill" : "heart")
             buttons.append(CPNowPlayingImageButton(image: icon) { _ in
                 Task { await LibraryStore.shared.toggleStarSong(song) }
