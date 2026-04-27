@@ -87,6 +87,9 @@ struct RecapDetailView: View {
             rankLabel(rank: rank, isTop3: isTop3)
             AlbumArtView(coverArtId: entry.song.coverArt, size: 100, cornerRadius: 8)
                 .frame(width: 52, height: 52)
+                .overlay {
+                    NowPlayingOverlay(songId: entry.song.id, size: 52, cornerRadius: 8, accentColor: accentColor)
+                }
             VStack(alignment: .leading, spacing: 2) {
                 Text(entry.song.title)
                     .font(isTop3 ? .body.bold() : .body)
@@ -149,23 +152,33 @@ struct RecapDetailView: View {
         isLoading = true
         defer { isLoading = false }
 
-        do {
-            let playlist = try await SubsonicAPIService.shared.getPlaylist(id: entry.playlistId)
-            let playlistSongs = playlist.songs ?? []
-
-            let counts = await PlayLogService.shared.topSongs(
-                serverId: serverId,
-                from: Date(timeIntervalSince1970: entry.periodStart),
-                to: Date(timeIntervalSince1970: entry.periodEnd),
-                limit: period.type.songLimit
-            )
-            let countMap = Dictionary(uniqueKeysWithValues: counts.map { ($0.songId, $0.count) })
-
-            songs = playlistSongs.map { song in
-                SongWithCount(id: song.id, song: song, playCount: countMap[song.id] ?? 0)
+        let playlistSongs: [Song]
+        if OfflineModeService.shared.isOffline {
+            guard let playlist = await LibraryStore.shared.loadPlaylistDetail(id: entry.playlistId) else {
+                errorMessage = tr("Playlist could not be loaded.", "Playlist konnte nicht geladen werden.")
+                return
             }
-        } catch {
-            errorMessage = error.localizedDescription
+            playlistSongs = playlist.songs ?? []
+        } else {
+            do {
+                let playlist = try await SubsonicAPIService.shared.getPlaylist(id: entry.playlistId)
+                playlistSongs = playlist.songs ?? []
+            } catch {
+                errorMessage = error.localizedDescription
+                return
+            }
+        }
+
+        let counts = await PlayLogService.shared.topSongs(
+            serverId: serverId,
+            from: Date(timeIntervalSince1970: entry.periodStart),
+            to: Date(timeIntervalSince1970: entry.periodEnd),
+            limit: period.type.songLimit
+        )
+        let countMap = Dictionary(uniqueKeysWithValues: counts.map { ($0.songId, $0.count) })
+
+        songs = playlistSongs.map { song in
+            SongWithCount(id: song.id, song: song, playCount: countMap[song.id] ?? 0)
         }
     }
 }

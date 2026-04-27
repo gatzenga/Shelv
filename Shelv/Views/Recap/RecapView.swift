@@ -211,6 +211,7 @@ struct RecapView: View {
             }
 
             Spacer(minLength: 0)
+            PlaylistDownloadBadge(playlistId: entry.playlistId)
             Image(systemName: "chevron.right")
                 .font(.caption.bold())
                 .foregroundStyle(.tertiary)

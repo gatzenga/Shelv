@@ -25,6 +25,8 @@ struct DiscoverView: View {
     @State private var showSearch = false
     @State private var showInsights = false
     @State private var showRecap = false
+    @State private var showOfflineHint = false
+    @State private var refreshContinuation: CheckedContinuation<Void, Never>?
 
     var body: some View {
         NavigationStack {
@@ -33,9 +35,25 @@ struct DiscoverView: View {
                     if offlineMode.isOffline {
                         offlineEmptyState
                     } else if libraryStore.isLoadingDiscover && libraryStore.recentlyAdded.isEmpty {
-                        ProgressView()
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, 60)
+                        VStack(spacing: 20) {
+                            ProgressView()
+                                .frame(maxWidth: .infinity)
+                            if showOfflineHint {
+                                Button {
+                                    offlineMode.enterOfflineMode()
+                                } label: {
+                                    Label(tr("Go Offline", "Offline gehen"), systemImage: "wifi.slash")
+                                        .font(.subheadline.bold())
+                                        .padding(.horizontal, 24)
+                                        .padding(.vertical, 10)
+                                        .background(accentColor.opacity(0.15))
+                                        .clipShape(Capsule())
+                                        .foregroundStyle(accentColor)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.top, 60)
                     } else {
                         VStack(spacing: 12) {
                             mixButton(
@@ -123,12 +141,43 @@ struct DiscoverView: View {
                     .tint(accentColor)
             }
             .refreshable {
-                async let discover: Void = libraryStore.loadDiscover()
-                async let sync:     Void = CloudKitSyncService.shared.syncNow()
-                _ = await (discover, sync)
+                await withCheckedContinuation { cont in
+                    refreshContinuation = cont
+                    Task { @MainActor in
+                        let bannerTask = Task {
+                            try? await Task.sleep(for: .seconds(3))
+                            if !Task.isCancelled { offlineMode.notifyServerError() }
+                        }
+                        async let discover: Void = libraryStore.loadDiscover()
+                        async let sync:     Void = CloudKitSyncService.shared.syncNow()
+                        _ = await (discover, sync)
+                        bannerTask.cancel()
+                        if let cont = refreshContinuation {
+                            refreshContinuation = nil
+                            cont.resume()
+                        }
+                    }
+                }
             }
             .task(id: libraryStore.reloadID) {
                 await libraryStore.loadDiscover()
+            }
+            .task(id: libraryStore.isLoadingDiscover) {
+                showOfflineHint = false
+                guard libraryStore.isLoadingDiscover && libraryStore.recentlyAdded.isEmpty else { return }
+                try? await Task.sleep(for: .seconds(3))
+                guard !Task.isCancelled else { return }
+                showOfflineHint = libraryStore.isLoadingDiscover && libraryStore.recentlyAdded.isEmpty
+            }
+            .onChange(of: offlineMode.isOffline) { _, isOffline in
+                if isOffline {
+                    if let cont = refreshContinuation {
+                        refreshContinuation = nil
+                        cont.resume()
+                    }
+                } else {
+                    Task { await libraryStore.loadDiscover() }
+                }
             }
             .onChange(of: libraryStore.errorMessage) { _, msg in
                 if let msg {

@@ -439,6 +439,10 @@ final class DownloadStore: ObservableObject {
     }
 
     func deleteAll() {
+        offlinePlaylistIds = []
+        playlistSongIds = [:]
+        UserDefaults.standard.removeObject(forKey: "shelv_offline_playlists_\(serverId)")
+        UserDefaults.standard.removeObject(forKey: "shelv_offline_playlist_songs_\(serverId)")
         Task { await DownloadService.shared.deleteAll() }
     }
 

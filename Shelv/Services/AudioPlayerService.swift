@@ -91,7 +91,7 @@ class AudioPlayerService: ObservableObject {
     private var crossfadeSeekSuppressed = false
     private var isEngineLoaded = false
     private var currentArtwork: MPMediaItemArtwork?
-    private var artworkTask: URLSessionDataTask?
+    private var artworkTask: Task<Void, Never>?
 
     private var networkMonitor = NWPathMonitor()
     private let networkMonitorQueue = DispatchQueue(label: "shelv.network", qos: .utility)
@@ -1042,18 +1042,38 @@ class AudioPlayerService: ObservableObject {
         info[MPNowPlayingInfoPropertyMediaType] = MPNowPlayingInfoMediaType.audio.rawValue as NSNumber
         if let d = song.duration { info[MPMediaItemPropertyPlaybackDuration] = Double(d) }
 
-        if let artId = song.coverArt, let artURL = SubsonicAPIService.shared.coverArtURL(for: artId, size: 600) {
-            artworkTask = URLSession.shared.dataTask(with: artURL) { [weak self] data, _, _ in
-                guard let data, let image = UIImage(data: data) else { return }
-                let artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
-                Task { @MainActor [weak self] in
-                    self?.currentArtwork = artwork
-                    var updated = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? info
+        if let artId = song.coverArt,
+           let artURL = SubsonicAPIService.shared.coverArtURL(for: artId, size: 600) {
+            let key = "\(artId)_600"
+            let isOffline = OfflineModeService.shared.isOffline
+            artworkTask = Task { [weak self] in
+                var img: UIImage?
+                if Task.isCancelled { return }
+                if let localPath = LocalArtworkIndex.shared.localPath(for: artId) {
+                    img = await Task.detached(priority: .medium) { UIImage(contentsOfFile: localPath) }.value
+                }
+                if img == nil {
+                    if isOffline {
+                        img = await ImageCacheService.shared.diskOnlyImage(key: key)
+                    } else {
+                        for attempt in 1...3 {
+                            if Task.isCancelled { return }
+                            img = await ImageCacheService.shared.image(url: artURL, key: key)
+                            if img != nil { break }
+                            if attempt < 3 { try? await Task.sleep(for: .milliseconds(500)) }
+                        }
+                    }
+                }
+                guard let img, !Task.isCancelled else { return }
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    let artwork = MPMediaItemArtwork(boundsSize: img.size) { _ in img }
+                    self.currentArtwork = artwork
+                    var updated = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
                     updated[MPMediaItemPropertyArtwork] = artwork
                     MPNowPlayingInfoCenter.default().nowPlayingInfo = updated
                 }
             }
-            artworkTask?.resume()
         }
 
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info

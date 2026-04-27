@@ -27,6 +27,7 @@ struct PlaylistsView: View {
     @State private var errorMessage: String?
     @State private var showError = false
     @State private var currentToast: ShelveToast?
+    @State private var refreshContinuation: CheckedContinuation<Void, Never>?
 
     var body: some View {
         NavigationStack {
@@ -128,9 +129,29 @@ struct PlaylistsView: View {
                 await libraryStore.loadPlaylists()
             }
             .refreshable {
-                async let reload: Void = libraryStore.loadPlaylists()
-                async let sync:   Void = CloudKitSyncService.shared.syncNow()
-                _ = await (reload, sync)
+                await withCheckedContinuation { cont in
+                    refreshContinuation = cont
+                    Task { @MainActor in
+                        let bannerTask = Task {
+                            try? await Task.sleep(for: .seconds(3))
+                            if !Task.isCancelled { offlineMode.notifyServerError() }
+                        }
+                        async let reload: Void = libraryStore.loadPlaylists()
+                        async let sync:   Void = CloudKitSyncService.shared.syncNow()
+                        _ = await (reload, sync)
+                        bannerTask.cancel()
+                        if let cont = refreshContinuation {
+                            refreshContinuation = nil
+                            cont.resume()
+                        }
+                    }
+                }
+            }
+            .onChange(of: offlineMode.isOffline) { _, isOffline in
+                if isOffline, let cont = refreshContinuation {
+                    refreshContinuation = nil
+                    cont.resume()
+                }
             }
             .alert(
                 tr("Delete Playlist?", "Playlist löschen?"),
@@ -309,6 +330,7 @@ struct PlaylistsView: View {
                 }
             }
             Spacer()
+            PlaylistDownloadBadge(playlistId: playlist.id)
             Image(systemName: "chevron.right")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)

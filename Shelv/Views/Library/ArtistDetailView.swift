@@ -296,10 +296,18 @@ struct ArtistDetailView: View {
         .scrollIndicators(.hidden)
     }
 
+    private func songsForAlbum(_ album: Album) async -> [Song] {
+        if offlineMode.isOffline {
+            return downloadStore.albums.first { $0.albumId == album.id }?.songs.map { $0.asSong() } ?? []
+        }
+        guard let detail = try? await SubsonicAPIService.shared.getAlbum(id: album.id) else { return [] }
+        return detail.song ?? []
+    }
+
     private func queueAlbum(_ album: Album) {
         Task {
-            guard let detail = try? await SubsonicAPIService.shared.getAlbum(id: album.id),
-                  let songs = detail.song, !songs.isEmpty else { return }
+            let songs = await songsForAlbum(album)
+            guard !songs.isEmpty else { return }
             await MainActor.run {
                 player.addToQueue(songs)
                 currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
@@ -309,8 +317,8 @@ struct ArtistDetailView: View {
 
     private func playNextAlbum(_ album: Album) {
         Task {
-            guard let detail = try? await SubsonicAPIService.shared.getAlbum(id: album.id),
-                  let songs = detail.song, !songs.isEmpty else { return }
+            let songs = await songsForAlbum(album)
+            guard !songs.isEmpty else { return }
             await MainActor.run {
                 player.addPlayNext(songs)
                 currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
@@ -320,8 +328,8 @@ struct ArtistDetailView: View {
 
     private func addAlbumToPlaylist(_ album: Album) {
         Task {
-            guard let detail = try? await SubsonicAPIService.shared.getAlbum(id: album.id),
-                  let songs = detail.song, !songs.isEmpty else { return }
+            let songs = await songsForAlbum(album)
+            guard !songs.isEmpty else { return }
             await MainActor.run {
                 NotificationCenter.default.post(name: .addSongsToPlaylist, object: songs.map(\.id))
             }

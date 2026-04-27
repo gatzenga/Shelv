@@ -69,7 +69,7 @@ struct ContentView: View {
             PlayerBarInset(isRegularWidth: isRegularWidth, showPlayer: $showPlayer)
         }
         .onChange(of: libraryStore.errorMessage) { _, msg in
-            guard let msg, enableDownloads else { return }
+            guard let msg else { return }
             offlineMode.notifyServerError(msg)
         }
         .sheet(isPresented: $showPlayer) {

@@ -107,6 +107,25 @@ struct AlbumDownloadBadge: View {
     }
 }
 
+/// Badge für Playlist-Rows — zeigt an, dass die Playlist für den Offline-Modus markiert ist.
+struct PlaylistDownloadBadge: View {
+    let playlistId: String
+    @ObservedObject private var downloadStore = DownloadStore.shared
+    @AppStorage("themeColor") private var themeColorName = "violet"
+    @AppStorage("enableDownloads") private var enableDownloads = false
+
+    var body: some View {
+        if enableDownloads && downloadStore.offlinePlaylistIds.contains(playlistId) {
+            Image(systemName: "arrow.down.circle.fill")
+                .font(.caption)
+                .foregroundStyle(.white)
+                .padding(4)
+                .background(AppTheme.color(for: themeColorName), in: Circle())
+                .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
+        }
+    }
+}
+
 /// Helper für View-Modifier — blendet das Download-Icon auf der rechten Seite einer Song-Zeile ein.
 struct DownloadTrailingIcon: ViewModifier {
     let songId: String

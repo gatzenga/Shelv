@@ -79,6 +79,7 @@ struct LibraryView: View {
     @State private var currentToast: ShelveToast?
     @State private var albumGroups: [(letter: String, items: [Album])] = []
     @State private var artistGroups: [(letter: String, items: [Artist])] = []
+    @State private var refreshContinuation: CheckedContinuation<Void, Never>?
     @ObservedObject private var downloadStore = DownloadStore.shared
 
     private let columns = [GridItem(.adaptive(minimum: 150, maximum: 200), spacing: 14)]
@@ -235,6 +236,10 @@ struct LibraryView: View {
         .onChange(of: downloadStore.artists) { _, _ in rebuildGroups() }
         .onChange(of: offlineMode.isOffline) { _, isOffline in
             if isOffline {
+                if let cont = refreshContinuation {
+                    refreshContinuation = nil
+                    cont.resume()
+                }
                 if sortOption.requiresServer { sortOptionRaw = AlbumSortOption.alphabetical.rawValue }
                 if artistSortOption.requiresServer { artistSortRaw = ArtistSortOption.alphabetical.rawValue }
             }
@@ -339,15 +344,26 @@ struct LibraryView: View {
         .refreshable {
             let currentSegment = segment
             let currentSort = sortOption.rawValue
-            async let reload: Void = {
-                switch currentSegment {
-                case .albums:    await libraryStore.loadAlbums(sortBy: currentSort)
-                case .artists:   await libraryStore.loadArtists()
-                case .favorites: await libraryStore.loadStarred()
+            await withCheckedContinuation { cont in
+                refreshContinuation = cont
+                Task { @MainActor in
+                    let bannerTask = Task {
+                        try? await Task.sleep(for: .seconds(3))
+                        if !Task.isCancelled { offlineMode.notifyServerError() }
+                    }
+                    switch currentSegment {
+                    case .albums:    await libraryStore.loadAlbums(sortBy: currentSort)
+                    case .artists:   await libraryStore.loadArtists()
+                    case .favorites: await libraryStore.loadStarred()
+                    }
+                    await CloudKitSyncService.shared.syncNow()
+                    bannerTask.cancel()
+                    if let cont = refreshContinuation {
+                        refreshContinuation = nil
+                        cont.resume()
+                    }
                 }
-            }()
-            async let sync: Void = CloudKitSyncService.shared.syncNow()
-            _ = await (reload, sync)
+            }
         }
         .shelveToast($currentToast)
         .onChange(of: libraryStore.errorMessage) { _, msg in
@@ -369,70 +385,52 @@ struct LibraryView: View {
         }
     }
 
+    private func songsForAlbum(_ album: Album) async -> [Song] {
+        if offlineMode.isOffline {
+            return downloadStore.albums.first { $0.albumId == album.id }?.songs.map { $0.asSong() } ?? []
+        }
+        return (try? await libraryStore.fetchAlbumSongs(album)) ?? []
+    }
+
     private func queueAlbum(_ album: Album) {
         Task {
-            do {
-                let songs = try await libraryStore.fetchAlbumSongs(album)
-                guard !songs.isEmpty else { return }
-                player.addToQueue(songs)
-                currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
-            } catch {
-                errorMessage = error.localizedDescription
-                showError = true
-            }
+            let songs = await songsForAlbum(album)
+            guard !songs.isEmpty else { return }
+            player.addToQueue(songs)
+            currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
         }
     }
 
     private func playNextAlbum(_ album: Album) {
         Task {
-            do {
-                let songs = try await libraryStore.fetchAlbumSongs(album)
-                guard !songs.isEmpty else { return }
-                player.addPlayNext(songs)
-                currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
-            } catch {
-                errorMessage = error.localizedDescription
-                showError = true
-            }
+            let songs = await songsForAlbum(album)
+            guard !songs.isEmpty else { return }
+            player.addPlayNext(songs)
+            currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
         }
     }
 
     private func playAlbum(_ album: Album) {
         Task {
-            do {
-                let songs = try await libraryStore.fetchAlbumSongs(album)
-                guard !songs.isEmpty else { return }
-                player.play(songs: songs, startIndex: 0)
-            } catch {
-                errorMessage = error.localizedDescription
-                showError = true
-            }
+            let songs = await songsForAlbum(album)
+            guard !songs.isEmpty else { return }
+            player.play(songs: songs, startIndex: 0)
         }
     }
 
     private func shuffleAlbum(_ album: Album) {
         Task {
-            do {
-                let songs = try await libraryStore.fetchAlbumSongs(album)
-                guard !songs.isEmpty else { return }
-                player.playShuffled(songs: songs)
-            } catch {
-                errorMessage = error.localizedDescription
-                showError = true
-            }
+            let songs = await songsForAlbum(album)
+            guard !songs.isEmpty else { return }
+            player.playShuffled(songs: songs)
         }
     }
 
     private func addAlbumToPlaylist(_ album: Album) {
         Task {
-            do {
-                let songs = try await libraryStore.fetchAlbumSongs(album)
-                guard !songs.isEmpty else { return }
-                NotificationCenter.default.post(name: .addSongsToPlaylist, object: songs.map(\.id))
-            } catch {
-                errorMessage = error.localizedDescription
-                showError = true
-            }
+            let songs = await songsForAlbum(album)
+            guard !songs.isEmpty else { return }
+            NotificationCenter.default.post(name: .addSongsToPlaylist, object: songs.map(\.id))
         }
     }
 
