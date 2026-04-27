@@ -4,12 +4,23 @@ struct RecapDetailView: View {
     let entry: RecapRegistryRecord
     let serverId: String
 
+    @ObservedObject private var libraryStore = LibraryStore.shared
+    @ObservedObject private var offlineMode = OfflineModeService.shared
+    @ObservedObject private var downloadStore = DownloadStore.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
+    @AppStorage("enableFavorites") private var enableFavorites = true
+    @AppStorage("enablePlaylists") private var enablePlaylists = true
+    @AppStorage("enableDownloads") private var enableDownloads = false
 
     @State private var songs: [SongWithCount] = []
     @State private var isLoading = true
     @State private var errorMessage: String?
+    @State private var currentToast: ShelveToast?
+    @State private var showAddToPlaylist = false
+    @State private var addToPlaylistSongId: String?
+
+    private let player = AudioPlayerService.shared
 
     private struct SongWithCount: Identifiable {
         let id: String
@@ -25,6 +36,8 @@ struct RecapDetailView: View {
             end: Date(timeIntervalSince1970: entry.periodEnd)
         )
     }
+
+    private var allSongs: [Song] { songs.map { $0.song } }
 
     var body: some View {
         Group {
@@ -51,20 +64,94 @@ struct RecapDetailView: View {
                 )
             } else {
                 List {
-                    ForEach(Array(songs.enumerated()), id: \.element.id) { idx, entry in
-                        Button {
-                            AudioPlayerService.shared.play(
-                                songs: songs.map { $0.song },
-                                startIndex: idx
-                            )
-                        } label: {
-                            songRow(rank: idx + 1, entry: entry)
+                    Section {
+                        VStack(spacing: 8) {
+                            HStack(spacing: 14) {
+                                Button {
+                                    player.play(songs: allSongs, startIndex: 0)
+                                } label: {
+                                    Label(tr("Play", "Abspielen"), systemImage: "play.fill")
+                                        .font(.body).bold()
+                                        .foregroundStyle(.white)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 14)
+                                        .background(accentColor)
+                                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                                }
+                                .buttonStyle(.plain)
+
+                                Button {
+                                    player.playShuffled(songs: allSongs)
+                                } label: {
+                                    Label(tr("Shuffle", "Zufällig"), systemImage: "shuffle")
+                                        .font(.body).bold()
+                                        .foregroundStyle(accentColor)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 14)
+                                        .background(accentColor.opacity(0.15))
+                                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            if enableDownloads && !songs.isEmpty {
+                                downloadHeaderButtons()
+                            }
                         }
-                        .buttonStyle(.plain)
+                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                         .listRowSeparator(.hidden)
-                        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
                         .listRowBackground(Color.clear)
                     }
+
+                    Section {
+                        ForEach(Array(songs.enumerated()), id: \.element.id) { idx, songEntry in
+                            Button {
+                                player.play(songs: allSongs, startIndex: idx)
+                            } label: {
+                                songRow(rank: idx + 1, entry: songEntry)
+                            }
+                            .buttonStyle(.plain)
+                            .listRowSeparator(.hidden)
+                            .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                            .listRowBackground(Color.clear)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                Button {
+                                    player.addToQueue(songEntry.song)
+                                    currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+                                } label: {
+                                    Image(systemName: "text.badge.plus")
+                                }
+                                .tint(accentColor)
+
+                                Button {
+                                    player.addPlayNext(songEntry.song)
+                                    currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
+                                } label: {
+                                    Image(systemName: "text.insert")
+                                }
+                                .tint(.orange)
+                            }
+                            .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                                if enableFavorites && !offlineMode.isOffline {
+                                    Button {
+                                        Task { await libraryStore.toggleStarSong(songEntry.song) }
+                                    } label: {
+                                        Image(systemName: libraryStore.isSongStarred(songEntry.song) ? "heart.slash" : "heart.fill")
+                                    }
+                                    .tint(.pink)
+                                }
+                                if enablePlaylists && !offlineMode.isOffline {
+                                    Button {
+                                        addToPlaylistSongId = songEntry.song.id
+                                        showAddToPlaylist = true
+                                    } label: {
+                                        Image(systemName: "music.note.list")
+                                    }
+                                    .tint(.purple)
+                                }
+                            }
+                        }
+                    }
+
                     PlayerBottomSpacer()
                         .listRowInsets(EdgeInsets())
                         .listRowBackground(Color.clear)
@@ -76,7 +163,54 @@ struct RecapDetailView: View {
         }
         .navigationTitle(period.playlistName)
         .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button {
+                        player.play(songs: allSongs, startIndex: 0)
+                    } label: {
+                        Label(tr("Play", "Abspielen"), systemImage: "play.fill")
+                    }
+                    .disabled(songs.isEmpty)
+
+                    Button {
+                        player.playShuffled(songs: allSongs)
+                    } label: {
+                        Label(tr("Shuffle", "Zufällig"), systemImage: "shuffle")
+                    }
+                    .disabled(songs.isEmpty)
+
+                    Divider()
+
+                    Button {
+                        player.addPlayNext(allSongs)
+                        currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
+                    } label: {
+                        Label(tr("Play Next", "Als nächstes"), systemImage: "text.insert")
+                    }
+                    .disabled(songs.isEmpty)
+
+                    Button {
+                        player.addToQueue(allSongs)
+                        currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+                    } label: {
+                        Label(tr("Add to Queue", "Zur Warteschlange"), systemImage: "text.badge.plus")
+                    }
+                    .disabled(songs.isEmpty)
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .symbolRenderingMode(.hierarchical)
+                }
+                .disabled(isLoading)
+            }
+        }
         .task { await load() }
+        .shelveToast($currentToast)
+        .sheet(isPresented: $showAddToPlaylist) {
+            if let songId = addToPlaylistSongId {
+                AddToPlaylistSheet(songIds: [songId])
+            }
+        }
     }
 
     // MARK: - Row
@@ -107,7 +241,7 @@ struct RecapDetailView: View {
         }
     }
 
-    // MARK: - Shared Components (analog InsightsView)
+    // MARK: - Shared Components
 
     private func rankCard<Content: View>(isTop3: Bool, @ViewBuilder content: () -> Content) -> some View {
         HStack(spacing: 12) { content() }
@@ -146,6 +280,49 @@ struct RecapDetailView: View {
         .clipShape(Capsule())
     }
 
+    // MARK: - Download Header
+
+    @ViewBuilder
+    private func downloadHeaderButtons() -> some View {
+        let isMarked = downloadStore.offlinePlaylistIds.contains(entry.playlistId)
+        HStack(spacing: 10) {
+            if !isMarked && !offlineMode.isOffline {
+                Button {
+                    let missing = allSongs.filter { !downloadStore.isDownloaded(songId: $0.id) }
+                    if !missing.isEmpty { downloadStore.enqueueSongs(missing) }
+                    downloadStore.addOfflinePlaylist(entry.playlistId, songIds: allSongs.map(\.id))
+                    currentToast = ShelveToast(message: tr("Download started", "Download gestartet"))
+                } label: {
+                    Label(tr("Download", "Herunterladen"), systemImage: "arrow.down.circle")
+                        .font(.subheadline).bold()
+                        .foregroundStyle(accentColor)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(accentColor.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+                .buttonStyle(.plain)
+            }
+            if isMarked {
+                Button {
+                    for song in allSongs where downloadStore.isDownloaded(songId: song.id) {
+                        downloadStore.deleteSong(song.id)
+                    }
+                    downloadStore.removeOfflinePlaylist(entry.playlistId)
+                } label: {
+                    Label(tr("Delete Downloads", "Downloads löschen"), systemImage: "arrow.down.circle")
+                        .font(.subheadline).bold()
+                        .foregroundStyle(.red)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(Color.red.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
     // MARK: - Data Loading
 
     private func load() async {
@@ -153,8 +330,8 @@ struct RecapDetailView: View {
         defer { isLoading = false }
 
         let playlistSongs: [Song]
-        if OfflineModeService.shared.isOffline {
-            guard let playlist = await LibraryStore.shared.loadPlaylistDetail(id: entry.playlistId) else {
+        if offlineMode.isOffline {
+            guard let playlist = await libraryStore.loadPlaylistDetail(id: entry.playlistId) else {
                 errorMessage = tr("Playlist could not be loaded.", "Playlist konnte nicht geladen werden.")
                 return
             }
