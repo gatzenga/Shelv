@@ -242,7 +242,35 @@ class SubsonicAPIService: ObservableObject {
     private let clientName = "Shelv"
     private let decoder: JSONDecoder = {
         let d = JSONDecoder()
-        d.dateDecodingStrategy = .iso8601
+        d.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let raw = try container.decode(String.self)
+
+            let normalized: String
+            if let dotRange = raw.range(of: "."),
+               let zRange = raw.range(of: "Z", options: .backwards),
+               dotRange.upperBound <= zRange.lowerBound {
+                let fractional = String(raw[dotRange.upperBound..<zRange.lowerBound])
+                let trimmed = String(fractional.prefix(3)).padding(toLength: 3, withPad: "0", startingAt: 0)
+                normalized = String(raw[raw.startIndex..<dotRange.lowerBound]) + "." + trimmed + "Z"
+            } else if let dotRange = raw.range(of: "."),
+                      let plusRange = raw.range(of: "+", range: dotRange.upperBound..<raw.endIndex) {
+                let fractional = String(raw[dotRange.upperBound..<plusRange.lowerBound])
+                let trimmed = String(fractional.prefix(3)).padding(toLength: 3, withPad: "0", startingAt: 0)
+                normalized = String(raw[raw.startIndex..<dotRange.lowerBound]) + "." + trimmed + String(raw[plusRange.lowerBound...])
+            } else {
+                normalized = raw
+            }
+
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let date = formatter.date(from: normalized) { return date }
+
+            formatter.formatOptions = [.withInternetDateTime]
+            if let date = formatter.date(from: normalized) { return date }
+
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Cannot parse date: \(raw)")
+        }
         return d
     }()
 
@@ -542,7 +570,6 @@ class SubsonicAPIService: ObservableObject {
         if let fmt = TranscodingPolicy.currentStreamFormat() {
             extras.append(URLQueryItem(name: "format", value: fmt.codec.rawValue))
             extras.append(URLQueryItem(name: "maxBitRate", value: "\(fmt.bitrate)"))
-            extras.append(URLQueryItem(name: "estimateContentLength", value: "true"))
         } else {
             extras.append(URLQueryItem(name: "format", value: "raw"))
         }

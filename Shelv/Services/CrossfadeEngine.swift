@@ -10,6 +10,7 @@ final class CrossfadeEngine: ObservableObject {
     @Published private(set) var isCrossfading: Bool = false
 
     var crossfadeDuration: TimeInterval = 5
+    var trustedDuration: TimeInterval = 0
     var onTrackFinished: (() -> Void)?
 
     private let playerA: AVPlayer
@@ -28,6 +29,7 @@ final class CrossfadeEngine: ObservableObject {
     private var currentURL: URL?
     private var retryCount: Int = 0
     private let maxRetries: Int = 3
+    private var isTranscoded: Bool = false
 
     init() {
         let a = AVPlayer()
@@ -53,9 +55,11 @@ final class CrossfadeEngine: ObservableObject {
 
     // MARK: - Public API
 
-    func play(url: URL) {
+    func play(url: URL, isTranscoded: Bool = false) {
         currentURL = url
         retryCount = 0
+        trustedDuration = 0
+        self.isTranscoded = isTranscoded
         loadAndPlay(url: url)
     }
 
@@ -68,6 +72,7 @@ final class CrossfadeEngine: ObservableObject {
         inactivePlayer.volume = 1.0
 
         let item = makePlayerItem(url: url)
+        activePlayer.automaticallyWaitsToMinimizeStalling = isTranscoded
         activePlayer.replaceCurrentItem(with: item)
         activePlayer.volume = 1.0
         activePlayer.play()
@@ -122,8 +127,9 @@ final class CrossfadeEngine: ObservableObject {
         }
     }
 
-    func triggerCrossfade(nextURL: URL) {
+    func triggerCrossfade(nextURL: URL, isTranscoded: Bool = false) {
         inactivePlayer.pause()
+        inactivePlayer.automaticallyWaitsToMinimizeStalling = isTranscoded
         inactivePlayer.replaceCurrentItem(with: makePlayerItem(url: nextURL))
         inactivePlayer.volume = 0
         beginFade()
@@ -295,6 +301,10 @@ final class CrossfadeEngine: ObservableObject {
     }
 
     private func refreshDuration() {
+        if trustedDuration > 0 {
+            duration = trustedDuration
+            return
+        }
         guard let item = activePlayer.currentItem else { return }
         let d = item.duration.seconds
         if d.isFinite && d > 0 { duration = d }

@@ -399,7 +399,15 @@ class AudioPlayerService: ObservableObject {
         let songId = song.id
         let isTranscoded = url.queryParam("format").map { $0 != "raw" } ?? false
         formatProbeTask = Task { [weak self] in
-            var req = URLRequest(url: url)
+            var probeURL = url
+            if isTranscoded,
+               var components = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+                var items = components.queryItems ?? []
+                items.append(URLQueryItem(name: "estimateContentLength", value: "true"))
+                components.queryItems = items
+                probeURL = components.url ?? url
+            }
+            var req = URLRequest(url: probeURL)
             req.httpMethod = "HEAD"
             req.timeoutInterval = 8
             do {
@@ -437,7 +445,7 @@ class AudioPlayerService: ObservableObject {
         crossfadeTriggered = false
         crossfadeSeekSuppressed = false
         isBuffering = true
-        engine.play(url: raw)
+        engine.play(url: raw, isTranscoded: false)
         if resumeAt > 1 { engine.seek(to: resumeAt) }
         isEngineLoaded = true
         probeStreamFormat(for: song, url: raw)
@@ -492,7 +500,9 @@ class AudioPlayerService: ObservableObject {
         let seekTo = pendingSeekTime
         pendingSeekTime = 0
 
-        engine.play(url: url)
+        let isTranscoded = TranscodingPolicy.currentStreamFormat() != nil
+        engine.play(url: url, isTranscoded: isTranscoded)
+        engine.trustedDuration = Double(song.duration ?? 0)
         if seekTo > 0 { engine.seek(to: seekTo) }
         isEngineLoaded = true
 
@@ -974,8 +984,10 @@ class AudioPlayerService: ObservableObject {
     private func crossfadeToSong(_ song: Song) {
         guard let url = resolveURL(for: song) else { return }
 
+        let isTranscoded = TranscodingPolicy.currentStreamFormat() != nil
         engine.crossfadeDuration = crossfadeDuration
-        engine.triggerCrossfade(nextURL: url)
+        engine.triggerCrossfade(nextURL: url, isTranscoded: isTranscoded)
+        engine.trustedDuration = Double(song.duration ?? 0)
 
         crossfadeTriggered = true
         currentSong = song
