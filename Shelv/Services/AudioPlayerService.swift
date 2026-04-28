@@ -89,6 +89,10 @@ class AudioPlayerService: ObservableObject {
     private var engineSubscriptions = Set<AnyCancellable>()
     private var crossfadeTriggered = false
     private var crossfadeSeekSuppressed = false
+    @AppStorage("gaplessEnabled") private var gaplessEnabled = false
+    private var gaplessPreloadTriggered = false
+    private var gaplessPreloadSong: Song? = nil
+    private var gaplessPreloadURL: URL? = nil
     private var isEngineLoaded = false
     private var currentArtwork: MPMediaItemArtwork?
     private var artworkTask: Task<Void, Never>?
@@ -490,6 +494,9 @@ class AudioPlayerService: ObservableObject {
 
         crossfadeTriggered = false
         crossfadeSeekSuppressed = false
+        gaplessPreloadTriggered = false
+        gaplessPreloadSong = nil
+        gaplessPreloadURL = nil
         currentSong = song
         isBuffering = true
         currentTime = 0
@@ -900,10 +907,49 @@ class AudioPlayerService: ObservableObject {
     }
 
     private func setupEngine() {
-        engine.onTrackFinished = { [weak self] in
+        engine.onTrackFinished = { [weak self] gaplessSwapDone in
             guard let self else { return }
             if self.crossfadeTriggered {
                 self.crossfadeTriggered = false
+            } else if gaplessSwapDone, let song = self.gaplessPreloadSong {
+                self.gaplessPreloadTriggered = false
+                self.gaplessPreloadSong = nil
+                let url = self.gaplessPreloadURL
+                self.gaplessPreloadURL = nil
+                self.crossfadeSeekSuppressed = false
+                self.currentSong = song
+                self.currentTime = 0
+                self.isEngineLoaded = true
+                self.isBuffering = false
+                if let d = song.duration { self.duration = Double(d) }
+                self.engine.trustedDuration = Double(song.duration ?? 0)
+                self.updateNowPlayingInfo(song: song)
+                MPNowPlayingInfoCenter.default().playbackState = .playing
+                if let url {
+                    self.probeStreamFormat(for: song, url: url)
+                    self.schedulePlaybackWatchdog(for: song, url: url)
+                }
+                let scrobbleSongId = song.id
+                let scrobbleServerId = SubsonicAPIService.shared.activeServer?.stableId ?? ""
+                let scrobbleAt = Date().timeIntervalSince1970
+                Task {
+                    do {
+                        try await SubsonicAPIService.shared.scrobble(songId: scrobbleSongId, playedAt: scrobbleAt)
+                    } catch {
+                        guard !scrobbleServerId.isEmpty else { return }
+                        await PlayLogService.shared.addPendingScrobble(
+                            songId: scrobbleSongId, serverId: scrobbleServerId, playedAt: scrobbleAt
+                        )
+                    }
+                }
+                self.saveState()
+            } else if self.gaplessPreloadTriggered {
+                // Preload was set but swap didn't happen — queue already advanced, start song fresh
+                self.gaplessPreloadTriggered = false
+                let song = self.gaplessPreloadSong
+                self.gaplessPreloadSong = nil
+                self.gaplessPreloadURL = nil
+                if let song { self.startPlayback(song: song) }
             } else {
                 self.next(triggeredByUser: false)
             }
@@ -1015,6 +1061,22 @@ class AudioPlayerService: ObservableObject {
     }
 
     private func checkCrossfadeTrigger(currentTime: Double) {
+        if gaplessEnabled && !crossfadeEnabled {
+            guard !crossfadeTriggered, !gaplessPreloadTriggered, duration > 11 else { return }
+            let preloadAt = duration - 10
+            guard currentTime >= preloadAt else { return }
+            guard !(repeatMode == .one && playNextQueue.isEmpty) else { return }
+            guard let nextSong = peekNextSong() else { return }
+            guard let url = resolveURL(for: nextSong) else { return }
+            let isTranscoded = TranscodingPolicy.currentStreamFormat() != nil
+            advanceQueueState()
+            gaplessPreloadSong = nextSong
+            gaplessPreloadURL = url
+            gaplessPreloadTriggered = true
+            engine.preloadForGapless(url: url, isTranscoded: isTranscoded)
+            saveState()
+            return
+        }
         guard crossfadeEnabled, !crossfadeTriggered, !crossfadeSeekSuppressed, duration > 1 else { return }
         guard crossfadeDuration < duration else { return }
 

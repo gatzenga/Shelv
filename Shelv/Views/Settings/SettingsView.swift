@@ -26,6 +26,7 @@ struct SettingsView: View {
     @AppStorage("enablePlaylists") private var enablePlaylists = true
     @AppStorage("crossfadeEnabled") private var crossfadeEnabled = false
     @AppStorage("crossfadeDuration") private var crossfadeDuration = 5
+    @AppStorage("gaplessEnabled") private var gaplessEnabled = false
     @AppStorage("autoFetchLyrics") private var autoFetchLyrics = true
     @AppStorage("recapEnabled") private var recapEnabled = false
     @AppStorage("iCloudSyncEnabled") private var iCloudSyncEnabled = true
@@ -118,13 +119,24 @@ struct SettingsView: View {
                     }
                 }
 
-                Section(tr("Crossfade", "Crossfade")) {
+                Section(tr("Crossfade & Gapless", "Crossfade & Gapless")) {
+                    Toggle(isOn: $gaplessEnabled) {
+                        Label { Text(tr("Gapless", "Gapless")) } icon: {
+                            Image(systemName: "waveform.path").foregroundStyle(accentColor)
+                        }
+                    }
+                    .tint(accentColor)
+                    .disabled(crossfadeEnabled)
+                    .onChange(of: gaplessEnabled) { _, on in if on { crossfadeEnabled = false } }
+
                     Toggle(isOn: $crossfadeEnabled) {
                         Label { Text(tr("Crossfade", "Crossfade")) } icon: {
                             Image(systemName: "waveform").foregroundStyle(accentColor)
                         }
                     }
                     .tint(accentColor)
+                    .disabled(gaplessEnabled)
+                    .onChange(of: crossfadeEnabled) { _, on in if on { gaplessEnabled = false } }
 
                     if crossfadeEnabled {
                         VStack(alignment: .leading, spacing: 8) {
@@ -276,6 +288,23 @@ struct SettingsView: View {
                 }
 
                 Section(tr("Links & Contact", "Links & Kontakt")) {
+                    if let url = URL(string: "https://vkugler.app") {
+                        Button { openURL(url) } label: {
+                            Label {
+                                HStack {
+                                    Text(tr("Developer Website", "Developer-Website"))
+                                    Spacer()
+                                    Image(systemName: "arrow.up.right")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            } icon: {
+                                Image(systemName: "globe")
+                                    .foregroundStyle(accentColor)
+                            }
+                        }
+                        .foregroundStyle(.primary)
+                    }
                     if let url = URL(string: "https://github.com/gatzenga/Shelv") {
                         Button { openURL(url) } label: {
                             Label {
@@ -293,7 +322,7 @@ struct SettingsView: View {
                         }
                         .foregroundStyle(.primary)
                     }
-                    if let url = URL(string: "https://gatzenga.github.io/Shelv/privacy.html") {
+                    if let url = URL(string: "https://vkugler.app/shelv_privacy.html") {
                         Button { openURL(url) } label: {
                             Label {
                                 HStack {
@@ -310,7 +339,7 @@ struct SettingsView: View {
                         }
                         .foregroundStyle(.primary)
                     }
-                    if let url = URL(string: "mailto:kontakt@vkugler.ch") {
+                    if let url = URL(string: "mailto:contact@vkugler.app") {
                         Button { openURL(url) } label: {
                             Label {
                                 HStack {
