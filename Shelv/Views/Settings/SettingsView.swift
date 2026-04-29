@@ -18,8 +18,6 @@ struct SettingsView: View {
     @EnvironmentObject var serverStore: ServerStore
     private let player = AudioPlayerService.shared
     @EnvironmentObject var lyricsStore: LyricsStore
-    @EnvironmentObject var recapStore: RecapStore
-    @EnvironmentObject var ckStatus: CloudKitSyncStatus
     @AppStorage("appAppearance") private var appAppearance = "system"
     @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage("enableFavorites") private var enableFavorites = true
@@ -174,8 +172,6 @@ struct SettingsView: View {
                         NavigationLink(destination:
                             RecapSettingsView()
                                 .environmentObject(serverStore)
-                                .environmentObject(recapStore)
-                                .environmentObject(ckStatus)
                         ) {
                             Label { Text(tr("Settings", "Einstellungen")) } icon: {
                                 Image(systemName: "slider.horizontal.3").foregroundStyle(accentColor)
