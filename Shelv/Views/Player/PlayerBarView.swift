@@ -76,13 +76,9 @@ struct PlayerBarView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(
-            Color(UIColor.systemBackground)
-                .opacity(0.85)
-                .background(.ultraThinMaterial)
-        )
+        .background(Color(UIColor.systemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 20))
-        .shadow(color: .black.opacity(0.15), radius: 15, y: 8)
+        .shadow(color: .black.opacity(0.15), radius: 6, y: 3)
         .overlay(
             RoundedRectangle(cornerRadius: 20)
                 .stroke(Color.gray.opacity(0.2), lineWidth: 1)

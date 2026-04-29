@@ -102,6 +102,7 @@ class AudioPlayerService: ObservableObject {
 
     private var pendingSeekTime: Double = 0
     private var resumeTime: Double = 0
+    private var lastReportedNowPlayingTime: Double = -1
 
     private enum StateKey {
         static let queue          = "shelv_player_queue"
@@ -706,6 +707,7 @@ class AudioPlayerService: ObservableObject {
     func seek(to seconds: Double) {
         currentTime = seconds
         isSeeking = true
+        lastReportedNowPlayingTime = -1
         updateNowPlayingTime(seconds)
         crossfadeSeekSuppressed = crossfadeEnabled && duration > 0 && seconds >= duration - crossfadeDuration
         engine.seek(to: seconds) { [weak self] _ in
@@ -1175,6 +1177,8 @@ class AudioPlayerService: ObservableObject {
     }
 
     private func updateNowPlayingTime(_ time: Double) {
+        guard abs(time - lastReportedNowPlayingTime) >= 0.5 else { return }
+        lastReportedNowPlayingTime = time
         var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
         info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = time
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info

@@ -86,6 +86,12 @@ final class CarPlayLibraryController {
             .sink { [weak self] _ in self?.rebuildArtistsTemplate() }
             .store(in: &cancellables)
 
+        LibraryStore.shared.$starredSongs
+            .receive(on: DispatchQueue.main)
+            .dropFirst()
+            .sink { [weak self] _ in self?.rebuildFavoritesTemplate() }
+            .store(in: &cancellables)
+
         buildMenu()
     }
 
@@ -351,14 +357,19 @@ final class CarPlayLibraryController {
         let template = CPListTemplate(title: tr("Favorites", "Favoriten"), sections: [])
         favoritesTemplate = template
         let built = makeFavoriteSections(songs: songs, albums: albums, artists: artists, counts: counts)
+        prefillCoversFromCache(built.itemsByCoverId)
         template.updateSections(built.sections)
         CarPlayNavigation.safePush(template, on: interfaceController)
 
+        // Wenn starredSongs noch nicht geladen — eigenständiger Task, unabhängig von coverLoadTask.
+        // $starredSongs subscriber baut Template automatisch neu wenn loadStarred fertig ist.
+        if LibraryStore.shared.starredSongs.isEmpty {
+            Task { await LibraryStore.shared.loadStarred() }
+        }
+
         guard !built.itemsByCoverId.isEmpty else { return }
         coverLoadTask?.cancel()
-        coverLoadTask = Task {
-            await streamCovers(into: built.itemsByCoverId)
-        }
+        coverLoadTask = Task { await streamCovers(into: built.itemsByCoverId) }
     }
 
     private func makeFavoriteSections(

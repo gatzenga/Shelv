@@ -26,6 +26,8 @@ final class DownloadStore: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var artistCoverByName: [String: String] = [:]
     private var pendingReload = false
+    private var pendingInserts: [DownloadRecord] = []
+    private var flushTask: Task<Void, Never>?
 
     init() {
         DownloadService.shared.progressUpdates
@@ -218,6 +220,44 @@ final class DownloadStore: ObservableObject {
     func insertRecord(_ record: DownloadRecord) {
         guard record.serverId == serverId else { return }
         if isLoading { pendingReload = true; return }
+
+        // LocalDownloadIndex sofort aktualisieren — nötig damit der Player
+        // heruntergeladene Songs unmittelbar lokal abspielen kann.
+        let song = record.toDownloadedSong()
+        LocalDownloadIndex.shared.setPath(songId: song.songId, serverId: song.serverId, path: song.filePath)
+        if let artId = song.coverArtId {
+            let p = DownloadService.coverPath(forFilePath: song.filePath)
+            if FileManager.default.fileExists(atPath: p) { LocalArtworkIndex.shared.set(artId: artId, path: p) }
+        }
+        if let artId = song.artistCoverArtId {
+            let p = DownloadService.artistCoverPath(serverId: song.serverId, artId: artId)
+            if FileManager.default.fileExists(atPath: p) { LocalArtworkIndex.shared.set(artId: artId, path: p) }
+        }
+
+        pendingInserts.append(record)
+        if flushTask == nil {
+            flushTask = Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .milliseconds(800))
+                self?.flushPendingInserts()
+            }
+        }
+    }
+
+    private func flushPendingInserts() {
+        flushTask = nil
+        guard !isLoading else {
+            if !pendingInserts.isEmpty { pendingReload = true }
+            pendingInserts = []
+            return
+        }
+        guard !pendingInserts.isEmpty else { return }
+        let records = pendingInserts
+        pendingInserts = []
+        for record in records { applyInsert(record) }
+    }
+
+    private func applyInsert(_ record: DownloadRecord) {
+        guard record.serverId == serverId else { return }
         let song = record.toDownloadedSong()
         let albumId = song.albumId
         let albumArtist = song.albumArtistName ?? song.artistName
@@ -298,16 +338,6 @@ final class DownloadStore: ObservableObject {
             )
             let insertIdx = artists.firstIndex { $0.name.lowercased() > albumArtist.lowercased() } ?? artists.endIndex
             artists.insert(newArtist, at: insertIdx)
-        }
-
-        LocalDownloadIndex.shared.setPath(songId: song.songId, serverId: song.serverId, path: song.filePath)
-        if let artId = song.coverArtId {
-            let p = DownloadService.coverPath(forFilePath: song.filePath)
-            if FileManager.default.fileExists(atPath: p) { LocalArtworkIndex.shared.set(artId: artId, path: p) }
-        }
-        if let artId = song.artistCoverArtId {
-            let p = DownloadService.artistCoverPath(serverId: song.serverId, artId: artId)
-            if FileManager.default.fileExists(atPath: p) { LocalArtworkIndex.shared.set(artId: artId, path: p) }
         }
     }
 

@@ -288,7 +288,7 @@ struct LibraryView: View {
         Set(downloadStore.artists.map { $0.name })
     }
     private var downloadedSongIds: Set<String> {
-        Set(downloadStore.songs.map { $0.id })
+        Set(downloadStore.songs.map { $0.songId })
     }
 
     private var displayAlbums: [Album] {

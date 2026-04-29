@@ -33,6 +33,7 @@ A native, album and artist focused iOS and iPadOS client for [Navidrome](https:/
 ### Playback
 - **Full player** — Play, pause, seek, previous, next, shuffle, and three repeat modes (Off / All / One)
 - **Crossfade** — Smooth crossfade between tracks with a configurable duration; enable and adjust it in Settings
+- **Gapless playback** — Lossless back-to-back playback with no silence between tracks; mutually exclusive with crossfade; enable in Settings
 - **AirPlay** — Stream to any AirPlay-compatible device directly from the player
 - **Lock screen and media keys** — Full remote control integration via MPRemoteCommandCenter
 - **iPad layout** — Optimised player layout for iPad with larger cover art and controls; mini-player anchored correctly at the bottom via `safeAreaInset`
@@ -93,6 +94,7 @@ A native, album and artist focused iOS and iPadOS client for [Navidrome](https:/
 - **Cache** — See the current cover art cache size and clear it with a single tap
 - **Downloads** — Enable downloads, set storage limit, run a bulk download, toggle Offline Mode, manage downloaded content
 - **Transcoding** — Enable transcoding and configure format and bitrate per network type and for downloads
+- **Recap** — Configure periods (weekly, monthly, yearly), retention, play threshold, iCloud sync, and database export/import
 - **Favorites & Playlists** — Toggle each feature on or off independently
 
 ### Cover Art
@@ -102,7 +104,7 @@ A native, album and artist focused iOS and iPadOS client for [Navidrome](https:/
 ## Requirements
 
 - iOS 18 or later / iPadOS 18 or later
-- Xcode 16 or later
+- Xcode 26 or later
 - A running [Navidrome](https://www.navidrome.org/) or Subsonic-compatible server
 
 ## Getting Started
@@ -153,7 +155,7 @@ Playback order: `playNextQueue` → `queue[currentIndex+1...]` → `userQueue` (
 
 ## Supported Audio Formats
 
-Shelv streams audio using `format=raw` (no server-side transcoding) and relies on AVFoundation for decoding: MP3, AAC, M4A, ALAC, WAV, AIFF, FLAC, Opus.
+By default Shelv streams in `format=raw` and relies on AVFoundation for decoding: MP3, AAC, M4A, ALAC, WAV, AIFF, FLAC, Opus. When transcoding is enabled, the server re-encodes to MP3 or Opus at a configurable bitrate before streaming.
 
 ## Authentication
 

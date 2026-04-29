@@ -391,6 +391,11 @@ struct PlaylistDetailView: View {
                 ? allSongs.filter { downloadStore.isDownloaded(songId: $0.id) }
                 : allSongs
         }
+        // Fallback auf heruntergeladene Songs wenn API fehlschlug und Playlist markiert ist
+        if songs.isEmpty && !offlineMode.isOffline && downloadStore.offlinePlaylistIds.contains(playlist.id) {
+            let ids = downloadStore.playlistSongIds[playlist.id] ?? []
+            songs = ids.compactMap { id in downloadStore.songs.first { $0.songId == id }?.asSong() }
+        }
         if !offlineMode.isOffline && downloadStore.offlinePlaylistIds.contains(playlist.id) {
             if songs.contains(where: { !downloadStore.isDownloaded(songId: $0.id) }) {
                 downloadStore.removeOfflinePlaylist(playlist.id)

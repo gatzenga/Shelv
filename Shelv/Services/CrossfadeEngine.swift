@@ -38,8 +38,8 @@ final class CrossfadeEngine: ObservableObject {
     init() {
         let a = AVQueuePlayer()
         let b = AVQueuePlayer()
-        a.allowsExternalPlayback = false
-        b.allowsExternalPlayback = false
+        a.allowsExternalPlayback = true
+        b.allowsExternalPlayback = true
         a.automaticallyWaitsToMinimizeStalling = false
         b.automaticallyWaitsToMinimizeStalling = false
         playerA = a

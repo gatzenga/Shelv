@@ -67,7 +67,13 @@ enum CarPlayNavigation {
                 songs = DownloadStore.shared.albums
                     .first { $0.albumId == album.id }?.songs.map { $0.asSong() } ?? []
             } else {
-                songs = (try? await LibraryStore.shared.fetchAlbumSongs(album)) ?? []
+                let fetched = (try? await LibraryStore.shared.fetchAlbumSongs(album)) ?? []
+                if fetched.isEmpty {
+                    songs = DownloadStore.shared.albums
+                        .first { $0.albumId == album.id }?.songs.map { $0.asSong() } ?? []
+                } else {
+                    songs = fetched
+                }
             }
             configureAlbumDetail(template, album: album, songs: songs, ic: ic)
         }
@@ -188,7 +194,8 @@ enum CarPlayNavigation {
             if OfflineModeService.shared.isOffline {
                 albums = downloadedAlbums(for: artist)
             } else {
-                albums = (try? await SubsonicAPIService.shared.getArtist(id: artist.id))?.album ?? []
+                let fetched = (try? await SubsonicAPIService.shared.getArtist(id: artist.id))?.album ?? []
+                albums = fetched.isEmpty ? downloadedAlbums(for: artist) : fetched
             }
             configureArtistDetail(template, artist: artist, albums: albums, ic: ic)
         }
@@ -311,9 +318,13 @@ enum CarPlayNavigation {
             safePush(template, on: ic)
 
             let allSongs = (await LibraryStore.shared.loadPlaylistDetail(id: playlist.id))?.songs ?? []
-            let songs: [Song] = OfflineModeService.shared.isOffline
+            var songs: [Song] = OfflineModeService.shared.isOffline
                 ? allSongs.filter { DownloadStore.shared.isDownloaded(songId: $0.id) }
                 : allSongs
+            if songs.isEmpty && DownloadStore.shared.offlinePlaylistIds.contains(playlist.id) {
+                let ids = DownloadStore.shared.playlistSongIds[playlist.id] ?? []
+                songs = ids.compactMap { id in DownloadStore.shared.songs.first { $0.songId == id }?.asSong() }
+            }
             configurePlaylistDetail(template, playlist: playlist, songs: songs, ic: ic)
         }
     }

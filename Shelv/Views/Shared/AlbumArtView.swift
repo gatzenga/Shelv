@@ -36,7 +36,7 @@ struct AlbumArtView: View {
             if isCircle {
                 content.clipShape(Circle())
             } else {
-                content.clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+                content.cornerRadius(cornerRadius)
             }
         }
         .onAppear {

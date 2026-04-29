@@ -110,7 +110,7 @@ class LyricsStore: ObservableObject {
                     if Task.isCancelled { group.cancelAll(); return }
                     fetched += 1
                     let now = Date()
-                    if now.timeIntervalSince(lastPublished) >= 0.1 {
+                    if now.timeIntervalSince(lastPublished) >= 0.5 {
                         lastPublished = now
                         let f = fetched
                         await MainActor.run { [weak self] in self?.downloadFetched = f }

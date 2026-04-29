@@ -45,6 +45,10 @@ struct ShelvApp: App {
         if d.string(forKey: "transcodingWifiCodec") == "aac" { d.set("raw", forKey: "transcodingWifiCodec") }
         if d.string(forKey: "transcodingCellularCodec") == "aac" { d.set("raw", forKey: "transcodingCellularCodec") }
         if d.string(forKey: "transcodingDownloadCodec") == "aac" { d.set("raw", forKey: "transcodingDownloadCodec") }
+        // Gapless und Crossfade schliessen sich gegenseitig aus — unmöglichen Zustand korrigieren
+        if d.bool(forKey: "gaplessEnabled") && d.bool(forKey: "crossfadeEnabled") {
+            d.set(false, forKey: "crossfadeEnabled")
+        }
         UserDefaults.standard.register(defaults: [
             "recapWeeklyEnabled": true,
             "recapMonthlyEnabled": true,
@@ -87,6 +91,7 @@ struct ShelvApp: App {
                 .task(id: serverStore.activeServerID) {
                     guard let server = serverStore.activeServer else { return }
                     await PlayLogService.shared.setup()
+                    await DownloadDatabase.shared.setup()
                     await recapStore.setup(serverId: server.stableId)
                     await downloadStore.setActiveServer(server.stableId)
                 }
@@ -97,9 +102,6 @@ struct ShelvApp: App {
                     if let active = serverStore.activeServer {
                         await downloadStore.setActiveServer(active.stableId)
                     }
-                    // DB ist jetzt bereit — sicherstellt dass Downloads geladen werden,
-                    // auch wenn setActiveServer oben durch den Guard blockiert wurde
-                    await downloadStore.reload()
                     for server in serverStore.servers where server.remoteUserId == nil {
                         guard let pw = serverStore.password(for: server) else { continue }
                         do {
