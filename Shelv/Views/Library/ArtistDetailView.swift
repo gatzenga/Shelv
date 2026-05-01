@@ -132,7 +132,7 @@ struct ArtistDetailView: View {
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
-                    HStack(spacing: 10) {
+                    HStack(spacing: 14) {
                         Button {
                             let albums = sortedAlbums
                             guard !albums.isEmpty else { return }
@@ -144,10 +144,14 @@ struct ArtistDetailView: View {
                         } label: {
                             Label(tr("Play", "Abspielen"), systemImage: "play.fill")
                                 .labelStyle(.titleAndIcon)
-                                .font(.subheadline.weight(.semibold))
+                                .font(.body).bold()
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                                .background(accentColor)
+                                .clipShape(Capsule())
                         }
-                        .buttonStyle(.borderedProminent)
-                        .tint(accentColor)
+                        .buttonStyle(.plain)
                         .disabled(isLoading)
 
                         Button {
@@ -161,10 +165,14 @@ struct ArtistDetailView: View {
                         } label: {
                             Label(tr("Shuffle", "Zufällig"), systemImage: "shuffle")
                                 .labelStyle(.titleAndIcon)
-                                .font(.subheadline.weight(.semibold))
+                                .font(.body).bold()
+                                .foregroundStyle(accentColor)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                                .background(accentColor.opacity(0.15))
+                                .clipShape(Capsule())
                         }
-                        .buttonStyle(.bordered)
-                        .tint(accentColor)
+                        .buttonStyle(.plain)
                         .disabled(isLoading)
                     }
                 }
@@ -548,7 +556,7 @@ struct ArtistDetailView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 10)
                             .background(accentColor.opacity(0.12))
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .clipShape(Capsule())
                     }
                     .buttonStyle(.plain)
                 }
@@ -564,7 +572,7 @@ struct ArtistDetailView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 10)
                             .background(accentColor.opacity(0.12))
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .clipShape(Capsule())
                     }
                     .buttonStyle(.plain)
                 }
@@ -580,7 +588,7 @@ struct ArtistDetailView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
                         .background(Color.red.opacity(0.12))
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
             case .complete:
@@ -596,7 +604,7 @@ struct ArtistDetailView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
                         .background(Color.red.opacity(0.12))
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
             }

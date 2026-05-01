@@ -311,7 +311,7 @@ struct DiscoverView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
             .background(accentColor)
-            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .clipShape(Capsule())
         }
         .disabled(mixLoading != nil)
     }

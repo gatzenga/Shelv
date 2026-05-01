@@ -306,7 +306,7 @@ struct DownloadedAlbumDetailView: View {
                                 .font(.body).bold().foregroundStyle(.white)
                                 .frame(maxWidth: .infinity).padding(.vertical, 12)
                                 .background(accentColor)
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .clipShape(Capsule())
                         }.buttonStyle(.plain)
                         Button {
                             let songs = (currentAlbum?.songs ?? album.songs).map { $0.asSong() }
@@ -316,7 +316,7 @@ struct DownloadedAlbumDetailView: View {
                                 .font(.body).bold().foregroundStyle(accentColor)
                                 .frame(maxWidth: .infinity).padding(.vertical, 12)
                                 .background(accentColor.opacity(0.15))
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .clipShape(Capsule())
                         }.buttonStyle(.plain)
                     }
                     .padding(.horizontal)

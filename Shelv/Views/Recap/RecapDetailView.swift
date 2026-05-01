@@ -76,7 +76,7 @@ struct RecapDetailView: View {
                                         .frame(maxWidth: .infinity)
                                         .padding(.vertical, 14)
                                         .background(accentColor)
-                                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                                        .clipShape(Capsule())
                                 }
                                 .buttonStyle(.plain)
 
@@ -89,7 +89,7 @@ struct RecapDetailView: View {
                                         .frame(maxWidth: .infinity)
                                         .padding(.vertical, 14)
                                         .background(accentColor.opacity(0.15))
-                                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                                        .clipShape(Capsule())
                                 }
                                 .buttonStyle(.plain)
                             }

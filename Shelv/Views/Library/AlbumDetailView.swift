@@ -245,7 +245,7 @@ struct AlbumDetailView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 14)
                             .background(accentColor)
-                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                            .clipShape(Capsule())
                     }
                     .buttonStyle(.plain)
                     .disabled(detail == nil)
@@ -261,7 +261,7 @@ struct AlbumDetailView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 14)
                             .background(accentColor.opacity(0.15))
-                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                            .clipShape(Capsule())
                     }
                     .buttonStyle(.plain)
                     .disabled(detail == nil)
@@ -295,7 +295,7 @@ struct AlbumDetailView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 10)
                             .background(accentColor.opacity(0.12))
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .clipShape(Capsule())
                     }
                     .buttonStyle(.plain)
                 }
@@ -310,7 +310,7 @@ struct AlbumDetailView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 10)
                             .background(accentColor.opacity(0.12))
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .clipShape(Capsule())
                     }
                     .buttonStyle(.plain)
                 }
@@ -323,7 +323,7 @@ struct AlbumDetailView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
                         .background(Color.red.opacity(0.12))
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
             case .complete:
@@ -337,7 +337,7 @@ struct AlbumDetailView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
                         .background(Color.red.opacity(0.12))
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
             }
