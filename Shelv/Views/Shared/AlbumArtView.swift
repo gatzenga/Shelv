@@ -6,16 +6,26 @@ struct AlbumArtView: View {
     let cornerRadius: CGFloat
     let isCircle: Bool
 
+    @State private var uiImage: UIImage?
+    @State private var loading: Bool
+
     init(coverArtId: String?, size: Int = 300, cornerRadius: CGFloat = 12, isCircle: Bool = false) {
         self.coverArtId = coverArtId
         self.size = size
         self.cornerRadius = cornerRadius
         self.isCircle = isCircle
-    }
 
-    @State private var uiImage: UIImage? = nil
-    @State private var loading = true
-    @State private var didCheck = false
+        // Synchroner Cache-Check beim Init: liefert das Bild sofort beim ersten Render,
+        // verhindert den ProgressView-Flash + die Doppel-State-Mutation während Scroll.
+        if let id = coverArtId,
+           let cached = ImageCacheService.shared.cachedImage(key: "\(id)_\(size)") {
+            self._uiImage = State(initialValue: cached)
+            self._loading = State(initialValue: false)
+        } else {
+            self._uiImage = State(initialValue: nil)
+            self._loading = State(initialValue: coverArtId != nil)
+        }
+    }
 
     var body: some View {
         let content = Color.clear
@@ -37,19 +47,6 @@ struct AlbumArtView: View {
                 content.clipShape(Circle())
             } else {
                 content.cornerRadius(cornerRadius)
-            }
-        }
-        .onAppear {
-            guard !didCheck else { return }
-            didCheck = true
-            if let id = coverArtId {
-                let key = "\(id)_\(size)"
-                if let cached = ImageCacheService.shared.cachedImage(key: key) {
-                    uiImage = cached
-                    loading = false
-                }
-            } else {
-                loading = false
             }
         }
         .task(id: coverArtId) {

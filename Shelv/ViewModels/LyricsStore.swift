@@ -4,6 +4,8 @@ import Combine
 
 @MainActor
 class LyricsStore: ObservableObject {
+    static let shared = LyricsStore()
+
     @Published var currentLyrics: LyricsRecord?
     @Published var isLoadingLyrics: Bool = false
     @Published var isDownloading: Bool = false

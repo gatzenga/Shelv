@@ -27,13 +27,6 @@ func tr(_ en: String, _ de: String, _ lang: String = appLang) -> String {
 struct ShelvApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var serverStore = ServerStore()
-    @StateObject private var libraryStore = LibraryStore.shared
-    @StateObject private var player = AudioPlayerService.shared
-    @StateObject private var lyricsStore = LyricsStore()
-    @StateObject private var recapStore = RecapStore.shared
-    @StateObject private var ckStatus = CloudKitSyncService.shared.status
-    @StateObject private var downloadStore = DownloadStore.shared
-    @StateObject private var offlineMode = OfflineModeService.shared
     private let _playTracker = PlayTracker.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage("appAppearance") private var appAppearance = "system"
@@ -74,29 +67,29 @@ struct ShelvApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(serverStore)
-                .environmentObject(libraryStore)
-                .environmentObject(player)
-                .environmentObject(lyricsStore)
-                .environmentObject(recapStore)
-                .environmentObject(ckStatus)
-                .environmentObject(downloadStore)
-                .environmentObject(offlineMode)
+                .environmentObject(LibraryStore.shared)
+                .environmentObject(AudioPlayerService.shared)
+                .environmentObject(LyricsStore.shared)
+                .environmentObject(RecapStore.shared)
+                .environmentObject(CloudKitSyncService.shared.status)
+                .environmentObject(DownloadStore.shared)
+                .environmentObject(OfflineModeService.shared)
                 .tint(AppTheme.color(for: themeColorName))
                 .preferredColorScheme(preferredScheme)
-                .task { await lyricsStore.setup() }
+                .task { await LyricsStore.shared.setup() }
                 .task(id: serverStore.activeServerID) {
                     guard let server = serverStore.activeServer else { return }
                     await PlayLogService.shared.setup()
                     await DownloadDatabase.shared.setup()
-                    await recapStore.setup(serverId: server.stableId)
-                    await downloadStore.setActiveServer(server.stableId)
+                    await RecapStore.shared.setup(serverId: server.stableId)
+                    await DownloadStore.shared.setActiveServer(server.stableId)
                 }
                 .task {
                     await PlayLogService.shared.setup()
                     await DownloadDatabase.shared.setup()
                     await DownloadService.shared.setup()
                     if let active = serverStore.activeServer {
-                        await downloadStore.setActiveServer(active.stableId)
+                        await DownloadStore.shared.setActiveServer(active.stableId)
                     }
                     for server in serverStore.servers where server.remoteUserId == nil {
                         guard let pw = serverStore.password(for: server) else { continue }
@@ -121,7 +114,7 @@ struct ShelvApp: App {
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .recapRegistryUpdated)) { _ in
                     guard let server = serverStore.activeServer else { return }
-                    Task { await recapStore.loadEntries(serverId: server.stableId) }
+                    Task { await RecapStore.shared.loadEntries(serverId: server.stableId) }
                 }
         }
     }
