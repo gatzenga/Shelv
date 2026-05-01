@@ -1,0 +1,302 @@
+<h2>Liquid Glass — Mini-Player + Tab-Bar aus einem Guss</h2>
+<p class="subtitle">Beide Elemente nutzen dasselbe iOS 26 Glas-Material. Zwei Höhenvarianten zur Auswahl.</p>
+
+<style>
+  * { box-sizing: border-box; }
+
+  .phones-row { display: flex; gap: 32px; justify-content: center; flex-wrap: wrap; margin: 24px 0; }
+  .phone-col  { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .mode-badge { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: #888; }
+
+  .phone {
+    width: 230px; height: 460px;
+    border-radius: 40px;
+    overflow: hidden; position: relative;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+    border: 6px solid #222;
+  }
+  .phone.light-phone { border-color: #bbb; box-shadow: 0 10px 32px rgba(0,0,0,0.18); }
+
+  /* App backgrounds */
+  .bg-dark  { position:absolute;inset:0; background:#1c1c1e; }
+  .bg-light { position:absolute;inset:0; background:#f2f2f7; }
+
+  /* Fake content inside app */
+  .app-content {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+  }
+  .fake-list-dark  { flex:1; padding: 16px 14px 0; }
+  .fake-list-light { flex:1; padding: 16px 14px 0; }
+  .fake-row {
+    height: 52px; border-radius: 12px;
+    margin-bottom: 8px; display: flex; align-items: center; gap: 10px; padding: 0 10px;
+  }
+  .fake-row-dark  { background: rgba(255,255,255,0.05); }
+  .fake-row-light { background: rgba(0,0,0,0.05); }
+  .fake-thumb { width: 36px; height: 36px; border-radius: 8px; flex-shrink:0; }
+  .fake-thumb-1 { background: linear-gradient(135deg,#8844cc,#44aaff); }
+  .fake-thumb-2 { background: linear-gradient(135deg,#e74c3c,#e67e22); }
+  .fake-thumb-3 { background: linear-gradient(135deg,#27ae60,#2ecc71); }
+  .fake-text { flex:1; }
+  .fake-line { height:10px; border-radius:5px; margin-bottom:5px; }
+  .fake-line-dark  { background: rgba(255,255,255,0.15); }
+  .fake-line-light { background: rgba(0,0,0,0.12); }
+  .fake-line.short { width: 55%; }
+
+  /* Bottom area — mini player + tab bar stacked */
+  .bottom-stack {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    padding: 0 10px 10px;
+    display: flex; flex-direction: column; gap: 7px;
+  }
+
+  /* ══ iOS 26 LIQUID GLASS simulation ══
+     Key properties:
+     - Very thin translucent layer (not opaque)
+     - Strong specular highlight at top edge
+     - Subtle inner shadow
+     - Outer soft shadow
+     - Almost no tint — pure glass
+  */
+  .glass-dark {
+    background: rgba(255,255,255,0.09);
+    backdrop-filter: blur(28px) saturate(200%) brightness(1.1);
+    -webkit-backdrop-filter: blur(28px) saturate(200%) brightness(1.1);
+    border: 0.5px solid rgba(255,255,255,0.22);
+    box-shadow:
+      0 0 0 0.5px rgba(255,255,255,0.08) inset,
+      0 1px 0 rgba(255,255,255,0.18) inset,
+      0 8px 20px rgba(0,0,0,0.4),
+      0 2px 6px rgba(0,0,0,0.2);
+  }
+  .glass-light {
+    background: rgba(255,255,255,0.65);
+    backdrop-filter: blur(28px) saturate(200%) brightness(1.05);
+    -webkit-backdrop-filter: blur(28px) saturate(200%) brightness(1.05);
+    border: 0.5px solid rgba(255,255,255,0.9);
+    box-shadow:
+      0 1px 0 rgba(255,255,255,0.95) inset,
+      0 8px 20px rgba(0,0,0,0.10),
+      0 2px 5px rgba(0,0,0,0.06);
+  }
+
+  /* ── MINI PLAYER ── */
+  .mini-compact { border-radius: 20px; padding: 10px 13px; display:flex; align-items:center; gap:11px; }
+  .mini-tall    { border-radius: 22px; padding: 13px 14px; display:flex; align-items:center; gap:12px; }
+
+  .cover-sm { width:38px;height:38px;border-radius:9px;flex-shrink:0;
+    background:linear-gradient(135deg,#8844cc,#44aaff,#cc4488);
+    box-shadow:0 2px 8px rgba(0,0,0,0.4); }
+  .cover-md { width:46px;height:46px;border-radius:11px;flex-shrink:0;
+    background:linear-gradient(135deg,#8844cc,#44aaff,#cc4488);
+    box-shadow:0 3px 10px rgba(0,0,0,0.4); }
+
+  .song-d { color:#fff; font-size:12px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .art-d  { color:rgba(255,255,255,0.48); font-size:10px; margin-top:1px; }
+  .song-l { color:#111; font-size:12px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .art-l  { color:rgba(0,0,0,0.45); font-size:10px; margin-top:1px; }
+
+  .btn-nd { width:28px;height:28px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.72);font-size:12px;flex-shrink:0; }
+  .btn-nl { width:28px;height:28px;display:flex;align-items:center;justify-content:center;color:rgba(0,0,0,0.6);font-size:12px;flex-shrink:0; }
+  .btn-play-sm { width:34px;height:34px;border-radius:50%;background:#7c3aed;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;box-shadow:0 2px 8px rgba(124,58,237,0.5); }
+  .btn-play-md { width:38px;height:38px;border-radius:50%;background:#7c3aed;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;box-shadow:0 3px 10px rgba(124,58,237,0.5); }
+
+  /* ── TAB BAR ── */
+  .tab-bar { border-radius: 22px; padding: 10px 8px; display:flex; justify-content:space-around; align-items:center; }
+  .tab-item { display:flex;flex-direction:column;align-items:center;gap:3px;width:44px; }
+  .tab-icon { font-size:16px; }
+  .tab-icon-d { color: rgba(255,255,255,0.45); }
+  .tab-icon-l { color: rgba(0,0,0,0.38); }
+  .tab-icon-active-d { color: #7c3aed; }
+  .tab-icon-active-l { color: #7c3aed; }
+  .tab-label { font-size:8px; font-weight:600; letter-spacing:0.02em; }
+  .tab-label-d { color: rgba(255,255,255,0.38); }
+  .tab-label-l { color: rgba(0,0,0,0.35); }
+  .tab-label-active { color: #7c3aed; }
+
+  .var-label { font-size: 11px; color: #888; text-align: center; font-weight: 600; }
+</style>
+
+<div class="phones-row">
+
+  <!-- ── KOMPAKT / DARK ── -->
+  <div class="phone-col">
+    <div class="mode-badge">Kompakt · Dark</div>
+    <div class="phone">
+      <div class="bg-dark"></div>
+      <div class="app-content">
+        <div class="fake-list-dark">
+          <div class="fake-row fake-row-dark">
+            <div class="fake-thumb fake-thumb-1"></div>
+            <div class="fake-text"><div class="fake-line fake-line-dark"></div><div class="fake-line fake-line-dark short"></div></div>
+          </div>
+          <div class="fake-row fake-row-dark">
+            <div class="fake-thumb fake-thumb-2"></div>
+            <div class="fake-text"><div class="fake-line fake-line-dark"></div><div class="fake-line fake-line-dark short"></div></div>
+          </div>
+          <div class="fake-row fake-row-dark">
+            <div class="fake-thumb fake-thumb-3"></div>
+            <div class="fake-text"><div class="fake-line fake-line-dark"></div><div class="fake-line fake-line-dark short"></div></div>
+          </div>
+        </div>
+        <div class="bottom-stack">
+          <!-- Mini player -->
+          <div class="glass-dark mini-compact">
+            <div class="cover-sm"></div>
+            <div class="text-area" style="flex:1;min-width:0;">
+              <div class="song-d">Nightcall</div>
+              <div class="art-d">Kavinsky</div>
+            </div>
+            <div class="btn-nd">⏮</div>
+            <div class="btn-play-sm">▶</div>
+            <div class="btn-nd">⏭</div>
+          </div>
+          <!-- Tab bar -->
+          <div class="glass-dark tab-bar">
+            <div class="tab-item"><div class="tab-icon tab-icon-active-d">✦</div><div class="tab-label tab-label-active">Discover</div></div>
+            <div class="tab-item"><div class="tab-icon tab-icon-d">♫</div><div class="tab-label tab-label-d">Library</div></div>
+            <div class="tab-item"><div class="tab-icon tab-icon-d">☰</div><div class="tab-label tab-label-d">Playlists</div></div>
+            <div class="tab-item"><div class="tab-icon tab-icon-d">⚙</div><div class="tab-label tab-label-d">Settings</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="var-label">Gleiche Höhe wie jetzt</div>
+  </div>
+
+  <!-- ── KOMPAKT / LIGHT ── -->
+  <div class="phone-col">
+    <div class="mode-badge">Kompakt · Light</div>
+    <div class="phone light-phone">
+      <div class="bg-light"></div>
+      <div class="app-content">
+        <div class="fake-list-light">
+          <div class="fake-row fake-row-light">
+            <div class="fake-thumb fake-thumb-1"></div>
+            <div class="fake-text"><div class="fake-line fake-line-light"></div><div class="fake-line fake-line-light short"></div></div>
+          </div>
+          <div class="fake-row fake-row-light">
+            <div class="fake-thumb fake-thumb-2"></div>
+            <div class="fake-text"><div class="fake-line fake-line-light"></div><div class="fake-line fake-line-light short"></div></div>
+          </div>
+          <div class="fake-row fake-row-light">
+            <div class="fake-thumb fake-thumb-3"></div>
+            <div class="fake-text"><div class="fake-line fake-line-light"></div><div class="fake-line fake-line-light short"></div></div>
+          </div>
+        </div>
+        <div class="bottom-stack">
+          <div class="glass-light mini-compact">
+            <div class="cover-sm"></div>
+            <div class="text-area" style="flex:1;min-width:0;">
+              <div class="song-l">Nightcall</div>
+              <div class="art-l">Kavinsky</div>
+            </div>
+            <div class="btn-nl">⏮</div>
+            <div class="btn-play-sm">▶</div>
+            <div class="btn-nl">⏭</div>
+          </div>
+          <div class="glass-light tab-bar">
+            <div class="tab-item"><div class="tab-icon tab-icon-active-l">✦</div><div class="tab-label tab-label-active">Discover</div></div>
+            <div class="tab-item"><div class="tab-icon tab-icon-l">♫</div><div class="tab-label tab-label-l">Library</div></div>
+            <div class="tab-item"><div class="tab-icon tab-icon-l">☰</div><div class="tab-label tab-label-l">Playlists</div></div>
+            <div class="tab-item"><div class="tab-icon tab-icon-l">⚙</div><div class="tab-label tab-label-l">Settings</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="var-label">Gleiche Höhe wie jetzt</div>
+  </div>
+
+  <!-- ── TALL / DARK ── -->
+  <div class="phone-col">
+    <div class="mode-badge">Höher · Dark</div>
+    <div class="phone">
+      <div class="bg-dark"></div>
+      <div class="app-content">
+        <div class="fake-list-dark">
+          <div class="fake-row fake-row-dark">
+            <div class="fake-thumb fake-thumb-1"></div>
+            <div class="fake-text"><div class="fake-line fake-line-dark"></div><div class="fake-line fake-line-dark short"></div></div>
+          </div>
+          <div class="fake-row fake-row-dark">
+            <div class="fake-thumb fake-thumb-2"></div>
+            <div class="fake-text"><div class="fake-line fake-line-dark"></div><div class="fake-line fake-line-dark short"></div></div>
+          </div>
+          <div class="fake-row fake-row-dark">
+            <div class="fake-thumb fake-thumb-3"></div>
+            <div class="fake-text"><div class="fake-line fake-line-dark"></div><div class="fake-line fake-line-dark short"></div></div>
+          </div>
+        </div>
+        <div class="bottom-stack">
+          <div class="glass-dark mini-tall">
+            <div class="cover-md"></div>
+            <div class="text-area" style="flex:1;min-width:0;">
+              <div class="song-d">Nightcall</div>
+              <div class="art-d">Kavinsky</div>
+            </div>
+            <div class="btn-nd">⏮</div>
+            <div class="btn-play-md">▶</div>
+            <div class="btn-nd">⏭</div>
+          </div>
+          <div class="glass-dark tab-bar">
+            <div class="tab-item"><div class="tab-icon tab-icon-active-d">✦</div><div class="tab-label tab-label-active">Discover</div></div>
+            <div class="tab-item"><div class="tab-icon tab-icon-d">♫</div><div class="tab-label tab-label-d">Library</div></div>
+            <div class="tab-item"><div class="tab-icon tab-icon-d">☰</div><div class="tab-label tab-label-d">Playlists</div></div>
+            <div class="tab-item"><div class="tab-icon tab-icon-d">⚙</div><div class="tab-label tab-label-d">Settings</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="var-label">Etwas höher — Cover 46 px</div>
+  </div>
+
+  <!-- ── TALL / LIGHT ── -->
+  <div class="phone-col">
+    <div class="mode-badge">Höher · Light</div>
+    <div class="phone light-phone">
+      <div class="bg-light"></div>
+      <div class="app-content">
+        <div class="fake-list-light">
+          <div class="fake-row fake-row-light">
+            <div class="fake-thumb fake-thumb-1"></div>
+            <div class="fake-text"><div class="fake-line fake-line-light"></div><div class="fake-line fake-line-light short"></div></div>
+          </div>
+          <div class="fake-row fake-row-light">
+            <div class="fake-thumb fake-thumb-2"></div>
+            <div class="fake-text"><div class="fake-line fake-line-light"></div><div class="fake-line fake-line-light short"></div></div>
+          </div>
+          <div class="fake-row fake-row-light">
+            <div class="fake-thumb fake-thumb-3"></div>
+            <div class="fake-text"><div class="fake-line fake-line-light"></div><div class="fake-line fake-line-light short"></div></div>
+          </div>
+        </div>
+        <div class="bottom-stack">
+          <div class="glass-light mini-tall">
+            <div class="cover-md"></div>
+            <div class="text-area" style="flex:1;min-width:0;">
+              <div class="song-l">Nightcall</div>
+              <div class="art-l">Kavinsky</div>
+            </div>
+            <div class="btn-nl">⏮</div>
+            <div class="btn-play-md">▶</div>
+            <div class="btn-nl">⏭</div>
+          </div>
+          <div class="glass-light tab-bar">
+            <div class="tab-item"><div class="tab-icon tab-icon-active-l">✦</div><div class="tab-label tab-label-active">Discover</div></div>
+            <div class="tab-item"><div class="tab-icon tab-icon-l">♫</div><div class="tab-label tab-label-l">Library</div></div>
+            <div class="tab-item"><div class="tab-icon tab-icon-l">☰</div><div class="tab-label tab-label-l">Playlists</div></div>
+            <div class="tab-item"><div class="tab-icon tab-icon-l">⚙</div><div class="tab-label tab-label-l">Settings</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="var-label">Etwas höher — Cover 46 px</div>
+  </div>
+
+</div>
+
+<p class="subtitle">
+  Mini-Player und Tab-Bar haben <strong>identisches Glas-Material</strong> — beide „schweben" über dem Content.
+  Im Code: iOS 26 bekommt <code>.glassEffect()</code>, iOS 16–25 bekommt <code>.ultraThinMaterial</code> + Border als Fallback.
+</p>

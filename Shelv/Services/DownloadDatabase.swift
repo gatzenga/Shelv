@@ -175,6 +175,7 @@ actor DownloadDatabase {
     private var consecutiveIOErrors = 0
     private var circuitOpenUntil: Date?
     private var hasLoggedCircuitOpen = false
+    private var walProtectionApplied = false
     private static let maxConsecutiveIOErrors = 3
     private static let circuitCooldown: TimeInterval = 30
 
@@ -194,6 +195,11 @@ actor DownloadDatabase {
         do {
             try pool.write(block)
             consecutiveIOErrors = 0
+            // WAL wird von GRDB lazy beim ersten Write erstellt — Schutz einmalig nachholen
+            if !walProtectionApplied {
+                Self.applyDataProtection(at: Self.dbURL)
+                walProtectionApplied = true
+            }
         } catch {
             let isIOError = "\(error)".contains("disk I/O") || "\(error)".contains("error 10")
             if isIOError {
@@ -232,6 +238,7 @@ actor DownloadDatabase {
     private func reopenPool(deleteCorruptFiles: Bool) {
         let url = Self.dbURL
         pool = nil
+        walProtectionApplied = false
         if deleteCorruptFiles {
             for suffix in ["-wal", "-shm"] {
                 let path = url.path + suffix

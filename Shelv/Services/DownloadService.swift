@@ -230,7 +230,10 @@ actor DownloadService {
         pendingJobs.removeAll { Self.key(songId: $0.song.id, serverId: $0.serverId) == key }
         if removedPending > 0 { pendingJobKeys.remove(key) }
         var removedInflight = 0
-        for (taskId, job) in inflightJobs where Self.key(songId: job.song.id, serverId: job.serverId) == key {
+        let matchingTaskIds = inflightJobs
+            .filter { Self.key(songId: $1.song.id, serverId: $1.serverId) == key }
+            .map { $0.key }
+        for taskId in matchingTaskIds {
             session?.getAllTasks { tasks in
                 tasks.first(where: { $0.taskIdentifier == taskId })?.cancel()
             }
@@ -339,12 +342,14 @@ actor DownloadService {
 
         // Dann Audio-/Cover-Files löschen — ABER DB-Datei + WAL + SHM skippen,
         // sonst "vnode unlinked while in use" weil Pool sie noch offen hält.
+        // Vergleich via lastPathComponent statt vollem Pfad — /var vs /private/var Symlink-Unterschiede
+        // machen Pfadvergleiche unzuverlässig.
         let root = Self.rootDirectory()
-        let dbPath = DownloadDatabase.dbURL.path
-        let protectedPaths: Set<String> = [dbPath, dbPath + "-wal", dbPath + "-shm"]
+        let dbFileName = DownloadDatabase.dbURL.lastPathComponent
         if let entries = try? FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil) {
             for url in entries {
-                if protectedPaths.contains(url.path) { continue }
+                let name = url.lastPathComponent
+                if name == dbFileName || name == dbFileName + "-wal" || name == dbFileName + "-shm" { continue }
                 try? FileManager.default.removeItem(at: url)
             }
         }

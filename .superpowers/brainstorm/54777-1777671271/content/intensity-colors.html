@@ -1,0 +1,257 @@
+<h2>Zwischen sanft und kräftig — verschiedene Farben</h2>
+<p class="subtitle">3 Intensitätsstufen × 4 Farben. Klick auf das Modell das am besten wirkt.</p>
+
+<style>
+  .section { margin-bottom: 32px; }
+  .intensity-label {
+    font-size: 13px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.07em; color: #aaa; margin-bottom: 14px;
+    padding-left: 4px;
+  }
+  .phone-row {
+    display: flex; gap: 18px; flex-wrap: wrap;
+  }
+  .phone-wrap {
+    display: flex; flex-direction: column; align-items: center;
+    gap: 7px; cursor: pointer;
+  }
+  .phone-wrap.selected .phone { outline: 3px solid #7c3aed; outline-offset: 3px; }
+  .phone-wrap.selected .color-badge { background: #7c3aed; }
+  .phone {
+    width: 152px; height: 300px;
+    border-radius: 26px; overflow: hidden; position: relative;
+    box-shadow: 0 6px 22px rgba(0,0,0,0.45);
+    border: 5px solid #1a1a1a;
+  }
+  .color-badge {
+    background: #444; color: #fff; font-size: 10px;
+    font-weight: 700; padding: 2px 9px; border-radius: 8px;
+  }
+  .phone-sub { font-size: 11px; color: #777; text-align: center; max-width: 145px; }
+
+  /* Player inner layout */
+  .pc { position:relative; z-index:1; display:flex; flex-direction:column;
+        align-items:center; padding:12px 10px 8px; height:100%; box-sizing:border-box; }
+  .cover { width:110px; height:110px; border-radius:11px; flex-shrink:0;
+           box-shadow: 0 6px 20px rgba(0,0,0,0.55); }
+  .title { color:#fff; font-size:12px; font-weight:700; margin-top:9px; }
+  .artist { color:rgba(255,255,255,0.5); font-size:10px; margin-top:2px; }
+  .prog { width:100%; height:3px; border-radius:2px;
+          background:rgba(255,255,255,0.18); margin-top:auto; flex-shrink:0; }
+  .prog-fill { width:38%; height:100%; border-radius:2px; background:rgba(255,255,255,0.75); }
+  .ctrls { display:flex; align-items:center; gap:12px; margin-top:7px; flex-shrink:0; }
+  .bs { width:26px; height:26px; display:flex; align-items:center; justify-content:center;
+        color:rgba(255,255,255,0.65); font-size:12px; }
+  .bp { width:42px; height:42px; border-radius:50%; background:#7c3aed; display:flex;
+        align-items:center; justify-content:center; color:#fff; font-size:15px;
+        box-shadow:0 3px 12px rgba(124,58,237,0.5); }
+  .brow { display:flex; justify-content:space-around; width:100%; margin-top:6px; flex-shrink:0; }
+  .bi { width:28px; height:28px; border-radius:50%; display:flex; align-items:center;
+        justify-content:center; font-size:11px; color:rgba(255,255,255,0.65); }
+
+  /* Cover-Farben (simulieren Album-Cover) */
+  .cov-red  { background: linear-gradient(135deg,#c0392b,#e74c3c,#8e44ad); }
+  .cov-blue { background: linear-gradient(135deg,#1a6ba0,#2980b9,#16a085); }
+  .cov-warm { background: linear-gradient(135deg,#e67e22,#f39c12,#d35400); }
+  .cov-green{ background: linear-gradient(135deg,#27ae60,#2ecc71,#1abc9c); }
+</style>
+
+<!-- ── Intensität 1: Leicht (35%) ── -->
+<div class="section">
+  <div class="intensity-label">① Leicht — Farbe verblasst nach 35 %</div>
+  <div class="phone-row">
+
+    <div class="phone-wrap" onclick="sel(this,'1-red')">
+      <div class="phone">
+        <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(180,30,30,0.75) 0%,rgba(120,15,15,0.45) 22%,rgba(20,5,5,0.9) 45%,#080808 100%);"></div>
+        <div class="pc">
+          <div class="cover cov-red"></div>
+          <div class="title">Blinding Lights</div><div class="artist">The Weeknd</div>
+          <div class="prog"><div class="prog-fill"></div></div>
+          <div class="ctrls"><div class="bs">⏮</div><div class="bp">▶</div><div class="bs">⏭</div></div>
+          <div class="brow"><div class="bi">♡</div><div class="bi">❝</div><div class="bi">≡</div><div class="bi">⊕</div></div>
+        </div>
+      </div>
+      <div class="color-badge">Rot</div>
+    </div>
+
+    <div class="phone-wrap" onclick="sel(this,'1-blue')">
+      <div class="phone">
+        <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(26,107,160,0.75) 0%,rgba(15,60,100,0.45) 22%,rgba(5,15,25,0.9) 45%,#080808 100%);"></div>
+        <div class="pc">
+          <div class="cover cov-blue"></div>
+          <div class="title">Ocean Eyes</div><div class="artist">Billie Eilish</div>
+          <div class="prog"><div class="prog-fill"></div></div>
+          <div class="ctrls"><div class="bs">⏮</div><div class="bp">▶</div><div class="bs">⏭</div></div>
+          <div class="brow"><div class="bi">♡</div><div class="bi">❝</div><div class="bi">≡</div><div class="bi">⊕</div></div>
+        </div>
+      </div>
+      <div class="color-badge">Blau</div>
+    </div>
+
+    <div class="phone-wrap" onclick="sel(this,'1-warm')">
+      <div class="phone">
+        <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(200,100,20,0.75) 0%,rgba(140,65,10,0.45) 22%,rgba(25,12,3,0.9) 45%,#080808 100%);"></div>
+        <div class="pc">
+          <div class="cover cov-warm"></div>
+          <div class="title">Sunflower</div><div class="artist">Post Malone</div>
+          <div class="prog"><div class="prog-fill"></div></div>
+          <div class="ctrls"><div class="bs">⏮</div><div class="bp">▶</div><div class="bs">⏭</div></div>
+          <div class="brow"><div class="bi">♡</div><div class="bi">❝</div><div class="bi">≡</div><div class="bi">⊕</div></div>
+        </div>
+      </div>
+      <div class="color-badge">Orange</div>
+    </div>
+
+    <div class="phone-wrap" onclick="sel(this,'1-green')">
+      <div class="phone">
+        <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(30,160,80,0.75) 0%,rgba(15,100,45,0.45) 22%,rgba(3,20,8,0.9) 45%,#080808 100%);"></div>
+        <div class="pc">
+          <div class="cover cov-green"></div>
+          <div class="title">Good Days</div><div class="artist">SZA</div>
+          <div class="prog"><div class="prog-fill"></div></div>
+          <div class="ctrls"><div class="bs">⏮</div><div class="bp">▶</div><div class="bs">⏭</div></div>
+          <div class="brow"><div class="bi">♡</div><div class="bi">❝</div><div class="bi">≡</div><div class="bi">⊕</div></div>
+        </div>
+      </div>
+      <div class="color-badge">Grün</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── Intensität 2: Mittel (50%) ── -->
+<div class="section">
+  <div class="intensity-label">② Mittel — Farbe hält sich bis 50 %  ← empfohlen</div>
+  <div class="phone-row">
+
+    <div class="phone-wrap" onclick="sel(this,'2-red')">
+      <div class="phone">
+        <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(180,30,30,0.85) 0%,rgba(130,20,20,0.65) 28%,rgba(60,8,8,0.85) 55%,#080808 100%);"></div>
+        <div class="pc">
+          <div class="cover cov-red"></div>
+          <div class="title">Blinding Lights</div><div class="artist">The Weeknd</div>
+          <div class="prog"><div class="prog-fill"></div></div>
+          <div class="ctrls"><div class="bs">⏮</div><div class="bp">▶</div><div class="bs">⏭</div></div>
+          <div class="brow"><div class="bi">♡</div><div class="bi">❝</div><div class="bi">≡</div><div class="bi">⊕</div></div>
+        </div>
+      </div>
+      <div class="color-badge">Rot</div>
+    </div>
+
+    <div class="phone-wrap" onclick="sel(this,'2-blue')">
+      <div class="phone">
+        <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(26,107,160,0.85) 0%,rgba(15,70,115,0.65) 28%,rgba(5,25,50,0.85) 55%,#080808 100%);"></div>
+        <div class="pc">
+          <div class="cover cov-blue"></div>
+          <div class="title">Ocean Eyes</div><div class="artist">Billie Eilish</div>
+          <div class="prog"><div class="prog-fill"></div></div>
+          <div class="ctrls"><div class="bs">⏮</div><div class="bp">▶</div><div class="bs">⏭</div></div>
+          <div class="brow"><div class="bi">♡</div><div class="bi">❝</div><div class="bi">≡</div><div class="bi">⊕</div></div>
+        </div>
+      </div>
+      <div class="color-badge">Blau</div>
+    </div>
+
+    <div class="phone-wrap" onclick="sel(this,'2-warm')">
+      <div class="phone">
+        <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(200,100,20,0.85) 0%,rgba(150,70,10,0.65) 28%,rgba(50,22,3,0.85) 55%,#080808 100%);"></div>
+        <div class="pc">
+          <div class="cover cov-warm"></div>
+          <div class="title">Sunflower</div><div class="artist">Post Malone</div>
+          <div class="prog"><div class="prog-fill"></div></div>
+          <div class="ctrls"><div class="bs">⏮</div><div class="bp">▶</div><div class="bs">⏭</div></div>
+          <div class="brow"><div class="bi">♡</div><div class="bi">❝</div><div class="bi">≡</div><div class="bi">⊕</div></div>
+        </div>
+      </div>
+      <div class="color-badge">Orange</div>
+    </div>
+
+    <div class="phone-wrap" onclick="sel(this,'2-green')">
+      <div class="phone">
+        <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(30,160,80,0.85) 0%,rgba(18,110,50,0.65) 28%,rgba(5,38,15,0.85) 55%,#080808 100%);"></div>
+        <div class="pc">
+          <div class="cover cov-green"></div>
+          <div class="title">Good Days</div><div class="artist">SZA</div>
+          <div class="prog"><div class="prog-fill"></div></div>
+          <div class="ctrls"><div class="bs">⏮</div><div class="bp">▶</div><div class="bs">⏭</div></div>
+          <div class="brow"><div class="bi">♡</div><div class="bi">❝</div><div class="bi">≡</div><div class="bi">⊕</div></div>
+        </div>
+      </div>
+      <div class="color-badge">Grün</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── Intensität 3: Präsent (65%) ── -->
+<div class="section">
+  <div class="intensity-label">③ Präsent — Farbe zieht sich bis 65 %</div>
+  <div class="phone-row">
+
+    <div class="phone-wrap" onclick="sel(this,'3-red')">
+      <div class="phone">
+        <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(180,30,30,0.92) 0%,rgba(140,22,22,0.78) 30%,rgba(80,10,10,0.88) 60%,rgba(20,3,3,0.97) 80%,#080808 100%);"></div>
+        <div class="pc">
+          <div class="cover cov-red"></div>
+          <div class="title">Blinding Lights</div><div class="artist">The Weeknd</div>
+          <div class="prog"><div class="prog-fill"></div></div>
+          <div class="ctrls"><div class="bs">⏮</div><div class="bp">▶</div><div class="bs">⏭</div></div>
+          <div class="brow"><div class="bi">♡</div><div class="bi">❝</div><div class="bi">≡</div><div class="bi">⊕</div></div>
+        </div>
+      </div>
+      <div class="color-badge">Rot</div>
+    </div>
+
+    <div class="phone-wrap" onclick="sel(this,'3-blue')">
+      <div class="phone">
+        <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(26,107,160,0.92) 0%,rgba(18,78,125,0.78) 30%,rgba(8,38,75,0.88) 60%,rgba(3,10,28,0.97) 80%,#080808 100%);"></div>
+        <div class="pc">
+          <div class="cover cov-blue"></div>
+          <div class="title">Ocean Eyes</div><div class="artist">Billie Eilish</div>
+          <div class="prog"><div class="prog-fill"></div></div>
+          <div class="ctrls"><div class="bs">⏮</div><div class="bp">▶</div><div class="bs">⏭</div></div>
+          <div class="brow"><div class="bi">♡</div><div class="bi">❝</div><div class="bi">≡</div><div class="bi">⊕</div></div>
+        </div>
+      </div>
+      <div class="color-badge">Blau</div>
+    </div>
+
+    <div class="phone-wrap" onclick="sel(this,'3-warm')">
+      <div class="phone">
+        <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(200,100,20,0.92) 0%,rgba(160,75,12,0.78) 30%,rgba(80,35,5,0.88) 60%,rgba(22,10,2,0.97) 80%,#080808 100%);"></div>
+        <div class="pc">
+          <div class="cover cov-warm"></div>
+          <div class="title">Sunflower</div><div class="artist">Post Malone</div>
+          <div class="prog"><div class="prog-fill"></div></div>
+          <div class="ctrls"><div class="bs">⏮</div><div class="bp">▶</div><div class="bs">⏭</div></div>
+          <div class="brow"><div class="bi">♡</div><div class="bi">❝</div><div class="bi">≡</div><div class="bi">⊕</div></div>
+        </div>
+      </div>
+      <div class="color-badge">Orange</div>
+    </div>
+
+    <div class="phone-wrap" onclick="sel(this,'3-green')">
+      <div class="phone">
+        <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(30,160,80,0.92) 0%,rgba(20,120,55,0.78) 30%,rgba(8,55,22,0.88) 60%,rgba(2,15,6,0.97) 80%,#080808 100%);"></div>
+        <div class="pc">
+          <div class="cover cov-green"></div>
+          <div class="title">Good Days</div><div class="artist">SZA</div>
+          <div class="prog"><div class="prog-fill"></div></div>
+          <div class="ctrls"><div class="bs">⏮</div><div class="bp">▶</div><div class="bs">⏭</div></div>
+          <div class="brow"><div class="bi">♡</div><div class="bi">❝</div><div class="bi">≡</div><div class="bi">⊕</div></div>
+        </div>
+      </div>
+      <div class="color-badge">Grün</div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  function sel(el, choice) {
+    document.querySelectorAll('.phone-wrap').forEach(w => w.classList.remove('selected'));
+    el.classList.add('selected');
+    if (window.recordChoice) window.recordChoice(choice, choice);
+  }
+</script>

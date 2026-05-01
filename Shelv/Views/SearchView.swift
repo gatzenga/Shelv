@@ -13,6 +13,7 @@ struct SearchView: View {
     @ObservedObject var downloadStore = DownloadStore.shared
 
     @State private var query = ""
+    @State private var searchFieldActive = true
     @State private var result: SearchResult?
     @State private var lyricsResults: [LyricsSearchResult] = []
     @State private var isSearching = false
@@ -390,6 +391,7 @@ struct SearchView: View {
             .navigationTitle(tr("Search", "Suchen"))
             .searchable(
                 text: $query,
+                isPresented: $searchFieldActive,
                 prompt: tr("Artists, albums, songs...", "Künstler, Alben, Titel...")
             )
             .onChange(of: query) { _, newValue in

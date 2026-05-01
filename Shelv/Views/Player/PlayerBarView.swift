@@ -6,21 +6,21 @@ struct PlayerBarView: View {
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 12) {
             AlbumArtView(coverArtId: player.currentSong?.coverArt, size: 100, cornerRadius: 10)
-                .frame(width: 48, height: 48)
-                .shadow(color: .black.opacity(0.1), radius: 2, y: 1)
+                .frame(width: 50, height: 50)
+                .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
                 .overlay(alignment: .bottomTrailing) {
                     if player.isBuffering || player.isPlaying || !player.isNetworkAvailable {
                         Circle()
                             .fill(!player.isNetworkAvailable ? Color.red : player.isBuffering ? Color.orange : Color.green)
-                            .frame(width: 12, height: 12)
+                            .frame(width: 11, height: 11)
                             .overlay(Circle().stroke(Color(UIColor.systemBackground), lineWidth: 2))
                             .offset(x: 3, y: 3)
                     }
                 }
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 2) {
                 if player.isBuffering {
                     Text(tr("Connecting...", "Verbinde..."))
                         .font(.subheadline).bold()
@@ -32,7 +32,6 @@ struct PlayerBarView: View {
                         .foregroundStyle(.primary)
                         .lineLimit(1)
                 }
-
                 Text(player.currentSong?.artist ?? player.currentSong?.album ?? "")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -46,8 +45,8 @@ struct PlayerBarView: View {
             } label: {
                 Image(systemName: "backward.fill")
                     .font(.callout)
-                    .foregroundStyle(accentColor)
-                    .frame(width: 32, height: 32)
+                    .foregroundStyle(.primary)
+                    .frame(width: 30, height: 30)
             }
             .buttonStyle(.plain)
 
@@ -55,11 +54,12 @@ struct PlayerBarView: View {
                 player.togglePlayPause()
             } label: {
                 Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.title3)
+                    .font(.body)
                     .foregroundStyle(.white)
                     .frame(width: 36, height: 36)
                     .background(accentColor)
                     .clipShape(Circle())
+                    .shadow(color: accentColor.opacity(0.35), radius: 6, y: 3)
             }
             .buttonStyle(.plain)
 
@@ -68,20 +68,35 @@ struct PlayerBarView: View {
             } label: {
                 Image(systemName: "forward.fill")
                     .font(.callout)
-                    .foregroundStyle(player.hasNextTrack ? accentColor : Color.secondary)
-                    .frame(width: 32, height: 32)
+                    .foregroundStyle(player.hasNextTrack ? Color.primary : Color.secondary)
+                    .frame(width: 30, height: 30)
             }
             .buttonStyle(.plain)
             .disabled(!player.hasNextTrack)
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(Color(UIColor.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 20))
-        .shadow(color: .black.opacity(0.15), radius: 6, y: 3)
-        .overlay(
-            RoundedRectangle(cornerRadius: 20)
-                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
-        )
+        .padding(.vertical, 10)
+        .contentShape(Rectangle())
+        .modifier(LiquidGlassBar())
+    }
+}
+
+private struct LiquidGlassBar: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content
+                .glassEffect(in: RoundedRectangle(cornerRadius: 32, style: .continuous))
+        } else {
+            content
+                .background(
+                    .ultraThinMaterial,
+                    in: RoundedRectangle(cornerRadius: 32, style: .continuous)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 32, style: .continuous)
+                        .stroke(Color.primary.opacity(0.10), lineWidth: 0.5)
+                )
+                .shadow(color: .black.opacity(0.12), radius: 10, y: 4)
+        }
     }
 }

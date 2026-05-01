@@ -1,0 +1,305 @@
+<h2>Mini-Player — neues Design</h2>
+<p class="subtitle">Aktuell vs. drei neue Varianten. Play-Button bleibt Akzentfarbe. Prev/Next: weiß im Dark Mode, schwarz im Light Mode.</p>
+
+<style>
+  .section { margin-bottom: 36px; }
+  .section-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #888; margin-bottom: 14px; }
+
+  /* App background simulation */
+  .app-dark  { background: #1c1c1e; padding: 24px 20px; border-radius: 16px; }
+  .app-light { background: #f2f2f7; padding: 24px 20px; border-radius: 16px; }
+
+  .bars-row { display: flex; gap: 20px; flex-wrap: wrap; justify-content: flex-start; }
+  .bar-wrap { display: flex; flex-direction: column; gap: 8px; }
+  .bar-label { font-size: 11px; font-weight: 700; color: #888; }
+
+  /* ── AKTUELL ── */
+  .bar-current-dark {
+    width: 340px;
+    background: #2c2c2e;
+    border-radius: 20px;
+    padding: 12px 14px;
+    display: flex; align-items: center; gap: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.08);
+    box-sizing: border-box;
+  }
+  .bar-current-light {
+    width: 340px;
+    background: #fff;
+    border-radius: 20px;
+    padding: 12px 14px;
+    display: flex; align-items: center; gap: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+    border: 1px solid rgba(0,0,0,0.08);
+    box-sizing: border-box;
+  }
+
+  /* ── GLASS STIL ── */
+  .bar-glass-dark {
+    width: 340px;
+    background: rgba(255,255,255,0.07);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border-radius: 22px;
+    padding: 14px 16px;
+    display: flex; align-items: center; gap: 14px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.35), 0 1px 0 rgba(255,255,255,0.12) inset;
+    border: 0.5px solid rgba(255,255,255,0.15);
+    box-sizing: border-box;
+    position: relative;
+    overflow: hidden;
+  }
+  .bar-glass-dark::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+  }
+
+  .bar-glass-light {
+    width: 340px;
+    background: rgba(255,255,255,0.72);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border-radius: 22px;
+    padding: 14px 16px;
+    display: flex; align-items: center; gap: 14px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.10), 0 1px 0 rgba(255,255,255,0.9) inset;
+    border: 0.5px solid rgba(0,0,0,0.08);
+    box-sizing: border-box;
+  }
+
+  /* ── GLASS + ACCENT GLOW (Variante mit farbigem Schimmer) ── */
+  .bar-glass-glow {
+    width: 340px;
+    background: rgba(255,255,255,0.07);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border-radius: 22px;
+    padding: 14px 16px;
+    display: flex; align-items: center; gap: 14px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.35), 0 0 0 1px rgba(124,58,237,0.25), 0 1px 0 rgba(255,255,255,0.10) inset;
+    border: 0.5px solid rgba(124,58,237,0.30);
+    box-sizing: border-box;
+    position: relative; overflow: hidden;
+  }
+  .bar-glass-glow::after {
+    content: '';
+    position: absolute; bottom: 0; left: 16px; right: 16px; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(124,58,237,0.5), transparent);
+  }
+
+  /* Shared inner content */
+  .cover-thumb {
+    width: 44px; height: 44px; border-radius: 10px; flex-shrink: 0;
+    background: linear-gradient(135deg,#8844cc,#44aaff,#cc4488);
+    box-shadow: 0 3px 8px rgba(0,0,0,0.35);
+  }
+  .cover-thumb-sm {
+    width: 38px; height: 38px; border-radius: 8px; flex-shrink: 0;
+    background: linear-gradient(135deg,#8844cc,#44aaff,#cc4488);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+  }
+  .text-area { flex: 1; min-width: 0; }
+  .song-dark  { color: #fff; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .song-light { color: #111; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .art-dark   { color: rgba(255,255,255,0.5); font-size: 11px; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .art-light  { color: rgba(0,0,0,0.45); font-size: 11px; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .btn-prev-dark, .btn-next-dark {
+    width: 30px; height: 30px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    color: rgba(255,255,255,0.75); font-size: 13px;
+  }
+  .btn-prev-light, .btn-next-light {
+    width: 30px; height: 30px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    color: rgba(0,0,0,0.6); font-size: 13px;
+  }
+  /* Accent color for old style */
+  .btn-prev-accent, .btn-next-accent {
+    width: 30px; height: 30px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    color: #7c3aed; font-size: 13px;
+  }
+  .btn-play {
+    width: 38px; height: 38px; border-radius: 50%; background: #7c3aed; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; color: #fff; font-size: 14px;
+    box-shadow: 0 3px 10px rgba(124,58,237,0.45);
+  }
+  .btn-play-sm {
+    width: 32px; height: 32px; border-radius: 50%; background: #7c3aed; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; color: #fff; font-size: 12px;
+    box-shadow: 0 2px 8px rgba(124,58,237,0.4);
+  }
+
+  /* Accent line at bottom of glass bar */
+  .accent-line {
+    position: absolute; bottom: 0; left: 20%; right: 20%; height: 2px; border-radius: 1px;
+    background: linear-gradient(90deg, transparent, #7c3aed, transparent);
+    opacity: 0.6;
+  }
+
+  .mode-pair { display: flex; gap: 16px; flex-wrap: wrap; }
+</style>
+
+<!-- ── AKTUELL ── -->
+<div class="section">
+  <div class="section-title">Aktuell (Referenz)</div>
+  <div class="mode-pair">
+    <div class="bar-wrap">
+      <div class="bar-label">Dark Mode</div>
+      <div class="app-dark">
+        <div class="bar-current-dark">
+          <div class="cover-thumb-sm"></div>
+          <div class="text-area">
+            <div class="song-dark">Nightcall</div>
+            <div class="art-dark">Kavinsky</div>
+          </div>
+          <div class="btn-prev-accent">⏮</div>
+          <div class="btn-play-sm">▶</div>
+          <div class="btn-next-accent">⏭</div>
+        </div>
+      </div>
+    </div>
+    <div class="bar-wrap">
+      <div class="bar-label">Light Mode</div>
+      <div class="app-light">
+        <div class="bar-current-light">
+          <div class="cover-thumb-sm"></div>
+          <div class="text-area">
+            <div class="song-light">Nightcall</div>
+            <div class="art-light">Kavinsky</div>
+          </div>
+          <div class="btn-prev-accent">⏮</div>
+          <div class="btn-play-sm">▶</div>
+          <div class="btn-next-accent">⏭</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── A: Glass, schlicht ── -->
+<div class="section">
+  <div class="section-title">A — Glass, schlicht (etwas höher, Prev/Next neutral)</div>
+  <div class="mode-pair">
+    <div class="bar-wrap">
+      <div class="bar-label">Dark Mode</div>
+      <div class="app-dark">
+        <div class="bar-glass-dark">
+          <div class="cover-thumb"></div>
+          <div class="text-area">
+            <div class="song-dark">Nightcall</div>
+            <div class="art-dark">Kavinsky</div>
+          </div>
+          <div class="btn-prev-dark">⏮</div>
+          <div class="btn-play">▶</div>
+          <div class="btn-next-dark">⏭</div>
+        </div>
+      </div>
+    </div>
+    <div class="bar-wrap">
+      <div class="bar-label">Light Mode</div>
+      <div class="app-light">
+        <div class="bar-glass-light">
+          <div class="cover-thumb"></div>
+          <div class="text-area">
+            <div class="song-light">Nightcall</div>
+            <div class="art-light">Kavinsky</div>
+          </div>
+          <div class="btn-prev-light">⏮</div>
+          <div class="btn-play">▶</div>
+          <div class="btn-next-light">⏭</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── B: Glass + subtiler Akzent-Rand ── -->
+<div class="section">
+  <div class="section-title">B — Glass + subtiler Akzent-Rand (Akzentfarbe als Gimmick)</div>
+  <div class="mode-pair">
+    <div class="bar-wrap">
+      <div class="bar-label">Dark Mode</div>
+      <div class="app-dark">
+        <div class="bar-glass-glow" style="position:relative;">
+          <div class="accent-line"></div>
+          <div class="cover-thumb"></div>
+          <div class="text-area">
+            <div class="song-dark">Nightcall</div>
+            <div class="art-dark">Kavinsky</div>
+          </div>
+          <div class="btn-prev-dark">⏮</div>
+          <div class="btn-play">▶</div>
+          <div class="btn-next-dark">⏭</div>
+        </div>
+      </div>
+    </div>
+    <div class="bar-wrap">
+      <div class="bar-label">Light Mode</div>
+      <div class="app-light">
+        <div class="bar-glass-light" style="border-color:rgba(124,58,237,0.25);box-shadow:0 6px 20px rgba(0,0,0,0.10), 0 0 0 1px rgba(124,58,237,0.15);position:relative;">
+          <div style="position:absolute;bottom:0;left:20%;right:20%;height:2px;border-radius:1px;background:linear-gradient(90deg,transparent,rgba(124,58,237,0.4),transparent);"></div>
+          <div class="cover-thumb"></div>
+          <div class="text-area">
+            <div class="song-light">Nightcall</div>
+            <div class="art-light">Kavinsky</div>
+          </div>
+          <div class="btn-prev-light">⏮</div>
+          <div class="btn-play">▶</div>
+          <div class="btn-next-light">⏭</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── C: Glass + Akzent-Dot am Cover ── -->
+<div class="section">
+  <div class="section-title">C — Glass, Akzentfarbe als Status-Dot am Cover (wie jetzt, nur feiner)</div>
+  <div class="mode-pair">
+    <div class="bar-wrap">
+      <div class="bar-label">Dark Mode</div>
+      <div class="app-dark">
+        <div class="bar-glass-dark">
+          <div style="position:relative;flex-shrink:0;">
+            <div class="cover-thumb"></div>
+            <div style="position:absolute;bottom:-2px;right:-2px;width:12px;height:12px;border-radius:50%;background:#7c3aed;border:2px solid #1c1c1e;"></div>
+          </div>
+          <div class="text-area">
+            <div class="song-dark">Nightcall</div>
+            <div class="art-dark">Kavinsky</div>
+          </div>
+          <div class="btn-prev-dark">⏮</div>
+          <div class="btn-play">▶</div>
+          <div class="btn-next-dark">⏭</div>
+        </div>
+      </div>
+    </div>
+    <div class="bar-wrap">
+      <div class="bar-label">Light Mode</div>
+      <div class="app-light">
+        <div class="bar-glass-light">
+          <div style="position:relative;flex-shrink:0;">
+            <div class="cover-thumb"></div>
+            <div style="position:absolute;bottom:-2px;right:-2px;width:12px;height:12px;border-radius:50%;background:#7c3aed;border:2px solid #f2f2f7;"></div>
+          </div>
+          <div class="text-area">
+            <div class="song-light">Nightcall</div>
+            <div class="art-light">Kavinsky</div>
+          </div>
+          <div class="btn-prev-light">⏮</div>
+          <div class="btn-play">▶</div>
+          <div class="btn-next-light">⏭</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<p class="subtitle">
+  Alle drei Varianten sind höher als aktuell (~72px → ~76px), haben Cover 44px statt 38px, und Prev/Next in Weiß/Schwarz statt Akzentfarbe.<br>
+  Der Play-Button bleibt überall der einzige Akzentfarben-Punkt.
+</p>

@@ -1,0 +1,10 @@
+{"type":"server-started","port":58501,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:58501","screen_dir":"/Users/vasco/Repositorys/Shelv/.superpowers/brainstorm/54777-1777671271/content","state_dir":"/Users/vasco/Repositorys/Shelv/.superpowers/brainstorm/54777-1777671271/state"}
+{"type":"screen-added","file":"/Users/vasco/Repositorys/Shelv/.superpowers/brainstorm/54777-1777671271/content/background-style.html"}
+{"type":"screen-added","file":"/Users/vasco/Repositorys/Shelv/.superpowers/brainstorm/54777-1777671271/content/background-c-modes.html"}
+{"type":"screen-added","file":"/Users/vasco/Repositorys/Shelv/.superpowers/brainstorm/54777-1777671271/content/intensity-colors.html"}
+{"type":"screen-added","file":"/Users/vasco/Repositorys/Shelv/.superpowers/brainstorm/54777-1777671271/content/mittel-refined.html"}
+{"type":"screen-added","file":"/Users/vasco/Repositorys/Shelv/.superpowers/brainstorm/54777-1777671271/content/button-styles.html"}
+{"type":"screen-added","file":"/Users/vasco/Repositorys/Shelv/.superpowers/brainstorm/54777-1777671271/content/subtle-vs-current.html"}
+{"type":"screen-added","file":"/Users/vasco/Repositorys/Shelv/.superpowers/brainstorm/54777-1777671271/content/miniplayer.html"}
+{"type":"screen-added","file":"/Users/vasco/Repositorys/Shelv/.superpowers/brainstorm/54777-1777671271/content/liquid-glass.html"}
+{"type":"server-stopped","reason":"idle timeout"}

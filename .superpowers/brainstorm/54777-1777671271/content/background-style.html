@@ -1,0 +1,260 @@
+<h2>Player-Hintergrund: Welcher Stil passt?</h2>
+<p class="subtitle">Alle drei nutzen eine dominante Farbe aus dem Cover. Welche Variante gefällt dir am besten?</p>
+
+<style>
+  .phone-row {
+    display: flex;
+    gap: 24px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin: 24px 0;
+  }
+  .phone-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+  }
+  .phone-wrap.selected .phone {
+    outline: 3px solid #7c3aed;
+    outline-offset: 4px;
+  }
+  .phone-wrap.selected .letter-badge {
+    background: #7c3aed;
+    color: white;
+  }
+  .phone {
+    width: 200px;
+    height: 390px;
+    border-radius: 32px;
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.35);
+    border: 6px solid #1a1a1a;
+  }
+  .letter-badge {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: #555;
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: bold; font-size: 13px;
+  }
+  .phone-label { font-size: 13px; color: #aaa; text-align: center; max-width: 180px; line-height: 1.4; }
+
+  /* --- Option A: Voller vertikaler Verlauf --- */
+  .bg-a {
+    background: linear-gradient(180deg,
+      #3a2060 0%,
+      #5a2080 25%,
+      #6b2090 50%,
+      #2a1040 75%,
+      #0e0820 100%
+    );
+  }
+  /* --- Option B: Radial-Glow um Cover --- */
+  .bg-b {
+    background: #111;
+  }
+  .bg-b::before {
+    content: '';
+    position: absolute;
+    top: 28px; left: 50%;
+    transform: translateX(-50%);
+    width: 160px; height: 160px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(120,50,200,0.85) 0%, rgba(80,20,150,0.4) 50%, transparent 75%);
+    z-index: 0;
+  }
+  /* --- Option C: Obere Hälfte farbig, untere System --- */
+  .bg-c {
+    background: linear-gradient(180deg,
+      #5a2080 0%,
+      #4a1870 30%,
+      #1a0830 60%,
+      #0a0a0a 100%
+    );
+  }
+
+  .player-content {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px 14px 12px;
+    height: 100%;
+    box-sizing: border-box;
+  }
+  .cover {
+    width: 148px; height: 148px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #8844cc, #44aaff, #cc4488);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    margin-top: 8px;
+    flex-shrink: 0;
+  }
+  .song-title {
+    color: #fff;
+    font-size: 14px; font-weight: 700;
+    margin-top: 14px; text-align: center;
+    line-height: 1.2;
+  }
+  .song-artist {
+    color: rgba(255,255,255,0.6);
+    font-size: 11px;
+    margin-top: 3px;
+  }
+  .progress {
+    width: 100%;
+    height: 3px;
+    border-radius: 2px;
+    background: rgba(255,255,255,0.2);
+    margin-top: 12px;
+    position: relative;
+    flex-shrink: 0;
+  }
+  .progress-fill {
+    width: 40%;
+    height: 100%;
+    border-radius: 2px;
+    background: rgba(255,255,255,0.85);
+  }
+  .controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    margin-top: 10px;
+    flex-shrink: 0;
+  }
+  .btn-secondary {
+    width: 32px; height: 32px;
+    display: flex; align-items: center; justify-content: center;
+    color: rgba(255,255,255,0.7);
+    font-size: 14px;
+  }
+  .btn-play {
+    width: 52px; height: 52px;
+    border-radius: 50%;
+    background: #7c3aed;
+    display: flex; align-items: center; justify-content: center;
+    color: white;
+    font-size: 18px;
+    box-shadow: 0 4px 16px rgba(124,58,237,0.5);
+  }
+  .bottom-icons {
+    display: flex;
+    justify-content: space-around;
+    width: 100%;
+    margin-top: 8px;
+    flex-shrink: 0;
+  }
+  .icon-btn {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px;
+  }
+  .icon-btn-a { background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.75); }
+  .spacer { flex: 1; }
+</style>
+
+<div class="phone-row">
+
+  <!-- Option A -->
+  <div class="phone-wrap" onclick="selectOption(this,'a')">
+    <div class="letter-badge">A</div>
+    <div class="phone">
+      <div class="bg-a" style="position:absolute;inset:0;"></div>
+      <div class="player-content">
+        <div class="cover"></div>
+        <div class="song-title">Nightcall</div>
+        <div class="song-artist">Kavinsky</div>
+        <div class="progress" style="margin-top:auto;padding-top:4px;">
+          <div class="progress-fill"></div>
+        </div>
+        <div class="controls">
+          <div class="btn-secondary">⏮</div>
+          <div class="btn-play">▶</div>
+          <div class="btn-secondary">⏭</div>
+        </div>
+        <div class="bottom-icons">
+          <div class="icon-btn icon-btn-a">♡</div>
+          <div class="icon-btn icon-btn-a">❝</div>
+          <div class="icon-btn icon-btn-a">≡</div>
+          <div class="icon-btn icon-btn-a">⊕</div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-label"><strong>A — Voller Verlauf</strong><br>Dominante Farbe oben → dunkel unten</div>
+  </div>
+
+  <!-- Option B -->
+  <div class="phone-wrap" onclick="selectOption(this,'b')">
+    <div class="letter-badge">B</div>
+    <div class="phone">
+      <div class="bg-b" style="position:absolute;inset:0;"></div>
+      <div class="player-content">
+        <div class="cover"></div>
+        <div class="song-title">Nightcall</div>
+        <div class="song-artist">Kavinsky</div>
+        <div class="progress" style="margin-top:auto;">
+          <div class="progress-fill"></div>
+        </div>
+        <div class="controls">
+          <div class="btn-secondary">⏮</div>
+          <div class="btn-play">▶</div>
+          <div class="btn-secondary">⏭</div>
+        </div>
+        <div class="bottom-icons">
+          <div class="icon-btn icon-btn-a">♡</div>
+          <div class="icon-btn icon-btn-a">❝</div>
+          <div class="icon-btn icon-btn-a">≡</div>
+          <div class="icon-btn icon-btn-a">⊕</div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-label"><strong>B — Radial-Glow</strong><br>Leuchten rund ums Cover, Rest fast schwarz</div>
+  </div>
+
+  <!-- Option C -->
+  <div class="phone-wrap" onclick="selectOption(this,'c')">
+    <div class="letter-badge">C</div>
+    <div class="phone">
+      <div class="bg-c" style="position:absolute;inset:0;"></div>
+      <div class="player-content">
+        <div class="cover"></div>
+        <div class="song-title">Nightcall</div>
+        <div class="song-artist">Kavinsky</div>
+        <div class="progress" style="margin-top:auto;">
+          <div class="progress-fill"></div>
+        </div>
+        <div class="controls">
+          <div class="btn-secondary">⏮</div>
+          <div class="btn-play">▶</div>
+          <div class="btn-secondary">⏭</div>
+        </div>
+        <div class="bottom-icons">
+          <div class="icon-btn icon-btn-a">♡</div>
+          <div class="icon-btn icon-btn-a">❝</div>
+          <div class="icon-btn icon-btn-a">≡</div>
+          <div class="icon-btn icon-btn-a">⊕</div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-label"><strong>C — Obere Zone</strong><br>Farbe nur im oberen Drittel, schnell zu dunkel</div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:8px;">Alle drei Varianten sind immer dunkel — der Player hat seinen eigenen Dunkel-Modus unabhängig vom System-Theme.</p>
+
+<script>
+  function selectOption(el, choice) {
+    document.querySelectorAll('.phone-wrap').forEach(w => w.classList.remove('selected'));
+    el.classList.add('selected');
+    if (window.recordChoice) window.recordChoice(choice, el.querySelector('.phone-label').textContent.trim());
+  }
+</script>
