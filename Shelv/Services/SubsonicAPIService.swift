@@ -286,6 +286,9 @@ class SubsonicAPIService: ObservableObject {
     private func resolveCredentials() throws -> (server: SubsonicServer, password: String) {
         try credentialLock.withLock {
             guard let s = _activeServer else { throw SubsonicAPIError.noServer }
+            if _activePassword == nil {
+                _activePassword = KeychainService.load(for: s.id)
+            }
             guard let p = _activePassword else { throw SubsonicAPIError.noPassword }
             return (s, p)
         }

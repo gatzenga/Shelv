@@ -48,6 +48,10 @@ class ServerStore: ObservableObject {
 
     private func applyToAPIService(server: SubsonicServer) {
         let password = KeychainService.load(for: server.id)
+        if let password {
+            // Transparente Migration: bestehende Items auf AfterFirstUnlock upgraden
+            KeychainService.save(password: password, for: server.id)
+        }
         SubsonicAPIService.shared.setCredentials(server: server, password: password)
     }
 

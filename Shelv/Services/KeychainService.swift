@@ -6,23 +6,21 @@ enum KeychainService {
         let key = "shelv_server_\(serverID.uuidString)"
         let data = Data(password.utf8)
 
+        // kSecAttrAccessible kann via SecItemUpdate nicht geändert werden —
+        // daher immer löschen + neu anlegen, damit AfterFirstUnlock garantiert ist.
+        let deleteQuery: [CFString: Any] = [
+            kSecClass: kSecClassGenericPassword,
+            kSecAttrAccount: key
+        ]
+        SecItemDelete(deleteQuery as CFDictionary)
+
         let query: [CFString: Any] = [
             kSecClass: kSecClassGenericPassword,
             kSecAttrAccount: key,
-            kSecValueData: data
+            kSecValueData: data,
+            kSecAttrAccessible: kSecAttrAccessibleAfterFirstUnlock
         ]
-
-        let status = SecItemAdd(query as CFDictionary, nil)
-        if status == errSecDuplicateItem {
-            let searchQuery: [CFString: Any] = [
-                kSecClass: kSecClassGenericPassword,
-                kSecAttrAccount: key
-            ]
-            let updateAttrs: [CFString: Any] = [
-                kSecValueData: data
-            ]
-            SecItemUpdate(searchQuery as CFDictionary, updateAttrs as CFDictionary)
-        }
+        SecItemAdd(query as CFDictionary, nil)
     }
 
     static func load(for serverID: UUID) -> String? {

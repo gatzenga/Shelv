@@ -134,7 +134,8 @@ struct ArtistDetailView: View {
                     }
                     HStack(spacing: 10) {
                         Button {
-                            guard let albums = detail?.album, !albums.isEmpty else { return }
+                            let albums = sortedAlbums
+                            guard !albums.isEmpty else { return }
                             Task {
                                 let songs = await fetchAllSongs(from: albums)
                                 guard !songs.isEmpty else { return }
@@ -150,7 +151,8 @@ struct ArtistDetailView: View {
                         .disabled(isLoading)
 
                         Button {
-                            guard let albums = detail?.album, !albums.isEmpty else { return }
+                            let albums = sortedAlbums
+                            guard !albums.isEmpty else { return }
                             Task {
                                 let songs = await fetchAllSongs(from: albums)
                                 guard !songs.isEmpty else { return }
@@ -386,7 +388,8 @@ struct ArtistDetailView: View {
     private var artistMenu: some View {
         Menu {
             Button {
-                guard let albums = detail?.album, !albums.isEmpty else { return }
+                let albums = sortedAlbums
+                guard !albums.isEmpty else { return }
                 Task {
                     let songs = await fetchAllSongs(from: albums)
                     guard !songs.isEmpty else { return }
@@ -399,7 +402,8 @@ struct ArtistDetailView: View {
             .disabled(isLoading)
 
             Button {
-                guard let albums = detail?.album, !albums.isEmpty else { return }
+                let albums = sortedAlbums
+                guard !albums.isEmpty else { return }
                 Task {
                     let songs = await fetchAllSongs(from: albums)
                     guard !songs.isEmpty else { return }
@@ -413,7 +417,8 @@ struct ArtistDetailView: View {
 
             if enablePlaylists && !offlineMode.isOffline {
                 Button {
-                    guard let albums = detail?.album, !albums.isEmpty else { return }
+                    let albums = sortedAlbums
+                    guard !albums.isEmpty else { return }
                     Task {
                         let songs = await fetchAllSongs(from: albums)
                         guard !songs.isEmpty else { return }

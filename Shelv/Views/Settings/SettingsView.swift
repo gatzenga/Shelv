@@ -22,8 +22,6 @@ struct SettingsView: View {
     @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage("enableFavorites") private var enableFavorites = true
     @AppStorage("enablePlaylists") private var enablePlaylists = true
-    @AppStorage("crossfadeEnabled") private var crossfadeEnabled = false
-    @AppStorage("crossfadeDuration") private var crossfadeDuration = 5
     @AppStorage("gaplessEnabled") private var gaplessEnabled = false
     @AppStorage("autoFetchLyrics") private var autoFetchLyrics = true
     @AppStorage("recapEnabled") private var recapEnabled = false
@@ -117,47 +115,13 @@ struct SettingsView: View {
                     }
                 }
 
-                Section(tr("Crossfade & Gapless", "Crossfade & Gapless")) {
+                Section(tr("Gapless", "Gapless")) {
                     Toggle(isOn: $gaplessEnabled) {
                         Label { Text(tr("Gapless", "Gapless")) } icon: {
                             Image(systemName: "waveform.path").foregroundStyle(accentColor)
                         }
                     }
                     .tint(accentColor)
-                    .disabled(crossfadeEnabled)
-                    .onChange(of: gaplessEnabled) { _, on in if on { crossfadeEnabled = false } }
-
-                    Toggle(isOn: $crossfadeEnabled) {
-                        Label { Text(tr("Crossfade", "Crossfade")) } icon: {
-                            Image(systemName: "waveform").foregroundStyle(accentColor)
-                        }
-                    }
-                    .tint(accentColor)
-                    .disabled(gaplessEnabled)
-                    .onChange(of: crossfadeEnabled) { _, on in if on { gaplessEnabled = false } }
-
-                    if crossfadeEnabled {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Label { Text(tr("Duration", "Dauer")) } icon: {
-                                    Image(systemName: "timer").foregroundStyle(accentColor)
-                                }
-                                Spacer()
-                                Text("\(crossfadeDuration)s")
-                                    .monospacedDigit()
-                                    .foregroundStyle(.secondary)
-                            }
-                            Slider(
-                                value: Binding(
-                                    get: { Double(crossfadeDuration) },
-                                    set: { crossfadeDuration = Int($0.rounded()) }
-                                ),
-                                in: 1...12,
-                                step: 1
-                            )
-                            .tint(accentColor)
-                        }
-                    }
                 }
 
                 Section(tr("Recap", "Recap")) {

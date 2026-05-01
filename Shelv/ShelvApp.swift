@@ -45,10 +45,6 @@ struct ShelvApp: App {
         if d.string(forKey: "transcodingWifiCodec") == "aac" { d.set("raw", forKey: "transcodingWifiCodec") }
         if d.string(forKey: "transcodingCellularCodec") == "aac" { d.set("raw", forKey: "transcodingCellularCodec") }
         if d.string(forKey: "transcodingDownloadCodec") == "aac" { d.set("raw", forKey: "transcodingDownloadCodec") }
-        // Gapless und Crossfade schliessen sich gegenseitig aus — unmöglichen Zustand korrigieren
-        if d.bool(forKey: "gaplessEnabled") && d.bool(forKey: "crossfadeEnabled") {
-            d.set(false, forKey: "crossfadeEnabled")
-        }
         UserDefaults.standard.register(defaults: [
             "recapWeeklyEnabled": true,
             "recapMonthlyEnabled": true,

@@ -32,8 +32,7 @@ A native, album and artist focused iOS and iPadOS client for [Navidrome](https:/
 
 ### Playback
 - **Full player** — Play, pause, seek, previous, next, shuffle, and three repeat modes (Off / All / One)
-- **Crossfade** — Smooth crossfade between tracks with a configurable duration; enable and adjust it in Settings
-- **Gapless playback** — Lossless back-to-back playback with no silence between tracks; mutually exclusive with crossfade; enable in Settings
+- **Gapless playback** — Lossless back-to-back playback with no silence between tracks; enable in Settings
 - **AirPlay** — Stream to any AirPlay-compatible device directly from the player
 - **Lock screen and media keys** — Full remote control integration via MPRemoteCommandCenter
 - **iPad layout** — Optimised player layout for iPad with larger cover art and controls; mini-player anchored correctly at the bottom via `safeAreaInset`

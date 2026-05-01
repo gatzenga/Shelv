@@ -124,11 +124,12 @@ final class CarPlayDiscoverController {
             makeMixItem(tr("Mix: Recently Played",   "Mix: Kürzlich gespielt"), type: "recent"),
         ], header: "Mixes", sectionIndexTitle: nil))
 
-        // Category image rows: each category = one CPListImageRowItem with 4 covers
+        // 4 Kategorien als Cover-Rows, kein Section-Header
         let categories: [(String, [Album])] = [
             (tr("Recently Added",    "Zuletzt hinzugefügt"), LibraryStore.shared.recentlyAdded),
             (tr("Recently Played",   "Zuletzt gespielt"),    LibraryStore.shared.recentlyPlayed),
             (tr("Frequently Played", "Häufig gespielt"),     LibraryStore.shared.frequentlyPlayed),
+            (tr("Random",            "Zufällig"),            LibraryStore.shared.randomAlbums),
         ]
 
         var categoryRows: [any CPListTemplateItem] = []
@@ -139,22 +140,15 @@ final class CarPlayDiscoverController {
             sections.append(CPListSection(items: categoryRows, header: nil, sectionIndexTitle: nil))
         }
 
-        // Random
-        let random = LibraryStore.shared.randomAlbums
-        if !random.isEmpty {
-            let refreshItem = actionListItem(title: tr("Refresh", "Aktualisieren"), systemImage: "arrow.clockwise") { [weak self] _, c in
-                Task { @MainActor [weak self] in
-                    guard let self else { return }
-                    await LibraryStore.shared.refreshRandomAlbums()
-                    self.rootTemplate.updateSections(self.buildSections())
-                    await self.enrichWithCovers()
-                }
-                c()
+        // Refresh-Button ganz unten, kein Header
+        let refreshItem = actionListItem(title: tr("Refresh", "Aktualisieren"), systemImage: "arrow.clockwise") { [weak self] _, c in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                await self.fetchAndBuild()
             }
-            let randomRow = coverRowItem(title: tr("Random", "Zufällig"), albums: random, imageMap: imageMap)
-            let randomItems: [any CPListTemplateItem] = [refreshItem, randomRow]
-            sections.append(CPListSection(items: randomItems, header: tr("Random", "Zufällig"), sectionIndexTitle: nil))
+            c()
         }
+        sections.append(CPListSection(items: [refreshItem], header: nil, sectionIndexTitle: nil))
 
         return sections
     }
