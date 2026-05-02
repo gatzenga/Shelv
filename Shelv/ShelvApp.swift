@@ -23,6 +23,10 @@ func tr(_ en: String, _ de: String, _ lang: String = appLang) -> String {
     lang == "de" ? de : en
 }
 
+func haptic(_ style: UIImpactFeedbackGenerator.FeedbackStyle = .light) {
+    UIImpactFeedbackGenerator(style: style).impactOccurred()
+}
+
 @main
 struct ShelvApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate

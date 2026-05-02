@@ -34,7 +34,7 @@ struct RecapRegistryView: View {
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             Button(role: .destructive) {
                                 Task {
-                                    await recapStore.deleteRegistryEntryOnly(playlistId: entry.playlistId, serverId: serverId)
+                                    haptic(); await recapStore.deleteRegistryEntryOnly(playlistId: entry.playlistId, serverId: serverId)
                                 }
                             } label: {
                                 Image(systemName: "trash")

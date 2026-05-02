@@ -78,7 +78,7 @@ struct DownloadsView: View {
                                 .buttonStyle(.plain)
                                 .contextMenu {
                                     Button(role: .destructive) {
-                                        downloadStore.deleteAlbum(album.albumId)
+                                        haptic(); downloadStore.deleteAlbum(album.albumId)
                                     } label: { Label(tr("Delete Downloads", "Downloads löschen"), systemImage: "trash") }
                                 }
                             }
@@ -95,10 +95,11 @@ struct DownloadsView: View {
                             }
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                 Button(role: .destructive) {
-                                    downloadStore.deleteAlbum(album.albumId)
+                                    haptic(); downloadStore.deleteAlbum(album.albumId)
                                 } label: {
                                     DeleteDownloadIcon()
                                 }
+                                .tint(.red)
                             }
                         }
                         PlayerBottomSpacer()
@@ -137,10 +138,11 @@ struct DownloadsView: View {
                     }
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                         Button(role: .destructive) {
-                            downloadStore.deleteArtist(artist.artistId)
+                            haptic(); downloadStore.deleteArtist(artist.artistId)
                         } label: {
                             DeleteDownloadIcon()
                         }
+                        .tint(.red)
                     }
                 }
                 PlayerBottomSpacer()
@@ -334,10 +336,11 @@ struct DownloadedAlbumDetailView: View {
                     DownloadedSongRow(song: song, playbackList: songs, startIndex: index)
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             Button(role: .destructive) {
-                                downloadStore.deleteSong(song.songId)
+                                haptic(); downloadStore.deleteSong(song.songId)
                             } label: {
                                 DeleteDownloadIcon()
                             }
+                            .tint(.red)
                         }
                 }
             }
@@ -376,10 +379,11 @@ struct DownloadedArtistDetailView: View {
                 }
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     Button(role: .destructive) {
-                        downloadStore.deleteAlbum(album.albumId)
+                        haptic(); downloadStore.deleteAlbum(album.albumId)
                     } label: {
                         DeleteDownloadIcon()
                     }
+                    .tint(.red)
                 }
             }
             PlayerBottomSpacer()

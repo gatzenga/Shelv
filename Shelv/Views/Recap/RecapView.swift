@@ -78,11 +78,11 @@ struct RecapView: View {
                                 .listRowBackground(Color.clear)
                                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                     Button {
-                                        Task { await addRecapToQueue(entry) }
+                                        haptic(); Task { await addRecapToQueue(entry) }
                                     } label: { Image(systemName: "text.badge.plus") }
                                     .tint(accentColor)
                                     Button {
-                                        Task { await playRecapNext(entry) }
+                                        haptic(); Task { await playRecapNext(entry) }
                                     } label: { Image(systemName: "text.insert") }
                                     .tint(.orange)
                                     if enableDownloads {
@@ -272,13 +272,13 @@ struct RecapView: View {
     @ViewBuilder
     private func recapDownloadSwipe(_ entry: RecapRegistryRecord) -> some View {
         if downloadStore.offlinePlaylistIds.contains(entry.playlistId) {
-            Button(role: .destructive) {
-                deleteRecapDownloads(entry)
+            Button {
+                haptic(); deleteRecapDownloads(entry)
             } label: { DeleteDownloadIcon() }
             .tint(.red)
         } else if !offlineMode.isOffline {
             Button {
-                Task { await downloadRecap(entry) }
+                haptic(); Task { await downloadRecap(entry) }
             } label: { Image(systemName: "arrow.down.circle") }
             .tint(accentColor)
         }

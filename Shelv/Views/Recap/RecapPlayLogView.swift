@@ -54,7 +54,7 @@ struct RecapPlayLogView: View {
                             if let uuid = log.uuid {
                                 Button(role: .destructive) {
                                     Task {
-                                        await PlayLogService.shared.deletePlayLog(uuid: uuid)
+                                        haptic(); await PlayLogService.shared.deletePlayLog(uuid: uuid)
                                         await CloudKitSyncService.shared.deletePlayEvent(uuid: uuid)
                                         await CloudKitSyncService.shared.updatePendingCounts()
                                         await refresh()

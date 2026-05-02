@@ -72,7 +72,7 @@ struct AlbumDetailView: View {
                         .buttonStyle(.plain)
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             Button {
-                                player.addToQueue(song)
+                                haptic(); player.addToQueue(song)
                                 currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
                             } label: {
                                 Image(systemName: "text.badge.plus")
@@ -80,7 +80,7 @@ struct AlbumDetailView: View {
                             .tint(accentColor)
 
                             Button {
-                                player.addPlayNext(song)
+                                haptic(); player.addPlayNext(song)
                                 currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
                             } label: {
                                 Image(systemName: "text.insert")
@@ -94,7 +94,7 @@ struct AlbumDetailView: View {
                         .swipeActions(edge: .leading, allowsFullSwipe: false) {
                             if enableFavorites && !offlineMode.isOffline {
                                 Button {
-                                    Task { await libraryStore.toggleStarSong(song) }
+                                    haptic(.medium); Task { await libraryStore.toggleStarSong(song) }
                                 } label: {
                                     Image(systemName: libraryStore.isSongStarred(song) ? "heart.slash" : "heart.fill")
                                 }
@@ -107,7 +107,7 @@ struct AlbumDetailView: View {
                                 } label: {
                                     Image(systemName: "music.note.list")
                                 }
-                                .tint(.purple)
+                                .tint(accentColor)
                             }
                         }
                     }
@@ -286,7 +286,7 @@ struct AlbumDetailView: View {
             case .none:
                 if !offlineMode.isOffline {
                     Button {
-                        downloadStore.enqueueAlbum(album)
+                        haptic(); downloadStore.enqueueAlbum(album)
                         currentToast = ShelveToast(message: tr("Download started", "Download gestartet"))
                     } label: {
                         Label(tr("Download", "Herunterladen"), systemImage: "arrow.down.circle")
@@ -302,7 +302,7 @@ struct AlbumDetailView: View {
             case .partial(let done, let tot):
                 if !offlineMode.isOffline {
                     Button {
-                        downloadStore.enqueueAlbum(album)
+                        haptic(); downloadStore.enqueueAlbum(album)
                     } label: {
                         Label(tr("Rest (\(tot - done))", "Rest (\(tot - done))"), systemImage: "arrow.down.circle")
                             .font(.subheadline).bold()
@@ -315,7 +315,7 @@ struct AlbumDetailView: View {
                     .buttonStyle(.plain)
                 }
                 Button {
-                    downloadStore.deleteAlbum(album.id)
+                    haptic(); downloadStore.deleteAlbum(album.id)
                 } label: {
                     Label(tr("Delete", "Löschen"), systemImage: "arrow.down.circle")
                         .font(.subheadline).bold()
@@ -328,7 +328,7 @@ struct AlbumDetailView: View {
                 .buttonStyle(.plain)
             case .complete:
                 Button {
-                    downloadStore.deleteAlbum(album.id)
+                    haptic(); downloadStore.deleteAlbum(album.id)
                     currentToast = ShelveToast(message: tr("Downloads deleted", "Downloads gelöscht"))
                 } label: {
                     Label(tr("Delete Downloads", "Downloads löschen"), systemImage: "arrow.down.circle")
@@ -347,15 +347,15 @@ struct AlbumDetailView: View {
     @ViewBuilder
     private func downloadSwipeButton(for song: Song) -> some View {
         if downloadStore.isDownloaded(songId: song.id) {
-            Button(role: .destructive) {
-                downloadStore.deleteSong(song.id)
+            Button {
+                haptic(); downloadStore.deleteSong(song.id)
             } label: {
                 DeleteDownloadIcon()
             }
             .tint(.red)
         } else if !offlineMode.isOffline {
             Button {
-                downloadStore.enqueueSongs([song])
+                haptic(); downloadStore.enqueueSongs([song])
             } label: {
                 Image(systemName: "arrow.down.circle")
             }

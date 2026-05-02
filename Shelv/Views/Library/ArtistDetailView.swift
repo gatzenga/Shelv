@@ -262,9 +262,9 @@ struct ArtistDetailView: View {
                         .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                         .albumContextMenu(album, showPreview: false)
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            Button { queueAlbum(album) } label: { Image(systemName: "text.badge.plus") }
+                            Button { haptic(); queueAlbum(album) } label: { Image(systemName: "text.badge.plus") }
                                 .tint(accentColor)
-                            Button { playNextAlbum(album) } label: { Image(systemName: "text.insert") }
+                            Button { haptic(); playNextAlbum(album) } label: { Image(systemName: "text.insert") }
                                 .tint(.orange)
                             albumDownloadSwipeButton(album)
                         }
@@ -272,7 +272,7 @@ struct ArtistDetailView: View {
                             if !offlineMode.isOffline {
                                 if enableFavorites {
                                     Button {
-                                        Task { await libraryStore.toggleStarAlbum(album) }
+                                        haptic(.medium); Task { await libraryStore.toggleStarAlbum(album) }
                                     } label: {
                                         Image(systemName: libraryStore.isAlbumStarred(album) ? "heart.slash" : "heart.fill")
                                     }
@@ -280,7 +280,7 @@ struct ArtistDetailView: View {
                                 }
                                 if enablePlaylists {
                                     Button { addAlbumToPlaylist(album) } label: { Image(systemName: "music.note.list") }
-                                        .tint(.purple)
+                                        .tint(accentColor)
                                 }
                             }
                         }
@@ -355,13 +355,13 @@ struct ArtistDetailView: View {
             case .none, .partial:
                 if !offlineMode.isOffline {
                     Button {
-                        downloadStore.enqueueAlbum(album)
+                        haptic(); downloadStore.enqueueAlbum(album)
                     } label: { Image(systemName: "arrow.down.circle") }
                     .tint(accentColor)
                 }
             case .complete:
-                Button(role: .destructive) {
-                    downloadStore.deleteAlbum(album.id)
+                Button {
+                    haptic(); downloadStore.deleteAlbum(album.id)
                 } label: { DeleteDownloadIcon() }
                 .tint(.red)
             }
@@ -547,6 +547,7 @@ struct ArtistDetailView: View {
             case .none:
                 if !offlineMode.isOffline {
                     Button {
+                        haptic()
                         Task { await DownloadService.shared.enqueueArtist(artist: artist, serverId: serverStableId()) }
                         currentToast = ShelveToast(message: tr("Download started", "Download gestartet"))
                     } label: {
@@ -563,6 +564,7 @@ struct ArtistDetailView: View {
             case .partial(let done, let tot):
                 if !offlineMode.isOffline {
                     Button {
+                        haptic()
                         Task { await DownloadService.shared.enqueueArtist(artist: artist, serverId: serverStableId()) }
                         currentToast = ShelveToast(message: tr("Download started", "Download gestartet"))
                     } label: {
@@ -577,6 +579,7 @@ struct ArtistDetailView: View {
                     .buttonStyle(.plain)
                 }
                 Button {
+                    haptic()
                     if let match = downloadStore.artists.first(where: { $0.name == artist.name }) {
                         downloadStore.deleteArtist(match.artistId)
                         currentToast = ShelveToast(message: tr("Downloads deleted", "Downloads gelöscht"))
@@ -593,6 +596,7 @@ struct ArtistDetailView: View {
                 .buttonStyle(.plain)
             case .complete:
                 Button {
+                    haptic()
                     if let match = downloadStore.artists.first(where: { $0.name == artist.name }) {
                         downloadStore.deleteArtist(match.artistId)
                         currentToast = ShelveToast(message: tr("Downloads deleted", "Downloads gelöscht"))

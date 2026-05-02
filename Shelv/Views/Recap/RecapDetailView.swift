@@ -115,7 +115,7 @@ struct RecapDetailView: View {
                             .listRowBackground(Color.clear)
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                 Button {
-                                    player.addToQueue(songEntry.song)
+                                    haptic(); player.addToQueue(songEntry.song)
                                     currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
                                 } label: {
                                     Image(systemName: "text.badge.plus")
@@ -123,7 +123,7 @@ struct RecapDetailView: View {
                                 .tint(accentColor)
 
                                 Button {
-                                    player.addPlayNext(songEntry.song)
+                                    haptic(); player.addPlayNext(songEntry.song)
                                     currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
                                 } label: {
                                     Image(systemName: "text.insert")
@@ -133,7 +133,7 @@ struct RecapDetailView: View {
                             .swipeActions(edge: .leading, allowsFullSwipe: false) {
                                 if enableFavorites && !offlineMode.isOffline {
                                     Button {
-                                        Task { await libraryStore.toggleStarSong(songEntry.song) }
+                                        haptic(.medium); Task { await libraryStore.toggleStarSong(songEntry.song) }
                                     } label: {
                                         Image(systemName: libraryStore.isSongStarred(songEntry.song) ? "heart.slash" : "heart.fill")
                                     }
@@ -146,7 +146,7 @@ struct RecapDetailView: View {
                                     } label: {
                                         Image(systemName: "music.note.list")
                                     }
-                                    .tint(.purple)
+                                    .tint(accentColor)
                                 }
                             }
                         }
@@ -288,6 +288,7 @@ struct RecapDetailView: View {
         HStack(spacing: 10) {
             if !isMarked && !offlineMode.isOffline {
                 Button {
+                    haptic()
                     let missing = allSongs.filter { !downloadStore.isDownloaded(songId: $0.id) }
                     if !missing.isEmpty { downloadStore.enqueueSongs(missing) }
                     downloadStore.addOfflinePlaylist(entry.playlistId, songIds: allSongs.map(\.id))
@@ -305,6 +306,7 @@ struct RecapDetailView: View {
             }
             if isMarked {
                 Button {
+                    haptic()
                     for song in allSongs where downloadStore.isDownloaded(songId: song.id) {
                         downloadStore.deleteSong(song.id)
                     }

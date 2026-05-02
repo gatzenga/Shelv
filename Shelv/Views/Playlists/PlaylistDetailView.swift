@@ -94,14 +94,8 @@ struct PlaylistDetailView: View {
                         }
                         .buttonStyle(.plain)
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            Button(role: .destructive) {
-                                Task { await removeSong(at: index) }
-                            } label: {
-                                Image(systemName: "trash")
-                            }
-
                             Button {
-                                player.addToQueue(song)
+                                haptic(); player.addToQueue(song)
                                 currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
                             } label: {
                                 Image(systemName: "text.badge.plus")
@@ -109,18 +103,24 @@ struct PlaylistDetailView: View {
                             .tint(accentColor)
 
                             Button {
-                                player.addPlayNext(song)
+                                haptic(); player.addPlayNext(song)
                                 currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
                             } label: {
                                 Image(systemName: "text.insert")
                             }
                             .tint(.orange)
 
+                            Button(role: .destructive) {
+                                haptic(); Task { await removeSong(at: index) }
+                            } label: {
+                                Image(systemName: "trash")
+                            }
+                            .tint(.red)
                         }
                         .swipeActions(edge: .leading, allowsFullSwipe: false) {
                             if enableFavorites && !offlineMode.isOffline {
                                 Button {
-                                    Task { await libraryStore.toggleStarSong(song) }
+                                    haptic(.medium); Task { await libraryStore.toggleStarSong(song) }
                                 } label: {
                                     Image(systemName: libraryStore.isSongStarred(song) ? "heart.slash" : "heart.fill")
                                 }
@@ -133,7 +133,7 @@ struct PlaylistDetailView: View {
                                 } label: {
                                     Image(systemName: "music.note.list")
                                 }
-                                .tint(.purple)
+                                .tint(accentColor)
                             }
                         }
                     }
@@ -348,6 +348,7 @@ struct PlaylistDetailView: View {
         HStack(spacing: 10) {
             if !isMarked && !offlineMode.isOffline {
                 Button {
+                    haptic()
                     let missing = songs.filter { !downloadStore.isDownloaded(songId: $0.id) }
                     if !missing.isEmpty { downloadStore.enqueueSongs(missing) }
                     downloadStore.addOfflinePlaylist(playlist.id, songIds: songs.map(\.id))
@@ -365,6 +366,7 @@ struct PlaylistDetailView: View {
             }
             if isMarked {
                 Button {
+                    haptic()
                     for song in songs where downloadStore.isDownloaded(songId: song.id) {
                         downloadStore.deleteSong(song.id)
                     }

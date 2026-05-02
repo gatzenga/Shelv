@@ -68,19 +68,52 @@ struct SearchView: View {
                                         }
                                     }
                                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                        Button { queueArtist(artist) } label: { Image(systemName: "text.badge.plus") }
+                                        Button { haptic(); queueArtist(artist) } label: { Image(systemName: "text.badge.plus") }
                                             .tint(accentColor)
-                                        Button { playNextArtist(artist) } label: { Image(systemName: "text.insert") }
+                                        Button { haptic(); playNextArtist(artist) } label: { Image(systemName: "text.insert") }
                                             .tint(.orange)
+                                        if enableDownloads {
+                                            if downloadStore.artists.contains(where: { $0.name == artist.name }) {
+                                                Button {
+                                                    haptic()
+                                                    if let match = downloadStore.artists.first(where: { $0.name == artist.name }) {
+                                                        downloadStore.deleteArtist(match.artistId)
+                                                    }
+                                                } label: { DeleteDownloadIcon() }
+                                                .tint(.red)
+                                            } else if !offlineMode.isOffline {
+                                                Button {
+                                                    haptic()
+                                                    let sid = serverStore.activeServer?.stableId ?? ""
+                                                    Task { await DownloadService.shared.enqueueArtist(artist: artist, serverId: sid) }
+                                                } label: { Image(systemName: "arrow.down.circle") }
+                                                .tint(accentColor)
+                                            }
+                                        }
                                     }
                                     .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                                        if enableFavorites && !offlineMode.isOffline {
-                                            Button {
-                                                Task { await libraryStore.toggleStarArtist(artist) }
-                                            } label: {
-                                                Image(systemName: libraryStore.isArtistStarred(artist) ? "heart.slash" : "heart.fill")
+                                        if !offlineMode.isOffline {
+                                            if enableFavorites {
+                                                Button {
+                                                    haptic(.medium); Task { await libraryStore.toggleStarArtist(artist) }
+                                                } label: {
+                                                    Image(systemName: libraryStore.isArtistStarred(artist) ? "heart.slash" : "heart.fill")
+                                                }
+                                                .tint(.pink)
                                             }
-                                            .tint(.pink)
+                                            if enablePlaylists {
+                                                Button {
+                                                    Task {
+                                                        let songs = await libraryStore.fetchAllSongs(for: artist)
+                                                        guard !songs.isEmpty else { return }
+                                                        await MainActor.run {
+                                                            playlistSongIds = songs.map(\.id)
+                                                            showAddToPlaylist = true
+                                                        }
+                                                    }
+                                                } label: { Image(systemName: "music.note.list") }
+                                                .tint(accentColor)
+                                            }
                                         }
                                     }
                                 }
@@ -105,16 +138,16 @@ struct SearchView: View {
                                         }
                                     }
                                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                        Button { queueAlbum(album) } label: { Image(systemName: "text.badge.plus") }
+                                        Button { haptic(); queueAlbum(album) } label: { Image(systemName: "text.badge.plus") }
                                             .tint(accentColor)
-                                        Button { playNextAlbum(album) } label: { Image(systemName: "text.insert") }
+                                        Button { haptic(); playNextAlbum(album) } label: { Image(systemName: "text.insert") }
                                             .tint(.orange)
                                     }
                                     .swipeActions(edge: .leading, allowsFullSwipe: false) {
                                         if !offlineMode.isOffline {
                                             if enableFavorites {
                                                 Button {
-                                                    Task { await libraryStore.toggleStarAlbum(album) }
+                                                    haptic(.medium); Task { await libraryStore.toggleStarAlbum(album) }
                                                 } label: {
                                                     let starred = libraryStore.isAlbumStarred(album)
                                                     Image(systemName: starred ? "heart.slash" : "heart.fill")
@@ -123,7 +156,7 @@ struct SearchView: View {
                                             }
                                             if enablePlaylists {
                                                 Button { addAlbumToPlaylist(album) } label: { Image(systemName: "music.note.list") }
-                                                    .tint(.purple)
+                                                    .tint(accentColor)
                                             }
                                         }
                                     }
@@ -181,7 +214,7 @@ struct SearchView: View {
                                             Divider()
                                             if enableFavorites {
                                                 Button {
-                                                    Task { await libraryStore.toggleStarSong(song) }
+                                                    haptic(.medium); Task { await libraryStore.toggleStarSong(song) }
                                                 } label: {
                                                     Label(
                                                         libraryStore.isSongStarred(song)
@@ -203,24 +236,24 @@ struct SearchView: View {
                                     }
                                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                         Button {
-                                            player.addToQueue(song)
+                                            haptic(); player.addToQueue(song)
                                             currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
                                         } label: { Image(systemName: "text.badge.plus") }
                                         .tint(accentColor)
                                         Button {
-                                            player.addPlayNext(song)
+                                            haptic(); player.addPlayNext(song)
                                             currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
                                         } label: { Image(systemName: "text.insert") }
                                         .tint(.orange)
                                         if enableDownloads {
                                             if downloadStore.isDownloaded(songId: song.id) {
-                                                Button(role: .destructive) {
-                                                    downloadStore.deleteSong(song.id)
+                                                Button {
+                                                    haptic(); downloadStore.deleteSong(song.id)
                                                 } label: { DeleteDownloadIcon() }
                                                 .tint(.red)
                                             } else if !offlineMode.isOffline {
                                                 Button {
-                                                    downloadStore.enqueueSongs([song])
+                                                    haptic(); downloadStore.enqueueSongs([song])
                                                 } label: { Image(systemName: "arrow.down.circle") }
                                                 .tint(accentColor)
                                             }
@@ -229,7 +262,7 @@ struct SearchView: View {
                                     .swipeActions(edge: .leading, allowsFullSwipe: false) {
                                         if enableFavorites && !offlineMode.isOffline {
                                             Button {
-                                                Task { await libraryStore.toggleStarSong(song) }
+                                                haptic(.medium); Task { await libraryStore.toggleStarSong(song) }
                                             } label: {
                                                 Image(systemName: libraryStore.isSongStarred(song) ? "heart.slash" : "heart.fill")
                                             }
@@ -242,7 +275,7 @@ struct SearchView: View {
                                             } label: {
                                                 Image(systemName: "music.note.list")
                                             }
-                                            .tint(.purple)
+                                            .tint(accentColor)
                                         }
                                     }
                                 }
@@ -299,7 +332,7 @@ struct SearchView: View {
                                                 year: nil, genre: nil, playCount: nil,
                                                 starred: nil, suffix: nil, bitRate: nil
                                             )
-                                            player.addToQueue(song)
+                                            haptic(); player.addToQueue(song)
                                             currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
                                         } label: { Image(systemName: "text.badge.plus") }
                                         .tint(accentColor)
@@ -312,18 +345,19 @@ struct SearchView: View {
                                                 year: nil, genre: nil, playCount: nil,
                                                 starred: nil, suffix: nil, bitRate: nil
                                             )
-                                            player.addPlayNext(song)
+                                            haptic(); player.addPlayNext(song)
                                             currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
                                         } label: { Image(systemName: "text.insert") }
                                         .tint(.orange)
                                         if enableDownloads {
                                             if downloadStore.isDownloaded(songId: item.songId) {
-                                                Button(role: .destructive) {
-                                                    downloadStore.deleteSong(item.songId)
+                                                Button {
+                                                    haptic(); downloadStore.deleteSong(item.songId)
                                                 } label: { DeleteDownloadIcon() }
                                                 .tint(.red)
                                             } else if !offlineMode.isOffline {
                                                 Button {
+                                                    haptic()
                                                     let song = Song(
                                                         id: item.songId,
                                                         title: item.songTitle ?? item.songId,
@@ -349,7 +383,7 @@ struct SearchView: View {
                                                     year: nil, genre: nil, playCount: nil,
                                                     starred: nil, suffix: nil, bitRate: nil
                                                 )
-                                                Task { await libraryStore.toggleStarSong(song) }
+                                                haptic(.medium); Task { await libraryStore.toggleStarSong(song) }
                                             } label: {
                                                 let song = Song(
                                                     id: item.songId,
@@ -370,7 +404,7 @@ struct SearchView: View {
                                             } label: {
                                                 Image(systemName: "music.note.list")
                                             }
-                                            .tint(.purple)
+                                            .tint(accentColor)
                                         }
                                     }
                                 }

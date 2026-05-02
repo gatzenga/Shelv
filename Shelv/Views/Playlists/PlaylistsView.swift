@@ -66,7 +66,7 @@ struct PlaylistsView: View {
                                             if let loaded = await libraryStore.loadPlaylistDetail(id: playlist.id),
                                                let songs = loaded.songs, !songs.isEmpty {
                                                 await MainActor.run {
-                                                    player.addToQueue(songs)
+                                                    haptic(); player.addToQueue(songs)
                                                     currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
                                                 }
                                             }
@@ -78,7 +78,7 @@ struct PlaylistsView: View {
                                             if let loaded = await libraryStore.loadPlaylistDetail(id: playlist.id),
                                                let songs = loaded.songs, !songs.isEmpty {
                                                 await MainActor.run {
-                                                    player.addPlayNext(songs)
+                                                    haptic(); player.addPlayNext(songs)
                                                     currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
                                                 }
                                             }
@@ -96,6 +96,7 @@ struct PlaylistsView: View {
                                     } label: {
                                         Image(systemName: "trash")
                                     }
+                                    .tint(.red)
                                 }
                             }
                         }
@@ -278,11 +279,12 @@ struct PlaylistsView: View {
     private func playlistDownloadSwipe(_ playlist: Playlist) -> some View {
         if downloadStore.offlinePlaylistIds.contains(playlist.id) {
             Button(role: .destructive) {
-                deletePlaylistDownloads(playlist)
+                haptic(); deletePlaylistDownloads(playlist)
             } label: { DeleteDownloadIcon() }
             .tint(.red)
         } else if !offlineMode.isOffline {
             Button {
+                haptic()
                 Task {
                     if let loaded = await libraryStore.loadPlaylistDetail(id: playlist.id),
                        let songs = loaded.songs, !songs.isEmpty {
