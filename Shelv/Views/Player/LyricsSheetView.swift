@@ -30,15 +30,14 @@ struct LyricsSheetView: View {
         .navigationTitle(tr("Lyrics", "Lyrics"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.visible, for: .navigationBar)
-        .onAppear { rebuildLines() }
-        .task(id: player.currentSong?.id) {
-            guard let song = player.currentSong,
-                  let serverId = SubsonicAPIService.shared.activeServer?.id.uuidString else { return }
-            lyricsStore.loadLyrics(for: song, serverId: serverId)
+        .onAppear {
+            rebuildLines()
+            triggerLyricsLoad()
         }
         .onChange(of: player.currentSong?.id) { _, _ in
             activeLineIndex = nil
             parsedLines = []
+            triggerLyricsLoad()
         }
         .onChange(of: lyricsStore.currentLyrics?.songId) { _, _ in
             activeLineIndex = nil
@@ -190,6 +189,12 @@ struct LyricsSheetView: View {
     }
 
     // MARK: - Logic
+
+    private func triggerLyricsLoad() {
+        guard let song = player.currentSong,
+              let serverId = SubsonicAPIService.shared.activeServer?.id.uuidString else { return }
+        lyricsStore.loadLyrics(for: song, serverId: serverId)
+    }
 
     private func rebuildLines() {
         parsedLines = lyricsStore.currentLyrics?.syncedLrc.map(parseLRC) ?? []

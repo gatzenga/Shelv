@@ -130,6 +130,12 @@ struct SettingsView: View {
                         }
                     }
                     .tint(accentColor)
+                    Text(tr(
+                        "Gapless and transcoding are not fully compatible — a short gap between tracks is expected.",
+                        "Gapless und Transcoding sind nicht vollständig kompatibel – ein kurzer Übergang zwischen Titeln ist normal."
+                    ))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 }
 
                 Section(tr("Recap", "Recap")) {

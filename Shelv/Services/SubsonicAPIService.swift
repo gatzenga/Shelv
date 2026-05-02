@@ -568,13 +568,16 @@ class SubsonicAPIService: ObservableObject {
         return try decoder.decode(AuthResponse.self, from: data).id
     }
 
-    func streamURL(for songId: String) -> URL? {
+    func streamURL(for songId: String, timeOffset: Int = 0) -> URL? {
         var extras = [URLQueryItem(name: "id", value: songId)]
         if let fmt = TranscodingPolicy.currentStreamFormat() {
             extras.append(URLQueryItem(name: "format", value: fmt.codec.rawValue))
             extras.append(URLQueryItem(name: "maxBitRate", value: "\(fmt.bitrate)"))
         } else {
             extras.append(URLQueryItem(name: "format", value: "raw"))
+        }
+        if timeOffset > 0 {
+            extras.append(URLQueryItem(name: "timeOffset", value: "\(timeOffset)"))
         }
         return try? buildURL(path: "stream", extra: extras)
     }

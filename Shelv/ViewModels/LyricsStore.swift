@@ -33,10 +33,7 @@ class LyricsStore: ObservableObject {
         isLoadingLyrics = true
         loadTask = Task {
             let record = await LyricsService.shared.fetchAndSave(song: song, serverId: serverId)
-            guard !Task.isCancelled else {
-                isLoadingLyrics = false
-                return
-            }
+            guard !Task.isCancelled else { return }
             currentLyrics = record
             isLoadingLyrics = false
         }

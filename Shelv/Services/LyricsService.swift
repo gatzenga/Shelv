@@ -341,9 +341,11 @@ actor LyricsService {
         var data = Data()
         var http: HTTPURLResponse?
         for (attempt, delay) in backoffsMs.enumerated() {
+            if Task.isCancelled { return .indeterminate }
             if delay > 0 {
                 let jitter = UInt64.random(in: 0...250)
                 try? await Task.sleep(nanoseconds: (delay + jitter) * 1_000_000)
+                if Task.isCancelled { return .indeterminate }
             }
             do {
                 let (d, resp) = try await Self.lrcLibSession.data(for: req)
@@ -353,9 +355,9 @@ actor LyricsService {
                 if h.statusCode == 404 { return .notFound }
                 if h.statusCode == 200 { break }
                 // 429, 5xx → nächster Versuch
-                if attempt == backoffsMs.count - 1 { return .indeterminate }
+                if Task.isCancelled || attempt == backoffsMs.count - 1 { return .indeterminate }
             } catch {
-                if attempt == backoffsMs.count - 1 { return .indeterminate }
+                if Task.isCancelled || attempt == backoffsMs.count - 1 { return .indeterminate }
             }
         }
         guard http?.statusCode == 200 else { return .indeterminate }

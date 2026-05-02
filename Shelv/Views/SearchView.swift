@@ -142,6 +142,20 @@ struct SearchView: View {
                                             .tint(accentColor)
                                         Button { haptic(); playNextAlbum(album) } label: { Image(systemName: "text.insert") }
                                             .tint(.orange)
+                                        if enableDownloads {
+                                            if downloadStore.albums.contains(where: { $0.albumId == album.id }) {
+                                                Button {
+                                                    haptic(); downloadStore.deleteAlbum(album.id)
+                                                } label: { DeleteDownloadIcon() }
+                                                .tint(.red)
+                                            } else if !offlineMode.isOffline {
+                                                Button {
+                                                    haptic()
+                                                    Task { await DownloadService.shared.enqueueAlbum(album: album, serverId: serverStore.activeServer?.stableId ?? "") }
+                                                } label: { Image(systemName: "arrow.down.circle") }
+                                                .tint(accentColor)
+                                            }
+                                        }
                                     }
                                     .swipeActions(edge: .leading, allowsFullSwipe: false) {
                                         if !offlineMode.isOffline {

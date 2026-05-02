@@ -67,6 +67,8 @@ class AudioPlayerService: ObservableObject {
 
     private var formatProbeTask: Task<Void, Never>?
     private var playbackWatchdog: Task<Void, Never>?
+    private var currentStreamURL: URL?
+    private var streamTimeOffset: Double = 0
 
     var hasNextTrack: Bool {
         !playNextQueue.isEmpty ||
@@ -113,6 +115,7 @@ class AudioPlayerService: ObservableObject {
     }
 
     private init() {
+        _ = NetworkStatus.shared
         setupAudioSession()
         setupEngine()
         setupRemoteControls()
@@ -419,6 +422,8 @@ class AudioPlayerService: ObservableObject {
         guard let raw = SubsonicAPIService.shared.rawStreamURL(for: songId) else { return }
         playbackWatchdog?.cancel()
         let resumeAt = currentTime
+        currentStreamURL = raw
+        streamTimeOffset = 0
         isBuffering = true
         engine.play(url: raw)
         if resumeAt > 1 { engine.seek(to: resumeAt) }
@@ -456,42 +461,49 @@ class AudioPlayerService: ObservableObject {
     }
 
     private func startPlayback(song: Song, seekTo: Double = 0) {
-        guard let url = resolveURL(for: song) else {
-            if OfflineModeService.shared.isOffline {
-                NotificationCenter.default.post(name: .offlinePlaybackBlocked, object: nil)
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            await NetworkStatus.shared.waitUntilReady()
+
+            guard let url = self.resolveURL(for: song) else {
+                if OfflineModeService.shared.isOffline {
+                    NotificationCenter.default.post(name: .offlinePlaybackBlocked, object: nil)
+                }
+                return
             }
-            return
-        }
 
-        gaplessPreloadTriggered = false
-        gaplessPreloadSong = nil
-        gaplessPreloadURL = nil
-        currentSong = song
-        isBuffering = true
-        isSeeking = false
-        currentTime = 0
-        if let d = song.duration { duration = Double(d) }
-        probeStreamFormat(for: song, url: url)
-        schedulePlaybackWatchdog(for: song, url: url)
+            self.currentStreamURL = url
+            self.streamTimeOffset = 0
+            self.gaplessPreloadTriggered = false
+            self.gaplessPreloadSong = nil
+            self.gaplessPreloadURL = nil
+            self.currentSong = song
+            self.isBuffering = true
+            self.isSeeking = false
+            self.currentTime = 0
+            if let d = song.duration { self.duration = Double(d) }
+            self.probeStreamFormat(for: song, url: url)
+            self.schedulePlaybackWatchdog(for: song, url: url)
 
-        engine.play(url: url)
-        engine.trustedDuration = Double(song.duration ?? 0)
-        if seekTo > 0 { engine.seek(to: seekTo) }
-        isEngineLoaded = true
+            self.engine.play(url: url)
+            self.engine.trustedDuration = Double(song.duration ?? 0)
+            if seekTo > 0 { self.engine.seek(to: seekTo) }
+            self.isEngineLoaded = true
 
-        MPNowPlayingInfoCenter.default().playbackState = .playing
-        updateNowPlayingInfo(song: song)
-        let scrobbleSongId = song.id
-        let scrobbleServerId = SubsonicAPIService.shared.activeServer?.stableId ?? ""
-        let scrobbleAt = Date().timeIntervalSince1970
-        Task {
-            do {
-                try await SubsonicAPIService.shared.scrobble(songId: scrobbleSongId, playedAt: scrobbleAt)
-            } catch {
-                guard !scrobbleServerId.isEmpty else { return }
-                await PlayLogService.shared.addPendingScrobble(
-                    songId: scrobbleSongId, serverId: scrobbleServerId, playedAt: scrobbleAt
-                )
+            MPNowPlayingInfoCenter.default().playbackState = .playing
+            self.updateNowPlayingInfo(song: song)
+            let scrobbleSongId = song.id
+            let scrobbleServerId = SubsonicAPIService.shared.activeServer?.stableId ?? ""
+            let scrobbleAt = Date().timeIntervalSince1970
+            Task {
+                do {
+                    try await SubsonicAPIService.shared.scrobble(songId: scrobbleSongId, playedAt: scrobbleAt)
+                } catch {
+                    guard !scrobbleServerId.isEmpty else { return }
+                    await PlayLogService.shared.addPendingScrobble(
+                        songId: scrobbleSongId, serverId: scrobbleServerId, playedAt: scrobbleAt
+                    )
+                }
             }
         }
     }
@@ -503,6 +515,8 @@ class AudioPlayerService: ObservableObject {
         currentSong = nil
         currentTime = 0
         duration = 0
+        currentStreamURL = nil
+        streamTimeOffset = 0
         formatProbeTask?.cancel()
         playbackWatchdog?.cancel()
         actualStreamFormat = nil
@@ -668,12 +682,35 @@ class AudioPlayerService: ObservableObject {
     }
 
     func seek(to seconds: Double) {
-        currentTime = seconds
-        isSeeking = true
-        lastReportedNowPlayingTime = -1
-        updateNowPlayingTime(seconds)
-        engine.seek(to: seconds) { [weak self] _ in
-            Task { @MainActor [weak self] in self?.isSeeking = false }
+        let isTranscodedStream = currentStreamURL.map {
+            !$0.isFileURL && ($0.queryParam("format").map { $0 != "raw" } ?? false)
+        } ?? false
+
+        if isTranscodedStream, let song = currentSong {
+            let offset = Int(seconds)
+            guard let newURL = SubsonicAPIService.shared.streamURL(for: song.id, timeOffset: offset) else { return }
+            currentStreamURL = newURL
+            streamTimeOffset = Double(offset)
+            currentTime = seconds
+            lastReportedNowPlayingTime = -1
+            updateNowPlayingTime(seconds)
+            gaplessPreloadTriggered = false
+            gaplessPreloadSong = nil
+            gaplessPreloadURL = nil
+            isBuffering = true
+            schedulePlaybackWatchdog(for: song, url: newURL)
+            if let d = song.duration { duration = Double(d) }
+            engine.play(url: newURL)
+            engine.trustedDuration = Double(song.duration ?? 0)
+            isEngineLoaded = true
+        } else {
+            currentTime = seconds
+            isSeeking = true
+            lastReportedNowPlayingTime = -1
+            updateNowPlayingTime(seconds)
+            engine.seek(to: seconds) { [weak self] _ in
+                Task { @MainActor [weak self] in self?.isSeeking = false }
+            }
         }
     }
 
@@ -884,6 +921,8 @@ class AudioPlayerService: ObservableObject {
                 self.isSeeking = false
                 self.isEngineLoaded = true
                 self.isBuffering = false
+                self.streamTimeOffset = 0
+                self.currentStreamURL = url
                 if let d = song.duration { self.duration = Double(d) }
                 self.engine.trustedDuration = Double(song.duration ?? 0)
                 self.updateNowPlayingInfo(song: song)
@@ -918,10 +957,11 @@ class AudioPlayerService: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] time in
                 guard let self, self.isEngineLoaded, !self.isSeeking else { return }
-                self.currentTime = time
-                self.timePublisher.send((time: time, duration: self.duration))
-                self.updateNowPlayingTime(time)
-                self.checkGaplessTrigger(currentTime: time)
+                let adjusted = time + self.streamTimeOffset
+                self.currentTime = adjusted
+                self.timePublisher.send((time: adjusted, duration: self.duration))
+                self.updateNowPlayingTime(adjusted)
+                self.checkGaplessTrigger(currentTime: adjusted)
             }
             .store(in: &engineSubscriptions)
 
