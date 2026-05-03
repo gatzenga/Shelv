@@ -50,7 +50,6 @@ struct PlayerBarView: View {
                     .frame(width: 36, height: 36)
                     .background(accentColor)
                     .clipShape(Circle())
-                    .shadow(color: accentColor.opacity(0.35), radius: 6, y: 3)
             }
             .buttonStyle(.plain)
 

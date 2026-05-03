@@ -114,7 +114,7 @@ struct LyricsSheetView: View {
                     ForEach(Array(parsedLines.enumerated()), id: \.element.id) { index, line in
                         let isActive = activeLineIndex == index
                         Text(line.text)
-                            .font(isActive ? .body.weight(.semibold) : .body)
+                            .font(.body)
                             .foregroundStyle(isActive ? Color.primary : Color.secondary)
                             .padding(.vertical, 7)
                             .padding(.horizontal, 16)
@@ -171,7 +171,6 @@ struct LyricsSheetView: View {
                             .foregroundStyle(.white)
                     }
                 }
-                .shadow(color: accentColor.opacity(0.35), radius: 8, y: 4)
             }
             .buttonStyle(.plain)
 

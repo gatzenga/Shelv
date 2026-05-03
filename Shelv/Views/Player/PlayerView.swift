@@ -26,9 +26,10 @@ struct PlayerView: View {
     @State private var artistDestination: Artist?
     @State private var isResolvingArtist = false
     @State private var artistResolveTask: Task<Void, Never>?
-    // Amperfy-style: blurred artwork + dominant color gradient
-    @State private var playerBgColor: Color = Color(UIColor.systemBackground)
-    @State private var playerImage: UIImage?
+    @State private var rawPrimary: UIColor? = nil
+    @State private var rawSecondary: UIColor? = nil
+    @State private var playerBgPrimary: Color = Color(UIColor.systemBackground)
+    @State private var playerBgSecondary: Color = Color(UIColor.systemBackground)
 
     private var currentAlbum: Album? {
         guard let song = player.currentSong, let albumId = song.albumId else { return nil }
@@ -174,7 +175,6 @@ struct PlayerView: View {
                                 Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
                                     .font(.system(size: isPad ? 34 : 30)).foregroundStyle(.white)
                             }
-                            .shadow(color: accentColor.opacity(0.4), radius: 12, y: 6)
                         }
                         .buttonStyle(.plain)
 
@@ -241,22 +241,16 @@ struct PlayerView: View {
                 }
                 .frame(width: geo.size.width, height: geo.size.height)
                 .background {
-                    // Amperfy-Stil: stark geblurrtes Cover + Verlauf dominant→systemBackground
-                    ZStack {
-                        Color(UIColor.systemBackground)
-                        if let img = playerImage {
-                            Image(uiImage: img)
-                                .resizable()
-                                .scaledToFill()
-                                .blur(radius: 50, opaque: true)
-                        }
-                        LinearGradient(
-                            colors: [playerBgColor, Color(UIColor.systemBackground)],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                        .opacity(0.80)
-                    }
+                    LinearGradient(
+                        stops: [
+                            .init(color: playerBgPrimary, location: 0.0),
+                            .init(color: playerBgPrimary, location: 0.45),
+                            .init(color: playerBgSecondary, location: 0.75),
+                            .init(color: playerBgSecondary, location: 1.0)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
                     .ignoresSafeArea()
                 }
                 .ignoresSafeArea(edges: .bottom)
@@ -282,7 +276,6 @@ struct PlayerView: View {
                         .toolbarBackground(.visible, for: .navigationBar)
                 }
                 .onChange(of: player.currentSong?.id) { _, _ in
-                    artistDestination = nil
                     artistResolveTask?.cancel()
                     artistResolveTask = nil
                     isResolvingArtist = false
@@ -296,6 +289,11 @@ struct PlayerView: View {
                 }
                 .task(id: player.currentSong?.coverArt) {
                     await updatePlayerBackground()
+                }
+                .onChange(of: colorScheme) { _, _ in
+                    guard let raw = rawPrimary else { return }
+                    playerBgPrimary = adaptedColor(raw, asSecondary: false)
+                    playerBgSecondary = adaptedColor(rawSecondary ?? raw, asSecondary: true)
                 }
                 .onReceive(player.timePublisher) { update in
                     guard !isDragging, !player.isSeeking else { return }
@@ -332,9 +330,11 @@ struct PlayerView: View {
     private func updatePlayerBackground() async {
         guard let coverArtId = player.currentSong?.coverArt else {
             withAnimation(.easeInOut(duration: 0.5)) {
-                playerBgColor = Color(UIColor.systemBackground)
-                playerImage = nil
+                playerBgPrimary = Color(UIColor.systemBackground)
+                playerBgSecondary = Color(UIColor.systemBackground)
             }
+            rawPrimary = nil
+            rawSecondary = nil
             return
         }
 
@@ -351,10 +351,35 @@ struct PlayerView: View {
         }
 
         guard !Task.isCancelled, let image = resolved else { return }
-        let color = image.playerDominantColor()
+        let (primary, secondary) = image.extractPlayerPalette()
         guard !Task.isCancelled else { return }
-        withAnimation(.easeInOut(duration: 0.5)) { playerBgColor = color }
-        playerImage = image
+        rawPrimary = primary
+        rawSecondary = secondary
+        withAnimation(.easeInOut(duration: 0.6)) {
+            playerBgPrimary = adaptedColor(primary, asSecondary: false)
+            playerBgSecondary = adaptedColor(secondary ?? primary, asSecondary: true)
+        }
+    }
+
+    private func adaptedColor(_ uiColor: UIColor, asSecondary: Bool) -> Color {
+        var h: CGFloat = 0, s: CGFloat = 0, v: CGFloat = 0, a: CGFloat = 0
+        uiColor.getHue(&h, saturation: &s, brightness: &v, alpha: &a)
+        let factor: CGFloat = asSecondary ? 0.88 : 1.0
+        if colorScheme == .dark {
+            return Color(UIColor(
+                hue: h,
+                saturation: min(s * 1.2 * factor, 0.90),
+                brightness: min(max(v, 0.35) * 0.82, 0.72),
+                alpha: 1
+            ))
+        } else {
+            return Color(UIColor(
+                hue: h,
+                saturation: min(s * 0.82 * factor, 0.78),
+                brightness: min(v * 0.45 + 0.58, 0.96),
+                alpha: 1
+            ))
+        }
     }
 
     private func resolveArtist(_ artistName: String) {
@@ -406,31 +431,81 @@ struct AirPlayButton: UIViewRepresentable {
 }
 
 private extension UIImage {
-    // Extrahiert die dominante Farbe für den Player-Hintergrundverlauf (Amperfy-Stil)
-    func playerDominantColor() -> Color {
-        let size = CGSize(width: 16, height: 16)
+    func extractPlayerPalette() -> (UIColor, UIColor?) {
+        let side = 32
+        let size = CGSize(width: side, height: side)
         let renderer = UIGraphicsImageRenderer(size: size)
         let small = renderer.image { _ in draw(in: CGRect(origin: .zero, size: size)) }
-        guard let cgImage = small.cgImage else { return Color(UIColor.systemBackground) }
-        var pixels = [UInt8](repeating: 0, count: 16 * 16 * 4)
+        guard let cgImage = small.cgImage else { return (.systemGray, nil) }
+
+        var pixels = [UInt8](repeating: 0, count: side * side * 4)
         guard let ctx = CGContext(
-            data: &pixels, width: 16, height: 16,
-            bitsPerComponent: 8, bytesPerRow: 64,
+            data: &pixels, width: side, height: side,
+            bitsPerComponent: 8, bytesPerRow: side * 4,
             space: CGColorSpaceCreateDeviceRGB(),
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else { return Color(UIColor.systemBackground) }
-        ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: 16, height: 16))
-        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0
-        let n: CGFloat = 256
+        ) else { return (.systemGray, nil) }
+        ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: side, height: side))
+
+        // 12 Farbeimer à 30° Farbton
+        var rSum = [CGFloat](repeating: 0, count: 12)
+        var gSum = [CGFloat](repeating: 0, count: 12)
+        var bSum = [CGFloat](repeating: 0, count: 12)
+        var counts = [Int](repeating: 0, count: 12)
+        var totalR: CGFloat = 0, totalG: CGFloat = 0, totalB: CGFloat = 0
+
         for i in stride(from: 0, to: pixels.count, by: 4) {
-            r += CGFloat(pixels[i]) / 255
-            g += CGFloat(pixels[i + 1]) / 255
-            b += CGFloat(pixels[i + 2]) / 255
+            let r = CGFloat(pixels[i]) / 255
+            let g = CGFloat(pixels[i+1]) / 255
+            let b = CGFloat(pixels[i+2]) / 255
+            totalR += r; totalG += g; totalB += b
+
+            var h: CGFloat = 0, s: CGFloat = 0, v: CGFloat = 0, a: CGFloat = 0
+            UIColor(red: r, green: g, blue: b, alpha: 1).getHue(&h, saturation: &s, brightness: &v, alpha: &a)
+            guard s > 0.12, v > 0.08 else { continue }
+            let bucket = min(Int(h * 12), 11)
+            rSum[bucket] += r; gSum[bucket] += g; bSum[bucket] += b
+            counts[bucket] += 1
         }
-        let avg = UIColor(red: r / n, green: g / n, blue: b / n, alpha: 1)
-        var h: CGFloat = 0, s: CGFloat = 0, v: CGFloat = 0, a: CGFloat = 0
-        avg.getHue(&h, saturation: &s, brightness: &v, alpha: &a)
-        // Sättigung leicht boosten, Helligkeit fast original lassen — vivid wie bei Amperfy
-        return Color(UIColor(hue: h, saturation: min(s * 1.2, 1.0), brightness: min(v * 1.05, 1.0), alpha: 1))
+
+        let sorted = (0..<12).filter { counts[$0] > 0 }.sorted { counts[$0] > counts[$1] }
+
+        func avgColor(at idx: Int) -> UIColor {
+            let n = CGFloat(counts[idx])
+            return UIColor(red: rSum[idx]/n, green: gSum[idx]/n, blue: bSum[idx]/n, alpha: 1)
+        }
+
+        let primary: UIColor
+        if let first = sorted.first {
+            primary = avgColor(at: first)
+        } else {
+            let n = CGFloat(side * side)
+            primary = UIColor(red: totalR/n, green: totalG/n, blue: totalB/n, alpha: 1)
+        }
+
+        var secondary: UIColor? = nil
+        if let primaryIdx = sorted.first {
+            for candidateIdx in sorted.dropFirst() {
+                let diff = min(abs(candidateIdx - primaryIdx), 12 - abs(candidateIdx - primaryIdx))
+                if diff >= 2 {
+                    secondary = avgColor(at: candidateIdx)
+                    break
+                }
+            }
+        }
+
+        // Kein eigenständiger zweiter Farbton gefunden → dunkle Tonal-Variante der Primärfarbe
+        if secondary == nil {
+            var h: CGFloat = 0, s: CGFloat = 0, v: CGFloat = 0, a: CGFloat = 0
+            primary.getHue(&h, saturation: &s, brightness: &v, alpha: &a)
+            secondary = UIColor(
+                hue: h,
+                saturation: min(s * 0.8, 1.0),
+                brightness: max(v * 0.45, 0.10),
+                alpha: 1
+            )
+        }
+
+        return (primary, secondary)
     }
 }

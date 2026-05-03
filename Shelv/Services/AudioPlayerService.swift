@@ -1159,10 +1159,7 @@ class AudioPlayerService: ObservableObject {
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
     }
 
-    /// Spiegelt isShuffled / repeatMode auf MPRemoteCommandCenter, damit CarPlay die
-    /// System-Buttons (CPNowPlayingShuffleButton / CPNowPlayingRepeatButton) korrekt
-    /// aktiv/inaktiv rendert. Apple liest diese State-Werte vom RemoteCommandCenter,
-    /// nicht vom NowPlayingInfo.
+
     private func applyPlaybackModeToNowPlayingInfo() {
         let cc = MPRemoteCommandCenter.shared()
         cc.changeShuffleModeCommand.currentShuffleType = isShuffled ? .items : .off
