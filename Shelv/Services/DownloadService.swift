@@ -53,12 +53,22 @@ actor DownloadService {
 
     private let backgroundIdentifier = "ch.vkugler.Shelv.downloads"
     private let maxConcurrent = 3
+    private var effectiveMaxConcurrent: Int {
+        TranscodingPolicy.currentDownloadFormat() != nil ? 1 : maxConcurrent
+    }
     private let maxAttempts = 3
 
     private var pendingJobs: [DownloadJob] = []
     private var pendingJobKeys = Set<String>()
     private var inflightJobs: [Int: DownloadJob] = [:]   // taskIdentifier -> Job
     private var jobKeyByTask: [Int: String] = [:]         // taskIdentifier -> "serverId::songId"
+    // Markiert Keys, deren Completion bei `cancel` bereits aus `inflightJobs` entfernt wurde —
+    // verhindert dass eine `handleCompletion`, die an einem `await` suspendiert war, nach Resume
+    // doch noch Datei + DB-Record schreibt. Wird in `enqueue` beim Re-Queue gelöscht.
+    private var cancelledKeys = Set<String>()
+    // Songs die gerade in handleCompletion laufen (aus inflightJobs entfernt, aber noch nicht committed).
+    // jobSongIds prüft auch diese Map, damit deleteAlbum/deleteArtist auch in-completion Songs canceln kann.
+    private var inCompletionJobs: [String: DownloadJob] = [:]  // key -> Job
 
     nonisolated private let progressSubject = CurrentValueSubject<[String: Double], Never>([:])
     nonisolated private let stateSubject = PassthroughSubject<(key: String, state: DownloadState), Never>()
@@ -136,6 +146,9 @@ actor DownloadService {
             if downloadedIds.contains(song.id) { continue }
             if inflightJobs.values.contains(where: { Self.key(songId: $0.song.id, serverId: $0.serverId) == key }) { continue }
             if pendingJobKeys.contains(key) { continue }
+            // Stale Cancel-Marker beim Neu-Enqueue entfernen — sonst würde eine spätere
+            // Completion fälschlich als "cancelled" interpretiert.
+            cancelledKeys.remove(key)
             let transcoding = await TranscodingPolicy.currentDownloadFormat()
             guard let url = api.api.downloadURL(for: song.id, server: api.server, password: api.password,
                                                 transcoding: transcoding) else { continue }
@@ -226,6 +239,9 @@ actor DownloadService {
 
     func cancel(songId: String, serverId: String) {
         let key = Self.key(songId: songId, serverId: serverId)
+        // Markieren: falls eine `handleCompletion` parallel läuft und an einem await suspendiert ist,
+        // bricht sie nach Resume ab und räumt die geschriebene Datei wieder auf.
+        cancelledKeys.insert(key)
         let removedPending = pendingJobs.filter { Self.key(songId: $0.song.id, serverId: $0.serverId) == key }.count
         pendingJobs.removeAll { Self.key(songId: $0.song.id, serverId: $0.serverId) == key }
         if removedPending > 0 { pendingJobKeys.remove(key) }
@@ -264,6 +280,9 @@ actor DownloadService {
     }
 
     func deleteAlbum(albumId: String, serverId: String) async {
+        let queuedSongIds = jobSongIds(matching: { $0.albumId == albumId && $0.serverId == serverId })
+        for songId in queuedSongIds { cancel(songId: songId, serverId: serverId) }
+
         let records = await DownloadDatabase.shared.allRecords(serverId: serverId)
             .filter { $0.albumId == albumId }
         for r in records {
@@ -277,11 +296,20 @@ actor DownloadService {
     }
 
     func deleteArtist(artistId: String, serverId: String) async {
+        let isNameKey = artistId.hasPrefix("name:")
+        let lookupName = isNameKey ? String(artistId.dropFirst("name:".count)) : artistId
+
+        let queuedSongIds = jobSongIds(matching: { job in
+            guard job.serverId == serverId else { return false }
+            if isNameKey { return job.artistName == lookupName }
+            return job.artistId == artistId || job.artistName == lookupName
+        })
+        for songId in queuedSongIds { cancel(songId: songId, serverId: serverId) }
+
         let all = await DownloadDatabase.shared.allRecords(serverId: serverId)
         let records: [DownloadRecord]
-        if artistId.hasPrefix("name:") {
-            let name = String(artistId.dropFirst("name:".count))
-            records = all.filter { $0.artistName == name }
+        if isNameKey {
+            records = all.filter { $0.artistName == lookupName }
         } else {
             records = all.filter { $0.artistId == artistId || $0.artistName == artistId }
         }
@@ -295,6 +323,14 @@ actor DownloadService {
         }
     }
 
+    private func jobSongIds(matching predicate: (DownloadJob) -> Bool) -> [String] {
+        var ids: [String] = []
+        ids.append(contentsOf: pendingJobs.filter(predicate).map { $0.song.id })
+        ids.append(contentsOf: inflightJobs.values.filter(predicate).map { $0.song.id })
+        ids.append(contentsOf: inCompletionJobs.values.filter(predicate).map { $0.song.id })
+        return ids
+    }
+
     func cancelBatch() {
         let pendingKeys = pendingJobs.map { Self.key(songId: $0.song.id, serverId: $0.serverId) }
         pendingJobs.removeAll()
@@ -304,8 +340,10 @@ actor DownloadService {
             inflightJobs.removeValue(forKey: taskId)
             jobKeyByTask.removeValue(forKey: taskId)
         }
+        let completionKeys = Array(inCompletionJobs.keys)
+        for key in completionKeys { cancelledKeys.insert(key) }
         session?.getAllTasks { tasks in tasks.forEach { $0.cancel() } }
-        for key in pendingKeys + inflightKeys {
+        for key in pendingKeys + inflightKeys + completionKeys {
             publishProgress(key: key, value: nil)
             stateSubject.send((key, .none))
         }
@@ -480,22 +518,23 @@ actor DownloadService {
 
     private func startNextJobs() {
         guard let session else { return }
-        while inflightJobs.count < maxConcurrent, !pendingJobs.isEmpty {
+        while inflightJobs.count < effectiveMaxConcurrent, !pendingJobs.isEmpty {
             let job = pendingJobs.removeFirst()
             let jobKey = Self.key(songId: job.song.id, serverId: job.serverId)
             pendingJobKeys.remove(jobKey)
             let task = session.downloadTask(with: job.downloadURL)
             inflightJobs[task.taskIdentifier] = job
             jobKeyByTask[task.taskIdentifier] = jobKey
-            publishProgress(key: jobKey, value: 0)
-            stateSubject.send((jobKey, .downloading(progress: 0)))
+            let initialProgress: Double = job.requestedFormat != nil ? -1 : 0
+            publishProgress(key: jobKey, value: initialProgress)
+            stateSubject.send((jobKey, .downloading(progress: initialProgress)))
             task.resume()
         }
     }
 
     func handleProgress(taskIdentifier: Int, written: Int64, total: Int64) {
         guard let key = jobKeyByTask[taskIdentifier] else { return }
-        let p = total > 0 ? Double(written) / Double(total) : 0
+        let p = total > 0 ? Double(written) / Double(total) : -1
         publishProgress(key: key, value: p)
         stateSubject.send((key, .downloading(progress: p)))
     }
@@ -509,10 +548,23 @@ actor DownloadService {
         jobKeyByTask.removeValue(forKey: taskIdentifier)
 
         let key = Self.key(songId: job.song.id, serverId: job.serverId)
+        inCompletionJobs[key] = job
+        defer { inCompletionJobs.removeValue(forKey: key) }
+
         let serverDir = Self.serverDirectory(serverId: job.serverId)
         // Wenn der Server nicht das angeforderte Format liefert, mit korrekter Extension speichern.
         let actualExt = await TranscodingPolicy.extensionFor(mimeType: mimeType) ?? job.fileExtension
         let finalURL = serverDir.appendingPathComponent("\(job.song.id).\(actualExt)")
+
+        // Race-Window 1: User cancel-te zwischen erstem `await` und jetzt.
+        if cancelledKeys.contains(key) {
+            cancelledKeys.remove(key)
+            try? FileManager.default.removeItem(at: tempURL)
+            publishProgress(key: key, value: nil)
+            stateSubject.send((key, .none))
+            return
+        }
+
         do {
             try FileManager.default.createDirectory(at: serverDir, withIntermediateDirectories: true)
             if FileManager.default.fileExists(atPath: finalURL.path) {
@@ -527,6 +579,17 @@ actor DownloadService {
         }
 
         await downloadAssetsIfNeeded(for: job, audioPath: finalURL.path)
+
+        // Race-Window 2: User cancel-te während Cover/Asset-Download (await downloadAssetsIfNeeded).
+        // Datei liegt schon auf Disk → wieder löschen, KEIN DB-Record schreiben.
+        if cancelledKeys.contains(key) {
+            cancelledKeys.remove(key)
+            try? FileManager.default.removeItem(atPath: finalURL.path)
+            try? FileManager.default.removeItem(atPath: Self.coverPath(forFilePath: finalURL.path))
+            publishProgress(key: key, value: nil)
+            stateSubject.send((key, .none))
+            return
+        }
 
         let bytes = byteSize > 0 ? byteSize :
             (Int64((try? FileManager.default.attributesOfItem(atPath: finalURL.path)[.size] as? NSNumber)?.int64Value ?? 0))
@@ -553,9 +616,33 @@ actor DownloadService {
             addedAt: Date().timeIntervalSince1970
         )
         await DownloadDatabase.shared.upsert(record)
+
+        // Race-Window 3: Cancel landete während `await upsert` — DB-Row wieder löschen + Datei weg.
+        if cancelledKeys.contains(key) {
+            cancelledKeys.remove(key)
+            try? FileManager.default.removeItem(atPath: finalURL.path)
+            try? FileManager.default.removeItem(atPath: Self.coverPath(forFilePath: finalURL.path))
+            await DownloadDatabase.shared.delete(songId: job.song.id, serverId: job.serverId)
+            publishProgress(key: key, value: nil)
+            stateSubject.send((key, .none))
+            return
+        }
+
         publishProgress(key: key, value: nil)
         stateSubject.send((key, .completed))
         await DownloadStore.shared.insertRecord(record)
+
+        // Race-Window 4: Cancel landete während `await insertRecord` — komplett zurückrollen.
+        if cancelledKeys.contains(key) {
+            cancelledKeys.remove(key)
+            try? FileManager.default.removeItem(atPath: finalURL.path)
+            try? FileManager.default.removeItem(atPath: Self.coverPath(forFilePath: finalURL.path))
+            await DownloadDatabase.shared.delete(songId: job.song.id, serverId: job.serverId)
+            await DownloadStore.shared.removeRecord(songId: job.song.id)
+            stateSubject.send((key, .none))
+            return
+        }
+
         incrementBatchCompleted()
         startNextJobs()
     }

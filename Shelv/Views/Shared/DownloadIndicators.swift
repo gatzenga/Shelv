@@ -5,6 +5,7 @@ struct DownloadStatusIcon: View {
     let songId: String
     @ObservedObject private var downloadStore = DownloadStore.shared
     @State private var progressTick = 0
+    @State private var isSpinning = false
     @AppStorage("themeColor") private var themeColorName = "violet"
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
@@ -20,8 +21,17 @@ struct DownloadStatusIcon: View {
                     .controlSize(.mini)
                     .tint(.secondary)
             case .downloading(let progress):
-                DownloadProgressRing(progress: progress, accent: accentColor)
-                    .frame(width: 14, height: 14)
+                if progress < 0 {
+                    DownloadProgressRing(progress: 0.2, accent: accentColor)
+                        .frame(width: 14, height: 14)
+                        .rotationEffect(.degrees(isSpinning ? 360 : 0))
+                        .animation(.linear(duration: 1).repeatForever(autoreverses: false), value: isSpinning)
+                        .onAppear { isSpinning = true }
+                        .onDisappear { isSpinning = false }
+                } else {
+                    DownloadProgressRing(progress: progress, accent: accentColor)
+                        .frame(width: 14, height: 14)
+                }
             case .completed:
                 Image(systemName: "checkmark.circle.fill")
                     .font(.caption)

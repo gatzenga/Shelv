@@ -66,8 +66,9 @@ struct AlbumArtView: View {
             uiImage = cached; loading = false; return
         }
 
-        uiImage = nil
-        loading = true
+        // Stale-while-revalidate: altes Bild bleibt sichtbar während neues lädt.
+        // Spinner nur wenn noch kein Bild vorhanden ist.
+        if uiImage == nil { loading = true }
 
         if let localPath = LocalArtworkIndex.shared.localPath(for: id) {
             let loaded: UIImage? = await Task.detached(priority: .medium) {
@@ -80,7 +81,9 @@ struct AlbumArtView: View {
         }
 
         if UserDefaults.standard.bool(forKey: "offlineModeEnabled") {
-            uiImage = await ImageCacheService.shared.diskOnlyImage(key: key)
+            if let img = await ImageCacheService.shared.diskOnlyImage(key: key) {
+                uiImage = img
+            }
             loading = false
             return
         }

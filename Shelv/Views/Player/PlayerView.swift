@@ -138,10 +138,18 @@ struct PlayerView: View {
                                 .font(.caption2).foregroundStyle(.secondary).monospacedDigit()
                         }
 
-                        if let badge = audioBadge {
-                            Text(badge)
-                                .font(.caption2).foregroundStyle(.tertiary).padding(.top, 2)
+                        HStack(spacing: 4) {
+                            if player.showBufferingIndicator {
+                                ProgressView()
+                                    .scaleEffect(0.65)
+                                    .tint(.secondary)
+                                    .frame(width: 12, height: 12)
+                            }
+                            Text(player.showBufferingIndicator ? tr("Loading…", "Lädt…") : (audioBadge ?? ""))
                         }
+                        .font(.caption2).foregroundStyle(.tertiary)
+                        .frame(height: 14)
+                        .padding(.top, 2)
                     }
                     .padding(.horizontal, isPad ? 48 : 32)
                     .padding(.bottom, vPad(h, large: 24, small: 32))
@@ -163,12 +171,8 @@ struct PlayerView: View {
                         Button { player.togglePlayPause() } label: {
                             ZStack {
                                 Circle().fill(accentColor).frame(width: play, height: play)
-                                if player.isBuffering {
-                                    ProgressView().tint(.white).scaleEffect(1.2)
-                                } else {
-                                    Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                                        .font(.system(size: isPad ? 34 : 30)).foregroundStyle(.white)
-                                }
+                                Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                                    .font(.system(size: isPad ? 34 : 30)).foregroundStyle(.white)
                             }
                             .shadow(color: accentColor.opacity(0.4), radius: 12, y: 6)
                         }
@@ -373,12 +377,7 @@ struct PlayerView: View {
     }
 
     private var audioBadge: String? {
-        if let actual = player.actualStreamFormat { return actual.displayString }
-        guard let song = player.currentSong else { return nil }
-        var parts: [String] = []
-        if let suffix = song.suffix { parts.append(suffix.uppercased()) }
-        if let bitRate = song.bitRate { parts.append("\(bitRate) kbps") }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+        player.actualStreamFormat?.displayString
     }
 
     private func formatTime(_ seconds: Double) -> String {

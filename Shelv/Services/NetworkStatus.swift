@@ -33,6 +33,27 @@ final class NetworkStatus {
         }
     }
 
+    // Synchroner Path-Sync, damit ein anderer Pfad-Monitor (z.B. AudioPlayerService.networkMonitor)
+    // den Stand vor dem ersten Read garantieren kann. Verhindert dass z.B. die TranscodingPolicy
+    // direkt nach WLAN-Reconnect noch den alten "kein WLAN"-Wert liest.
+    func update(from path: NWPath) {
+        let wifi = path.usesInterfaceType(.wifi) || path.usesInterfaceType(.wiredEthernet)
+        let any = path.status == .satisfied
+        lock.lock()
+        _isOnWifi = wifi
+        _hasNetwork = any
+        let continuations: [CheckedContinuation<Void, Never>]
+        if !_isReady {
+            _isReady = true
+            continuations = _readyContinuations
+            _readyContinuations = []
+        } else {
+            continuations = []
+        }
+        lock.unlock()
+        continuations.forEach { $0.resume() }
+    }
+
     private init() {
         monitor.pathUpdateHandler = { [weak self] path in
             guard let self else { return }

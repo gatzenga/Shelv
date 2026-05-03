@@ -306,7 +306,7 @@ struct PlaylistsView: View {
         Task {
             if let loaded = await libraryStore.loadPlaylistDetail(id: playlistId),
                let songs = loaded.songs {
-                for song in songs where downloadStore.isDownloaded(songId: song.id) {
+                for song in songs {
                     downloadStore.deleteSong(song.id)
                 }
             }

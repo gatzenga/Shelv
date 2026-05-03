@@ -367,7 +367,7 @@ struct PlaylistDetailView: View {
             if isMarked {
                 Button {
                     haptic()
-                    for song in songs where downloadStore.isDownloaded(songId: song.id) {
+                    for song in songs {
                         downloadStore.deleteSong(song.id)
                     }
                     downloadStore.removeOfflinePlaylist(playlist.id)

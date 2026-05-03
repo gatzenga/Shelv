@@ -33,6 +33,7 @@ class AudioPlayerService: ObservableObject {
 
     @Published var isPlaying: Bool = false
     @Published var isBuffering: Bool = false
+    @Published var showBufferingIndicator: Bool = false
     @Published var isNetworkAvailable: Bool = true
     @Published var currentSong: Song?
     @Published var queue: [Song] = []
@@ -64,11 +65,14 @@ class AudioPlayerService: ObservableObject {
     }
 
     @Published var actualStreamFormat: ActualStreamFormat?
+    @Published var artworkReloadToken: UUID = UUID()
 
     private var formatProbeTask: Task<Void, Never>?
     private var playbackWatchdog: Task<Void, Never>?
     private var currentStreamURL: URL?
     private var streamTimeOffset: Double = 0
+    private var networkResumeSong: Song?
+    private var networkResumeTime: Double = 0
 
     var hasNextTrack: Bool {
         !playNextQueue.isEmpty ||
@@ -87,6 +91,8 @@ class AudioPlayerService: ObservableObject {
 
     private let engine = PlayerEngine()
     private var engineSubscriptions = Set<AnyCancellable>()
+    private var bufferingShowTask: Task<Void, Never>?
+    private var lastArtworkCoverArt: String? = nil
     @AppStorage("gaplessEnabled") private var gaplessEnabled = false
     private var gaplessPreloadTriggered = false
     private var gaplessPreloadSong: Song? = nil
@@ -137,8 +143,21 @@ class AudioPlayerService: ObservableObject {
 
     private func setupNetworkMonitor() {
         networkMonitor.pathUpdateHandler = { [weak self] path in
+            // Synchroner Sync zu NetworkStatus.shared, damit ein anschliessender startPlayback
+            // (der die TranscodingPolicy → isOnWifi liest) den korrekten Wert sieht — auch wenn
+            // der NetworkStatus-Monitor seinen eigenen Update noch nicht prozessiert hat.
+            NetworkStatus.shared.update(from: path)
             let isAvailable = path.status == .satisfied
-            Task { @MainActor [weak self] in self?.isNetworkAvailable = isAvailable }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.isNetworkAvailable = isAvailable
+                if isAvailable, let song = self.networkResumeSong {
+                    self.networkResumeSong = nil
+                    let t = self.networkResumeTime
+                    self.networkResumeTime = 0
+                    self.startPlayback(song: song, seekTo: t)
+                }
+            }
         }
         networkMonitor.start(queue: networkMonitorQueue)
     }
@@ -255,6 +274,14 @@ class AudioPlayerService: ObservableObject {
                 if let optionsRaw = info[AVAudioSessionInterruptionOptionKey] as? UInt {
                     let options = AVAudioSession.InterruptionOptions(rawValue: optionsRaw)
                     if options.contains(.shouldResume), self.currentSong != nil {
+                        // Audio-Session vor Resume reaktivieren — iOS deaktiviert sie bei Interruption
+                        // (z.B. Anruf), und ohne explizites setActive(true) bleibt der Player lautlos
+                        // obwohl er "spielt".
+                        do {
+                            try AVAudioSession.sharedInstance().setActive(true)
+                        } catch {
+                            print("[AudioSession] Reaktivierung nach Interruption fehlgeschlagen: \(error)")
+                        }
                         self.resume()
                     }
                 }
@@ -463,6 +490,8 @@ class AudioPlayerService: ObservableObject {
     private func startPlayback(song: Song, seekTo: Double = 0) {
         Task { @MainActor [weak self] in
             guard let self else { return }
+            self.networkResumeSong = nil
+            self.isEngineLoaded = false
             await NetworkStatus.shared.waitUntilReady()
 
             guard let url = self.resolveURL(for: song) else {
@@ -477,14 +506,22 @@ class AudioPlayerService: ObservableObject {
             self.gaplessPreloadTriggered = false
             self.gaplessPreloadSong = nil
             self.gaplessPreloadURL = nil
+            self.formatProbeTask?.cancel()
+            self.actualStreamFormat = nil
             self.currentSong = song
             self.isBuffering = true
             self.isSeeking = false
             self.currentTime = 0
             if let d = song.duration { self.duration = Double(d) }
+            self.timePublisher.send((time: 0, duration: self.duration))
             self.probeStreamFormat(for: song, url: url)
             self.schedulePlaybackWatchdog(for: song, url: url)
 
+            self.isPlaying = true
+            if song.coverArt != self.lastArtworkCoverArt {
+                self.artworkReloadToken = UUID()
+                self.lastArtworkCoverArt = song.coverArt
+            }
             self.engine.play(url: url)
             self.engine.trustedDuration = Double(song.duration ?? 0)
             if seekTo > 0 { self.engine.seek(to: seekTo) }
@@ -517,6 +554,8 @@ class AudioPlayerService: ObservableObject {
         duration = 0
         currentStreamURL = nil
         streamTimeOffset = 0
+        networkResumeSong = nil
+        networkResumeTime = 0
         formatProbeTask?.cancel()
         playbackWatchdog?.cancel()
         actualStreamFormat = nil
@@ -531,9 +570,11 @@ class AudioPlayerService: ObservableObject {
     }
 
     func pause() {
+        networkResumeSong = nil
         MPNowPlayingInfoCenter.default().playbackState = .paused
         engine.pause()
         isPlaying = false
+        isBuffering = false
         updateNowPlayingPlaybackRate(0)
         saveState()
     }
@@ -708,7 +749,14 @@ class AudioPlayerService: ObservableObject {
             isSeeking = true
             lastReportedNowPlayingTime = -1
             updateNowPlayingTime(seconds)
-            engine.seek(to: seconds) { [weak self] _ in
+            // loadedTimeRanges fragen: ist die Zielposition im Buffer? Wenn nicht UND der Player
+            // gerade spielt → aktiv pausieren und auf isPlaybackLikelyToKeepUp warten. Wenn der
+            // User schon pausiert hat, NICHT pause-and-resume, sonst springt der Player gegen
+            // seinen Wunsch wieder an.
+            let buffered = engine.isPositionBuffered(seconds)
+            let shouldPauseAndWait = !buffered && self.isPlaying
+            if shouldPauseAndWait { isBuffering = true }
+            engine.seek(to: seconds, pauseUntilBuffered: shouldPauseAndWait) { [weak self] _ in
                 Task { @MainActor [weak self] in self?.isSeeking = false }
             }
         }
@@ -979,10 +1027,44 @@ class AudioPlayerService: ObservableObject {
             .sink { [weak self] playing in
                 guard let self else { return }
                 if playing {
-                    self.isBuffering = false
                     self.playbackWatchdog?.cancel()
                 }
-                self.isPlaying = playing
+            }
+            .store(in: &engineSubscriptions)
+
+        engine.$isWaiting
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] waiting in
+                guard let self, self.isEngineLoaded, self.isPlaying else { return }
+                self.isBuffering = waiting
+            }
+            .store(in: &engineSubscriptions)
+
+        engine.onPlaybackFailed = { [weak self] in
+            guard let self else { return }
+            self.isEngineLoaded = false
+            guard self.isPlaying else { return }
+            self.networkResumeSong = self.currentSong
+            self.networkResumeTime = self.currentTime
+            self.resumeTime = self.currentTime
+            self.isBuffering = true
+        }
+
+        $isBuffering
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] isBuf in
+                guard let self else { return }
+                self.bufferingShowTask?.cancel()
+                if isBuf {
+                    self.bufferingShowTask = Task { @MainActor [weak self] in
+                        try? await Task.sleep(for: .seconds(1))
+                        guard !Task.isCancelled, let self, self.isBuffering else { return }
+                        self.showBufferingIndicator = true
+                    }
+                } else {
+                    self.showBufferingIndicator = false
+                }
             }
             .store(in: &engineSubscriptions)
     }

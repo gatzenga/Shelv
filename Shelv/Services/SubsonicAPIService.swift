@@ -601,8 +601,7 @@ class SubsonicAPIService: ObservableObject {
             return try? buildURL(for: server, password: password, path: "stream", extra: [
                 URLQueryItem(name: "id", value: songId),
                 URLQueryItem(name: "format", value: t.codec.rawValue),
-                URLQueryItem(name: "maxBitRate", value: "\(t.bitrate)"),
-                URLQueryItem(name: "estimateContentLength", value: "true")
+                URLQueryItem(name: "maxBitRate", value: "\(t.bitrate)")
             ])
         }
         return try? buildURL(for: server, password: password, path: "download", extra: [

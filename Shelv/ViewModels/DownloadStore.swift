@@ -49,8 +49,10 @@ final class DownloadStore: ObservableObject {
                     if case .downloading = update.state { isDl = true } else { isDl = false }
                     if case .none = update.state {
                         self.inFlightStates.removeValue(forKey: update.key)
+                        self.inFlightProgress.removeValue(forKey: update.key)
                     } else if case .completed = update.state {
                         self.inFlightStates.removeValue(forKey: update.key)
+                        self.inFlightProgress.removeValue(forKey: update.key)
                     } else {
                         self.inFlightStates[update.key] = update.state
                     }
@@ -343,6 +345,11 @@ final class DownloadStore: ObservableObject {
 
     func removeRecord(songId: String) {
         if isLoading { pendingReload = true; return }
+        // Song könnte noch im 800ms-Debounce-Buffer stecken (nach insertRecord, vor flushPendingInserts).
+        // Hier rausnehmen, sonst erscheint er nach dem Flush doch noch in der UI.
+        pendingInserts.removeAll { $0.songId == songId }
+        // LocalDownloadIndex wird in insertRecord sofort (vor dem Debounce) gesetzt — direkt löschen.
+        LocalDownloadIndex.shared.setPath(songId: songId, serverId: serverId, path: nil)
         guard let song = songById[songId] else { return }
         let albumId = song.albumId
         let albumArtist = albums.first(where: { $0.albumId == albumId })?.artistName ?? song.artistName

@@ -10,18 +10,9 @@ struct PlayerBarView: View {
             AlbumArtView(coverArtId: player.currentSong?.coverArt, size: 100, cornerRadius: 10)
                 .frame(width: 50, height: 50)
                 .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
-                .overlay(alignment: .bottomTrailing) {
-                    if player.isBuffering || player.isPlaying || !player.isNetworkAvailable {
-                        Circle()
-                            .fill(!player.isNetworkAvailable ? Color.red : player.isBuffering ? Color.orange : Color.green)
-                            .frame(width: 11, height: 11)
-                            .overlay(Circle().stroke(Color(UIColor.systemBackground), lineWidth: 2))
-                            .offset(x: 3, y: 3)
-                    }
-                }
 
             VStack(alignment: .leading, spacing: 2) {
-                if player.isBuffering {
+                if player.showBufferingIndicator {
                     Text(tr("Connecting...", "Verbinde..."))
                         .font(.subheadline).bold()
                         .foregroundStyle(.orange)
