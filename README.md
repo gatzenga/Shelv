@@ -181,7 +181,7 @@ See [LICENSE](LICENSE) for details.
 <table>
   <tr>
     <td><img src="Screenshots_iPhone/artists.png" width="220"/></td>
-    <td><img src="Screenshots_iPhone/favourites.png" width="220"/></td>
+    <td><img src="Screenshots_iPhone/favorites.png" width="220"/></td>
     <td><img src="Screenshots_iPhone/playlists.png" width="220"/></td>
   </tr>
 </table>
