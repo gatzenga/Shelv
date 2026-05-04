@@ -502,6 +502,9 @@ class AudioPlayerService: ObservableObject {
             }
             await NetworkStatus.shared.waitUntilReady()
 
+            // Guard: Song kann während waitUntilReady gewechselt haben
+            guard self.currentSong == nil || self.currentSong?.id == song.id else { return }
+
             guard let url = self.resolveURL(for: song) else {
                 if OfflineModeService.shared.isOffline {
                     NotificationCenter.default.post(name: .offlinePlaybackBlocked, object: nil)
@@ -544,8 +547,10 @@ class AudioPlayerService: ObservableObject {
                     bitrate: fmt.bitrate
                 )
                 // Polling bis Datei da ist (alle 200ms, max 60s)
+                // repeat…while: erst schlafen, dann prüfen — Download hat gerade erst gestartet
                 let deadline = Date().addingTimeInterval(60)
-                while Date() < deadline {
+                repeat {
+                    try? await Task.sleep(nanoseconds: 200_000_000)
                     guard self.currentSong?.id == songId else { return } // Song wurde gewechselt
                     if let local = await StreamCacheService.shared.localURL(for: songId) {
                         self.currentStreamURL = local
@@ -555,19 +560,16 @@ class AudioPlayerService: ObservableObject {
                         self.isEngineLoaded = true
                         break
                     }
-                    try? await Task.sleep(nanoseconds: 200_000_000)
-                }
+                } while Date() < deadline
                 // Timeout-Fallback: Raw-Stream versuchen
-                if self.currentSong?.id == songId, !self.isEngineLoaded {
-                    if let rawURL = SubsonicAPIService.shared.rawStreamURL(for: songId),
-                       self.currentSong?.id == songId {
-                        self.currentStreamURL = rawURL
-                        self.probeStreamFormat(for: song, url: rawURL)
-                        self.engine.play(url: rawURL)
-                        self.engine.trustedDuration = Double(song.duration ?? 0)
-                        if seekTo > 0 { self.engine.seek(to: seekTo) }
-                        self.isEngineLoaded = true
-                    }
+                if self.currentSong?.id == songId, !self.isEngineLoaded,
+                   let rawURL = SubsonicAPIService.shared.rawStreamURL(for: songId) {
+                    self.currentStreamURL = rawURL
+                    self.probeStreamFormat(for: song, url: rawURL)
+                    self.engine.play(url: rawURL)
+                    self.engine.trustedDuration = Double(song.duration ?? 0)
+                    if seekTo > 0 { self.engine.seek(to: seekTo) }
+                    self.isEngineLoaded = true
                 }
             } else {
                 // Raw-Stream oder lokale Datei → wie bisher
