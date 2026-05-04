@@ -68,7 +68,6 @@ class AudioPlayerService: ObservableObject {
     @Published var artworkReloadToken: UUID = UUID()
 
     private var formatProbeTask: Task<Void, Never>?
-    private var playbackWatchdog: Task<Void, Never>?
     private var currentStreamURL: URL?
     private var streamTimeOffset: Double = 0
     private var networkResumeSong: Song?
@@ -403,28 +402,14 @@ class AudioPlayerService: ObservableObject {
         }
         actualStreamFormat = nil
         let songDuration = Double(song.duration ?? 0)
-        let songId = song.id
-        let isTranscoded = url.queryParam("format").map { $0 != "raw" } ?? false
         formatProbeTask = Task { [weak self] in
-            var probeURL = url
-            if isTranscoded,
-               var components = URLComponents(url: url, resolvingAgainstBaseURL: false) {
-                var items = components.queryItems ?? []
-                items.append(URLQueryItem(name: "estimateContentLength", value: "true"))
-                components.queryItems = items
-                probeURL = components.url ?? url
-            }
-            var req = URLRequest(url: probeURL)
+            var req = URLRequest(url: url)
             req.httpMethod = "HEAD"
             req.timeoutInterval = 8
             do {
                 let (_, response) = try await URLSession.shared.data(for: req)
                 guard !Task.isCancelled, let http = response as? HTTPURLResponse else { return }
-                if http.statusCode != 200, isTranscoded {
-                    print("[Transcoding] HEAD status \(http.statusCode) → fallback to raw")
-                    await MainActor.run { self?.fallbackToRawStream(songId: songId) }
-                    return
-                }
+                if http.statusCode != 200 { return }
                 let codec = ActualStreamFormat.codecLabel(forMime: http.mimeType)
                 let length = http.expectedContentLength
                 var bitrate: Int? = nil
@@ -436,43 +421,7 @@ class AudioPlayerService: ObservableObject {
                 }
             } catch {
                 guard !Task.isCancelled else { return }
-                if isTranscoded {
-                    print("[Transcoding] HEAD failed (\(error.localizedDescription)) → fallback to raw")
-                    await MainActor.run { self?.fallbackToRawStream(songId: songId) }
-                }
-            }
-        }
-    }
-
-    private func fallbackToRawStream(songId: String) {
-        guard let song = currentSong, song.id == songId else { return }
-        guard let raw = SubsonicAPIService.shared.rawStreamURL(for: songId) else { return }
-        playbackWatchdog?.cancel()
-        let resumeAt = currentTime
-        currentStreamURL = raw
-        streamTimeOffset = 0
-        isBuffering = true
-        engine.play(url: raw)
-        if resumeAt > 1 { engine.seek(to: resumeAt) }
-        isEngineLoaded = true
-        probeStreamFormat(for: song, url: raw)
-    }
-
-    /// Wenn AVPlayer nach 5s den Transcoded-Stream nicht abspielt, fallback auf raw.
-    /// Geprüft wird isPlaying UND currentTime — manche Player-Status-Reports sind unzuverlässig.
-    private func schedulePlaybackWatchdog(for song: Song, url: URL) {
-        playbackWatchdog?.cancel()
-        guard let fmt = url.queryParam("format"), fmt != "raw" else { return }
-        let songId = song.id
-        playbackWatchdog = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 5_000_000_000)
-            guard !Task.isCancelled else { return }
-            await MainActor.run {
-                guard let self, self.currentSong?.id == songId else { return }
-                let stuck = !self.isPlaying || self.currentTime < 0.1
-                guard stuck else { return }
-                print("[Transcoding] Playback watchdog timeout (isPlaying=\(self.isPlaying) currentTime=\(self.currentTime)) → fallback to raw")
-                self.fallbackToRawStream(songId: songId)
+                print("[StreamFormat] HEAD failed: \(error.localizedDescription)")
             }
         }
     }
@@ -610,7 +559,6 @@ class AudioPlayerService: ObservableObject {
         networkResumeSong = nil
         networkResumeTime = 0
         formatProbeTask?.cancel()
-        playbackWatchdog?.cancel()
         actualStreamFormat = nil
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
     }
@@ -776,42 +724,19 @@ class AudioPlayerService: ObservableObject {
     }
 
     func seek(to seconds: Double) {
-        let isTranscodedStream = currentStreamURL.map {
-            !$0.isFileURL && ($0.queryParam("format").map { $0 != "raw" } ?? false)
-        } ?? false
-
-        if isTranscodedStream, let song = currentSong {
-            let offset = Int(seconds)
-            guard let newURL = SubsonicAPIService.shared.streamURL(for: song.id, timeOffset: offset) else { return }
-            currentStreamURL = newURL
-            streamTimeOffset = Double(offset)
-            currentTime = seconds
-            lastReportedNowPlayingTime = -1
-            updateNowPlayingTime(seconds)
-            gaplessPreloadTriggered = false
-            gaplessPreloadSong = nil
-            gaplessPreloadURL = nil
-            isBuffering = true
-            schedulePlaybackWatchdog(for: song, url: newURL)
-            if let d = song.duration { duration = Double(d) }
-            engine.play(url: newURL)
-            engine.trustedDuration = Double(song.duration ?? 0)
-            isEngineLoaded = true
-        } else {
-            currentTime = seconds
-            isSeeking = true
-            lastReportedNowPlayingTime = -1
-            updateNowPlayingTime(seconds)
-            // loadedTimeRanges fragen: ist die Zielposition im Buffer? Wenn nicht UND der Player
-            // gerade spielt → aktiv pausieren und auf isPlaybackLikelyToKeepUp warten. Wenn der
-            // User schon pausiert hat, NICHT pause-and-resume, sonst springt der Player gegen
-            // seinen Wunsch wieder an.
-            let buffered = engine.isPositionBuffered(seconds)
-            let shouldPauseAndWait = !buffered && self.isPlaying
-            if shouldPauseAndWait { isBuffering = true }
-            engine.seek(to: seconds, pauseUntilBuffered: shouldPauseAndWait) { [weak self] _ in
-                Task { @MainActor [weak self] in self?.isSeeking = false }
-            }
+        currentTime = seconds
+        isSeeking = true
+        lastReportedNowPlayingTime = -1
+        updateNowPlayingTime(seconds)
+        // loadedTimeRanges fragen: ist die Zielposition im Buffer? Wenn nicht UND der Player
+        // gerade spielt → aktiv pausieren und auf isPlaybackLikelyToKeepUp warten. Wenn der
+        // User schon pausiert hat, NICHT pause-and-resume, sonst springt der Player gegen
+        // seinen Wunsch wieder an.
+        let buffered = engine.isPositionBuffered(seconds)
+        let shouldPauseAndWait = !buffered && self.isPlaying
+        if shouldPauseAndWait { isBuffering = true }
+        engine.seek(to: seconds, pauseUntilBuffered: shouldPauseAndWait) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.isSeeking = false }
         }
     }
 
@@ -1030,7 +955,6 @@ class AudioPlayerService: ObservableObject {
                 MPNowPlayingInfoCenter.default().playbackState = .playing
                 if let url {
                     self.probeStreamFormat(for: song, url: url)
-                    self.schedulePlaybackWatchdog(for: song, url: url)
                 }
                 let scrobbleSongId = song.id
                 let scrobbleServerId = SubsonicAPIService.shared.activeServer?.stableId ?? ""
@@ -1072,16 +996,6 @@ class AudioPlayerService: ObservableObject {
                 guard let self, d > 0 else { return }
                 self.duration = d
                 self.timePublisher.send((time: self.currentTime, duration: d))
-            }
-            .store(in: &engineSubscriptions)
-
-        engine.$isPlaying
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] playing in
-                guard let self else { return }
-                if playing {
-                    self.playbackWatchdog?.cancel()
-                }
             }
             .store(in: &engineSubscriptions)
 
