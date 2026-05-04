@@ -24,11 +24,50 @@ struct SearchView: View {
     @State private var showError = false
     @State private var currentToast: ShelveToast?
 
+    private var matchedFavoriteArtists: [Artist] {
+        guard enableFavorites, !query.isEmpty else { return [] }
+        let q = query.lowercased()
+        var base = libraryStore.starredArtists
+        if offlineMode.isOffline {
+            base = base.filter { a in downloadStore.artists.contains { $0.name == a.name } }
+        }
+        return base.filter { $0.name.lowercased().contains(q) }
+    }
+
+    private var matchedFavoriteAlbums: [Album] {
+        guard enableFavorites, !query.isEmpty else { return [] }
+        let q = query.lowercased()
+        var base = libraryStore.starredAlbums
+        if offlineMode.isOffline {
+            base = base.filter { a in downloadStore.albums.contains { $0.albumId == a.id } }
+        }
+        return base.filter {
+            $0.name.lowercased().contains(q) || ($0.artist?.lowercased().contains(q) ?? false)
+        }
+    }
+
+    private var matchedFavoriteSongs: [Song] {
+        guard enableFavorites, !query.isEmpty else { return [] }
+        let q = query.lowercased()
+        var base = libraryStore.starredSongs
+        if offlineMode.isOffline {
+            base = base.filter { downloadStore.isDownloaded(songId: $0.id) }
+        }
+        return base.filter {
+            $0.title.lowercased().contains(q) || ($0.artist?.lowercased().contains(q) ?? false)
+        }
+    }
+
+    private var hasFavoriteResults: Bool {
+        !matchedFavoriteArtists.isEmpty || !matchedFavoriteAlbums.isEmpty || !matchedFavoriteSongs.isEmpty
+    }
+
     private var hasResults: Bool {
         !(result?.artist ?? []).isEmpty ||
         !(result?.album ?? []).isEmpty ||
         !(result?.song ?? []).isEmpty ||
-        !lyricsResults.isEmpty
+        !lyricsResults.isEmpty ||
+        hasFavoriteResults
     }
 
     var body: some View {
@@ -420,6 +459,88 @@ struct SearchView: View {
                                             }
                                             .tint(accentColor)
                                         }
+                                    }
+                                }
+                            }
+                        }
+
+                        if hasFavoriteResults {
+                            Section(tr("Favorites", "Favoriten")) {
+                                ForEach(matchedFavoriteArtists) { artist in
+                                    NavigationLink(destination: ArtistDetailView(artist: artist)) {
+                                        HStack(spacing: 12) {
+                                            AlbumArtView(coverArtId: artist.coverArt, size: 100, isCircle: true)
+                                                .frame(width: 44, height: 44)
+                                            Text(artist.name).font(.body)
+                                            Spacer()
+                                            Image(systemName: "heart.fill")
+                                                .font(.caption2).foregroundStyle(.pink)
+                                        }
+                                    }
+                                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                        Button { haptic(); queueArtist(artist) } label: { Image(systemName: "text.badge.plus") }
+                                            .tint(accentColor)
+                                        Button { haptic(); playNextArtist(artist) } label: { Image(systemName: "text.insert") }
+                                            .tint(.orange)
+                                    }
+                                }
+                                ForEach(matchedFavoriteAlbums) { album in
+                                    NavigationLink(destination: AlbumDetailView(album: album)) {
+                                        HStack(spacing: 12) {
+                                            AlbumArtView(coverArtId: album.coverArt, size: 100, cornerRadius: 8)
+                                                .frame(width: 44, height: 44)
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text(album.name).font(.body)
+                                                if let artist = album.artist {
+                                                    Text(artist).font(.caption).foregroundStyle(.secondary)
+                                                }
+                                            }
+                                            Spacer()
+                                            Image(systemName: "heart.fill")
+                                                .font(.caption2).foregroundStyle(.pink)
+                                        }
+                                    }
+                                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                        Button { haptic(); queueAlbum(album) } label: { Image(systemName: "text.badge.plus") }
+                                            .tint(accentColor)
+                                        Button { haptic(); playNextAlbum(album) } label: { Image(systemName: "text.insert") }
+                                            .tint(.orange)
+                                    }
+                                }
+                                ForEach(matchedFavoriteSongs) { song in
+                                    Button { player.playSong(song) } label: {
+                                        HStack(spacing: 12) {
+                                            AlbumArtView(coverArtId: song.coverArt, size: 100, cornerRadius: 8)
+                                                .frame(width: 44, height: 44)
+                                                .overlay {
+                                                    NowPlayingOverlay(songId: song.id, size: 44, cornerRadius: 8, accentColor: accentColor)
+                                                }
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text(song.title).font(.body).foregroundStyle(.primary)
+                                                if let artist = song.artist {
+                                                    Text(artist).font(.caption).foregroundStyle(.secondary)
+                                                }
+                                            }
+                                            Spacer()
+                                            Image(systemName: "heart.fill")
+                                                .font(.caption2).foregroundStyle(.pink)
+                                            Text(song.durationFormatted)
+                                                .font(.caption2).foregroundStyle(.secondary).monospacedDigit()
+                                        }
+                                        .contentShape(Rectangle())
+                                    }
+                                    .buttonStyle(.plain)
+                                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                        Button {
+                                            haptic(); player.addToQueue(song)
+                                            currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+                                        } label: { Image(systemName: "text.badge.plus") }
+                                        .tint(accentColor)
+                                        Button {
+                                            haptic(); player.addPlayNext(song)
+                                            currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
+                                        } label: { Image(systemName: "text.insert") }
+                                        .tint(.orange)
                                     }
                                 }
                             }

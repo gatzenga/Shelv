@@ -21,6 +21,13 @@ struct AlbumDetailView: View {
     @State private var artistDestination: Artist?
     @State private var isResolvingArtist = false
     @State private var artistResolveTask: Task<Void, Never>?
+    @State private var searchQuery = ""
+
+    private var displayedSongs: [Song] {
+        let all = detail?.song ?? []
+        guard !searchQuery.isEmpty else { return all }
+        return all.filter { $0.title.localizedCaseInsensitiveContains(searchQuery) }
+    }
 
     private var currentArtist: Artist? {
         guard let name = album.artist else { return nil }
@@ -43,11 +50,12 @@ struct AlbumDetailView: View {
                         .padding(.vertical, 24)
                         .listRowSeparator(.hidden)
                 }
-            } else if let songs = detail?.song {
+            } else if let allSongs = detail?.song {
                 Section {
-                    ForEach(Array(songs.enumerated()), id: \.element.id) { index, song in
+                    ForEach(Array(displayedSongs.enumerated()), id: \.element.id) { index, song in
+                        let startIndex = allSongs.firstIndex(where: { $0.id == song.id }) ?? index
                         Button {
-                            player.play(songs: songs, startIndex: index)
+                            player.play(songs: allSongs, startIndex: startIndex)
                         } label: {
                             HStack(spacing: 14) {
                                 NowPlayingIndicator(
@@ -132,6 +140,7 @@ struct AlbumDetailView: View {
         }
         .listStyle(.plain)
         .scrollIndicators(.hidden)
+        .searchable(text: $searchQuery, prompt: tr("Search songs…", "Titel suchen…"))
         .navigationDestination(item: $artistDestination) { artist in
             ArtistDetailView(artist: artist)
         }

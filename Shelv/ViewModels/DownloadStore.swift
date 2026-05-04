@@ -196,10 +196,15 @@ final class DownloadStore: ObservableObject {
                     let p = DownloadService.coverPath(forFilePath: song.filePath)
                     if FileManager.default.fileExists(atPath: p) { dict[artId] = p }
                 }
+                if let artId = song.artistCoverArtId {
+                    let p = DownloadService.artistCoverPath(serverId: song.serverId, artId: artId)
+                    if FileManager.default.fileExists(atPath: p) { dict[artId] = p }
+                }
             }
             return dict
         }.value
         LocalArtworkIndex.shared.update(paths: artPaths)
+        NotificationCenter.default.post(name: .artworkIndexReady, object: nil)
         DownloadStatusCache.shared.rebuild(albumIds: Set(newRecordsByAlbumId.keys))
 
         // Orphan-Playlist-Marker aufräumen: Marker, deren Songs alle nicht mehr lokal sind,

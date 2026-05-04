@@ -52,6 +52,10 @@ struct AlbumArtView: View {
         .task(id: coverArtId) {
             await load()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .artworkIndexReady)) { _ in
+            guard uiImage == nil else { return }
+            Task { await load() }
+        }
     }
 
     @MainActor

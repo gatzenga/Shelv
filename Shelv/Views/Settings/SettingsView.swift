@@ -27,6 +27,7 @@ struct SettingsView: View {
     @AppStorage("recapEnabled") private var recapEnabled = false
     @AppStorage("iCloudSyncEnabled") private var iCloudSyncEnabled = true
     @AppStorage("enableDownloads") private var enableDownloads = false
+    @AppStorage("streamPreCacheEnabled") private var streamPreCacheEnabled = false
     @AppStorage("offlineModeEnabled") private var offlineModeEnabled = false
     @AppStorage("maxBulkDownloadStorageGB") private var maxBulkStorageGB = 10
     @AppStorage("transcodingEnabled") private var transcodingEnabled = false
@@ -243,6 +244,20 @@ struct SettingsView: View {
                 }
 
                 Section(tr("Cache", "Cache")) {
+                    Toggle(isOn: $streamPreCacheEnabled) {
+                        Label { Text(tr("Precache original file", "Originaldatei vorab laden")) } icon: {
+                            Image(systemName: "arrow.down.to.line").foregroundStyle(accentColor)
+                        }
+                    }
+                    .tint(accentColor)
+                    if streamPreCacheEnabled {
+                        Text(tr(
+                            "Downloads the song before playback for seamless gapless and network-independent playback. Only applies when transcoding is off.",
+                            "Lädt den Song vollständig herunter, bevor er abgespielt wird. Ermöglicht unterbrechungsfreies Gapless-Playback und macht die Wiedergabe unabhängig vom Netzwerk. Nur wirksam, wenn kein Transcoding aktiv ist."
+                        ))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
                     HStack {
                         Label { Text(tr("Cache Size", "Cache-Größe")) } icon: {
                             Image(systemName: "internaldrive").foregroundStyle(accentColor)

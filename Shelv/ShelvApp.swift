@@ -86,7 +86,11 @@ struct ShelvApp: App {
                     await PlayLogService.shared.setup()
                     await DownloadDatabase.shared.setup()
                     await RecapStore.shared.setup(serverId: server.stableId)
+                    // Artists vor setActiveServer laden: .libraryArtistsLoaded feuert → artistCoverByName
+                    // in DownloadStore befüllt, bevor reload() DownloadedArtist-Objekte baut.
+                    await LibraryStore.shared.loadArtists()
                     await DownloadStore.shared.setActiveServer(server.stableId)
+                    await LibraryStore.shared.loadStarred()
                 }
                 .task {
                     Task.detached(priority: .utility) {

@@ -19,6 +19,7 @@ struct PlaylistDetailView: View {
     @State private var playlistSongIds: [String] = []
     @State private var isLoading = true
     @State private var isEditMode = false
+    @State private var searchQuery = ""
     @State private var showRenameAlert = false
     @State private var newName = ""
     @State private var newComment = ""
@@ -26,6 +27,11 @@ struct PlaylistDetailView: View {
     @State private var currentToast: ShelveToast?
     @State private var isSyncing = false
     @Environment(\.dismiss) private var dismiss
+
+    private var displayedSongs: [Song] {
+        guard !searchQuery.isEmpty, !isEditMode else { return songs }
+        return songs.filter { $0.title.localizedCaseInsensitiveContains(searchQuery) }
+    }
 
     var body: some View {
         List {
@@ -54,15 +60,16 @@ struct PlaylistDetailView: View {
                 }
             } else {
                 Section {
-                    ForEach(Array(songs.enumerated()), id: \.element.id) { index, song in
+                    ForEach(Array(displayedSongs.enumerated()), id: \.element.id) { displayIndex, song in
+                        let songsIndex = songs.firstIndex(where: { $0.id == song.id }) ?? displayIndex
                         Button {
-                            player.play(songs: songs, startIndex: index)
+                            player.play(songs: songs, startIndex: songsIndex)
                         } label: {
                             HStack(spacing: 14) {
                                 if !isEditMode {
                                     NowPlayingIndicator(
                                         songId: song.id,
-                                        fallbackIndex: index + 1,
+                                        fallbackIndex: songsIndex + 1,
                                         accentColor: accentColor
                                     )
                                 }
@@ -110,12 +117,14 @@ struct PlaylistDetailView: View {
                             }
                             .tint(.orange)
 
-                            Button(role: .destructive) {
-                                haptic(); Task { await removeSong(at: index) }
-                            } label: {
-                                Image(systemName: "trash")
+                            if searchQuery.isEmpty {
+                                Button(role: .destructive) {
+                                    haptic(); Task { await removeSong(at: songsIndex) }
+                                } label: {
+                                    Image(systemName: "trash")
+                                }
+                                .tint(.red)
                             }
-                            .tint(.red)
                         }
                         .swipeActions(edge: .leading, allowsFullSwipe: false) {
                             if enableFavorites && !offlineMode.isOffline {
@@ -155,6 +164,7 @@ struct PlaylistDetailView: View {
         }
         .listStyle(.plain)
         .scrollIndicators(.hidden)
+        .searchable(text: $searchQuery, prompt: tr("Search songs…", "Titel suchen…"))
         .environment(\.editMode, .constant(isEditMode ? .active : .inactive))
         .navigationTitle(displayName.isEmpty ? playlist.name : displayName)
         .navigationBarTitleDisplayMode(.inline)
@@ -168,6 +178,7 @@ struct PlaylistDetailView: View {
                 } else {
                     Menu {
                         Button {
+                            searchQuery = ""
                             isEditMode = true
                         } label: {
                             Label(tr("Reorder / Delete", "Sortieren / Löschen"), systemImage: "pencil")

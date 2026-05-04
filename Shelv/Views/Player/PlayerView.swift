@@ -432,13 +432,19 @@ struct AirPlayButton: UIViewRepresentable {
 
 private extension UIImage {
     func extractPlayerPalette() -> (UIColor, UIColor?) {
+        // Schwellwerte — einfach justierbar
+        let bucketSaturationThreshold: CGFloat = 0.25  // Mindest-Sättigung für Bucket-Pfad
+        let bucketBrightnessThreshold: CGFloat = 0.10  // Mindest-Helligkeit für Bucket-Pfad
+        let chromaticDensityThreshold: CGFloat = 0.10  // < 10% gesättigte Pixel → achromatischer Pfad
+
         let side = 32
+        let totalPixels = side * side
         let size = CGSize(width: side, height: side)
         let renderer = UIGraphicsImageRenderer(size: size)
         let small = renderer.image { _ in draw(in: CGRect(origin: .zero, size: size)) }
         guard let cgImage = small.cgImage else { return (.systemGray, nil) }
 
-        var pixels = [UInt8](repeating: 0, count: side * side * 4)
+        var pixels = [UInt8](repeating: 0, count: totalPixels * 4)
         guard let ctx = CGContext(
             data: &pixels, width: side, height: side,
             bitsPerComponent: 8, bytesPerRow: side * 4,
@@ -447,12 +453,13 @@ private extension UIImage {
         ) else { return (.systemGray, nil) }
         ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: side, height: side))
 
-        // 12 Farbeimer à 30° Farbton
+        // Alle Pixel einlesen + gesättigte Pixel in Buckets sortieren
         var rSum = [CGFloat](repeating: 0, count: 12)
         var gSum = [CGFloat](repeating: 0, count: 12)
         var bSum = [CGFloat](repeating: 0, count: 12)
         var counts = [Int](repeating: 0, count: 12)
         var totalR: CGFloat = 0, totalG: CGFloat = 0, totalB: CGFloat = 0
+        var saturatedCount = 0
 
         for i in stride(from: 0, to: pixels.count, by: 4) {
             let r = CGFloat(pixels[i]) / 255
@@ -462,39 +469,44 @@ private extension UIImage {
 
             var h: CGFloat = 0, s: CGFloat = 0, v: CGFloat = 0, a: CGFloat = 0
             UIColor(red: r, green: g, blue: b, alpha: 1).getHue(&h, saturation: &s, brightness: &v, alpha: &a)
-            guard s > 0.12, v > 0.08 else { continue }
+            guard s > bucketSaturationThreshold, v > bucketBrightnessThreshold else { continue }
+            saturatedCount += 1
             let bucket = min(Int(h * 12), 11)
             rSum[bucket] += r; gSum[bucket] += g; bSum[bucket] += b
             counts[bucket] += 1
         }
 
-        let sorted = (0..<12).filter { counts[$0] > 0 }.sorted { counts[$0] > counts[$1] }
-
-        func avgColor(at idx: Int) -> UIColor {
+        func bucketColor(at idx: Int) -> UIColor {
             let n = CGFloat(counts[idx])
             return UIColor(red: rSum[idx]/n, green: gSum[idx]/n, blue: bSum[idx]/n, alpha: 1)
         }
 
+        // Cover-Typ entscheiden: chromatisch oder achromatisch?
+        let isChromaticCover = CGFloat(saturatedCount) / CGFloat(totalPixels) >= chromaticDensityThreshold
+
         let primary: UIColor
-        if let first = sorted.first {
-            primary = avgColor(at: first)
+        var secondary: UIColor? = nil
+
+        if isChromaticCover {
+            // Bucket-Pfad: dominante und zweit-dominante Farbe
+            let sorted = (0..<12).filter { counts[$0] > 0 }.sorted { counts[$0] > counts[$1] }
+            primary = sorted.first.map { bucketColor(at: $0) } ?? .systemGray
+            if let primaryIdx = sorted.first {
+                for candidateIdx in sorted.dropFirst() {
+                    let diff = min(abs(candidateIdx - primaryIdx), 12 - abs(candidateIdx - primaryIdx))
+                    if diff >= 2 {
+                        secondary = bucketColor(at: candidateIdx)
+                        break
+                    }
+                }
+            }
         } else {
-            let n = CGFloat(side * side)
+            // Achromatischer Pfad: Durchschnittsfarbe des gesamten Covers
+            let n = CGFloat(totalPixels)
             primary = UIColor(red: totalR/n, green: totalG/n, blue: totalB/n, alpha: 1)
         }
 
-        var secondary: UIColor? = nil
-        if let primaryIdx = sorted.first {
-            for candidateIdx in sorted.dropFirst() {
-                let diff = min(abs(candidateIdx - primaryIdx), 12 - abs(candidateIdx - primaryIdx))
-                if diff >= 2 {
-                    secondary = avgColor(at: candidateIdx)
-                    break
-                }
-            }
-        }
-
-        // Kein eigenständiger zweiter Farbton gefunden → dunkle Tonal-Variante der Primärfarbe
+        // Kein zweiter Farbton gefunden → dunkle Tonal-Variante der Primärfarbe
         if secondary == nil {
             var h: CGFloat = 0, s: CGFloat = 0, v: CGFloat = 0, a: CGFloat = 0
             primary.getHue(&h, saturation: &s, brightness: &v, alpha: &a)

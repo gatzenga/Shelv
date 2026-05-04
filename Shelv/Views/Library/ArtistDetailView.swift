@@ -23,6 +23,7 @@ struct ArtistDetailView: View {
     @State private var errorMessage: String?
     @State private var showError = false
     @State private var currentToast: ShelveToast?
+    @State private var searchQuery = ""
 
     private let columns = [GridItem(.adaptive(minimum: 150, maximum: 200), spacing: 16)]
 
@@ -56,6 +57,11 @@ struct ArtistDetailView: View {
         return name
     }
 
+    private var filteredAlbums: [Album] {
+        guard !searchQuery.isEmpty else { return sortedAlbums }
+        return sortedAlbums.filter { $0.name.localizedCaseInsensitiveContains(searchQuery) }
+    }
+
     private var sortedAlbums: [Album] {
         guard let albums = detail?.album else { return [] }
         switch sortOption {
@@ -86,6 +92,7 @@ struct ArtistDetailView: View {
                 listBody
             }
         }
+        .searchable(text: $searchQuery, prompt: tr("Search albums…", "Alben suchen…"))
         .navigationTitle(artist.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -209,7 +216,7 @@ struct ArtistDetailView: View {
                         .padding(.horizontal)
 
                     LazyVGrid(columns: columns, spacing: 20) {
-                        ForEach(sortedAlbums) { album in
+                        ForEach(filteredAlbums) { album in
                             NavigationLink(destination: AlbumDetailView(album: album)) {
                                 AlbumCardView(album: album, showArtist: false, showYear: true)
                             }
@@ -255,7 +262,7 @@ struct ArtistDetailView: View {
                 }
             } else if !sortedAlbums.isEmpty {
                 Section {
-                    ForEach(sortedAlbums) { album in
+                    ForEach(filteredAlbums) { album in
                         NavigationLink(destination: AlbumDetailView(album: album)) {
                             albumListRow(album)
                         }

@@ -7,6 +7,7 @@ extension Notification.Name {
     nonisolated static let downloadStateChanged = Notification.Name("shelv.downloadStateChanged")
     nonisolated static let downloadsLibraryChanged = Notification.Name("shelv.downloadsLibraryChanged")
     nonisolated static let libraryArtistsLoaded = Notification.Name("shelv.libraryArtistsLoaded")
+    nonisolated static let artworkIndexReady = Notification.Name("shelv.artworkIndexReady")
 }
 
 // MARK: - DownloadJob

@@ -65,6 +65,7 @@ struct ContentView: View {
                 .ignoresSafeArea(edges: .top)
             }
         }
+        .ignoresSafeArea(.keyboard)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             PlayerBarInset(isRegularWidth: isRegularWidth, showPlayer: $showPlayer)
         }
