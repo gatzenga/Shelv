@@ -96,6 +96,7 @@ class AudioPlayerService: ObservableObject {
     private var gaplessPreloadTriggered = false
     private var gaplessPreloadSong: Song? = nil
     private var gaplessPreloadURL: URL? = nil
+    private var prefetchScheduled = false
     private var isEngineLoaded = false
     private var currentArtwork: MPMediaItemArtwork?
     private var artworkTask: Task<Void, Never>?
@@ -466,6 +467,7 @@ class AudioPlayerService: ObservableObject {
             self.gaplessPreloadTriggered = false
             self.gaplessPreloadSong = nil
             self.gaplessPreloadURL = nil
+            self.prefetchScheduled = false
             self.formatProbeTask?.cancel()
             self.actualStreamFormat = nil
             self.currentSong = song
@@ -927,7 +929,7 @@ class AudioPlayerService: ObservableObject {
     private func setupEngine() {
         engine.onTrackFinished = { [weak self] in
             guard let self else { return }
-            if self.gaplessPreloadTriggered, let song = self.gaplessPreloadSong {
+            if self.gaplessPreloadTriggered, let song = self.gaplessPreloadSong, self.gaplessPreloadURL != nil {
                 let url = self.gaplessPreloadURL
                 self.gaplessPreloadTriggered = false
                 self.gaplessPreloadSong = nil
@@ -1062,16 +1064,18 @@ class AudioPlayerService: ObservableObject {
     }
 
     private func checkGaplessTrigger(currentTime: Double) {
-        guard !gaplessPreloadTriggered, duration > 11 else { return }
+        guard duration > 11 else { return }
         guard !(repeatMode == .one && playNextQueue.isEmpty) else { return }
         guard let nextSong = peekNextSong() else { return }
 
-        // Prefetch: 30s vor Ende starten (immer, unabhängig von Gapless-Einstellung)
+        // Prefetch: 30s vor Ende (immer, kein Flag-Check — läuft unabhängig von gaplessPreloadTriggered)
         let prefetchAt = max(0, duration - 30)
         if currentTime >= prefetchAt,
+           !prefetchScheduled,
            let nextURL = SubsonicAPIService.shared.streamURL(for: nextSong.id),
            isTranscodedRemote(nextURL),
            let fmt = TranscodingPolicy.currentStreamFormat() {
+            prefetchScheduled = true
             Task {
                 await StreamCacheService.shared.prefetch(
                     songId: nextSong.id,
@@ -1082,7 +1086,8 @@ class AudioPlayerService: ObservableObject {
             }
         }
 
-        // Gapless-Preload: 10s vor Ende
+        // Gapless-Preload: 10s vor Ende (nur wenn Flag nicht gesetzt)
+        guard !gaplessPreloadTriggered else { return }
         guard gaplessEnabled else { return }
         let preloadAt = duration - 10
         guard currentTime >= preloadAt else { return }
@@ -1103,6 +1108,7 @@ class AudioPlayerService: ObservableObject {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 // Kurz pollen bis Cache-Datei da ist (max ~8s in 200ms-Schritten)
+                // Nur pollen wenn gaplessPreloadURL noch nil (könnte durch parallelen Prefetch schon gesetzt sein)
                 let deadline = Date().addingTimeInterval(8)
                 while Date() < deadline {
                     if let local = await StreamCacheService.shared.localURL(for: songId) {
