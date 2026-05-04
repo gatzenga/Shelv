@@ -41,6 +41,9 @@ actor StreamCacheService {
     func cancelAll() {
         for (_, task) in activeTasks { task.cancel() }
         activeTasks.removeAll()
+        for songId in cachedURLs.keys {
+            try? FileManager.default.removeItem(at: Self.tempURL(for: songId))
+        }
         cachedURLs.removeAll()
         cachedFormats.removeAll()
     }
@@ -74,6 +77,10 @@ actor StreamCacheService {
                 cachedURLs[songId] = dest
                 activeTasks.removeValue(forKey: songId)
                 print("[StreamCache] Cached \(songId)")
+                return
+            } catch let urlError as URLError where urlError.code == .timedOut {
+                print("[StreamCache] Timeout for \(songId), no retry")
+                activeTasks.removeValue(forKey: songId)
                 return
             } catch {
                 guard !Task.isCancelled else { return }
