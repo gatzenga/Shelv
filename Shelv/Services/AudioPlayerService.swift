@@ -1062,17 +1062,66 @@ class AudioPlayerService: ObservableObject {
     }
 
     private func checkGaplessTrigger(currentTime: Double) {
-        guard gaplessEnabled else { return }
         guard !gaplessPreloadTriggered, duration > 11 else { return }
-        let preloadAt = duration - 10
-        guard currentTime >= preloadAt else { return }
         guard !(repeatMode == .one && playNextQueue.isEmpty) else { return }
         guard let nextSong = peekNextSong() else { return }
-        guard let url = resolveURL(for: nextSong) else { return }
-        gaplessPreloadSong = nextSong
-        gaplessPreloadURL = url
-        gaplessPreloadTriggered = true
-        engine.preloadForGapless(url: url)
+
+        // Prefetch: 30s vor Ende starten (immer, unabhängig von Gapless-Einstellung)
+        let prefetchAt = max(0, duration - 30)
+        if currentTime >= prefetchAt,
+           let nextURL = SubsonicAPIService.shared.streamURL(for: nextSong.id),
+           isTranscodedRemote(nextURL),
+           let fmt = TranscodingPolicy.currentStreamFormat() {
+            Task {
+                await StreamCacheService.shared.prefetch(
+                    songId: nextSong.id,
+                    url: nextURL,
+                    codec: fmt.codec.rawValue,
+                    bitrate: fmt.bitrate
+                )
+            }
+        }
+
+        // Gapless-Preload: 10s vor Ende
+        guard gaplessEnabled else { return }
+        let preloadAt = duration - 10
+        guard currentTime >= preloadAt else { return }
+        guard let resolvedURL = resolveURL(for: nextSong) else { return }
+
+        if resolvedURL.isFileURL {
+            // Lokale Datei (Download oder Stream-Cache) — direkt an Engine übergeben
+            gaplessPreloadSong = nextSong
+            gaplessPreloadURL = resolvedURL
+            gaplessPreloadTriggered = true
+            engine.preloadForGapless(url: resolvedURL)
+        } else if isTranscodedRemote(resolvedURL) {
+            // Transcodierter Remote-Stream — Cache könnte noch laufen.
+            // Flag sofort setzen um Re-Entry zu verhindern; async auf lokale Datei warten.
+            gaplessPreloadSong = nextSong
+            gaplessPreloadTriggered = true
+            let songId = nextSong.id
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                // Kurz pollen bis Cache-Datei da ist (max ~8s in 200ms-Schritten)
+                let deadline = Date().addingTimeInterval(8)
+                while Date() < deadline {
+                    if let local = await StreamCacheService.shared.localURL(for: songId) {
+                        guard self.gaplessPreloadSong?.id == songId else { return }
+                        self.gaplessPreloadURL = local
+                        self.engine.preloadForGapless(url: local)
+                        return
+                    }
+                    try? await Task.sleep(nanoseconds: 200_000_000)
+                }
+                // Cache nicht rechtzeitig fertig — Flag zurücksetzen damit kein Gapless-Swap ausgelöst wird
+                if self.gaplessPreloadSong?.id == songId {
+                    self.gaplessPreloadTriggered = false
+                    self.gaplessPreloadSong = nil
+                    self.gaplessPreloadURL = nil
+                }
+            }
+        }
+        // Sonstige Remote-URLs (raw, kein Transcoding) werden nicht für Gapless genutzt
     }
 
     private func updateNowPlayingInfo(song: Song) {
