@@ -89,6 +89,9 @@ struct ShelvApp: App {
                     await DownloadStore.shared.setActiveServer(server.stableId)
                 }
                 .task {
+                    Task.detached(priority: .utility) {
+                        await StreamCacheService.shared.cleanupOldFiles()
+                    }
                     await PlayLogService.shared.setup()
                     await DownloadDatabase.shared.setup()
                     await DownloadService.shared.setup()
