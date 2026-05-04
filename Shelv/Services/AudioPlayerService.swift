@@ -487,11 +487,19 @@ class AudioPlayerService: ObservableObject {
         return SubsonicAPIService.shared.streamURL(for: song.id)
     }
 
+    private func isTranscodedRemote(_ url: URL) -> Bool {
+        guard !url.isFileURL else { return false }
+        return url.queryParam("format").map { $0 != "raw" } ?? false
+    }
+
     private func startPlayback(song: Song, seekTo: Double = 0) {
         Task { @MainActor [weak self] in
             guard let self else { return }
             self.networkResumeSong = nil
             self.isEngineLoaded = false
+            if let prev = self.currentSong {
+                await StreamCacheService.shared.cancel(songId: prev.id)
+            }
             await NetworkStatus.shared.waitUntilReady()
 
             guard let url = self.resolveURL(for: song) else {
@@ -514,18 +522,61 @@ class AudioPlayerService: ObservableObject {
             self.currentTime = 0
             if let d = song.duration { self.duration = Double(d) }
             self.timePublisher.send((time: 0, duration: self.duration))
-            self.probeStreamFormat(for: song, url: url)
-            self.schedulePlaybackWatchdog(for: song, url: url)
 
             self.isPlaying = true
             if song.coverArt != self.lastArtworkCoverArt {
                 self.artworkReloadToken = UUID()
                 self.lastArtworkCoverArt = song.coverArt
             }
-            self.engine.play(url: url)
-            self.engine.trustedDuration = Double(song.duration ?? 0)
-            if seekTo > 0 { self.engine.seek(to: seekTo) }
-            self.isEngineLoaded = true
+
+            // Transcodierter Remote-Stream → erst cachen, dann lokal abspielen
+            if self.isTranscodedRemote(url), let fmt = TranscodingPolicy.currentStreamFormat() {
+                let songId = song.id
+                // Format sofort setzen (wir kennen Codec + Bitrate aus der Policy)
+                self.actualStreamFormat = ActualStreamFormat(
+                    codecLabel: fmt.codec.rawValue.uppercased(),
+                    bitrateKbps: fmt.bitrate
+                )
+                await StreamCacheService.shared.prefetch(
+                    songId: songId,
+                    url: url,
+                    codec: fmt.codec.rawValue,
+                    bitrate: fmt.bitrate
+                )
+                // Polling bis Datei da ist (alle 200ms, max 60s)
+                let deadline = Date().addingTimeInterval(60)
+                while Date() < deadline {
+                    guard self.currentSong?.id == songId else { return } // Song wurde gewechselt
+                    if let local = await StreamCacheService.shared.localURL(for: songId) {
+                        self.currentStreamURL = local
+                        self.engine.play(url: local)
+                        self.engine.trustedDuration = Double(song.duration ?? 0)
+                        if seekTo > 0 { self.engine.seek(to: seekTo) }
+                        self.isEngineLoaded = true
+                        break
+                    }
+                    try? await Task.sleep(nanoseconds: 200_000_000)
+                }
+                // Timeout-Fallback: Raw-Stream versuchen
+                if self.currentSong?.id == songId, !self.isEngineLoaded {
+                    if let rawURL = SubsonicAPIService.shared.rawStreamURL(for: songId),
+                       self.currentSong?.id == songId {
+                        self.currentStreamURL = rawURL
+                        self.probeStreamFormat(for: song, url: rawURL)
+                        self.engine.play(url: rawURL)
+                        self.engine.trustedDuration = Double(song.duration ?? 0)
+                        if seekTo > 0 { self.engine.seek(to: seekTo) }
+                        self.isEngineLoaded = true
+                    }
+                }
+            } else {
+                // Raw-Stream oder lokale Datei → wie bisher
+                self.probeStreamFormat(for: song, url: url)
+                self.engine.play(url: url)
+                self.engine.trustedDuration = Double(song.duration ?? 0)
+                if seekTo > 0 { self.engine.seek(to: seekTo) }
+                self.isEngineLoaded = true
+            }
 
             MPNowPlayingInfoCenter.default().playbackState = .playing
             self.updateNowPlayingInfo(song: song)
