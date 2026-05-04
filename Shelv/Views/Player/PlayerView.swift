@@ -1,6 +1,15 @@
 import SwiftUI
 import AVKit
 
+private final class PlayerPaletteResult: NSObject {
+    let primary: UIColor
+    let secondary: UIColor?
+    init(_ primary: UIColor, _ secondary: UIColor?) {
+        self.primary = primary
+        self.secondary = secondary
+    }
+}
+
 struct PlayerView: View {
     @ObservedObject var player = AudioPlayerService.shared
     @ObservedObject var libraryStore = LibraryStore.shared
@@ -30,6 +39,12 @@ struct PlayerView: View {
     @State private var rawSecondary: UIColor? = nil
     @State private var playerBgPrimary: Color = Color(UIColor.systemBackground)
     @State private var playerBgSecondary: Color = Color(UIColor.systemBackground)
+
+    private static let paletteCache: NSCache<NSString, PlayerPaletteResult> = {
+        let c = NSCache<NSString, PlayerPaletteResult>()
+        c.countLimit = 200
+        return c
+    }()
 
     private var currentAlbum: Album? {
         guard let song = player.currentSong, let albumId = song.albumId else { return nil }
@@ -338,21 +353,48 @@ struct PlayerView: View {
             return
         }
 
-        let cached: UIImage? = ImageCacheService.shared.cachedImage(key: "\(coverArtId)_600")
-            ?? ImageCacheService.shared.cachedImage(key: "\(coverArtId)_300")
+        if let hit = Self.paletteCache.object(forKey: coverArtId as NSString) {
+            rawPrimary = hit.primary
+            rawSecondary = hit.secondary
+            withAnimation(.easeInOut(duration: 0.6)) {
+                playerBgPrimary = adaptedColor(hit.primary, asSecondary: false)
+                playerBgSecondary = adaptedColor(hit.secondary ?? hit.primary, asSecondary: true)
+            }
+            return
+        }
+
+        let key300 = "\(coverArtId)_300"
+        let image: UIImage?
+        if let cached = ImageCacheService.shared.cachedImage(key: key300) {
+            image = cached
+        } else if let url = SubsonicAPIService.shared.coverArtURL(for: coverArtId, size: 300) {
+            image = await ImageCacheService.shared.image(url: url, key: key300)
+        } else {
+            image = nil
+        }
 
         let resolved: UIImage?
-        if let cached {
-            resolved = cached
+        if let image {
+            resolved = image
         } else if let url = SubsonicAPIService.shared.coverArtURL(for: coverArtId, size: 80) {
             resolved = await ImageCacheService.shared.image(url: url, key: "\(coverArtId)_80")
         } else {
             resolved = nil
         }
 
-        guard !Task.isCancelled, let image = resolved else { return }
-        let (primary, secondary) = image.extractPlayerPalette()
         guard !Task.isCancelled else { return }
+        guard let img = resolved else {
+            rawPrimary = nil
+            rawSecondary = nil
+            withAnimation(.easeInOut(duration: 0.5)) {
+                playerBgPrimary = Color(UIColor.systemBackground)
+                playerBgSecondary = Color(UIColor.systemBackground)
+            }
+            return
+        }
+        let (primary, secondary) = img.extractPlayerPalette()
+        guard !Task.isCancelled else { return }
+        Self.paletteCache.setObject(PlayerPaletteResult(primary, secondary), forKey: coverArtId as NSString)
         rawPrimary = primary
         rawSecondary = secondary
         withAnimation(.easeInOut(duration: 0.6)) {
@@ -432,10 +474,8 @@ struct AirPlayButton: UIViewRepresentable {
 
 private extension UIImage {
     func extractPlayerPalette() -> (UIColor, UIColor?) {
-        // Schwellwerte — einfach justierbar
-        let bucketSaturationThreshold: CGFloat = 0.25  // Mindest-Sättigung für Bucket-Pfad
-        let bucketBrightnessThreshold: CGFloat = 0.10  // Mindest-Helligkeit für Bucket-Pfad
-        let chromaticDensityThreshold: CGFloat = 0.10  // < 10% gesättigte Pixel → achromatischer Pfad
+        // 14 Buckets: 0–11 = Hue (je 30°, s ≥ 0.15), 12 = Dunkel (v < 0.20), 13 = Hell (v > 0.85, s < 0.12)
+        let totalBuckets = 14
 
         let side = 32
         let totalPixels = side * side
@@ -453,25 +493,29 @@ private extension UIImage {
         ) else { return (.systemGray, nil) }
         ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: side, height: side))
 
-        // Alle Pixel einlesen + gesättigte Pixel in Buckets sortieren
-        var rSum = [CGFloat](repeating: 0, count: 12)
-        var gSum = [CGFloat](repeating: 0, count: 12)
-        var bSum = [CGFloat](repeating: 0, count: 12)
-        var counts = [Int](repeating: 0, count: 12)
-        var totalR: CGFloat = 0, totalG: CGFloat = 0, totalB: CGFloat = 0
-        var saturatedCount = 0
+        var rSum = [CGFloat](repeating: 0, count: totalBuckets)
+        var gSum = [CGFloat](repeating: 0, count: totalBuckets)
+        var bSum = [CGFloat](repeating: 0, count: totalBuckets)
+        var counts = [Int](repeating: 0, count: totalBuckets)
 
         for i in stride(from: 0, to: pixels.count, by: 4) {
             let r = CGFloat(pixels[i]) / 255
             let g = CGFloat(pixels[i+1]) / 255
             let b = CGFloat(pixels[i+2]) / 255
-            totalR += r; totalG += g; totalB += b
 
             var h: CGFloat = 0, s: CGFloat = 0, v: CGFloat = 0, a: CGFloat = 0
             UIColor(red: r, green: g, blue: b, alpha: 1).getHue(&h, saturation: &s, brightness: &v, alpha: &a)
-            guard s > bucketSaturationThreshold, v > bucketBrightnessThreshold else { continue }
-            saturatedCount += 1
-            let bucket = min(Int(h * 12), 11)
+
+            let bucket: Int
+            if v < 0.20 {
+                bucket = 12
+            } else if v > 0.85, s < 0.12 {
+                bucket = 13
+            } else if s >= 0.15 {
+                bucket = min(Int(h * 12), 11)
+            } else {
+                continue
+            }
             rSum[bucket] += r; gSum[bucket] += g; bSum[bucket] += b
             counts[bucket] += 1
         }
@@ -481,32 +525,61 @@ private extension UIImage {
             return UIColor(red: rSum[idx]/n, green: gSum[idx]/n, blue: bSum[idx]/n, alpha: 1)
         }
 
-        // Cover-Typ entscheiden: chromatisch oder achromatisch?
-        let isChromaticCover = CGFloat(saturatedCount) / CGFloat(totalPixels) >= chromaticDensityThreshold
+        // Phase 1: chromatische Buckets (0–11) nach Grösse sortieren
+        let chromaticSorted = (0..<12).filter { counts[$0] > 0 }.sorted { counts[$0] > counts[$1] }
 
-        let primary: UIColor
+        var primary: UIColor
         var secondary: UIColor? = nil
 
-        if isChromaticCover {
-            // Bucket-Pfad: dominante und zweit-dominante Farbe
-            let sorted = (0..<12).filter { counts[$0] > 0 }.sorted { counts[$0] > counts[$1] }
-            primary = sorted.first.map { bucketColor(at: $0) } ?? .systemGray
-            if let primaryIdx = sorted.first {
-                for candidateIdx in sorted.dropFirst() {
-                    let diff = min(abs(candidateIdx - primaryIdx), 12 - abs(candidateIdx - primaryIdx))
-                    if diff >= 2 {
-                        secondary = bucketColor(at: candidateIdx)
-                        break
+        if let primaryIdx = chromaticSorted.first {
+            let chromaticColor = bucketColor(at: primaryIdx)
+            let chromaticCount = counts[primaryIdx]
+            let minSecondaryCount = max(3, chromaticCount / 10)
+
+            // Zweite chromatische Farbe suchen (≥60° Hue-Abstand, ≥25% des Primär-Buckets)
+            for candidateIdx in chromaticSorted.dropFirst() {
+                let diff = abs(candidateIdx - primaryIdx)
+                if min(diff, 12 - diff) >= 2, counts[candidateIdx] >= minSecondaryCount {
+                    secondary = bucketColor(at: candidateIdx)
+                    break
+                }
+            }
+
+            if secondary != nil {
+                // Zwei chromatische Farben → Chroma bleibt Primär
+                primary = chromaticColor
+            } else {
+                // Neutral-Fallback: wer mehr Pixel hat, wird Primär
+                let darkCount = counts[12]
+                let lightCount = counts[13]
+                let neutralIdx = darkCount >= lightCount ? 12 : 13
+                let neutralCount = max(darkCount, lightCount)
+                if neutralCount > 0 {
+                    if neutralCount > chromaticCount {
+                        primary = bucketColor(at: neutralIdx)
+                        secondary = chromaticColor
+                    } else {
+                        primary = chromaticColor
+                        secondary = bucketColor(at: neutralIdx)
                     }
+                } else {
+                    primary = chromaticColor
                 }
             }
         } else {
-            // Achromatischer Pfad: Durchschnittsfarbe des gesamten Covers
-            let n = CGFloat(totalPixels)
-            primary = UIColor(red: totalR/n, green: totalG/n, blue: totalB/n, alpha: 1)
+            // Kein Chroma überhaupt → Dark vs Light
+            let darkCount = counts[12]
+            let lightCount = counts[13]
+            if darkCount >= lightCount {
+                primary = darkCount > 0 ? bucketColor(at: 12) : .systemGray
+                secondary = lightCount > 0 ? bucketColor(at: 13) : nil
+            } else {
+                primary = bucketColor(at: 13)
+                secondary = darkCount > 0 ? bucketColor(at: 12) : nil
+            }
         }
 
-        // Kein zweiter Farbton gefunden → dunkle Tonal-Variante der Primärfarbe
+        // Letzter Fallback: tonale Variante der Primärfarbe
         if secondary == nil {
             var h: CGFloat = 0, s: CGFloat = 0, v: CGFloat = 0, a: CGFloat = 0
             primary.getHue(&h, saturation: &s, brightness: &v, alpha: &a)

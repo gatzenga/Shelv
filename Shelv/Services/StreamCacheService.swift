@@ -18,10 +18,15 @@ actor StreamCacheService {
     // Fix 4: derive file extension from codec label
     private static func fileExtension(for codecLabel: String) -> String {
         switch codecLabel.uppercased() {
-        case "MP3":  return "mp3"
-        case "OPUS": return "opus"
-        case "AAC":  return "m4a"
-        default:     return "audio"
+        case "MP3":          return "mp3"
+        case "OPUS":         return "opus"
+        case "AAC":          return "m4a"
+        case "FLAC":         return "flac"
+        case "OGG":          return "ogg"
+        case "WAV":          return "wav"
+        case "M4A":          return "m4a"
+        case "AIFF", "AIF": return "aiff"
+        default:             return "audio"
         }
     }
 
@@ -35,7 +40,15 @@ actor StreamCacheService {
 
     // Fix 3 + Fix 4: format passed into downloadWithRetry; activeFormats tracked for cancel
     func prefetch(songId: String, url: URL, codec: String, bitrate: Int) {
-        guard activeTasks[songId] == nil, cachedURLs[songId] == nil else { return }
+        if cachedURLs[songId] != nil {
+            print("[StreamCache] Already cached: \(songId)")
+            return
+        }
+        if activeTasks[songId] != nil {
+            print("[StreamCache] Already downloading: \(songId)")
+            return
+        }
+        print("[StreamCache] Starting download: \(songId) (\(codec) \(bitrate)kbps)")
         let format = ActualStreamFormat(codecLabel: codec.uppercased(), bitrateKbps: bitrate)
         activeFormats[songId] = format
         activeTasks[songId] = Task {
@@ -49,10 +62,13 @@ actor StreamCacheService {
         activeTasks.removeValue(forKey: songId)
         let ext = activeFormats[songId].map { Self.fileExtension(for: $0.codecLabel) } ?? ""
         activeFormats.removeValue(forKey: songId)
-        cachedURLs.removeValue(forKey: songId)
+        if let url = cachedURLs.removeValue(forKey: songId) {
+            try? FileManager.default.removeItem(at: url)
+        }
         cachedFormats.removeValue(forKey: songId)
-        try? FileManager.default.removeItem(at: Self.tempURL(for: songId, ext: ext))
-        // Also remove extension-less file (legacy / fallback)
+        if !ext.isEmpty {
+            try? FileManager.default.removeItem(at: Self.tempURL(for: songId, ext: ext))
+        }
         try? FileManager.default.removeItem(at: Self.tempURL(for: songId))
     }
 
@@ -92,6 +108,7 @@ actor StreamCacheService {
         for attempt in 1...maxAttempts {
             guard !Task.isCancelled else { return }
             do {
+                print("[StreamCache] Request attempt \(attempt)/\(maxAttempts): \(songId)")
                 let (tmpURL, response) = try await URLSession.shared.download(from: url)
                 guard !Task.isCancelled else {
                     try? FileManager.default.removeItem(at: tmpURL)

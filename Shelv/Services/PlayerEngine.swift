@@ -244,7 +244,7 @@ final class PlayerEngine: ObservableObject {
     private func makePlayerItem(url: URL) -> AVPlayerItem {
         let asset: AVURLAsset
         if url.isFileURL {
-            asset = AVURLAsset(url: url)
+            asset = AVURLAsset(url: url, options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])
         } else {
             let headers: [String: String] = ["Range": "bytes=0-"]
             asset = AVURLAsset(url: url, options: ["AVURLAssetHTTPHeaderFieldsKey": headers])
