@@ -13,8 +13,6 @@ struct AlbumDetailView: View {
     @AppStorage("enableDownloads") private var enableDownloads = false
 
     @State private var detail: AlbumDetail?
-    @State private var showAddToPlaylist = false
-    @State private var playlistSongIds: [String] = []
     @State private var albumPlaylistIds: AlbumPlaylistIds?
     @State private var isLoading = true
     @State private var errorMessage: String?
@@ -45,7 +43,8 @@ struct AlbumDetailView: View {
     }
 
     private var useDiscGrouping: Bool {
-        !discGroups.isEmpty && searchQuery.isEmpty
+        guard searchQuery.isEmpty, let all = detail?.song else { return false }
+        return Set(all.compactMap(\.discNumber)).count >= 2
     }
 
     private var currentArtist: Artist? {
@@ -179,11 +178,6 @@ struct AlbumDetailView: View {
             Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
         } message: {
             Text(tr("The downloads will be removed from this device.", "Die Downloads werden von diesem Gerät entfernt."))
-        }
-        .sheet(isPresented: $showAddToPlaylist) {
-            AddToPlaylistSheet(songIds: playlistSongIds)
-                .environmentObject(libraryStore)
-                .tint(accentColor)
         }
         .sheet(item: $albumPlaylistIds) { item in
             AddToPlaylistSheet(songIds: item.ids)
@@ -399,8 +393,7 @@ struct AlbumDetailView: View {
             }
             if enablePlaylists && !offlineMode.isOffline {
                 Button {
-                    playlistSongIds = [song.id]
-                    showAddToPlaylist = true
+                    albumPlaylistIds = AlbumPlaylistIds(ids: [song.id])
                 } label: {
                     Image(systemName: "music.note.list")
                 }
