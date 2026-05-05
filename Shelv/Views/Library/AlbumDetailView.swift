@@ -15,6 +15,7 @@ struct AlbumDetailView: View {
     @State private var detail: AlbumDetail?
     @State private var showAddToPlaylist = false
     @State private var playlistSongIds: [String] = []
+    @State private var albumPlaylistIds: AlbumPlaylistIds?
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var currentToast: ShelveToast?
@@ -22,11 +23,29 @@ struct AlbumDetailView: View {
     @State private var isResolvingArtist = false
     @State private var artistResolveTask: Task<Void, Never>?
     @State private var searchQuery = ""
+    @State private var showDeleteAlbumDownloadConfirm = false
 
     private var displayedSongs: [Song] {
         let all = detail?.song ?? []
         guard !searchQuery.isEmpty else { return all }
         return all.filter { $0.title.localizedCaseInsensitiveContains(searchQuery) }
+    }
+
+    private var discGroups: [(disc: Int, songs: [Song])] {
+        let all = detail?.song ?? []
+        let discNumbers = Set(all.compactMap(\.discNumber))
+        guard discNumbers.count >= 2 else { return [] }
+        let sorted = all.sorted {
+            let d0 = $0.discNumber ?? 1, d1 = $1.discNumber ?? 1
+            if d0 != d1 { return d0 < d1 }
+            return ($0.track ?? 0) < ($1.track ?? 0)
+        }
+        let grouped = Dictionary(grouping: sorted) { $0.discNumber ?? 1 }
+        return grouped.keys.sorted().map { disc in (disc: disc, songs: grouped[disc]!) }
+    }
+
+    private var useDiscGrouping: Bool {
+        !discGroups.isEmpty && searchQuery.isEmpty
     }
 
     private var currentArtist: Artist? {
@@ -51,72 +70,24 @@ struct AlbumDetailView: View {
                         .listRowSeparator(.hidden)
                 }
             } else if let allSongs = detail?.song {
-                Section {
-                    ForEach(Array(displayedSongs.enumerated()), id: \.element.id) { index, song in
-                        let startIndex = allSongs.firstIndex(where: { $0.id == song.id }) ?? index
-                        Button {
-                            player.play(songs: allSongs, startIndex: startIndex)
-                        } label: {
-                            HStack(spacing: 14) {
-                                NowPlayingIndicator(
-                                    songId: song.id,
-                                    fallbackIndex: song.track ?? (index + 1),
-                                    accentColor: accentColor
-                                )
-                                Text(song.title)
-                                    .font(.body)
-                                    .foregroundStyle(.primary)
-                                    .lineLimit(1)
-                                Spacer()
-                                DownloadStatusIcon(songId: song.id)
-                                Text(song.durationFormatted)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .monospacedDigit()
-                            }
-                            .padding(.vertical, 4)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            Button {
-                                haptic(); player.addToQueue(song)
-                                currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
-                            } label: {
-                                Image(systemName: "text.badge.plus")
-                            }
-                            .tint(accentColor)
-
-                            Button {
-                                haptic(); player.addPlayNext(song)
-                                currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
-                            } label: {
-                                Image(systemName: "text.insert")
-                            }
-                            .tint(.orange)
-
-                            if enableDownloads {
-                                downloadSwipeButton(for: song)
+                if useDiscGrouping {
+                    ForEach(discGroups, id: \.disc) { group in
+                        Section(header: Text(tr("Disc \(group.disc)", "Disc \(group.disc)"))
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .textCase(nil)
+                        ) {
+                            ForEach(group.songs, id: \.id) { song in
+                                let startIndex = allSongs.firstIndex(where: { $0.id == song.id }) ?? 0
+                                songRow(song: song, startIndex: startIndex, allSongs: allSongs)
                             }
                         }
-                        .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                            if enableFavorites && !offlineMode.isOffline {
-                                Button {
-                                    haptic(.medium); Task { await libraryStore.toggleStarSong(song) }
-                                } label: {
-                                    Image(systemName: libraryStore.isSongStarred(song) ? "heart.slash" : "heart.fill")
-                                }
-                                .tint(.pink)
-                            }
-                            if enablePlaylists && !offlineMode.isOffline {
-                                Button {
-                                    playlistSongIds = [song.id]
-                                    showAddToPlaylist = true
-                                } label: {
-                                    Image(systemName: "music.note.list")
-                                }
-                                .tint(accentColor)
-                            }
+                    }
+                } else {
+                    Section {
+                        ForEach(Array(displayedSongs.enumerated()), id: \.element.id) { index, song in
+                            let startIndex = allSongs.firstIndex(where: { $0.id == song.id }) ?? index
+                            songRow(song: song, startIndex: startIndex, allSongs: allSongs)
                         }
                     }
                 }
@@ -182,8 +153,9 @@ struct AlbumDetailView: View {
                     if enablePlaylists && !offlineMode.isOffline {
                         Divider()
                         Button {
-                            playlistSongIds = detail?.song?.map(\.id) ?? []
-                            showAddToPlaylist = true
+                            if let songs = detail?.song, !songs.isEmpty {
+                                albumPlaylistIds = AlbumPlaylistIds(ids: songs.map(\.id))
+                            }
                         } label: {
                             Label(tr("Add to Playlist…", "Zur Playlist hinzufügen…"), systemImage: "music.note.list")
                         }
@@ -196,8 +168,25 @@ struct AlbumDetailView: View {
             }
         }
         .shelveToast($currentToast)
+        .alert(
+            tr("Delete Downloads?", "Downloads löschen?"),
+            isPresented: $showDeleteAlbumDownloadConfirm
+        ) {
+            Button(tr("Delete", "Löschen"), role: .destructive) {
+                downloadStore.deleteAlbum(album.id)
+                currentToast = ShelveToast(message: tr("Downloads deleted", "Downloads gelöscht"))
+            }
+            Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+        } message: {
+            Text(tr("The downloads will be removed from this device.", "Die Downloads werden von diesem Gerät entfernt."))
+        }
         .sheet(isPresented: $showAddToPlaylist) {
             AddToPlaylistSheet(songIds: playlistSongIds)
+                .environmentObject(libraryStore)
+                .tint(accentColor)
+        }
+        .sheet(item: $albumPlaylistIds) { item in
+            AddToPlaylistSheet(songIds: item.ids)
                 .environmentObject(libraryStore)
                 .tint(accentColor)
         }
@@ -324,7 +313,7 @@ struct AlbumDetailView: View {
                     .buttonStyle(.plain)
                 }
                 Button {
-                    haptic(); downloadStore.deleteAlbum(album.id)
+                    haptic(); showDeleteAlbumDownloadConfirm = true
                 } label: {
                     Label(tr("Delete", "Löschen"), systemImage: "arrow.down.circle")
                         .font(.subheadline).bold()
@@ -337,8 +326,7 @@ struct AlbumDetailView: View {
                 .buttonStyle(.plain)
             case .complete:
                 Button {
-                    haptic(); downloadStore.deleteAlbum(album.id)
-                    currentToast = ShelveToast(message: tr("Downloads deleted", "Downloads gelöscht"))
+                    haptic(); showDeleteAlbumDownloadConfirm = true
                 } label: {
                     Label(tr("Delete Downloads", "Downloads löschen"), systemImage: "arrow.down.circle")
                         .font(.subheadline).bold()
@@ -349,6 +337,74 @@ struct AlbumDetailView: View {
                         .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func songRow(song: Song, startIndex: Int, allSongs: [Song]) -> some View {
+        Button {
+            player.play(songs: allSongs, startIndex: startIndex)
+        } label: {
+            HStack(spacing: 14) {
+                NowPlayingIndicator(
+                    songId: song.id,
+                    fallbackIndex: song.track ?? (startIndex + 1),
+                    accentColor: accentColor
+                )
+                Text(song.title)
+                    .font(.body)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                Spacer()
+                DownloadStatusIcon(songId: song.id)
+                Text(song.durationFormatted)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            .padding(.vertical, 4)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button {
+                haptic(); player.addToQueue(song)
+                currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+            } label: {
+                Image(systemName: "text.badge.plus")
+            }
+            .tint(accentColor)
+
+            Button {
+                haptic(); player.addPlayNext(song)
+                currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
+            } label: {
+                Image(systemName: "text.insert")
+            }
+            .tint(.orange)
+
+            if enableDownloads {
+                downloadSwipeButton(for: song)
+            }
+        }
+        .swipeActions(edge: .leading, allowsFullSwipe: false) {
+            if enableFavorites && !offlineMode.isOffline {
+                Button {
+                    haptic(.medium); Task { await libraryStore.toggleStarSong(song) }
+                } label: {
+                    Image(systemName: libraryStore.isSongStarred(song) ? "heart.slash" : "heart.fill")
+                }
+                .tint(.pink)
+            }
+            if enablePlaylists && !offlineMode.isOffline {
+                Button {
+                    playlistSongIds = [song.id]
+                    showAddToPlaylist = true
+                } label: {
+                    Image(systemName: "music.note.list")
+                }
+                .tint(accentColor)
             }
         }
     }
@@ -425,4 +481,9 @@ struct AlbumDetailView: View {
             song: songs
         )
     }
+}
+
+private struct AlbumPlaylistIds: Identifiable {
+    let id = UUID()
+    let ids: [String]
 }
