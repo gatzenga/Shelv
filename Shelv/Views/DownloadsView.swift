@@ -10,6 +10,8 @@ struct DownloadsView: View {
     @AppStorage("downloadsAlbumIsGrid") private var albumIsGrid: Bool = true
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
+    @State private var albumToDeleteDownloads: DownloadedAlbum?
+    @State private var artistToDeleteDownloads: DownloadedArtist?
 
     enum Segment: String, CaseIterable {
         case albums, artists, favorites
@@ -49,6 +51,30 @@ struct DownloadsView: View {
             .navigationTitle(offlineMode.isOffline ? tr("Offline", "Offline") : tr("Downloads", "Downloads"))
             .navigationBarTitleDisplayMode(.inline)
             .task { await downloadStore.reload() }
+            .alert(
+                tr("Delete Downloads?", "Downloads löschen?"),
+                isPresented: Binding(get: { albumToDeleteDownloads != nil }, set: { if !$0 { albumToDeleteDownloads = nil } }),
+                presenting: albumToDeleteDownloads
+            ) { album in
+                Button(tr("Delete", "Löschen"), role: .destructive) {
+                    downloadStore.deleteAlbum(album.albumId)
+                }
+                Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+            } message: { _ in
+                Text(tr("The downloads will be removed from this device.", "Die Downloads werden von diesem Gerät entfernt."))
+            }
+            .alert(
+                tr("Delete Downloads?", "Downloads löschen?"),
+                isPresented: Binding(get: { artistToDeleteDownloads != nil }, set: { if !$0 { artistToDeleteDownloads = nil } }),
+                presenting: artistToDeleteDownloads
+            ) { artist in
+                Button(tr("Delete", "Löschen"), role: .destructive) {
+                    downloadStore.deleteArtist(artist.artistId)
+                }
+                Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+            } message: { _ in
+                Text(tr("The downloads will be removed from this device.", "Die Downloads werden von diesem Gerät entfernt."))
+            }
         }
     }
 
@@ -78,7 +104,7 @@ struct DownloadsView: View {
                                 .buttonStyle(.plain)
                                 .contextMenu {
                                     Button(role: .destructive) {
-                                        haptic(); downloadStore.deleteAlbum(album.albumId)
+                                        haptic(); albumToDeleteDownloads = album
                                     } label: { Label(tr("Delete Downloads", "Downloads löschen"), systemImage: "trash") }
                                 }
                             }
@@ -95,7 +121,7 @@ struct DownloadsView: View {
                             }
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                 Button(role: .destructive) {
-                                    haptic(); downloadStore.deleteAlbum(album.albumId)
+                                    haptic(); albumToDeleteDownloads = album
                                 } label: {
                                     DeleteDownloadIcon()
                                 }
@@ -138,7 +164,7 @@ struct DownloadsView: View {
                     }
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                         Button(role: .destructive) {
-                            haptic(); downloadStore.deleteArtist(artist.artistId)
+                            haptic(); artistToDeleteDownloads = artist
                         } label: {
                             DeleteDownloadIcon()
                         }
@@ -366,6 +392,7 @@ struct DownloadedArtistDetailView: View {
     let artist: DownloadedArtist
     @ObservedObject var downloadStore = DownloadStore.shared
     @Environment(\.dismiss) private var dismiss
+    @State private var albumToDeleteDownloads: DownloadedAlbum?
 
     private var currentArtist: DownloadedArtist? {
         downloadStore.artists.first(where: { $0.artistId == artist.artistId })
@@ -379,7 +406,7 @@ struct DownloadedArtistDetailView: View {
                 }
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     Button(role: .destructive) {
-                        haptic(); downloadStore.deleteAlbum(album.albumId)
+                        haptic(); albumToDeleteDownloads = album
                     } label: {
                         DeleteDownloadIcon()
                     }
@@ -396,6 +423,18 @@ struct DownloadedArtistDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .onChange(of: downloadStore.artists.contains(where: { $0.artistId == artist.artistId })) { _, exists in
             if !exists { dismiss() }
+        }
+        .alert(
+            tr("Delete Downloads?", "Downloads löschen?"),
+            isPresented: Binding(get: { albumToDeleteDownloads != nil }, set: { if !$0 { albumToDeleteDownloads = nil } }),
+            presenting: albumToDeleteDownloads
+        ) { album in
+            Button(tr("Delete", "Löschen"), role: .destructive) {
+                downloadStore.deleteAlbum(album.albumId)
+            }
+            Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+        } message: { _ in
+            Text(tr("The downloads will be removed from this device.", "Die Downloads werden von diesem Gerät entfernt."))
         }
     }
 }

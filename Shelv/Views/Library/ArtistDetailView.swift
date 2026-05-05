@@ -24,6 +24,8 @@ struct ArtistDetailView: View {
     @State private var showError = false
     @State private var currentToast: ShelveToast?
     @State private var searchQuery = ""
+    @State private var albumToDeleteDownloads: Album?
+    @State private var showDeleteArtistDownloadConfirm = false
 
     private let columns = [GridItem(.adaptive(minimum: 150, maximum: 200), spacing: 16)]
 
@@ -111,6 +113,32 @@ struct ArtistDetailView: View {
             }
         }
         .shelveToast($currentToast)
+        .alert(
+            tr("Delete Downloads?", "Downloads löschen?"),
+            isPresented: Binding(get: { albumToDeleteDownloads != nil }, set: { if !$0 { albumToDeleteDownloads = nil } }),
+            presenting: albumToDeleteDownloads
+        ) { album in
+            Button(tr("Delete", "Löschen"), role: .destructive) {
+                downloadStore.deleteAlbum(album.id)
+            }
+            Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+        } message: { _ in
+            Text(tr("The downloads will be removed from this device.", "Die Downloads werden von diesem Gerät entfernt."))
+        }
+        .alert(
+            tr("Delete Downloads?", "Downloads löschen?"),
+            isPresented: $showDeleteArtistDownloadConfirm
+        ) {
+            Button(tr("Delete", "Löschen"), role: .destructive) {
+                if let match = downloadStore.artists.first(where: { $0.name == artist.name }) {
+                    downloadStore.deleteArtist(match.artistId)
+                }
+                currentToast = ShelveToast(message: tr("Downloads deleted", "Downloads gelöscht"))
+            }
+            Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+        } message: {
+            Text(tr("The downloads will be removed from this device.", "Die Downloads werden von diesem Gerät entfernt."))
+        }
         .onChange(of: offlineMode.isOffline) { _, isOffline in
             if isOffline && sortOption.requiresServer {
                 sortRaw = AlbumSortOption.alphabetical.rawValue
@@ -368,7 +396,7 @@ struct ArtistDetailView: View {
                 }
             case .complete:
                 Button {
-                    haptic(); downloadStore.deleteAlbum(album.id)
+                    haptic(); albumToDeleteDownloads = album
                 } label: { DeleteDownloadIcon() }
                 .tint(.red)
             }
@@ -392,6 +420,7 @@ struct ArtistDetailView: View {
                 }
             }
             Spacer(minLength: 0)
+            AlbumDownloadBadge(albumId: album.id)
             Image(systemName: "chevron.right")
                 .font(.caption.bold())
                 .foregroundStyle(.tertiary)
@@ -586,11 +615,7 @@ struct ArtistDetailView: View {
                     .buttonStyle(.plain)
                 }
                 Button {
-                    haptic()
-                    if let match = downloadStore.artists.first(where: { $0.name == artist.name }) {
-                        downloadStore.deleteArtist(match.artistId)
-                        currentToast = ShelveToast(message: tr("Downloads deleted", "Downloads gelöscht"))
-                    }
+                    haptic(); showDeleteArtistDownloadConfirm = true
                 } label: {
                     Label(tr("Delete", "Löschen"), systemImage: "arrow.down.circle")
                         .font(.subheadline).bold()
@@ -603,11 +628,7 @@ struct ArtistDetailView: View {
                 .buttonStyle(.plain)
             case .complete:
                 Button {
-                    haptic()
-                    if let match = downloadStore.artists.first(where: { $0.name == artist.name }) {
-                        downloadStore.deleteArtist(match.artistId)
-                        currentToast = ShelveToast(message: tr("Downloads deleted", "Downloads gelöscht"))
-                    }
+                    haptic(); showDeleteArtistDownloadConfirm = true
                 } label: {
                     Label(tr("Delete Downloads", "Downloads löschen"), systemImage: "arrow.down.circle")
                         .font(.subheadline).bold()

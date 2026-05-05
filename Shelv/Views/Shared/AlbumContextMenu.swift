@@ -9,8 +9,11 @@ struct AlbumContextMenuModifier: ViewModifier {
     @AppStorage("enableFavorites") private var enableFavorites = true
     @AppStorage("enablePlaylists") private var enablePlaylists = true
     @AppStorage("enableDownloads") private var enableDownloads = false
+    @AppStorage("themeColor") private var themeColorName = "violet"
 
     @State private var cachedSongs: [Song]?
+    @State private var pendingPlaylistIds: PendingPlaylistIds?
+    @State private var showDeleteAlbumDownloadConfirm = false
 
     func body(content: Content) -> some View {
         if showPreview {
@@ -21,8 +24,34 @@ struct AlbumContextMenuModifier: ViewModifier {
                     .frame(width: 280, height: 280)
                     .task { let _ = await fetchSongs() }
             }
+            .sheet(item: $pendingPlaylistIds) { item in
+                AddToPlaylistSheet(songIds: item.ids)
+                    .environmentObject(libraryStore)
+                    .tint(AppTheme.color(for: themeColorName))
+            }
+            .alert(tr("Delete Downloads?", "Downloads löschen?"), isPresented: $showDeleteAlbumDownloadConfirm) {
+                Button(tr("Delete", "Löschen"), role: .destructive) {
+                    DownloadStore.shared.deleteAlbum(album.id)
+                }
+                Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+            } message: {
+                Text(tr("The downloads will be removed from this device.", "Die Downloads werden von diesem Gerät entfernt."))
+            }
         } else {
             content.contextMenu { menuItems }
+            .sheet(item: $pendingPlaylistIds) { item in
+                AddToPlaylistSheet(songIds: item.ids)
+                    .environmentObject(libraryStore)
+                    .tint(AppTheme.color(for: themeColorName))
+            }
+            .alert(tr("Delete Downloads?", "Downloads löschen?"), isPresented: $showDeleteAlbumDownloadConfirm) {
+                Button(tr("Delete", "Löschen"), role: .destructive) {
+                    DownloadStore.shared.deleteAlbum(album.id)
+                }
+                Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+            } message: {
+                Text(tr("The downloads will be removed from this device.", "Die Downloads werden von diesem Gerät entfernt."))
+            }
         }
     }
 
@@ -82,9 +111,13 @@ struct AlbumContextMenuModifier: ViewModifier {
             }
             if enablePlaylists {
                 Button {
-                    Task {
-                        guard let songs = await fetchSongs(), !songs.isEmpty else { return }
-                        NotificationCenter.default.post(name: .addSongsToPlaylist, object: songs.map(\.id))
+                    if let cached = cachedSongs, !cached.isEmpty {
+                        pendingPlaylistIds = PendingPlaylistIds(ids: cached.map(\.id))
+                    } else {
+                        Task {
+                            guard let songs = await fetchSongs(), !songs.isEmpty else { return }
+                            pendingPlaylistIds = PendingPlaylistIds(ids: songs.map(\.id))
+                        }
                     }
                 } label: {
                     Label(tr("Add to Playlist…", "Zur Playlist hinzufügen…"), systemImage: "music.note.list")
@@ -124,13 +157,13 @@ struct AlbumContextMenuModifier: ViewModifier {
                 }
             }
             Button(role: .destructive) {
-                DownloadStore.shared.deleteAlbum(album.id)
+                showDeleteAlbumDownloadConfirm = true
             } label: {
                 Label { Text(tr("Delete Downloads", "Downloads löschen")) } icon: { DeleteDownloadIcon(tint: .red) }
             }
         case .complete:
             Button(role: .destructive) {
-                DownloadStore.shared.deleteAlbum(album.id)
+                showDeleteAlbumDownloadConfirm = true
             } label: {
                 Label { Text(tr("Delete Downloads", "Downloads löschen")) } icon: { DeleteDownloadIcon(tint: .red) }
             }
@@ -150,4 +183,9 @@ extension View {
     func albumContextMenu(_ album: Album, showPreview: Bool = true) -> some View {
         modifier(AlbumContextMenuModifier(album: album, showPreview: showPreview))
     }
+}
+
+private struct PendingPlaylistIds: Identifiable {
+    let id = UUID()
+    let ids: [String]
 }

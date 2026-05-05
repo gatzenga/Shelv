@@ -74,13 +74,13 @@ struct LibraryView: View {
     @State private var artistScrollID: String?
     @State private var navigateToAlbum: Album?
     @State private var navigateToArtist: Artist?
-    @State private var errorMessage: String?
-    @State private var showError = false
     @State private var currentToast: ShelveToast?
     @State private var albumGroups: [(letter: String, items: [Album])] = []
     @State private var artistGroups: [(letter: String, items: [Artist])] = []
     @State private var refreshContinuation: CheckedContinuation<Void, Never>?
     @ObservedObject private var downloadStore = DownloadStore.shared
+    @State private var albumToDeleteDownloads: Album?
+    @State private var artistToDeleteDownloads: Artist?
 
     private let columns = [GridItem(.adaptive(minimum: 150, maximum: 200), spacing: 14)]
 
@@ -366,17 +366,31 @@ struct LibraryView: View {
             }
         }
         .shelveToast($currentToast)
-        .onChange(of: libraryStore.errorMessage) { _, msg in
-            if let msg {
-                errorMessage = msg
-                showError = true
-                libraryStore.errorMessage = nil
+        .alert(
+            tr("Delete Downloads?", "Downloads löschen?"),
+            isPresented: Binding(get: { albumToDeleteDownloads != nil }, set: { if !$0 { albumToDeleteDownloads = nil } }),
+            presenting: albumToDeleteDownloads
+        ) { album in
+            Button(tr("Delete", "Löschen"), role: .destructive) {
+                DownloadStore.shared.deleteAlbum(album.id)
             }
+            Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+        } message: { _ in
+            Text(tr("The downloads will be removed from this device.", "Die Downloads werden von diesem Gerät entfernt."))
         }
-        .alert(tr("Error", "Fehler"), isPresented: $showError, presenting: errorMessage) { _ in
-            Button(tr("OK", "OK"), role: .cancel) {}
-        } message: { msg in
-            Text(msg)
+        .alert(
+            tr("Delete Downloads?", "Downloads löschen?"),
+            isPresented: Binding(get: { artistToDeleteDownloads != nil }, set: { if !$0 { artistToDeleteDownloads = nil } }),
+            presenting: artistToDeleteDownloads
+        ) { artist in
+            Button(tr("Delete", "Löschen"), role: .destructive) {
+                if let match = downloadStore.artists.first(where: { $0.name == artist.name }) {
+                    DownloadStore.shared.deleteArtist(match.artistId)
+                }
+            }
+            Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+        } message: { _ in
+            Text(tr("The downloads will be removed from this device.", "Die Downloads werden von diesem Gerät entfernt."))
         }
         .sheet(isPresented: $showAddToPlaylist) {
             AddToPlaylistSheet(songIds: playlistSongIds)
@@ -948,7 +962,7 @@ struct LibraryView: View {
                 }
             case .complete:
                 Button {
-                    haptic(); DownloadStore.shared.deleteAlbum(album.id)
+                    haptic(); albumToDeleteDownloads = album
                 } label: { DeleteDownloadIcon() }
                 .tint(.red)
             }
@@ -960,10 +974,7 @@ struct LibraryView: View {
         if enableDownloads {
             if downloadedArtistNames.contains(artist.name) {
                 Button {
-                    haptic()
-                    if let match = downloadStore.artists.first(where: { $0.name == artist.name }) {
-                        DownloadStore.shared.deleteArtist(match.artistId)
-                    }
+                    haptic(); artistToDeleteDownloads = artist
                 } label: { DeleteDownloadIcon() }
                 .tint(.red)
             } else if !offlineMode.isOffline {
@@ -993,9 +1004,9 @@ struct LibraryView: View {
                     Label(tr("Download Remaining", "Rest herunterladen"), systemImage: "arrow.down.circle")
                 }
             }
-            Button(role: .destructive) { DownloadStore.shared.deleteAlbum(album.id) } label: { Label { Text(tr("Delete Downloads", "Downloads löschen")) } icon: { DeleteDownloadIcon(tint: .red) } }
+            Button(role: .destructive) { albumToDeleteDownloads = album } label: { Label { Text(tr("Delete Downloads", "Downloads löschen")) } icon: { DeleteDownloadIcon(tint: .red) } }
         case .complete:
-            Button(role: .destructive) { DownloadStore.shared.deleteAlbum(album.id) } label: { Label { Text(tr("Delete Downloads", "Downloads löschen")) } icon: { DeleteDownloadIcon(tint: .red) } }
+            Button(role: .destructive) { albumToDeleteDownloads = album } label: { Label { Text(tr("Delete Downloads", "Downloads löschen")) } icon: { DeleteDownloadIcon(tint: .red) } }
         }
     }
 
@@ -1062,9 +1073,7 @@ struct LibraryView: View {
             }
             if downloadedArtistNames.contains(artist.name) {
                 Button(role: .destructive) {
-                    if let match = downloadStore.artists.first(where: { $0.name == artist.name }) {
-                        DownloadStore.shared.deleteArtist(match.artistId)
-                    }
+                    artistToDeleteDownloads = artist
                 } label: {
                     Label { Text(tr("Delete Downloads", "Downloads löschen")) } icon: { DeleteDownloadIcon(tint: .red) }
                 }
@@ -1102,6 +1111,14 @@ struct LibraryView: View {
                 .frame(width: 44, height: 44)
             Text(artist.name).font(.body).lineLimit(1)
             Spacer()
+            if downloadedArtistNames.contains(artist.name) {
+                Image(systemName: "arrow.down.circle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.white)
+                    .padding(4)
+                    .background(accentColor, in: Circle())
+                    .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
+            }
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())
@@ -1118,6 +1135,7 @@ struct LibraryView: View {
                 }
             }
             Spacer()
+            AlbumDownloadBadge(albumId: album.id)
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())
@@ -1135,6 +1153,7 @@ struct LibraryView: View {
                 }
             }
             Spacer()
+            DownloadStatusIcon(songId: song.id)
             Text(song.durationFormatted)
                 .font(.caption2).foregroundStyle(.secondary).monospacedDigit()
         }

@@ -19,6 +19,7 @@ struct RecapView: View {
     @State private var entryToDelete: RecapRegistryRecord?
     @State private var showDeleteConfirm = false
     @State private var currentToast: ShelveToast?
+    @State private var entryToDeleteDownloads: RecapRegistryRecord?
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
@@ -90,7 +91,7 @@ struct RecapView: View {
                                     }
                                 }
                                 .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                                    Button(role: .destructive) {
+                                    Button {
                                         entryToDelete = entry
                                         showDeleteConfirm = true
                                     } label: {
@@ -139,7 +140,15 @@ struct RecapView: View {
         ) { entry in
             Button(tr("Delete", "Löschen"), role: .destructive) {
                 guard let sid = serverStore.activeServer?.stableId else { return }
-                Task { await recapStore.deleteEntry(playlistId: entry.playlistId, serverId: sid) }
+                Task {
+                    do {
+                        try await recapStore.deleteEntry(playlistId: entry.playlistId, serverId: sid)
+                    } catch {
+                        if !(error is CancellationError) {
+                            currentToast = ShelveToast(message: tr("Could not delete playlist", "Playlist konnte nicht gelöscht werden"), isError: true)
+                        }
+                    }
+                }
             }
             Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
         } message: { entry in
@@ -150,6 +159,18 @@ struct RecapView: View {
                 end: Date(timeIntervalSince1970: entry.periodEnd)
             )
             Text(period.playlistName)
+        }
+        .alert(
+            tr("Delete Downloads?", "Downloads löschen?"),
+            isPresented: Binding(get: { entryToDeleteDownloads != nil }, set: { if !$0 { entryToDeleteDownloads = nil } }),
+            presenting: entryToDeleteDownloads
+        ) { entry in
+            Button(tr("Delete", "Löschen"), role: .destructive) {
+                deleteRecapDownloads(entry)
+            }
+            Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+        } message: { _ in
+            Text(tr("The downloads will be removed from this device.", "Die Downloads werden von diesem Gerät entfernt."))
         }
         .onAppear {
             if let first = enabledTypes.first, !enabledTypes.contains(segment) {
@@ -273,7 +294,7 @@ struct RecapView: View {
     private func recapDownloadSwipe(_ entry: RecapRegistryRecord) -> some View {
         if downloadStore.offlinePlaylistIds.contains(entry.playlistId) {
             Button {
-                haptic(); deleteRecapDownloads(entry)
+                haptic(); entryToDeleteDownloads = entry
             } label: { DeleteDownloadIcon() }
             .tint(.red)
         } else if !offlineMode.isOffline {

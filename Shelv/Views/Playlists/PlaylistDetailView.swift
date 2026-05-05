@@ -24,6 +24,7 @@ struct PlaylistDetailView: View {
     @State private var newName = ""
     @State private var newComment = ""
     @State private var showDeleteConfirm = false
+    @State private var showDeleteDownloadConfirm = false
     @State private var currentToast: ShelveToast?
     @State private var isSyncing = false
     @Environment(\.dismiss) private var dismiss
@@ -116,6 +117,10 @@ struct PlaylistDetailView: View {
                                 Image(systemName: "text.insert")
                             }
                             .tint(.orange)
+
+                            if enableDownloads {
+                                downloadSwipeButton(for: song)
+                            }
 
                             if searchQuery.isEmpty {
                                 Button(role: .destructive) {
@@ -258,11 +263,30 @@ struct PlaylistDetailView: View {
             .bold()
             Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
         }
+        .alert(
+            tr("Delete Downloads?", "Downloads löschen?"),
+            isPresented: $showDeleteDownloadConfirm
+        ) {
+            Button(tr("Delete", "Löschen"), role: .destructive) {
+                for song in songs { downloadStore.deleteSong(song.id) }
+                downloadStore.removeOfflinePlaylist(playlist.id)
+                currentToast = ShelveToast(message: tr("Downloads deleted", "Downloads gelöscht"))
+            }
+            Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+        } message: {
+            Text(tr("The downloads will be removed from this device.", "Die Downloads werden von diesem Gerät entfernt."))
+        }
         .alert(tr("Delete Playlist?", "Playlist löschen?"), isPresented: $showDeleteConfirm) {
             Button(tr("Delete", "Löschen"), role: .destructive) {
                 Task {
-                    await libraryStore.deletePlaylist(playlist)
-                    dismiss()
+                    do {
+                        try await libraryStore.deletePlaylist(playlist)
+                        dismiss()
+                    } catch {
+                        if !(error is CancellationError) {
+                            currentToast = ShelveToast(message: tr("Could not delete playlist", "Playlist konnte nicht gelöscht werden"), isError: true)
+                        }
+                    }
                 }
             }
             Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
@@ -378,10 +402,7 @@ struct PlaylistDetailView: View {
             if isMarked {
                 Button {
                     haptic()
-                    for song in songs {
-                        downloadStore.deleteSong(song.id)
-                    }
-                    downloadStore.removeOfflinePlaylist(playlist.id)
+                    showDeleteDownloadConfirm = true
                 } label: {
                     Label(tr("Delete Downloads", "Downloads löschen"), systemImage: "arrow.down.circle")
                         .font(.subheadline).bold()
@@ -432,6 +453,25 @@ struct PlaylistDetailView: View {
         songs.remove(atOffsets: offsets)
         await libraryStore.removeSongsFromPlaylist(playlist, indices: indices)
         isSyncing = false
+    }
+
+    @ViewBuilder
+    private func downloadSwipeButton(for song: Song) -> some View {
+        if downloadStore.isDownloaded(songId: song.id) {
+            Button {
+                haptic(); downloadStore.deleteSong(song.id)
+            } label: {
+                DeleteDownloadIcon()
+            }
+            .tint(.red)
+        } else if !offlineMode.isOffline {
+            Button {
+                haptic(); downloadStore.enqueueSongs([song])
+            } label: {
+                Image(systemName: "arrow.down.circle")
+            }
+            .tint(accentColor)
+        }
     }
 
     private func syncOrder() async {

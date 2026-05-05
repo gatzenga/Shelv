@@ -24,9 +24,8 @@ struct PlaylistsView: View {
     @FocusState private var nameFieldFocused: Bool
     @State private var showDeleteConfirm = false
     @State private var playlistToDelete: Playlist?
-    @State private var errorMessage: String?
-    @State private var showError = false
     @State private var currentToast: ShelveToast?
+    @State private var playlistToDeleteDownloads: Playlist?
     @State private var refreshContinuation: CheckedContinuation<Void, Never>?
 
     var body: some View {
@@ -90,13 +89,15 @@ struct PlaylistsView: View {
                                     }
                                 }
                                 .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                                    Button(role: .destructive) {
-                                        playlistToDelete = playlist
-                                        showDeleteConfirm = true
-                                    } label: {
-                                        Image(systemName: "trash")
+                                    if !offlineMode.isOffline {
+                                        Button {
+                                            playlistToDelete = playlist
+                                            showDeleteConfirm = true
+                                        } label: {
+                                            Image(systemName: "trash")
+                                        }
+                                        .tint(.red)
                                     }
-                                    .tint(.red)
                                 }
                             }
                         }
@@ -160,25 +161,34 @@ struct PlaylistsView: View {
                 presenting: playlistToDelete
             ) { playlist in
                 Button(tr("Delete", "Löschen"), role: .destructive) {
-                    Task { await libraryStore.deletePlaylist(playlist) }
+                    Task {
+                        do {
+                            try await libraryStore.deletePlaylist(playlist)
+                        } catch {
+                            if !(error is CancellationError) {
+                                currentToast = ShelveToast(message: tr("Could not delete playlist", "Playlist konnte nicht gelöscht werden"), isError: true)
+                            }
+                        }
+                    }
                 }
                 Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
             } message: { playlist in
                 Text("\"\(playlist.name)\"")
             }
-            .onChange(of: libraryStore.errorMessage) { _, msg in
-                if let msg {
-                    errorMessage = msg
-                    showError = true
-                    libraryStore.errorMessage = nil
-                }
-            }
-            .alert(tr("Error", "Fehler"), isPresented: $showError, presenting: errorMessage) { _ in
-                Button(tr("OK", "OK"), role: .cancel) {}
-            } message: { msg in
-                Text(msg)
-            }
             .shelveToast($currentToast)
+            .alert(
+                tr("Delete Downloads?", "Downloads löschen?"),
+                isPresented: Binding(get: { playlistToDeleteDownloads != nil }, set: { if !$0 { playlistToDeleteDownloads = nil } }),
+                presenting: playlistToDeleteDownloads
+            ) { playlist in
+                Button(tr("Delete", "Löschen"), role: .destructive) {
+                    deletePlaylistDownloads(playlist)
+                    currentToast = ShelveToast(message: tr("Downloads deleted", "Downloads gelöscht"))
+                }
+                Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+            } message: { _ in
+                Text(tr("The downloads will be removed from this device.", "Die Downloads werden von diesem Gerät entfernt."))
+            }
             .sheet(isPresented: $showCreateSheet) {
                 createPlaylistSheet
             }
@@ -247,8 +257,9 @@ struct PlaylistsView: View {
             if !offlineMode.isOffline && !downloadStore.offlinePlaylistIds.contains(playlist.id) {
                 Button {
                     Task {
-                        if let loaded = await libraryStore.loadPlaylistDetail(id: playlist.id),
-                           let songs = loaded.songs, !songs.isEmpty {
+                        let loaded = await libraryStore.loadPlaylistDetail(id: playlist.id)
+                        libraryStore.errorMessage = nil
+                        if let songs = loaded?.songs, !songs.isEmpty {
                             let missing = songs.filter { !downloadStore.isDownloaded(songId: $0.id) }
                             if !missing.isEmpty { downloadStore.enqueueSongs(missing) }
                             downloadStore.addOfflinePlaylist(playlist.id, songIds: songs.map(\.id))
@@ -260,7 +271,7 @@ struct PlaylistsView: View {
 
             if downloadStore.offlinePlaylistIds.contains(playlist.id) {
                 Button(role: .destructive) {
-                    deletePlaylistDownloads(playlist)
+                    playlistToDeleteDownloads = playlist
                 } label: {
                     Label { Text(tr("Delete Downloads", "Downloads löschen")) } icon: { DeleteDownloadIcon(tint: .red) }
                 }
@@ -269,28 +280,32 @@ struct PlaylistsView: View {
 
         Divider()
 
-        Button(role: .destructive) {
-            playlistToDelete = playlist
-            showDeleteConfirm = true
-        } label: { Label(tr("Delete Playlist", "Playlist löschen"), systemImage: "trash") }
+        if !offlineMode.isOffline {
+            Button(role: .destructive) {
+                playlistToDelete = playlist
+                showDeleteConfirm = true
+            } label: { Label(tr("Delete Playlist", "Playlist löschen"), systemImage: "trash") }
+        }
     }
 
     @ViewBuilder
     private func playlistDownloadSwipe(_ playlist: Playlist) -> some View {
         if downloadStore.offlinePlaylistIds.contains(playlist.id) {
             Button(role: .destructive) {
-                haptic(); deletePlaylistDownloads(playlist)
+                haptic(); playlistToDeleteDownloads = playlist
             } label: { DeleteDownloadIcon() }
             .tint(.red)
         } else if !offlineMode.isOffline {
             Button {
                 haptic()
                 Task {
-                    if let loaded = await libraryStore.loadPlaylistDetail(id: playlist.id),
-                       let songs = loaded.songs, !songs.isEmpty {
+                    let loaded = await libraryStore.loadPlaylistDetail(id: playlist.id)
+                    libraryStore.errorMessage = nil
+                    if let songs = loaded?.songs, !songs.isEmpty {
                         let missing = songs.filter { !downloadStore.isDownloaded(songId: $0.id) }
                         if !missing.isEmpty { downloadStore.enqueueSongs(missing) }
                         downloadStore.addOfflinePlaylist(playlist.id, songIds: songs.map(\.id))
+                        currentToast = ShelveToast(message: tr("Download started", "Download gestartet"))
                     }
                 }
             } label: { Image(systemName: "arrow.down.circle") }

@@ -17,7 +17,10 @@ struct RecapDetailView: View {
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var currentToast: ShelveToast?
+    @State private var showDeleteDownloadConfirm = false
+    @State private var showDeleteRecapConfirm = false
     @State private var showAddToPlaylist = false
+    @Environment(\.dismiss) private var dismiss
     @State private var addToPlaylistSongId: String?
 
     private let player = AudioPlayerService.shared
@@ -197,6 +200,14 @@ struct RecapDetailView: View {
                         Label(tr("Add to Queue", "Zur Warteschlange"), systemImage: "text.badge.plus")
                     }
                     .disabled(songs.isEmpty)
+
+                    Divider()
+
+                    Button(role: .destructive) {
+                        showDeleteRecapConfirm = true
+                    } label: {
+                        Label(tr("Delete Recap", "Recap löschen"), systemImage: "trash")
+                    }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                         .symbolRenderingMode(.hierarchical)
@@ -206,6 +217,41 @@ struct RecapDetailView: View {
         }
         .task { await load() }
         .shelveToast($currentToast)
+        .alert(
+            tr("Delete Downloads?", "Downloads löschen?"),
+            isPresented: $showDeleteDownloadConfirm
+        ) {
+            Button(tr("Delete", "Löschen"), role: .destructive) {
+                for song in allSongs where downloadStore.isDownloaded(songId: song.id) {
+                    downloadStore.deleteSong(song.id)
+                }
+                downloadStore.removeOfflinePlaylist(entry.playlistId)
+                currentToast = ShelveToast(message: tr("Downloads deleted", "Downloads gelöscht"))
+            }
+            Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+        } message: {
+            Text(tr("The downloads will be removed from this device.", "Die Downloads werden von diesem Gerät entfernt."))
+        }
+        .alert(
+            tr("Delete Recap?", "Recap löschen?"),
+            isPresented: $showDeleteRecapConfirm
+        ) {
+            Button(tr("Delete", "Löschen"), role: .destructive) {
+                Task {
+                    do {
+                        try await RecapStore.shared.deleteEntry(playlistId: entry.playlistId, serverId: serverId)
+                        dismiss()
+                    } catch {
+                        if !(error is CancellationError) {
+                            currentToast = ShelveToast(message: tr("Could not delete recap", "Recap konnte nicht gelöscht werden"), isError: true)
+                        }
+                    }
+                }
+            }
+            Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+        } message: {
+            Text(period.playlistName)
+        }
         .sheet(isPresented: $showAddToPlaylist) {
             if let songId = addToPlaylistSongId {
                 AddToPlaylistSheet(songIds: [songId])
@@ -307,10 +353,7 @@ struct RecapDetailView: View {
             if isMarked {
                 Button {
                     haptic()
-                    for song in allSongs where downloadStore.isDownloaded(songId: song.id) {
-                        downloadStore.deleteSong(song.id)
-                    }
-                    downloadStore.removeOfflinePlaylist(entry.playlistId)
+                    showDeleteDownloadConfirm = true
                 } label: {
                     Label(tr("Delete Downloads", "Downloads löschen"), systemImage: "arrow.down.circle")
                         .font(.subheadline).bold()
