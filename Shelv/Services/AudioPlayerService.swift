@@ -520,6 +520,7 @@ class AudioPlayerService: ObservableObject {
                         let precise = cmTime.flatMap { $0.isValid && !$0.isIndefinite ? CMTimeGetSeconds($0) : nil }
                         self.currentStreamURL = local
                         self.engine.play(url: local)
+                        if !self.isPlaying { self.engine.pause() }
                         self.engine.trustedDuration = (precise ?? 0) > 0 ? precise! : Double(song.duration ?? 0)
                         if seekTo > 0 { self.engine.seek(to: seekTo) }
                         self.isEngineLoaded = true
@@ -532,6 +533,7 @@ class AudioPlayerService: ObservableObject {
                     self.currentStreamURL = rawURL
                     self.probeStreamFormat(for: song, url: rawURL)
                     self.engine.play(url: rawURL)
+                    if !self.isPlaying { self.engine.pause() }
                     self.engine.trustedDuration = Double(song.duration ?? 0)
                     if seekTo > 0 { self.engine.seek(to: seekTo) }
                     self.isEngineLoaded = true
@@ -559,6 +561,7 @@ class AudioPlayerService: ObservableObject {
                         self.currentStreamURL = local
                         self.probeStreamFormat(for: song, url: local)
                         self.engine.play(url: local)
+                        if !self.isPlaying { self.engine.pause() }
                         self.engine.trustedDuration = (precise ?? 0) > 0 ? precise! : Double(song.duration ?? 0)
                         if seekTo > 0 { self.engine.seek(to: seekTo) }
                         self.isEngineLoaded = true
@@ -569,6 +572,7 @@ class AudioPlayerService: ObservableObject {
                 if self.playbackGeneration == gen, !self.isEngineLoaded {
                     self.probeStreamFormat(for: song, url: url)
                     self.engine.play(url: url)
+                    if !self.isPlaying { self.engine.pause() }
                     self.engine.trustedDuration = Double(song.duration ?? 0)
                     if seekTo > 0 { self.engine.seek(to: seekTo) }
                     self.isEngineLoaded = true

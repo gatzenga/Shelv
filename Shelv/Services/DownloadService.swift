@@ -260,7 +260,8 @@ actor DownloadService {
         }
         publishProgress(key: key, value: nil)
         stateSubject.send((key, .none))
-        let removed = removedPending + removedInflight
+        let inCompletion = inCompletionJobs.values.contains { Self.key(songId: $0.song.id, serverId: $0.serverId) == key } ? 1 : 0
+        let removed = removedPending + removedInflight + inCompletion
         if removed > 0 {
             batchTotal = max(0, batchTotal - removed)
             publishBatch()
