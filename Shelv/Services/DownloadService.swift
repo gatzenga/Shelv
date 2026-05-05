@@ -604,7 +604,7 @@ actor DownloadService {
             albumTitle: job.albumTitle,
             artistName: job.artistName,
             track: job.track,
-            disc: nil,
+            disc: job.song.discNumber,
             duration: job.duration,
             bytes: bytes,
             coverArtId: job.coverArtId,
