@@ -133,19 +133,6 @@ class LibraryStore: ObservableObject {
         isLoadingAlbums = false
     }
 
-    /// Entfernt Downloads deren Album nicht mehr auf dem Server existiert.
-    /// Einmalige Fehl-Antwort führt zu sofortigem Cleanup — akzeptiert, damit lokale Downloads
-    /// nie Server-Content divergieren. Ein versehentlich gelöschter Download kann vom User
-    /// erneut angestoßen werden.
-    private func reconcileDownloadedAlbums(serverAlbumIds: Set<String>) async {
-        guard let stableId = api.activeServer?.stableId, !stableId.isEmpty else { return }
-        let downloadedAlbumIds = await DownloadDatabase.shared.allAlbumIds(serverId: stableId)
-        let missing = downloadedAlbumIds.subtracting(serverAlbumIds)
-        for albumId in missing {
-            await DownloadService.shared.deleteAlbum(albumId: albumId, serverId: stableId)
-        }
-    }
-
     func loadArtists() async {
         if artists.isEmpty, let id = activeServerID {
             let serverID = id
@@ -420,23 +407,18 @@ class LibraryStore: ObservableObject {
         }
     }
 
-    func deletePlaylist(_ playlist: Playlist) async {
+    func deletePlaylist(_ playlist: Playlist) async throws {
+        try await api.deletePlaylist(id: playlist.id)
         playlists.removeAll { $0.id == playlist.id }
-        do {
-            try await api.deletePlaylist(id: playlist.id)
-            if let entry = await PlayLogService.shared.registryEntry(playlistId: playlist.id) {
-                CloudKitSyncService.debugLog("[LibraryDelete] playlistId=\(playlist.id) was recap, deleting marker=\(entry.ckRecordName ?? "nil")")
-                if let ckName = entry.ckRecordName {
-                    await CloudKitSyncService.shared.deleteRecapMarker(ckRecordName: ckName)
-                }
-                await PlayLogService.shared.deleteRegistryEntry(playlistId: playlist.id)
-                NotificationCenter.default.post(name: .recapRegistryUpdated, object: nil)
+        if let entry = await PlayLogService.shared.registryEntry(playlistId: playlist.id) {
+            CloudKitSyncService.debugLog("[LibraryDelete] playlistId=\(playlist.id) was recap, deleting marker=\(entry.ckRecordName ?? "nil")")
+            if let ckName = entry.ckRecordName {
+                await CloudKitSyncService.shared.deleteRecapMarker(ckRecordName: ckName)
             }
-            if let id = activeServerID { save(playlists, name: "playlists", serverID: id) }
-        } catch {
-            playlists.append(playlist)
-            if !(error is CancellationError) { errorMessage = error.localizedDescription }
+            await PlayLogService.shared.deleteRegistryEntry(playlistId: playlist.id)
+            NotificationCenter.default.post(name: .recapRegistryUpdated, object: nil)
         }
+        if let id = activeServerID { save(playlists, name: "playlists", serverID: id) }
     }
 
     func renamePlaylist(_ playlist: Playlist, newName: String, newComment: String? = nil) async {

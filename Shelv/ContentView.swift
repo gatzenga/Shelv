@@ -71,6 +71,7 @@ struct ContentView: View {
         }
         .onChange(of: libraryStore.errorMessage) { _, msg in
             guard let msg else { return }
+            libraryStore.errorMessage = nil
             offlineMode.notifyServerError(msg)
         }
         .sheet(isPresented: $showPlayer) {

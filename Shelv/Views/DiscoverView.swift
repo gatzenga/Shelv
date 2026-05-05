@@ -179,13 +179,6 @@ struct DiscoverView: View {
                     Task { await libraryStore.loadDiscover() }
                 }
             }
-            .onChange(of: libraryStore.errorMessage) { _, msg in
-                if let msg {
-                    errorMessage = msg
-                    showError = true
-                    libraryStore.errorMessage = nil
-                }
-            }
             .alert(tr("Error", "Fehler"), isPresented: $showError, presenting: errorMessage) { _ in
                 Button(tr("OK", "OK"), role: .cancel) {}
             } message: { msg in
