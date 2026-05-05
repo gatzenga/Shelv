@@ -53,6 +53,7 @@ struct DownloadedSong: Identifiable, Hashable {
             album: albumTitle,
             albumId: albumId,
             track: track,
+            discNumber: disc,
             duration: duration,
             coverArt: coverArtId,
             year: nil,

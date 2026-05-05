@@ -209,7 +209,7 @@ actor DownloadService {
                 return Song(
                     id: song.id, title: song.title,
                     artist: detail.artist, album: song.album ?? detail.name,
-                    albumId: song.albumId ?? detail.id, track: song.track,
+                    albumId: song.albumId ?? detail.id, track: song.track, discNumber: song.discNumber,
                     duration: song.duration, coverArt: song.coverArt ?? detail.coverArt,
                     year: song.year, genre: song.genre, playCount: song.playCount,
                     starred: song.starred, suffix: song.suffix, bitRate: song.bitRate

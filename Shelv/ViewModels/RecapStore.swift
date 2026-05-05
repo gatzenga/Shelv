@@ -535,7 +535,7 @@ class RecapStore: ObservableObject {
     private func placeholderSong(id: String) -> Song {
         Song(
             id: id, title: id, artist: nil, album: nil, albumId: nil,
-            track: nil, duration: nil, coverArt: nil, year: nil, genre: nil,
+            track: nil, discNumber: nil, duration: nil, coverArt: nil, year: nil, genre: nil,
             playCount: nil, starred: nil, suffix: nil, bitRate: nil
         )
     }
@@ -653,13 +653,13 @@ class RecapStore: ObservableObject {
         return entries.count > before
     }
 
-    func deleteEntry(playlistId: String, serverId: String) async {
+    func deleteEntry(playlistId: String, serverId: String) async throws {
         let entry = await PlayLogService.shared.registryEntry(playlistId: playlistId)
         CloudKitSyncService.debugLog("[UserAction:deleteEntry] playlistId=\(playlistId) marker=\(entry?.ckRecordName ?? "nil")")
+        try await SubsonicAPIService.shared.deletePlaylist(id: playlistId)
         if let entry, entry.periodType == RecapPeriod.PeriodType.week.rawValue, !entry.isTest {
             RecapProcessedWeeks.insert(entry.periodStart)
         }
-        try? await SubsonicAPIService.shared.deletePlaylist(id: playlistId)
         await PlayLogService.shared.deleteRegistryEntry(playlistId: playlistId)
         if let ckName = entry?.ckRecordName {
             await CloudKitSyncService.shared.deleteRecapMarker(ckRecordName: ckName)

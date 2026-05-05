@@ -23,6 +23,8 @@ struct SearchView: View {
     @State private var errorMessage: String?
     @State private var showError = false
     @State private var currentToast: ShelveToast?
+    @State private var artistToDeleteDownloads: Artist?
+    @State private var albumToDeleteDownloads: Album?
 
     private var matchedFavoriteArtists: [Artist] {
         guard enableFavorites, !query.isEmpty else { return [] }
@@ -104,6 +106,15 @@ struct SearchView: View {
                                                 .frame(width: 44, height: 44)
                                             Text(artist.name)
                                                 .font(.body)
+                                            Spacer()
+                                            if enableDownloads && downloadStore.artists.contains(where: { $0.name == artist.name }) {
+                                                Image(systemName: "arrow.down.circle.fill")
+                                                    .font(.caption)
+                                                    .foregroundStyle(.white)
+                                                    .padding(4)
+                                                    .background(accentColor, in: Circle())
+                                                    .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
+                                            }
                                         }
                                     }
                                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
@@ -114,10 +125,7 @@ struct SearchView: View {
                                         if enableDownloads {
                                             if downloadStore.artists.contains(where: { $0.name == artist.name }) {
                                                 Button {
-                                                    haptic()
-                                                    if let match = downloadStore.artists.first(where: { $0.name == artist.name }) {
-                                                        downloadStore.deleteArtist(match.artistId)
-                                                    }
+                                                    haptic(); artistToDeleteDownloads = artist
                                                 } label: { DeleteDownloadIcon() }
                                                 .tint(.red)
                                             } else if !offlineMode.isOffline {
@@ -174,6 +182,8 @@ struct SearchView: View {
                                                         .foregroundStyle(.secondary)
                                                 }
                                             }
+                                            Spacer()
+                                            AlbumDownloadBadge(albumId: album.id)
                                         }
                                     }
                                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
@@ -184,7 +194,7 @@ struct SearchView: View {
                                         if enableDownloads {
                                             if downloadStore.albums.contains(where: { $0.albumId == album.id }) {
                                                 Button {
-                                                    haptic(); downloadStore.deleteAlbum(album.id)
+                                                    haptic(); albumToDeleteDownloads = album
                                                 } label: { DeleteDownloadIcon() }
                                                 .tint(.red)
                                             } else if !offlineMode.isOffline {
@@ -243,6 +253,7 @@ struct SearchView: View {
                                                 }
                                             }
                                             Spacer()
+                                            DownloadStatusIcon(songId: song.id)
                                             Text(song.durationFormatted)
                                                 .font(.caption2)
                                                 .foregroundStyle(.secondary)
@@ -365,6 +376,7 @@ struct SearchView: View {
                                                     .italic()
                                             }
                                             Spacer()
+                                            DownloadStatusIcon(songId: item.songId)
                                             if let dur = item.duration {
                                                 Text(String(format: "%d:%02d", dur / 60, dur % 60))
                                                     .font(.caption)
@@ -381,7 +393,7 @@ struct SearchView: View {
                                                 id: item.songId,
                                                 title: item.songTitle ?? item.songId,
                                                 artist: item.artistName, album: nil, albumId: nil,
-                                                track: nil, duration: item.duration, coverArt: item.coverArt,
+                                                track: nil, discNumber: nil, duration: item.duration, coverArt: item.coverArt,
                                                 year: nil, genre: nil, playCount: nil,
                                                 starred: nil, suffix: nil, bitRate: nil
                                             )
@@ -394,7 +406,7 @@ struct SearchView: View {
                                                 id: item.songId,
                                                 title: item.songTitle ?? item.songId,
                                                 artist: item.artistName, album: nil, albumId: nil,
-                                                track: nil, duration: item.duration, coverArt: item.coverArt,
+                                                track: nil, discNumber: nil, duration: item.duration, coverArt: item.coverArt,
                                                 year: nil, genre: nil, playCount: nil,
                                                 starred: nil, suffix: nil, bitRate: nil
                                             )
@@ -415,7 +427,7 @@ struct SearchView: View {
                                                         id: item.songId,
                                                         title: item.songTitle ?? item.songId,
                                                         artist: item.artistName, album: nil, albumId: nil,
-                                                        track: nil, duration: item.duration, coverArt: item.coverArt,
+                                                        track: nil, discNumber: nil, duration: item.duration, coverArt: item.coverArt,
                                                         year: nil, genre: nil, playCount: nil,
                                                         starred: nil, suffix: nil, bitRate: nil
                                                     )
@@ -432,7 +444,7 @@ struct SearchView: View {
                                                     id: item.songId,
                                                     title: item.songTitle ?? item.songId,
                                                     artist: item.artistName, album: nil, albumId: nil,
-                                                    track: nil, duration: item.duration, coverArt: item.coverArt,
+                                                    track: nil, discNumber: nil, duration: item.duration, coverArt: item.coverArt,
                                                     year: nil, genre: nil, playCount: nil,
                                                     starred: nil, suffix: nil, bitRate: nil
                                                 )
@@ -442,7 +454,7 @@ struct SearchView: View {
                                                     id: item.songId,
                                                     title: item.songTitle ?? item.songId,
                                                     artist: item.artistName, album: nil, albumId: nil,
-                                                    track: nil, duration: item.duration, coverArt: item.coverArt,
+                                                    track: nil, discNumber: nil, duration: item.duration, coverArt: item.coverArt,
                                                     year: nil, genre: nil, playCount: nil,
                                                     starred: nil, suffix: nil, bitRate: nil
                                                 )
@@ -473,6 +485,14 @@ struct SearchView: View {
                                                 .frame(width: 44, height: 44)
                                             Text(artist.name).font(.body)
                                             Spacer()
+                                            if enableDownloads && downloadStore.artists.contains(where: { $0.name == artist.name }) {
+                                                Image(systemName: "arrow.down.circle.fill")
+                                                    .font(.caption)
+                                                    .foregroundStyle(.white)
+                                                    .padding(4)
+                                                    .background(accentColor, in: Circle())
+                                                    .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
+                                            }
                                             Image(systemName: "heart.fill")
                                                 .font(.caption2).foregroundStyle(.pink)
                                         }
@@ -496,6 +516,7 @@ struct SearchView: View {
                                                 }
                                             }
                                             Spacer()
+                                            AlbumDownloadBadge(albumId: album.id)
                                             Image(systemName: "heart.fill")
                                                 .font(.caption2).foregroundStyle(.pink)
                                         }
@@ -522,6 +543,7 @@ struct SearchView: View {
                                                 }
                                             }
                                             Spacer()
+                                            DownloadStatusIcon(songId: song.id)
                                             Image(systemName: "heart.fill")
                                                 .font(.caption2).foregroundStyle(.pink)
                                             Text(song.durationFormatted)
@@ -577,6 +599,32 @@ struct SearchView: View {
                 }
             }
             .shelveToast($currentToast)
+            .alert(
+                tr("Delete Downloads?", "Downloads löschen?"),
+                isPresented: Binding(get: { artistToDeleteDownloads != nil }, set: { if !$0 { artistToDeleteDownloads = nil } }),
+                presenting: artistToDeleteDownloads
+            ) { artist in
+                Button(tr("Delete", "Löschen"), role: .destructive) {
+                    if let match = downloadStore.artists.first(where: { $0.name == artist.name }) {
+                        downloadStore.deleteArtist(match.artistId)
+                    }
+                }
+                Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+            } message: { _ in
+                Text(tr("The downloads will be removed from this device.", "Die Downloads werden von diesem Gerät entfernt."))
+            }
+            .alert(
+                tr("Delete Downloads?", "Downloads löschen?"),
+                isPresented: Binding(get: { albumToDeleteDownloads != nil }, set: { if !$0 { albumToDeleteDownloads = nil } }),
+                presenting: albumToDeleteDownloads
+            ) { album in
+                Button(tr("Delete", "Löschen"), role: .destructive) {
+                    downloadStore.deleteAlbum(album.id)
+                }
+                Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+            } message: { _ in
+                Text(tr("The downloads will be removed from this device.", "Die Downloads werden von diesem Gerät entfernt."))
+            }
             .alert(tr("Error", "Fehler"), isPresented: $showError, presenting: errorMessage) { _ in
                 Button(tr("OK", "OK"), role: .cancel) {}
             } message: { msg in
@@ -671,7 +719,7 @@ struct SearchView: View {
                     id: item.songId,
                     title: item.songTitle ?? item.songId,
                     artist: item.artistName, album: nil, albumId: nil,
-                    track: nil, duration: nil, coverArt: item.coverArt,
+                    track: nil, discNumber: nil, duration: nil, coverArt: item.coverArt,
                     year: nil, genre: nil, playCount: nil,
                     starred: nil, suffix: nil, bitRate: nil
                 )

@@ -7,6 +7,7 @@ struct Song: Identifiable, Codable, Hashable {
     let album: String?
     let albumId: String?
     let track: Int?
+    let discNumber: Int?
     let duration: Int?
     let coverArt: String?
     let year: Int?
@@ -24,6 +25,6 @@ struct Song: Identifiable, Codable, Hashable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, title, artist, album, albumId, track, duration, coverArt, year, genre, playCount, starred, suffix, bitRate
+        case id, title, artist, album, albumId, track, discNumber, duration, coverArt, year, genre, playCount, starred, suffix, bitRate
     }
 }
