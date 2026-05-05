@@ -367,6 +367,9 @@ struct PlayerView: View {
         let image: UIImage?
         if let cached = ImageCacheService.shared.cachedImage(key: key300) {
             image = cached
+        } else if let localPath = LocalArtworkIndex.shared.localPath(for: coverArtId),
+                  let local = UIImage(contentsOfFile: localPath) {
+            image = local
         } else if let url = SubsonicAPIService.shared.coverArtURL(for: coverArtId, size: 300) {
             image = await ImageCacheService.shared.image(url: url, key: key300)
         } else {
