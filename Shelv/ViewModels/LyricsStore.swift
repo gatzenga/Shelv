@@ -53,10 +53,10 @@ class LyricsStore: ObservableObject {
 
         downloadTask = Task.detached(priority: .utility) { [weak self] in
             defer {
-                Task { @MainActor [weak self] in
+                DispatchQueue.main.async { [weak self] in
                     self?.isDownloading = false
                     self?.refreshDbSize()
-                    await self?.refreshFetchedCount(serverId: serverId)
+                    Task { await self?.refreshFetchedCount(serverId: serverId) }
                 }
             }
 

@@ -151,7 +151,7 @@ class AudioPlayerService: ObservableObject {
             // der NetworkStatus-Monitor seinen eigenen Update noch nicht prozessiert hat.
             NetworkStatus.shared.update(from: path)
             let isAvailable = path.status == .satisfied
-            Task { @MainActor [weak self] in
+            DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
                 self.isNetworkAvailable = isAvailable
                 if isAvailable, let song = self.networkResumeSong {
