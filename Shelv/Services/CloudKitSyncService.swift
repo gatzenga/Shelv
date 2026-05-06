@@ -219,56 +219,59 @@ actor CloudKitSyncService {
         }
         do {
             try await ensureZoneExists()
-            let unsynced = await PlayLogService.shared.fetchUnsynced(limit: 200)
-            debug("[CloudKitSync] Pending events to upload: \(unsynced.count)")
-            guard !unsynced.isEmpty else { return }
+            while canSync {
+                let unsynced = await PlayLogService.shared.fetchUnsynced(limit: 200)
+                debug("[CloudKitSync] Pending events to upload: \(unsynced.count)")
+                guard !unsynced.isEmpty else { return }
 
-            let did = deviceId
-            let records: [CKRecord] = unsynced.compactMap { event in
-                guard let uuid = event.uuid else { return nil }
-                let rid = CKRecord.ID(recordName: uuid, zoneID: zoneID)
-                let r = CKRecord(recordType: "PlayEvent", recordID: rid)
-                r["uuid"]         = uuid
-                r["songId"]       = event.songId
-                r["serverId"]     = event.serverId
-                r["playedAt"]     = event.playedAt
-                r["songDuration"] = event.songDuration
-                r["deviceId"]     = did
-                return r
-            }
-            guard !records.isEmpty else { return }
+                let did = deviceId
+                let records: [CKRecord] = unsynced.compactMap { event in
+                    guard let uuid = event.uuid else { return nil }
+                    let rid = CKRecord.ID(recordName: uuid, zoneID: zoneID)
+                    let r = CKRecord(recordType: "PlayEvent", recordID: rid)
+                    r["uuid"]         = uuid
+                    r["songId"]       = event.songId
+                    r["serverId"]     = event.serverId
+                    r["playedAt"]     = event.playedAt
+                    r["songDuration"] = event.songDuration
+                    r["deviceId"]     = did
+                    return r
+                }
+                guard !records.isEmpty else { return }
 
-            debug("[CloudKitSync] Sending modifyRecords with \(records.count) records...")
-            let saveResults = try await db.modifyRecords(
-                saving: records, deleting: [],
-                savePolicy: .allKeys, atomically: false
-            ).saveResults
+                debug("[CloudKitSync] Sending modifyRecords with \(records.count) records...")
+                let saveResults = try await db.modifyRecords(
+                    saving: records, deleting: [],
+                    savePolicy: .allKeys, atomically: false
+                ).saveResults
 
-            var uploaded: [String] = []
-            var failureCount = 0
-            for (recordID, result) in saveResults {
-                switch result {
-                case .success:
-                    uploaded.append(recordID.recordName)
-                case .failure(let err):
-                    if let ckErr = err as? CKError, ckErr.code == .serverRecordChanged {
+                var uploaded: [String] = []
+                var failureCount = 0
+                for (recordID, result) in saveResults {
+                    switch result {
+                    case .success:
                         uploaded.append(recordID.recordName)
-                    } else {
-                        failureCount += 1
-                        debug("[CloudKitSync] Save failure for \(recordID.recordName): \(err.localizedDescription)")
+                    case .failure(let err):
+                        if let ckErr = err as? CKError, ckErr.code == .serverRecordChanged {
+                            uploaded.append(recordID.recordName)
+                        } else {
+                            failureCount += 1
+                            debug("[CloudKitSync] Save failure for \(recordID.recordName): \(err.localizedDescription)")
+                        }
                     }
                 }
-            }
 
-            await PlayLogService.shared.markSynced(uuids: uploaded)
-            await updatePendingCounts()
-            debug("[CloudKitSync] Uploaded \(uploaded.count) events (\(failureCount) failures)")
-            if failureCount > 0 {
-                log("Uploaded \(uploaded.count) plays (\(failureCount) failed)", isError: true)
-            } else {
-                log("Uploaded \(uploaded.count) plays")
+                await PlayLogService.shared.markSynced(uuids: uploaded)
+                await updatePendingCounts()
+                debug("[CloudKitSync] Uploaded \(uploaded.count) events (\(failureCount) failures)")
+                if failureCount > 0 {
+                    log("Uploaded \(uploaded.count) plays (\(failureCount) failed)", isError: true)
+                } else {
+                    log("Uploaded \(uploaded.count) plays")
+                }
+                await MainActor.run { status.lastSyncDate = Date() }
+                if uploaded.isEmpty { return }
             }
-            await MainActor.run { status.lastSyncDate = Date() }
         } catch {
             debug("[CloudKitSync] Upload error: \(error)")
             debug("[CloudKitSync] Upload error description: \(error.localizedDescription)")

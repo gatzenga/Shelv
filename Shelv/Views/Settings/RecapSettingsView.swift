@@ -177,26 +177,22 @@ struct RecapSettingsView: View {
                         }
                     }
 
-                    if ckStatus.pendingUploads > 0 {
-                        HStack {
-                            Label { Text(tr("Pending uploads", "Ausstehende Uploads")) } icon: {
-                                Image(systemName: "icloud.and.arrow.up").foregroundStyle(accentColor)
-                            }
-                            Spacer()
-                            Text("\(ckStatus.pendingUploads)")
-                                .font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                    HStack {
+                        Label { Text(tr("Pending uploads", "Ausstehende Uploads")) } icon: {
+                            Image(systemName: "icloud.and.arrow.up").foregroundStyle(accentColor)
                         }
+                        Spacer()
+                        Text(ckStatus.pendingUploads > 0 ? "\(ckStatus.pendingUploads)" : "—")
+                            .font(.caption).foregroundStyle(.secondary).monospacedDigit()
                     }
 
-                    if ckStatus.pendingScrobbles > 0 {
-                        HStack {
-                            Label { Text(tr("Pending scrobbles", "Ausstehende Scrobbles")) } icon: {
-                                Image(systemName: "waveform.badge.plus").foregroundStyle(accentColor)
-                            }
-                            Spacer()
-                            Text("\(ckStatus.pendingScrobbles)")
-                                .font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                    HStack {
+                        Label { Text(tr("Pending scrobbles", "Ausstehende Scrobbles")) } icon: {
+                            Image(systemName: "waveform.badge.plus").foregroundStyle(accentColor)
                         }
+                        Spacer()
+                        Text(ckStatus.pendingScrobbles > 0 ? "\(ckStatus.pendingScrobbles)" : "—")
+                            .font(.caption).foregroundStyle(.secondary).monospacedDigit()
                     }
 
                     Button {
