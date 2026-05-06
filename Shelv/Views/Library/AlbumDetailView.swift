@@ -23,10 +23,17 @@ struct AlbumDetailView: View {
     @State private var searchQuery = ""
     @State private var showDeleteAlbumDownloadConfirm = false
 
+    private var showPerSongArtist: Bool {
+        Set((detail?.song ?? []).compactMap(\.artist)).count > 1
+    }
+
     private var displayedSongs: [Song] {
         let all = detail?.song ?? []
         guard !searchQuery.isEmpty else { return all }
-        return all.filter { $0.title.localizedCaseInsensitiveContains(searchQuery) }
+        return all.filter {
+            $0.title.localizedCaseInsensitiveContains(searchQuery)
+                || ($0.artist?.localizedCaseInsensitiveContains(searchQuery) ?? false)
+        }
     }
 
     private var discGroups: [(disc: Int, songs: [Song])] {
@@ -346,10 +353,18 @@ struct AlbumDetailView: View {
                     fallbackIndex: song.track ?? (startIndex + 1),
                     accentColor: accentColor
                 )
-                Text(song.title)
-                    .font(.body)
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(song.title)
+                        .font(.body)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    if showPerSongArtist, let artist = song.artist {
+                        Text(artist)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
                 Spacer()
                 DownloadStatusIcon(songId: song.id)
                 Text(song.durationFormatted)

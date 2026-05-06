@@ -31,7 +31,11 @@ struct PlaylistDetailView: View {
 
     private var displayedSongs: [Song] {
         guard !searchQuery.isEmpty, !isEditMode else { return songs }
-        return songs.filter { $0.title.localizedCaseInsensitiveContains(searchQuery) }
+        return songs.filter {
+            $0.title.localizedCaseInsensitiveContains(searchQuery)
+                || ($0.artist?.localizedCaseInsensitiveContains(searchQuery) ?? false)
+                || ($0.album?.localizedCaseInsensitiveContains(searchQuery) ?? false)
+        }
     }
 
     var body: some View {
