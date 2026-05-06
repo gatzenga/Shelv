@@ -121,7 +121,30 @@ final class DownloadStore: ObservableObject {
         isLoading = true
         pendingReload = false
         let sid = serverId
-        let records = await DownloadDatabase.shared.allRecords(serverId: sid)
+        let rawRecords = await DownloadDatabase.shared.allRecords(serverId: sid)
+        // App-Container-UUID im gespeicherten Pfad kann sich ändern; kanonischen Pfad neu berechnen wenn nötig.
+        let healResult = await Task.detached(priority: .utility) { () -> (records: [DownloadRecord], toUpdate: [DownloadRecord]) in
+            var healed: [DownloadRecord] = []
+            var toUpdate: [DownloadRecord] = []
+            for var record in rawRecords {
+                if FileManager.default.fileExists(atPath: record.filePath) {
+                    healed.append(record)
+                } else {
+                    let candidate = DownloadService.serverDirectory(serverId: record.serverId)
+                        .appendingPathComponent("\(record.songId).\(record.fileExtension)")
+                    if FileManager.default.fileExists(atPath: candidate.path) {
+                        record.filePath = candidate.path
+                        toUpdate.append(record)
+                    }
+                    healed.append(record)
+                }
+            }
+            return (healed, toUpdate)
+        }.value
+        for record in healResult.toUpdate {
+            await DownloadDatabase.shared.upsert(record)
+        }
+        let records = healResult.records
         let total = await DownloadDatabase.shared.totalBytes(serverId: sid)
         let mappedSongs = records.map { $0.toDownloadedSong() }
 
