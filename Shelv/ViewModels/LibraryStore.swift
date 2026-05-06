@@ -164,10 +164,10 @@ class LibraryStore: ObservableObject {
                 save(result, name: "artists", serverID: id)
                 UserDefaults.standard.set(result.count, forKey: "shelv_artistCount_\(id)")
             }
-            let map = Dictionary(uniqueKeysWithValues: result.compactMap { artist -> (String, String)? in
+            let map = Dictionary(result.compactMap { artist -> (String, String)? in
                 guard let cover = artist.coverArt else { return nil }
                 return (artist.name, cover)
-            })
+            }, uniquingKeysWith: { first, _ in first })
             NotificationCenter.default.post(name: .libraryArtistsLoaded, object: map)
         } catch {
             if !(error is CancellationError) { errorMessage = error.localizedDescription }
