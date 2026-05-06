@@ -117,9 +117,9 @@ actor DownloadService {
         guard let api = await currentAPI(for: serverId) else { return }
         let downloadedIds = await DownloadDatabase.shared.allSongIds(serverId: serverId)
         let artistCoverById: [String: String] = await MainActor.run {
-            Dictionary(uniqueKeysWithValues: LibraryStore.shared.artists.compactMap { a in
+            Dictionary(LibraryStore.shared.artists.compactMap { a in
                 a.coverArt.map { (a.name, $0) }
-            })
+            }, uniquingKeysWith: { first, _ in first })
         }
 
         // Album-Metadata pro Song-AlbumId nachschlagen wenn kein Override vorliegt.

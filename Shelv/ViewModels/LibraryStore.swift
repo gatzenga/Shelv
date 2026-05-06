@@ -144,10 +144,10 @@ class LibraryStore: ObservableObject {
 
         guard !OfflineModeService.shared.isOffline else {
             // Notification auch aus Disk-Cache feuern damit DownloadStore.artistCoverByName befüllt wird
-            let map = Dictionary(uniqueKeysWithValues: artists.compactMap { artist -> (String, String)? in
+            let map = Dictionary(artists.compactMap { artist -> (String, String)? in
                 guard let cover = artist.coverArt else { return nil }
                 return (artist.name, cover)
-            })
+            }, uniquingKeysWith: { first, _ in first })
             if !map.isEmpty {
                 NotificationCenter.default.post(name: .libraryArtistsLoaded, object: map)
             }
