@@ -266,6 +266,11 @@ struct SettingsView: View {
                         Text(cacheSize)
                             .foregroundStyle(.secondary)
                     }
+                    NavigationLink(destination: CacheLogView()) {
+                        Label { Text(tr("Logs", "Logs")) } icon: {
+                            Image(systemName: "doc.text.magnifyingglass").foregroundStyle(accentColor)
+                        }
+                    }
                     Button(role: .destructive) {
                         showClearCacheConfirm = true
                     } label: {
