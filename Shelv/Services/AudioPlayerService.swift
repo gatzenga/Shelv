@@ -445,6 +445,13 @@ class AudioPlayerService: ObservableObject {
         return url.queryParam("format").map { $0 != "raw" } ?? false
     }
 
+    private func isLossless(suffix: String?) -> Bool {
+        switch suffix?.lowercased() {
+        case "flac", "wav", "aiff", "aif", "alac": return true
+        default: return false
+        }
+    }
+
     private func startPlayback(song: Song, seekTo: Double = 0) {
         playbackGeneration += 1
         let gen = playbackGeneration
@@ -540,7 +547,7 @@ class AudioPlayerService: ObservableObject {
                     if seekTo > 0 { self.engine.seek(to: seekTo) }
                     self.isEngineLoaded = true
                 }
-            } else if !url.isFileURL, self.streamPreCacheEnabled {
+            } else if !url.isFileURL, self.streamPreCacheEnabled || self.isLossless(suffix: song.suffix) {
                 // Original-Remote-Stream mit Pre-Cache → erst vollständig laden, dann lokal abspielen
                 self.engine.stop()
                 let songId = song.id
@@ -1143,7 +1150,7 @@ class AudioPlayerService: ObservableObject {
                         bitrate: fmt.bitrate
                     )
                 }
-            } else if !nextURL.isFileURL, streamPreCacheEnabled || gaplessEnabled {
+            } else if !nextURL.isFileURL, streamPreCacheEnabled || gaplessEnabled || isLossless(suffix: nextSong.suffix) {
                 prefetchScheduled = true
                 prefetchedSongId = nextSong.id
                 let suffix = nextSong.suffix?.lowercased() ?? "audio"
@@ -1197,7 +1204,7 @@ class AudioPlayerService: ObservableObject {
                     self.gaplessPreloadURL = nil
                 }
             }
-        } else if streamPreCacheEnabled || gaplessEnabled {
+        } else if streamPreCacheEnabled || gaplessEnabled || isLossless(suffix: nextSong.suffix) {
             // Original-Remote-Stream — auf lokale Datei warten (Prefetch läuft seit 5s-Marker)
             gaplessPreloadSong = nextSong
             gaplessPreloadTriggered = true
