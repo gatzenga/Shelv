@@ -319,12 +319,12 @@ final class PlayerEngine: ObservableObject {
     }
 
     private func refreshDuration() {
-        if trustedDuration > 0 {
-            duration = trustedDuration
-            return
-        }
         guard let item = player.currentItem else { return }
         let d = item.duration.seconds
-        if d.isFinite && d > 0 { duration = d }
+        if d.isFinite && d > 0 {
+            duration = d
+            return
+        }
+        if trustedDuration > 0 { duration = trustedDuration }
     }
 }
