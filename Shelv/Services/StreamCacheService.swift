@@ -56,6 +56,8 @@ actor StreamCacheService {
     }
 
     func cancel(songId: String) {
+        let hadTask = activeTasks[songId] != nil
+        let hadCache = cachedURLs[songId] != nil
         activeTasks[songId]?.cancel()
         activeTasks.removeValue(forKey: songId)
         let ext = activeFormats[songId].map { Self.fileExtension(for: $0.codecLabel) } ?? ""
@@ -68,7 +70,9 @@ actor StreamCacheService {
             try? FileManager.default.removeItem(at: Self.tempURL(for: songId, ext: ext))
         }
         try? FileManager.default.removeItem(at: Self.tempURL(for: songId))
-        StreamCacheLog.log(songId: songId, message: "Removed")
+        if hadTask || hadCache {
+            StreamCacheLog.log(songId: songId, message: "Removed")
+        }
     }
 
     func cancelAll() {

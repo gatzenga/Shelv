@@ -45,6 +45,7 @@ struct SettingsView: View {
     @State private var cacheSize = "—"
     @State private var showBulkDownloadSheet = false
     @State private var showDeleteAllDownloadsConfirm = false
+    @State private var showPreCacheInfo = false
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
@@ -131,12 +132,6 @@ struct SettingsView: View {
                         }
                     }
                     .tint(accentColor)
-                    Text(tr(
-                        "Gapless and transcoding are not fully compatible — a short gap between tracks is expected.",
-                        "Gapless und Transcoding sind nicht vollständig kompatibel – ein kurzer Übergang zwischen Titeln ist normal."
-                    ))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
                 }
 
                 Section(tr("Recap", "Recap")) {
@@ -250,13 +245,36 @@ struct SettingsView: View {
                         }
                     }
                     .tint(accentColor)
-                    if streamPreCacheEnabled {
-                        Text(tr(
-                            "Stable, network-independent playback with seamless gapless transitions. The first song may take longer to load.\n\n• Downloads the current song fully before playback\n• While it plays, the next song pre-fetches in the background\n• Every subsequent song starts instantly\n• Cached files are removed when the next song starts\n\nOnly active when transcoding is set to Original or off.",
-                            "Stabile, netzwerkunabhängige Wiedergabe mit nahtlosen Gapless-Übergängen. Beim ersten Song kann es zu einer längeren Ladezeit kommen.\n\n• Lädt den aktuellen Song vollständig vor der Wiedergabe\n• Währenddessen wird der nächste Song im Hintergrund geladen\n• Ab dem zweiten Song startet die Wiedergabe sofort\n• Gecachte Dateien werden beim Start des nächsten Songs gelöscht\n\nNur wirksam, wenn Transcoding auf Original gestellt oder deaktiviert ist."
-                        ))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    Button {
+                        showPreCacheInfo = true
+                    } label: {
+                        Label {
+                            Text(tr("About Pre-cache", "Über Pre-cache"))
+                                .foregroundStyle(.primary)
+                        } icon: {
+                            Image(systemName: "info.circle").foregroundStyle(accentColor)
+                        }
+                    }
+                    .sheet(isPresented: $showPreCacheInfo) {
+                        NavigationStack {
+                            ScrollView {
+                                Text(tr(
+                                    "Stable, network-independent playback with seamless gapless transitions. The first song may take longer to load.\n\n• Downloads the current song fully before playback\n• While it plays, the next song pre-fetches in the background\n• Every subsequent song starts instantly\n• Cached files are removed when the next song starts\n\nOnly active when transcoding is set to Original or off.",
+                                    "Stabile, netzwerkunabhängige Wiedergabe mit nahtlosen Gapless-Übergängen. Beim ersten Song kann es zu einer längeren Ladezeit kommen.\n\n• Lädt den aktuellen Song vollständig vor der Wiedergabe\n• Währenddessen wird der nächste Song im Hintergrund geladen\n• Ab dem zweiten Song startet die Wiedergabe sofort\n• Gecachte Dateien werden beim Start des nächsten Songs gelöscht\n\nNur wirksam, wenn Transcoding auf Original gestellt oder deaktiviert ist."
+                                ))
+                                .font(.body)
+                                .padding()
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .navigationTitle(tr("Pre-cache", "Pre-cache"))
+                            .navigationBarTitleDisplayMode(.inline)
+                            .toolbar {
+                                ToolbarItem(placement: .confirmationAction) {
+                                    Button(tr("Done", "Fertig")) { showPreCacheInfo = false }
+                                }
+                            }
+                        }
+                        .presentationDetents([.medium, .large])
                     }
                     HStack {
                         Label { Text(tr("Cache Size", "Cache-Größe")) } icon: {
