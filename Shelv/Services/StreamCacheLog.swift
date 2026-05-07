@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 
 final class StreamCacheLog: ObservableObject {
     static let shared = StreamCacheLog()
