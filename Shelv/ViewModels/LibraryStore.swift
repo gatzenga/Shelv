@@ -195,11 +195,19 @@ class LibraryStore: ObservableObject {
     }
 
     func fetchAlbumSongs(_ album: Album) async throws -> [Song] {
+        if OfflineModeService.shared.isOffline {
+            return DownloadStore.shared.albums.first { $0.albumId == album.id }?.songs.map { $0.asSong() } ?? []
+        }
         let detail = try await api.getAlbum(id: album.id)
         return detail.song ?? []
     }
 
     func fetchAllSongs(for artist: Artist) async -> [Song] {
+        if OfflineModeService.shared.isOffline {
+            return DownloadStore.shared.artists
+                .first { $0.artistId == artist.id }?
+                .albums.flatMap { $0.songs.map { $0.asSong() } } ?? []
+        }
         guard let artistDetail = try? await api.getArtist(id: artist.id),
               let albums = artistDetail.album, !albums.isEmpty else { return [] }
         let indexed = Array(albums.enumerated())

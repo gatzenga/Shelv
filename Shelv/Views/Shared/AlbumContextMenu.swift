@@ -171,6 +171,9 @@ struct AlbumContextMenuModifier: ViewModifier {
     }
 
     private func fetchSongs() async -> [Song]? {
+        if offlineMode.isOffline {
+            return DownloadStore.shared.albums.first { $0.albumId == album.id }?.songs.map { $0.asSong() }
+        }
         if let cachedSongs { return cachedSongs }
         guard let detail = try? await SubsonicAPIService.shared.getAlbum(id: album.id) else { return nil }
         let songs = detail.song ?? []
