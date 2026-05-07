@@ -205,7 +205,7 @@ class LibraryStore: ObservableObject {
     func fetchAllSongs(for artist: Artist) async -> [Song] {
         if OfflineModeService.shared.isOffline {
             return DownloadStore.shared.artists
-                .first { $0.artistId == artist.id }?
+                .first { $0.artistId == artist.id || $0.name == artist.name }?
                 .albums.flatMap { $0.songs.map { $0.asSong() } } ?? []
         }
         guard let artistDetail = try? await api.getArtist(id: artist.id),
