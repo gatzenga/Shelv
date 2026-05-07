@@ -498,6 +498,8 @@ class AudioPlayerService: ObservableObject {
                 self.artworkReloadToken = UUID()
                 self.lastArtworkCoverArt = song.coverArt
             }
+            MPNowPlayingInfoCenter.default().playbackState = .playing
+            self.updateNowPlayingInfo(song: song)
 
             // Transcodierter Remote-Stream → erst cachen, dann lokal abspielen
             if self.isTranscodedRemote(url), let fmt = TranscodingPolicy.currentStreamFormat() {
@@ -597,8 +599,6 @@ class AudioPlayerService: ObservableObject {
                 self.isEngineLoaded = true
             }
 
-            MPNowPlayingInfoCenter.default().playbackState = .playing
-            self.updateNowPlayingInfo(song: song)
             let scrobbleSongId = song.id
             let scrobbleServerId = SubsonicAPIService.shared.activeServer?.stableId ?? ""
             let scrobbleAt = Date().timeIntervalSince1970

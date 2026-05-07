@@ -15,8 +15,8 @@ struct TranscodingSettingsView: View {
         List {
             Section {
                 Text(tr(
-                    "Choose format and bitrate the server should transcode to. \"Original\" requests the source file unchanged. If the server cannot transcode, the original is returned.",
-                    "Wähle Format und Bitrate die der Server liefern soll. „Original\u{201C} lädt unverändert. Wenn der Server das Format nicht liefert, kommt die Originaldatei zurück."
+                    "Choose format and bitrate the server should transcode to. \"Original\" requests the source file unchanged. If the server cannot transcode, the original is returned.\n\nTranscoded songs play from a local copy, ensuring stable playback and seamless gapless transitions. The first song may take longer to load.\n\n• The current song is fully downloaded before playback\n• While it plays, the next song pre-fetches in the background\n• Every subsequent song starts instantly\n• Cached files are removed when the next song starts",
+                    "Wähle Format und Bitrate die der Server liefern soll. „Original\u{201C} lädt unverändert. Wenn der Server das Format nicht liefert, kommt die Originaldatei zurück.\n\nTranscodierte Songs werden lokal abgespielt – stabile Wiedergabe und nahtlose Gapless-Übergänge. Beim ersten Song kann es zu einer längeren Ladezeit kommen.\n\n• Der aktuelle Song wird vollständig vor der Wiedergabe geladen\n• Währenddessen wird der nächste Song im Hintergrund geladen\n• Ab dem zweiten Song startet die Wiedergabe sofort\n• Gecachte Dateien werden beim Start des nächsten Songs gelöscht"
                 ))
                 .font(.caption)
                 .foregroundStyle(.secondary)

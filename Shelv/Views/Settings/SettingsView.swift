@@ -245,15 +245,15 @@ struct SettingsView: View {
 
                 Section(tr("Cache", "Cache")) {
                     Toggle(isOn: $streamPreCacheEnabled) {
-                        Label { Text(tr("Precache original file", "Originaldatei vorab laden")) } icon: {
+                        Label { Text(tr("Pre-cache original file", "Originaldatei vorab laden")) } icon: {
                             Image(systemName: "arrow.down.to.line").foregroundStyle(accentColor)
                         }
                     }
                     .tint(accentColor)
                     if streamPreCacheEnabled {
                         Text(tr(
-                            "Downloads the song before playback for seamless gapless and network-independent playback. Only applies when transcoding is off.",
-                            "Lädt den Song vollständig herunter, bevor er abgespielt wird. Ermöglicht unterbrechungsfreies Gapless-Playback und macht die Wiedergabe unabhängig vom Netzwerk. Nur wirksam, wenn kein Transcoding aktiv ist."
+                            "Stable, network-independent playback with seamless gapless transitions. The first song may take longer to load.\n\n• Downloads the current song fully before playback\n• While it plays, the next song pre-fetches in the background\n• Every subsequent song starts instantly\n• Cached files are removed when the next song starts\n\nOnly active when transcoding is set to Original or off.",
+                            "Stabile, netzwerkunabhängige Wiedergabe mit nahtlosen Gapless-Übergängen. Beim ersten Song kann es zu einer längeren Ladezeit kommen.\n\n• Lädt den aktuellen Song vollständig vor der Wiedergabe\n• Währenddessen wird der nächste Song im Hintergrund geladen\n• Ab dem zweiten Song startet die Wiedergabe sofort\n• Gecachte Dateien werden beim Start des nächsten Songs gelöscht\n\nNur wirksam, wenn Transcoding auf Original gestellt oder deaktiviert ist."
                         ))
                         .font(.caption)
                         .foregroundStyle(.secondary)
