@@ -266,7 +266,6 @@ struct DiscoverView: View {
             }
             .padding(.top, 20)
         }
-        .padding(.top, 80)
     }
 
     @ViewBuilder
@@ -377,7 +376,16 @@ struct DiscoverView: View {
             player.play(songs: Array(sorted.prefix(500)))
 
         case "offline_shuffle":
-            let sampled = Array(allSongs.shuffled().prefix(500))
+            let sampled = Array(allSongs.shuffled().prefix(500)).sorted {
+                let a = stripArticle($0.artist ?? "")
+                    .localizedStandardCompare(stripArticle($1.artist ?? ""))
+                if a != .orderedSame { return a == .orderedAscending }
+                let b = ($0.album ?? "").localizedStandardCompare($1.album ?? "")
+                if b != .orderedSame { return b == .orderedAscending }
+                let d0 = $0.discNumber ?? 0, d1 = $1.discNumber ?? 0
+                if d0 != d1 { return d0 < d1 }
+                return ($0.track ?? 0) < ($1.track ?? 0)
+            }
             player.playShuffled(songs: sampled)
 
         case "offline_newest":
