@@ -404,6 +404,7 @@ actor DownloadService {
 
     func planBulkDownload(serverId: String, maxBytes: Int64,
                           favorites enabled: Bool,
+                          recapPlaylistIds: [String] = [],
                           libraryAlbums: [Album]) async -> BulkDownloadPlan {
         guard let api = await currentAPI(for: serverId) else {
             return BulkDownloadPlan(planned: [], skipped: [], totalBytes: 0, limitBytes: maxBytes)
@@ -436,7 +437,26 @@ actor DownloadService {
         let discoverFreq = await discoverFreqTask
         let discoverRecent = await discoverRecentTask
 
-        // Reihenfolge: Discover (häufig→kürzlich) → Favoriten → Rest A-Z
+        var recapSongIds: [String] = []
+        var recapSongsExtra: [Song] = []
+        if !recapPlaylistIds.isEmpty {
+            let fetched: [Song] = await withTaskGroup(of: [Song].self) { group in
+                for id in recapPlaylistIds {
+                    group.addTask { (try? await api.api.getPlaylist(id: id))?.songs ?? [] }
+                }
+                var result: [Song] = []
+                for await songs in group { result.append(contentsOf: songs) }
+                return result
+            }
+            var seenRecap = Set<String>()
+            for song in fetched {
+                guard seenRecap.insert(song.id).inserted else { continue }
+                recapSongIds.append(song.id)
+                recapSongsExtra.append(song)
+            }
+        }
+
+        // Reihenfolge: Discover (häufig→kürzlich) → Favoriten → Recap → Rest A-Z
         var discoverPriority: [String: Int] = [:]
         for (i, album) in discoverFreq.enumerated() {
             discoverPriority[album.id] = i
@@ -478,9 +498,13 @@ actor DownloadService {
         }
         appendUnique(discoverSongs)
         appendUnique(starred)
+        appendUnique(recapSongIds)
         appendUnique(alphabetical)
 
-        let songsById = Dictionary(uniqueKeysWithValues: allSongs.map { ($0.id, $0) })
+        var songsById = Dictionary(uniqueKeysWithValues: allSongs.map { ($0.id, $0) })
+        for song in recapSongsExtra where songsById[song.id] == nil {
+            songsById[song.id] = song
+        }
         var planned: [Song] = []
         var skipped: [Song] = []
         var totalBytes: Int64 = 0

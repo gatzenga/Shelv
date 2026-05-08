@@ -5,6 +5,7 @@ struct BulkDownloadSheet: View {
 
     @ObservedObject var libraryStore = LibraryStore.shared
     @EnvironmentObject var serverStore: ServerStore
+    @EnvironmentObject var recapStore: RecapStore
     @ObservedObject var downloadStore = DownloadStore.shared
     @Environment(\.dismiss) private var dismiss
     @AppStorage("enableFavorites") private var enableFavorites = true
@@ -120,9 +121,11 @@ struct BulkDownloadSheet: View {
         guard !Task.isCancelled else { return }
         let albums = libraryStore.albums
         guard !albums.isEmpty else { return }
+        let recapIds = await MainActor.run { Array(recapStore.recapPlaylistIds) }
         let computed = await DownloadService.shared.planBulkDownload(
             serverId: stable, maxBytes: maxBytes,
             favorites: enableFavorites,
+            recapPlaylistIds: recapIds,
             libraryAlbums: albums
         )
         guard !Task.isCancelled else { return }
