@@ -9,6 +9,7 @@ struct BulkDownloadSheet: View {
     @ObservedObject var downloadStore = DownloadStore.shared
     @Environment(\.dismiss) private var dismiss
     @AppStorage("enableFavorites") private var enableFavorites = true
+    @AppStorage("recapEnabled") private var recapEnabled = false
     @AppStorage("themeColor") private var themeColorName = "violet"
 
     @State private var plan: BulkDownloadPlan?
@@ -100,6 +101,10 @@ struct BulkDownloadSheet: View {
                     if enableFavorites {
                         Label(tr("Then favorites", "Dann Favoriten"),
                               systemImage: "heart")
+                    }
+                    if recapEnabled && !recapStore.recapPlaylistIds.isEmpty {
+                        Label(tr("Then recap playlists", "Dann Recap-Playlists"),
+                              systemImage: "calendar.badge.clock")
                     }
                     Label(tr("Then alphabetical by artist", "Dann alphabetisch"),
                           systemImage: "textformat")
