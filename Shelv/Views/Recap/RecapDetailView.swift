@@ -374,22 +374,11 @@ struct RecapDetailView: View {
         isLoading = true
         defer { isLoading = false }
 
-        let playlistSongs: [Song]
-        if offlineMode.isOffline {
-            guard let playlist = await libraryStore.loadPlaylistDetail(id: entry.playlistId) else {
-                errorMessage = tr("Playlist could not be loaded.", "Playlist konnte nicht geladen werden.")
-                return
-            }
-            playlistSongs = playlist.songs ?? []
-        } else {
-            do {
-                let playlist = try await SubsonicAPIService.shared.getPlaylist(id: entry.playlistId)
-                playlistSongs = playlist.songs ?? []
-            } catch {
-                errorMessage = error.localizedDescription
-                return
-            }
+        guard let playlist = await libraryStore.loadPlaylistDetail(id: entry.playlistId) else {
+            errorMessage = tr("Playlist could not be loaded.", "Playlist konnte nicht geladen werden.")
+            return
         }
+        let playlistSongs: [Song] = playlist.songs ?? []
 
         let counts = await PlayLogService.shared.topSongs(
             serverId: serverId,
