@@ -126,7 +126,7 @@ struct BulkDownloadSheet: View {
         guard !Task.isCancelled else { return }
         let albums = libraryStore.albums
         guard !albums.isEmpty else { return }
-        let recapIds = await MainActor.run { Array(recapStore.recapPlaylistIds) }
+        let recapIds = await MainActor.run { recapEnabled ? Array(recapStore.recapPlaylistIds) : [] }
         let computed = await DownloadService.shared.planBulkDownload(
             serverId: stable, maxBytes: maxBytes,
             favorites: enableFavorites,
