@@ -39,6 +39,9 @@ struct BulkDownloadSheet: View {
                     Button(tr("Start", "Starten")) {
                         guard let plan else { return }
                         downloadStore.enqueueSongs(plan.planned)
+                        for (playlistId, songIds) in plan.recapPlaylistSongIds {
+                            downloadStore.addOfflinePlaylist(playlistId, songIds: songIds)
+                        }
                         dismiss()
                     }
                     .disabled(plan?.isEmpty ?? true)

@@ -165,6 +165,7 @@ struct BulkDownloadPlan {
     let skipped: [Song]
     let totalBytes: Int64
     let limitBytes: Int64
+    var recapPlaylistSongIds: [String: [String]] = [:]
 
     var isEmpty: Bool { planned.isEmpty }
 }

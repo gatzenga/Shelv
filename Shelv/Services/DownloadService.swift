@@ -439,20 +439,23 @@ actor DownloadService {
 
         var recapSongIds: [String] = []
         var recapSongsExtra: [Song] = []
+        var recapPlaylistSongIdsMap: [String: [String]] = [:]
         if !recapPlaylistIds.isEmpty {
-            let fetched: [Song] = await withTaskGroup(of: [Song].self) { group in
+            let fetched: [(String, [Song])] = await withTaskGroup(of: (String, [Song]).self) { group in
                 for id in recapPlaylistIds {
-                    group.addTask { (try? await api.api.getPlaylist(id: id))?.songs ?? [] }
+                    group.addTask { (id, (try? await api.api.getPlaylist(id: id))?.songs ?? []) }
                 }
-                var result: [Song] = []
-                for await songs in group { result.append(contentsOf: songs) }
+                var result: [(String, [Song])] = []
+                for await pair in group { result.append(pair) }
                 return result
             }
             var seenRecap = Set<String>()
-            for song in fetched {
-                guard seenRecap.insert(song.id).inserted else { continue }
-                recapSongIds.append(song.id)
-                recapSongsExtra.append(song)
+            for (playlistId, songs) in fetched {
+                recapPlaylistSongIdsMap[playlistId] = songs.map(\.id)
+                for song in songs where seenRecap.insert(song.id).inserted {
+                    recapSongIds.append(song.id)
+                    recapSongsExtra.append(song)
+                }
             }
         }
 
@@ -519,7 +522,7 @@ actor DownloadService {
             planned.append(song)
             totalBytes += estBytes
         }
-        return BulkDownloadPlan(planned: planned, skipped: skipped, totalBytes: totalBytes, limitBytes: maxBytes)
+        return BulkDownloadPlan(planned: planned, skipped: skipped, totalBytes: totalBytes, limitBytes: maxBytes, recapPlaylistSongIds: recapPlaylistSongIdsMap)
     }
 
     private func estimatedBytes(for song: Song) -> Int64 {
