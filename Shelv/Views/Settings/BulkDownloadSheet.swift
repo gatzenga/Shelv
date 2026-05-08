@@ -39,6 +39,13 @@ struct BulkDownloadSheet: View {
                     Button(tr("Start", "Starten")) {
                         guard let plan else { return }
                         downloadStore.enqueueSongs(plan.planned)
+                        let plannedIds = Set(plan.planned.map(\.id))
+                        for (playlistId, songIds) in plan.recapPlaylistSongIds {
+                            let allCovered = songIds.allSatisfy { downloadStore.isDownloaded(songId: $0) || plannedIds.contains($0) }
+                            if allCovered {
+                                downloadStore.addOfflinePlaylist(playlistId, songIds: songIds)
+                            }
+                        }
                         dismiss()
                     }
                     .disabled(plan?.isEmpty ?? true)

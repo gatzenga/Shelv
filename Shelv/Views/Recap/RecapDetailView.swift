@@ -283,6 +283,9 @@ struct RecapDetailView: View {
                 }
             }
             Spacer(minLength: 0)
+            if enableDownloads {
+                downloadBadge(songId: entry.song.id)
+            }
             playCountBadge(entry.playCount, isTop3: isTop3)
         }
     }
@@ -324,6 +327,16 @@ struct RecapDetailView: View {
         .padding(.vertical, 4)
         .background((isTop3 ? accentColor : Color.secondary).opacity(0.12))
         .clipShape(Capsule())
+    }
+
+    private func downloadBadge(songId: String) -> some View {
+        Group {
+            if downloadStore.isDownloaded(songId: songId) {
+                Image(systemName: "arrow.down.circle.fill")
+                    .font(.caption)
+                    .foregroundStyle(accentColor.opacity(0.7))
+            }
+        }
     }
 
     // MARK: - Download Header

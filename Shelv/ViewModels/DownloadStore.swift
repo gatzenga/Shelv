@@ -26,6 +26,7 @@ final class DownloadStore: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var artistCoverByName: [String: String] = [:]
     private var pendingReload = false
+    private var protectedPlaylistIds: Set<String> = []
     private var pendingInserts: [DownloadRecord] = []
     private var flushTask: Task<Void, Never>?
 
@@ -83,12 +84,14 @@ final class DownloadStore: ObservableObject {
         let saved = UserDefaults.standard.stringArray(forKey: "shelv_offline_playlists_\(serverId)") ?? []
         offlinePlaylistIds = Set(saved)
         playlistSongIds = UserDefaults.standard.dictionary(forKey: "shelv_offline_playlist_songs_\(serverId)") as? [String: [String]] ?? [:]
+        protectedPlaylistIds = []
         await reload()
     }
 
     func addOfflinePlaylist(_ id: String, songIds: [String]) {
         offlinePlaylistIds.insert(id)
         playlistSongIds[id] = songIds
+        protectedPlaylistIds.insert(id)
         UserDefaults.standard.set(Array(offlinePlaylistIds), forKey: "shelv_offline_playlists_\(serverId)")
         UserDefaults.standard.set(playlistSongIds, forKey: "shelv_offline_playlist_songs_\(serverId)")
     }
@@ -96,6 +99,7 @@ final class DownloadStore: ObservableObject {
     func removeOfflinePlaylist(_ id: String) {
         offlinePlaylistIds.remove(id)
         playlistSongIds.removeValue(forKey: id)
+        protectedPlaylistIds.remove(id)
         UserDefaults.standard.set(Array(offlinePlaylistIds), forKey: "shelv_offline_playlists_\(serverId)")
         UserDefaults.standard.set(playlistSongIds, forKey: "shelv_offline_playlist_songs_\(serverId)")
     }
@@ -229,9 +233,16 @@ final class DownloadStore: ObservableObject {
         NotificationCenter.default.post(name: .artworkIndexReady, object: nil)
         DownloadStatusCache.shared.rebuild(albumIds: Set(newRecordsByAlbumId.keys))
 
+        // Sobald der erste Song einer geschützten Playlist heruntergeladen ist, Schutz aufheben.
+        protectedPlaylistIds = protectedPlaylistIds.filter { id in
+            guard let ids = playlistSongIds[id] else { return false }
+            return !ids.contains { newSongById[$0] != nil }
+        }
         // Orphan-Playlist-Marker aufräumen: Marker, deren Songs alle nicht mehr lokal sind,
         // entfernen — sonst Geist-Eintrag im Offline-Modus (z.B. nach „Delete All Downloads").
+        // Geschützte Playlists (Download läuft, noch kein Song fertig) werden übersprungen.
         let orphanedPlaylistIds = offlinePlaylistIds.filter { id in
+            guard !protectedPlaylistIds.contains(id) else { return false }
             guard let ids = playlistSongIds[id], !ids.isEmpty else { return true }
             return !ids.contains { newSongById[$0] != nil }
         }
