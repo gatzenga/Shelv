@@ -435,7 +435,13 @@ struct PlaylistDetailView: View {
             songs = ids.compactMap { id in downloadStore.songs.first { $0.songId == id }?.asSong() }
         }
         if !offlineMode.isOffline && downloadStore.offlinePlaylistIds.contains(playlist.id) {
-            if songs.contains(where: { !downloadStore.isDownloaded(songId: $0.id) }) {
+            let hasActive = songs.contains {
+                switch downloadStore.downloadState(songId: $0.id) {
+                case .queued, .downloading: return true
+                default: return false
+                }
+            }
+            if !hasActive && songs.contains(where: { !downloadStore.isDownloaded(songId: $0.id) }) {
                 downloadStore.removeOfflinePlaylist(playlist.id)
             }
         }
