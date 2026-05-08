@@ -33,7 +33,11 @@ struct DiscoverView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 28) {
                     if offlineMode.isOffline {
-                        offlineEmptyState
+                        if downloadStore.songs.isEmpty {
+                            offlineEmptyState
+                        } else {
+                            offlineMixState
+                        }
                     } else if libraryStore.isLoadingDiscover && libraryStore.recentlyAdded.isEmpty {
                         VStack(spacing: 20) {
                             ProgressView()
@@ -221,6 +225,51 @@ struct DiscoverView: View {
     }
 
     @ViewBuilder
+    private var offlineMixState: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(spacing: 12) {
+                mixButton(
+                    title: tr("Play: All Downloads", "Play: Alle Downloads"),
+                    icon: "play.fill",
+                    key: "offline_play"
+                ) { loadOfflineMix(type: "offline_play") }
+
+                mixButton(
+                    title: tr("Shuffle: All Downloads", "Shuffle: Alle Downloads"),
+                    icon: "shuffle",
+                    key: "offline_shuffle"
+                ) { loadOfflineMix(type: "offline_shuffle") }
+
+                mixButton(
+                    title: tr("Mix: Latest Downloads", "Mix: Neueste Downloads"),
+                    icon: "arrow.down.circle.fill",
+                    key: "offline_newest"
+                ) { loadOfflineMix(type: "offline_newest") }
+            }
+            .padding(.horizontal)
+
+            HStack {
+                Spacer()
+                Button {
+                    offlineMode.exitOfflineMode()
+                } label: {
+                    Label(tr("Go Online", "Online gehen"), systemImage: "wifi")
+                        .font(.subheadline.bold())
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 10)
+                        .background(accentColor.opacity(0.15))
+                        .clipShape(Capsule())
+                        .foregroundStyle(accentColor)
+                }
+                .buttonStyle(.plain)
+                Spacer()
+            }
+            .padding(.top, 20)
+        }
+        .padding(.top, 80)
+    }
+
+    @ViewBuilder
     private var randomAlbumSection: some View {
         albumSection(title: tr("Random Albums", "Zufällige Alben"), albums: libraryStore.randomAlbums) {
             Button {
@@ -307,6 +356,40 @@ struct DiscoverView: View {
             .clipShape(Capsule())
         }
         .disabled(mixLoading != nil)
+    }
+
+    private func loadOfflineMix(type: String) {
+        let allSongs = downloadStore.songs.map { $0.asSong() }
+        guard !allSongs.isEmpty else { return }
+
+        switch type {
+        case "offline_play":
+            let sorted = allSongs.sorted {
+                let a = stripArticle($0.artist ?? "")
+                    .localizedStandardCompare(stripArticle($1.artist ?? ""))
+                if a != .orderedSame { return a == .orderedAscending }
+                let b = ($0.album ?? "").localizedStandardCompare($1.album ?? "")
+                if b != .orderedSame { return b == .orderedAscending }
+                let d0 = $0.discNumber ?? 0, d1 = $1.discNumber ?? 0
+                if d0 != d1 { return d0 < d1 }
+                return ($0.track ?? 0) < ($1.track ?? 0)
+            }
+            player.play(songs: Array(sorted.prefix(500)))
+
+        case "offline_shuffle":
+            let sampled = Array(allSongs.shuffled().prefix(500))
+            player.playShuffled(songs: sampled)
+
+        case "offline_newest":
+            let top100 = downloadStore.songs
+                .sorted { $0.addedAt > $1.addedAt }
+                .prefix(100)
+                .map { $0.asSong() }
+            player.playShuffled(songs: Array(top100))
+
+        default:
+            break
+        }
     }
 
     private func loadMix(type: String) async {
