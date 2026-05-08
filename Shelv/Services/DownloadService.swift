@@ -412,8 +412,8 @@ actor DownloadService {
         let alreadyDownloaded = await DownloadDatabase.shared.allSongIds(serverId: serverId)
 
         // Discover-Listen und alle Album-Songs parallel laden
-        async let discoverFreqTask = (try? await api.api.getAlbumList(type: "frequent", size: 50)) ?? []
-        async let discoverRecentTask = (try? await api.api.getAlbumList(type: "recent", size: 50)) ?? []
+        async let discoverFreqTask = (try? await api.api.getAlbumList(type: "frequent", size: 20)) ?? []
+        async let discoverRecentTask = (try? await api.api.getAlbumList(type: "recent", size: 20)) ?? []
 
         let allSongs: [Song] = await withTaskGroup(of: [Song].self) { group in
             let limit = 10
