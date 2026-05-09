@@ -319,8 +319,9 @@ struct PlayerView: View {
                 .onDisappear { artistResolveTask?.cancel(); artistResolveTask = nil }
                 .sheet(isPresented: $showQueue) {
                     QueueView()
-                        .presentationDetents([.medium, .large])
+                        .presentationSizing(.page)
                         .presentationCornerRadius(24)
+                        .presentationDragIndicator(.visible)
                         .tint(accentColor)
                 }
                 .sheet(isPresented: $showAddToPlaylist) {
