@@ -864,19 +864,6 @@ struct LibraryView: View {
                                     currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
                                 } label: { Image(systemName: "text.insert") }
                                 .tint(.orange)
-                                if enableDownloads {
-                                    if downloadedSongIds.contains(song.id) {
-                                        Button {
-                                            haptic(); DownloadStore.shared.deleteSong(song.id)
-                                        } label: { DeleteDownloadIcon() }
-                                        .tint(.red)
-                                    } else if !offlineMode.isOffline {
-                                        Button {
-                                            haptic(); DownloadStore.shared.enqueueSongs([song])
-                                        } label: { Image(systemName: "arrow.down.circle") }
-                                        .tint(accentColor)
-                                    }
-                                }
                             }
                             .swipeActions(edge: .leading, allowsFullSwipe: false) {
                                 if !offlineMode.isOffline {
@@ -963,7 +950,7 @@ struct LibraryView: View {
             case .complete:
                 Button {
                     haptic(); albumToDeleteDownloads = album
-                } label: { DeleteDownloadIcon() }
+                } label: { Image(systemName: "arrow.down.circle") }
                 .tint(.red)
             }
         }
@@ -975,7 +962,7 @@ struct LibraryView: View {
             if downloadedArtistNames.contains(artist.name) {
                 Button {
                     haptic(); artistToDeleteDownloads = artist
-                } label: { DeleteDownloadIcon() }
+                } label: { Image(systemName: "arrow.down.circle") }
                 .tint(.red)
             } else if !offlineMode.isOffline {
                 Button {
@@ -1004,9 +991,9 @@ struct LibraryView: View {
                     Label(tr("Download Remaining", "Rest herunterladen"), systemImage: "arrow.down.circle")
                 }
             }
-            Button(role: .destructive) { albumToDeleteDownloads = album } label: { Label { Text(tr("Delete Downloads", "Downloads löschen")) } icon: { DeleteDownloadIcon(tint: .red) } }
+            Button(role: .destructive) { albumToDeleteDownloads = album } label: { Label(tr("Delete Downloads", "Downloads löschen"), systemImage: "arrow.down.circle") }
         case .complete:
-            Button(role: .destructive) { albumToDeleteDownloads = album } label: { Label { Text(tr("Delete Downloads", "Downloads löschen")) } icon: { DeleteDownloadIcon(tint: .red) } }
+            Button(role: .destructive) { albumToDeleteDownloads = album } label: { Label(tr("Delete Downloads", "Downloads löschen"), systemImage: "arrow.down.circle") }
         }
     }
 
@@ -1075,7 +1062,7 @@ struct LibraryView: View {
                 Button(role: .destructive) {
                     artistToDeleteDownloads = artist
                 } label: {
-                    Label { Text(tr("Delete Downloads", "Downloads löschen")) } icon: { DeleteDownloadIcon(tint: .red) }
+                    Label(tr("Delete Downloads", "Downloads löschen"), systemImage: "arrow.down.circle")
                 }
             }
         }

@@ -126,7 +126,7 @@ struct SearchView: View {
                                             if downloadStore.artists.contains(where: { $0.name == artist.name }) {
                                                 Button {
                                                     haptic(); artistToDeleteDownloads = artist
-                                                } label: { DeleteDownloadIcon() }
+                                                } label: { Image(systemName: "arrow.down.circle") }
                                                 .tint(.red)
                                             } else if !offlineMode.isOffline {
                                                 Button {
@@ -195,7 +195,7 @@ struct SearchView: View {
                                             if downloadStore.albums.contains(where: { $0.albumId == album.id }) {
                                                 Button {
                                                     haptic(); albumToDeleteDownloads = album
-                                                } label: { DeleteDownloadIcon() }
+                                                } label: { Image(systemName: "arrow.down.circle") }
                                                 .tint(.red)
                                             } else if !offlineMode.isOffline {
                                                 Button {
@@ -309,19 +309,6 @@ struct SearchView: View {
                                             currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
                                         } label: { Image(systemName: "text.insert") }
                                         .tint(.orange)
-                                        if enableDownloads {
-                                            if downloadStore.isDownloaded(songId: song.id) {
-                                                Button {
-                                                    haptic(); downloadStore.deleteSong(song.id)
-                                                } label: { DeleteDownloadIcon() }
-                                                .tint(.red)
-                                            } else if !offlineMode.isOffline {
-                                                Button {
-                                                    haptic(); downloadStore.enqueueSongs([song])
-                                                } label: { Image(systemName: "arrow.down.circle") }
-                                                .tint(accentColor)
-                                            }
-                                        }
                                     }
                                     .swipeActions(edge: .leading, allowsFullSwipe: false) {
                                         if enableFavorites && !offlineMode.isOffline {
@@ -414,28 +401,6 @@ struct SearchView: View {
                                             currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
                                         } label: { Image(systemName: "text.insert") }
                                         .tint(.orange)
-                                        if enableDownloads {
-                                            if downloadStore.isDownloaded(songId: item.songId) {
-                                                Button {
-                                                    haptic(); downloadStore.deleteSong(item.songId)
-                                                } label: { DeleteDownloadIcon() }
-                                                .tint(.red)
-                                            } else if !offlineMode.isOffline {
-                                                Button {
-                                                    haptic()
-                                                    let song = Song(
-                                                        id: item.songId,
-                                                        title: item.songTitle ?? item.songId,
-                                                        artist: item.artistName, album: nil, albumId: nil,
-                                                        track: nil, discNumber: nil, duration: item.duration, coverArt: item.coverArt,
-                                                        year: nil, genre: nil, playCount: nil,
-                                                        starred: nil, suffix: nil, bitRate: nil
-                                                    )
-                                                    downloadStore.enqueueSongs([song])
-                                                } label: { Image(systemName: "arrow.down.circle") }
-                                                .tint(accentColor)
-                                            }
-                                        }
                                     }
                                     .swipeActions(edge: .leading, allowsFullSwipe: false) {
                                         if enableFavorites && !offlineMode.isOffline {

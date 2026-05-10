@@ -288,13 +288,16 @@ struct AlbumDetailView: View {
                         haptic(); downloadStore.enqueueAlbum(album)
                         currentToast = ShelveToast(message: tr("Download started", "Download gestartet"))
                     } label: {
-                        Label(tr("Download", "Herunterladen"), systemImage: "arrow.down.circle")
-                            .font(.subheadline).bold()
-                            .foregroundStyle(accentColor)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                            .background(accentColor.opacity(0.12))
-                            .clipShape(Capsule())
+                        HStack(spacing: 6) {
+                            Image(systemName: "arrow.down.circle")
+                            Text(tr("Download", "Herunterladen"))
+                        }
+                        .font(.subheadline).bold()
+                        .foregroundStyle(accentColor)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(accentColor.opacity(0.12))
+                        .clipShape(Capsule())
                     }
                     .buttonStyle(.plain)
                 }
@@ -303,39 +306,48 @@ struct AlbumDetailView: View {
                     Button {
                         haptic(); downloadStore.enqueueAlbum(album)
                     } label: {
-                        Label(tr("Rest (\(tot - done))", "Rest (\(tot - done))"), systemImage: "arrow.down.circle")
-                            .font(.subheadline).bold()
-                            .foregroundStyle(accentColor)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 10)
-                            .background(accentColor.opacity(0.12))
-                            .clipShape(Capsule())
+                        HStack(spacing: 6) {
+                            Image(systemName: "arrow.down.circle")
+                            Text(tr("Rest (\(tot - done))", "Rest (\(tot - done))"))
+                        }
+                        .font(.subheadline).bold()
+                        .foregroundStyle(accentColor)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(accentColor.opacity(0.12))
+                        .clipShape(Capsule())
                     }
                     .buttonStyle(.plain)
                 }
                 Button {
                     haptic(); showDeleteAlbumDownloadConfirm = true
                 } label: {
-                    Label(tr("Delete", "Löschen"), systemImage: "arrow.down.circle")
-                        .font(.subheadline).bold()
-                        .foregroundStyle(.red)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background(Color.red.opacity(0.12))
-                        .clipShape(Capsule())
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.down.circle")
+                        Text(tr("Delete Downloads", "Downloads löschen"))
+                    }
+                    .font(.subheadline).bold()
+                    .foregroundStyle(.red)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(Color.red.opacity(0.12))
+                    .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
             case .complete:
                 Button {
                     haptic(); showDeleteAlbumDownloadConfirm = true
                 } label: {
-                    Label(tr("Delete Downloads", "Downloads löschen"), systemImage: "arrow.down.circle")
-                        .font(.subheadline).bold()
-                        .foregroundStyle(.red)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background(Color.red.opacity(0.12))
-                        .clipShape(Capsule())
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.down.circle")
+                        Text(tr("Delete Downloads", "Downloads löschen"))
+                    }
+                    .font(.subheadline).bold()
+                    .foregroundStyle(.red)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(Color.red.opacity(0.12))
+                    .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
             }
@@ -393,9 +405,6 @@ struct AlbumDetailView: View {
             }
             .tint(.orange)
 
-            if enableDownloads {
-                downloadSwipeButton(for: song)
-            }
         }
         .swipeActions(edge: .leading, allowsFullSwipe: false) {
             if enableFavorites && !offlineMode.isOffline {
@@ -414,25 +423,6 @@ struct AlbumDetailView: View {
                 }
                 .tint(accentColor)
             }
-        }
-    }
-
-    @ViewBuilder
-    private func downloadSwipeButton(for song: Song) -> some View {
-        if downloadStore.isDownloaded(songId: song.id) {
-            Button {
-                haptic(); downloadStore.deleteSong(song.id)
-            } label: {
-                DeleteDownloadIcon()
-            }
-            .tint(.red)
-        } else if !offlineMode.isOffline {
-            Button {
-                haptic(); downloadStore.enqueueSongs([song])
-            } label: {
-                Image(systemName: "arrow.down.circle")
-            }
-            .tint(accentColor)
         }
     }
 

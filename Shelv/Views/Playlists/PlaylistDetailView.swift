@@ -27,6 +27,7 @@ struct PlaylistDetailView: View {
     @State private var showDeleteDownloadConfirm = false
     @State private var currentToast: ShelveToast?
     @State private var isSyncing = false
+    @State private var originalRanks: [String: Int] = [:]
     @Environment(\.dismiss) private var dismiss
 
     private var displayedSongs: [Song] {
@@ -74,7 +75,7 @@ struct PlaylistDetailView: View {
                                 if !isEditMode {
                                     NowPlayingIndicator(
                                         songId: song.id,
-                                        fallbackIndex: songsIndex + 1,
+                                        fallbackIndex: originalRanks[song.id] ?? (songsIndex + 1),
                                         accentColor: accentColor
                                     )
                                 }
@@ -121,10 +122,6 @@ struct PlaylistDetailView: View {
                                 Image(systemName: "text.insert")
                             }
                             .tint(.orange)
-
-                            if enableDownloads {
-                                downloadSwipeButton(for: song)
-                            }
 
                             if searchQuery.isEmpty {
                                 Button(role: .destructive) {
@@ -384,6 +381,8 @@ struct PlaylistDetailView: View {
     @ViewBuilder
     private func downloadHeaderButtons() -> some View {
         let isMarked = downloadStore.offlinePlaylistIds.contains(playlist.id)
+        let totalCount = downloadStore.playlistSongIds[playlist.id]?.count ?? songs.count
+        let remaining = isMarked ? max(0, totalCount - downloadStore.downloadedCount(for: playlist.id)) : 0
         HStack(spacing: 10) {
             if !isMarked && !offlineMode.isOffline {
                 Button {
@@ -393,13 +392,36 @@ struct PlaylistDetailView: View {
                     downloadStore.addOfflinePlaylist(playlist.id, songIds: songs.map(\.id))
                     currentToast = ShelveToast(message: tr("Download started", "Download gestartet"))
                 } label: {
-                    Label(tr("Download", "Herunterladen"), systemImage: "arrow.down.circle")
-                        .font(.subheadline).bold()
-                        .foregroundStyle(accentColor)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background(accentColor.opacity(0.12))
-                        .clipShape(Capsule())
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.down.circle")
+                        Text(tr("Download", "Herunterladen"))
+                    }
+                    .font(.subheadline).bold()
+                    .foregroundStyle(accentColor)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(accentColor.opacity(0.12))
+                    .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+            if isMarked && remaining > 0 && !offlineMode.isOffline {
+                Button {
+                    haptic()
+                    let missing = songs.filter { !downloadStore.isDownloaded(songId: $0.id) }
+                    if !missing.isEmpty { downloadStore.enqueueSongs(missing) }
+                    currentToast = ShelveToast(message: tr("Download started", "Download gestartet"))
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.down.circle")
+                        Text(tr("Rest (\(remaining))", "Rest (\(remaining))"))
+                    }
+                    .font(.subheadline).bold()
+                    .foregroundStyle(accentColor)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(accentColor.opacity(0.12))
+                    .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
             }
@@ -408,13 +430,16 @@ struct PlaylistDetailView: View {
                     haptic()
                     showDeleteDownloadConfirm = true
                 } label: {
-                    Label(tr("Delete Downloads", "Downloads löschen"), systemImage: "arrow.down.circle")
-                        .font(.subheadline).bold()
-                        .foregroundStyle(.red)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background(Color.red.opacity(0.12))
-                        .clipShape(Capsule())
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.down.circle")
+                        Text(tr("Delete Downloads", "Downloads löschen"))
+                    }
+                    .font(.subheadline).bold()
+                    .foregroundStyle(.red)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(Color.red.opacity(0.12))
+                    .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
             }
@@ -425,6 +450,7 @@ struct PlaylistDetailView: View {
         isLoading = true
         if let loaded = await libraryStore.loadPlaylistDetail(id: playlist.id) {
             let allSongs = loaded.songs ?? []
+            originalRanks = Dictionary(uniqueKeysWithValues: allSongs.enumerated().map { ($1.id, $0 + 1) })
             songs = offlineMode.isOffline
                 ? allSongs.filter { downloadStore.isDownloaded(songId: $0.id) }
                 : allSongs
@@ -432,18 +458,10 @@ struct PlaylistDetailView: View {
         // Fallback auf heruntergeladene Songs wenn API fehlschlug und Playlist markiert ist
         if songs.isEmpty && !offlineMode.isOffline && downloadStore.offlinePlaylistIds.contains(playlist.id) {
             let ids = downloadStore.playlistSongIds[playlist.id] ?? []
+            if originalRanks.isEmpty {
+                originalRanks = Dictionary(uniqueKeysWithValues: ids.enumerated().map { ($1, $0 + 1) })
+            }
             songs = ids.compactMap { id in downloadStore.songs.first { $0.songId == id }?.asSong() }
-        }
-        if !offlineMode.isOffline && downloadStore.offlinePlaylistIds.contains(playlist.id) {
-            let hasActive = songs.contains {
-                switch downloadStore.downloadState(songId: $0.id) {
-                case .queued, .downloading: return true
-                default: return false
-                }
-            }
-            if !hasActive && songs.contains(where: { !downloadStore.isDownloaded(songId: $0.id) }) {
-                downloadStore.removeOfflinePlaylist(playlist.id)
-            }
         }
         isLoading = false
     }
@@ -463,25 +481,6 @@ struct PlaylistDetailView: View {
         songs.remove(atOffsets: offsets)
         await libraryStore.removeSongsFromPlaylist(playlist, indices: indices)
         isSyncing = false
-    }
-
-    @ViewBuilder
-    private func downloadSwipeButton(for song: Song) -> some View {
-        if downloadStore.isDownloaded(songId: song.id) {
-            Button {
-                haptic(); downloadStore.deleteSong(song.id)
-            } label: {
-                DeleteDownloadIcon()
-            }
-            .tint(.red)
-        } else if !offlineMode.isOffline {
-            Button {
-                haptic(); downloadStore.enqueueSongs([song])
-            } label: {
-                Image(systemName: "arrow.down.circle")
-            }
-            .tint(accentColor)
-        }
     }
 
     private func syncOrder() async {
