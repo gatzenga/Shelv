@@ -260,7 +260,7 @@ func loadCoversIncremental(
     }
 
     if Task.isCancelled { return }
-    if !syncHits.isEmpty { onChunk(syncHits) }
+    if !syncHits.isEmpty { onChunk(syncHits.mapValues { squareCropped($0) }) }
     guard !misses.isEmpty else { return }
 
     // 3) Async-Misses in Chunks laden — UI nach jedem Chunk updaten.
@@ -290,7 +290,7 @@ func loadCoversIncremental(
             }
             for await (id, img) in group { if let img { chunkResult[id] = img } }
         }
-        if !chunkResult.isEmpty { onChunk(chunkResult) }
+        if !chunkResult.isEmpty { onChunk(chunkResult.mapValues { squareCropped($0) }) }
     }
 }
 
@@ -311,7 +311,7 @@ func prefillCoversFromCache(_ itemsByCoverId: [String: [CPListItem]], size: Int 
     for (id, items) in itemsByCoverId {
         for s in fallback {
             if let img = ImageCacheService.shared.cachedImage(key: "\(id)_\(s)") {
-                items.forEach { $0.setImage(img) }
+                items.forEach { $0.setImage(squareCropped(img)) }
                 break
             }
         }
@@ -378,4 +378,19 @@ func batchLoadCovers(
         result.merge(chunk) { _, new in new }
     }
     return result
+}
+
+// MARK: - Image Helpers
+
+func squareCropped(_ image: UIImage) -> UIImage {
+    let w = image.size.width
+    let h = image.size.height
+    guard w != h else { return image }
+    let side = min(w, h)
+    let x = (w - side) / 2
+    let y = (h - side) / 2
+    let scale = image.scale
+    let cropRect = CGRect(x: x * scale, y: y * scale, width: side * scale, height: side * scale)
+    guard let cgImg = image.cgImage?.cropping(to: cropRect) else { return image }
+    return UIImage(cgImage: cgImg, scale: scale, orientation: image.imageOrientation)
 }

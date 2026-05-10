@@ -1279,7 +1279,8 @@ class AudioPlayerService: ObservableObject {
                 guard let img, !Task.isCancelled else { return }
                 await MainActor.run { [weak self] in
                     guard let self else { return }
-                    let artwork = MPMediaItemArtwork(boundsSize: img.size) { _ in img }
+                    let square = squareCropped(img)
+                    let artwork = MPMediaItemArtwork(boundsSize: square.size) { _ in square }
                     self.currentArtwork = artwork
                     var updated = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
                     updated[MPMediaItemPropertyArtwork] = artwork
