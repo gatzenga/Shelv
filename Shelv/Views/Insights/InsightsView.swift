@@ -176,7 +176,6 @@ struct InsightsView: View {
                 ForEach(Array(topSongs.enumerated()), id: \.element.id) { idx, song in
                     Button {
                         AudioPlayerService.shared.play(songs: topSongs, startIndex: idx)
-                        dismiss()
                     } label: {
                         songRow(rank: idx + 1, song: song)
                     }
