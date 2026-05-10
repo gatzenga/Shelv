@@ -282,6 +282,9 @@ struct InsightsView: View {
             rankLabel(rank: rank, isTop3: isTop3)
             AlbumArtView(coverArtId: song.coverArt, size: 100, cornerRadius: 8)
                 .frame(width: 52, height: 52)
+                .overlay {
+                    NowPlayingOverlay(songId: song.id, size: 52, cornerRadius: 8, accentColor: accentColor)
+                }
             VStack(alignment: .leading, spacing: 2) {
                 Text(song.title)
                     .font(isTop3 ? .body.bold() : .body)
