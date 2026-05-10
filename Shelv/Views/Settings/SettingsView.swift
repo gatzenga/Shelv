@@ -132,6 +132,14 @@ struct SettingsView: View {
                         }
                     }
                     .tint(accentColor)
+                    if gaplessEnabled {
+                        Text(tr(
+                            "Pre-cache Original File recommended.\nTranscoded streams are pre-cached automatically.",
+                            "Pre-cache Originaldatei empfohlen.\nTranskodierte Streams werden automatisch pre-gecached."
+                        ))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
                 }
 
                 Section(tr("Recap", "Recap")) {
