@@ -273,7 +273,7 @@ struct PlaylistsView: View {
                 Button(role: .destructive) {
                     playlistToDeleteDownloads = playlist
                 } label: {
-                    Label { Text(tr("Delete Downloads", "Downloads löschen")) } icon: { DeleteDownloadIcon(tint: .red) }
+                    Label(tr("Delete Downloads", "Downloads löschen"), systemImage: "arrow.down.circle")
                 }
             }
         }
@@ -293,7 +293,7 @@ struct PlaylistsView: View {
         if downloadStore.offlinePlaylistIds.contains(playlist.id) {
             Button(role: .destructive) {
                 haptic(); playlistToDeleteDownloads = playlist
-            } label: { DeleteDownloadIcon() }
+            } label: { Image(systemName: "arrow.down.circle") }
             .tint(.red)
         } else if !offlineMode.isOffline {
             Button {
@@ -339,7 +339,7 @@ struct PlaylistsView: View {
                     .foregroundStyle(.primary)
                 let count = offlineMode.isOffline
                     ? downloadStore.downloadedCount(for: playlist.id)
-                    : playlist.songCount
+                    : (downloadStore.playlistSongIds[playlist.id]?.count ?? playlist.songCount)
                 if let count {
                     Text("\(count) \(tr("Songs", "Titel"))")
                         .font(.caption)

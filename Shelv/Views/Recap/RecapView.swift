@@ -295,7 +295,7 @@ struct RecapView: View {
         if downloadStore.offlinePlaylistIds.contains(entry.playlistId) {
             Button {
                 haptic(); entryToDeleteDownloads = entry
-            } label: { DeleteDownloadIcon() }
+            } label: { Image(systemName: "arrow.down.circle") }
             .tint(.red)
         } else if !offlineMode.isOffline {
             Button {
@@ -340,7 +340,7 @@ struct RecapView: View {
         Task {
             if let loaded = await libraryStore.loadPlaylistDetail(id: pid),
                let songs = loaded.songs {
-                for song in songs where downloadStore.isDownloaded(songId: song.id) {
+                for song in songs {
                     downloadStore.deleteSong(song.id)
                 }
             }
