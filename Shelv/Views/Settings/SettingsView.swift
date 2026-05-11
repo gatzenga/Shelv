@@ -460,7 +460,7 @@ struct SettingsView: View {
                 }
             }
             .sheet(isPresented: $showBulkDownloadSheet) {
-                BulkDownloadSheet(maxBytes: Int64(maxBulkStorageGB) * 1024 * 1024 * 1024)
+                BulkDownloadSheet(maxBytes: Int64(maxBulkStorageGB) * 1_000_000_000)
                     .presentationDetents([.large])
                     .presentationCornerRadius(24)
                     .tint(accentColor)

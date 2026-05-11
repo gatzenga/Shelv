@@ -504,17 +504,18 @@ actor DownloadService {
         appendUnique(recapSongIds)
         appendUnique(alphabetical)
 
-        var songsById = Dictionary(uniqueKeysWithValues: allSongs.map { ($0.id, $0) })
+        var songsById = Dictionary(allSongs.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         for song in recapSongsExtra where songsById[song.id] == nil {
             songsById[song.id] = song
         }
+        let targetBitrate = TranscodingPolicy.currentDownloadFormat()?.bitrate
         var planned: [Song] = []
         var skipped: [Song] = []
         var totalBytes: Int64 = 0
         for songId in ordered {
             guard let song = songsById[songId] else { continue }
             if alreadyDownloaded.contains(song.id) { continue }
-            let estBytes = estimatedBytes(for: song)
+            let estBytes = estimatedBytes(for: song, targetBitrate: targetBitrate)
             if totalBytes + estBytes > maxBytes {
                 skipped.append(song)
                 continue
@@ -525,9 +526,8 @@ actor DownloadService {
         return BulkDownloadPlan(planned: planned, skipped: skipped, totalBytes: totalBytes, limitBytes: maxBytes, recapPlaylistSongIds: recapPlaylistSongIdsMap)
     }
 
-    private func estimatedBytes(for song: Song) -> Int64 {
-        // Bitrate (kbps) * Duration / 8 — fallback 192 kbps
-        let kbps = song.bitRate ?? 192
+    private func estimatedBytes(for song: Song, targetBitrate: Int? = nil) -> Int64 {
+        let kbps = targetBitrate ?? song.bitRate ?? 192
         let duration = song.duration ?? 200
         return Int64(kbps) * Int64(duration) * 1024 / 8
     }
