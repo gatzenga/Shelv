@@ -167,7 +167,7 @@ Pull requests are welcome. For larger changes, please open an issue first to dis
 
 ### Translations
 
-Shelv uses Apple's standard localization system (`String(localized:)` with `.strings` files). To add a new language, create a `<language-code>.lproj/Localizable.strings` file (e.g. `zh-Hans.lproj/Localizable.strings`) using the existing `en.lproj/Localizable.strings` as a template. Submit it as a pull request — no code changes are required.
+To add a new language, create a `<language-code>.lproj/Localizable.strings` file (e.g. `fr.lproj/Localizable.strings`) modelled after `en.lproj/Localizable.strings`. Submit it as a pull request.
 
 ## License
 
