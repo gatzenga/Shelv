@@ -73,6 +73,17 @@ final class CarPlayQueueController {
         }
 
         if player.isShuffled {
+            if !player.playNextQueue.isEmpty {
+                let songs = player.playNextQueue
+                let items = songs.enumerated().map { idx, song -> CPListItem in
+                    let item = songListItem(song, index: idx, showCover: true) { _, c in
+                        c(); AudioPlayerService.shared.jumpToPlayNext(at: idx)
+                    }
+                    register(item, coverArt: song.coverArt)
+                    return item
+                }
+                sections.append(CPListSection(items: items, header: tr("Play Next", "Als nächstes"), sectionIndexTitle: nil))
+            }
             let albumQueue = albumQueueSongs()
             if !albumQueue.isEmpty {
                 let items = albumQueue.enumerated().map { idx, song -> CPListItem in
