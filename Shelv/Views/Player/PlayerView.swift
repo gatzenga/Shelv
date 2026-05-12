@@ -164,7 +164,7 @@ struct PlayerView: View {
                                     .tint(.secondary)
                                     .frame(width: 12, height: 12)
                             }
-                            Text(player.showBufferingIndicator ? tr("Loading…", "Lädt…") : (audioBadge ?? ""))
+                            Text(player.showBufferingIndicator ? String(localized: "loading_2") : (audioBadge ?? ""))
                         }
                         .font(.caption2).foregroundStyle(.tertiary)
                         .frame(height: 14)

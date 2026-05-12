@@ -53,9 +53,9 @@ struct RecapSettingsView: View {
     var body: some View {
         List {
             // MARK: Perioden
-            Section(tr("Periods", "Perioden")) {
+            Section(String(localized: "periods")) {
                 recapPeriodRow(
-                    title: tr("Weekly", "Wöchentlich"),
+                    title: String(localized: "weekly"),
                     icon: "calendar",
                     enabled: $recapWeeklyEnabled,
                     retention: $weekRetentionDraft,
@@ -63,7 +63,7 @@ struct RecapSettingsView: View {
                     type: .week
                 )
                 recapPeriodRow(
-                    title: tr("Monthly", "Monatlich"),
+                    title: String(localized: "monthly"),
                     icon: "calendar.badge.clock",
                     enabled: $recapMonthlyEnabled,
                     retention: $monthRetentionDraft,
@@ -71,7 +71,7 @@ struct RecapSettingsView: View {
                     type: .month
                 )
                 recapPeriodRow(
-                    title: tr("Yearly", "Jährlich"),
+                    title: String(localized: "yearly"),
                     icon: "calendar.badge.checkmark",
                     enabled: $recapYearlyEnabled,
                     retention: $yearRetentionDraft,
@@ -83,16 +83,16 @@ struct RecapSettingsView: View {
                         Text("\(pct)%").tag(pct)
                     }
                 } label: {
-                    Label { Text(tr("Count from", "Zählen ab")) } icon: {
+                    Label { Text(String(localized: "count_from")) } icon: {
                         Image(systemName: "checkmark.seal").foregroundStyle(accentColor)
                     }
                 }
             }
 
             // MARK: Overview
-            Section(tr("Overview", "Übersicht")) {
+            Section(String(localized: "overview")) {
                 HStack {
-                    Label { Text(tr("Total plays", "Gesamte Plays")) } icon: {
+                    Label { Text(String(localized: "total_plays")) } icon: {
                         Image(systemName: "music.note.list").foregroundStyle(accentColor)
                     }
                     Spacer()
@@ -105,7 +105,7 @@ struct RecapSettingsView: View {
                 Button {
                     showVerifySheet = true
                 } label: {
-                    Label { Text(tr("Sync with Navidrome", "Mit Navidrome abgleichen")) } icon: {
+                    Label { Text(String(localized: "sync_with_navidrome")) } icon: {
                         Image(systemName: "arrow.triangle.2.circlepath")
                             .foregroundStyle(accentColor)
                     }
@@ -113,7 +113,7 @@ struct RecapSettingsView: View {
             }
 
             // MARK: Datenbank
-            Section(tr("Database", "Datenbank")) {
+            Section(String(localized: "database")) {
                 Button {
                     guard !isPreparingExport else { return }
                     isPreparingExport = true
@@ -128,7 +128,7 @@ struct RecapSettingsView: View {
                     }
                 } label: {
                     HStack {
-                        Label { Text(tr("Export database", "Datenbank exportieren")) } icon: {
+                        Label { Text(String(localized: "export_database")) } icon: {
                             Image(systemName: "square.and.arrow.up").foregroundStyle(accentColor)
                         }
                         if isPreparingExport { Spacer(); ProgressView() }
@@ -139,22 +139,22 @@ struct RecapSettingsView: View {
                 Button {
                     showImportFilePicker = true
                 } label: {
-                    Label { Text(tr("Import database", "Datenbank importieren")) } icon: {
+                    Label { Text(String(localized: "import_database")) } icon: {
                         Image(systemName: "square.and.arrow.down").foregroundStyle(accentColor)
                     }
                 }
             }
 
             // MARK: iCloud Sync
-            Section(tr("iCloud Sync", "iCloud-Sync")) {
+            Section(String(localized: "icloud_sync")) {
                 if !ckStatus.accountAvailable {
                     HStack(spacing: 10) {
                         Image(systemName: "icloud.slash")
                             .foregroundStyle(.secondary)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(tr("No iCloud account", "Kein iCloud-Konto"))
+                            Text(String(localized: "no_icloud_account"))
                                 .font(.subheadline)
-                            Text(tr("Use Export/Import as backup instead.", "Export/Import als Datensicherung nutzen."))
+                            Text(String(localized: "use_exportimport_as_backup_instead"))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -162,7 +162,7 @@ struct RecapSettingsView: View {
                     .padding(.vertical, 2)
                 } else {
                     HStack {
-                        Label { Text(tr("Last sync", "Letzter Sync")) } icon: {
+                        Label { Text(String(localized: "last_sync")) } icon: {
                             Image(systemName: "arrow.triangle.2.circlepath").foregroundStyle(accentColor)
                         }
                         Spacer()
@@ -171,14 +171,14 @@ struct RecapSettingsView: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         } else {
-                            Text(tr("Never", "Noch nie"))
+                            Text(String(localized: "never"))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
                     }
 
                     HStack {
-                        Label { Text(tr("Pending uploads", "Ausstehende Uploads")) } icon: {
+                        Label { Text(String(localized: "pending_uploads")) } icon: {
                             Image(systemName: "icloud.and.arrow.up").foregroundStyle(accentColor)
                         }
                         Spacer()
@@ -187,7 +187,7 @@ struct RecapSettingsView: View {
                     }
 
                     HStack {
-                        Label { Text(tr("Pending scrobbles", "Ausstehende Scrobbles")) } icon: {
+                        Label { Text(String(localized: "pending_scrobbles")) } icon: {
                             Image(systemName: "waveform.badge.plus").foregroundStyle(accentColor)
                         }
                         Spacer()
@@ -204,7 +204,7 @@ struct RecapSettingsView: View {
                         }
                     } label: {
                         HStack {
-                            Label { Text(tr("Sync now", "Jetzt synchronisieren")) } icon: {
+                            Label { Text(String(localized: "sync_now")) } icon: {
                                 Image(systemName: "arrow.triangle.2.circlepath").foregroundStyle(accentColor)
                             }
                             if isSyncingManually { Spacer(); ProgressView() }
@@ -216,9 +216,9 @@ struct RecapSettingsView: View {
 
             // MARK: Logs
             if let sid = serverStore.activeServer?.stableId {
-                Section(tr("Logs", "Logs")) {
+                Section(String(localized: "logs")) {
                     NavigationLink(destination: RecapPlayLogView(serverId: sid)) {
-                        Label { Text(tr("Recent plays", "Letzte Plays")) } icon: {
+                        Label { Text(String(localized: "recent_plays")) } icon: {
                             Image(systemName: "list.bullet.clipboard").foregroundStyle(accentColor)
                         }
                     }
@@ -226,7 +226,7 @@ struct RecapSettingsView: View {
                         RecapRegistryView(serverId: sid)
                             .environmentObject(recapStore)
                     ) {
-                        Label { Text(tr("Registry", "Registry")) } icon: {
+                        Label { Text(String(localized: "registry")) } icon: {
                             Image(systemName: "square.stack.3d.up").foregroundStyle(accentColor)
                         }
                     }
@@ -234,7 +234,7 @@ struct RecapSettingsView: View {
                         RecapCreationLogView()
                             .environmentObject(ckStatus)
                     ) {
-                        Label { Text(tr("Recap log", "Recap-Protokoll")) } icon: {
+                        Label { Text(String(localized: "recap_log")) } icon: {
                             Image(systemName: "sparkles.rectangle.stack").foregroundStyle(accentColor)
                         }
                     }
@@ -242,17 +242,17 @@ struct RecapSettingsView: View {
                         RecapSyncLogView()
                             .environmentObject(ckStatus)
                     ) {
-                        Label { Text(tr("Sync log", "Sync-Protokoll")) } icon: {
+                        Label { Text(String(localized: "sync_log")) } icon: {
                             Image(systemName: "doc.text").foregroundStyle(accentColor)
                         }
                     }
                     NavigationLink(destination: RecapDBLogView()) {
-                        Label { Text(tr("Database errors", "Datenbank-Fehler")) } icon: {
+                        Label { Text(String(localized: "database_errors")) } icon: {
                             Image(systemName: "exclamationmark.octagon").foregroundStyle(accentColor)
                         }
                     }
                     NavigationLink(destination: RecapMarkersLogView(serverId: sid)) {
-                        Label { Text(tr("Auto-gen markers", "Auto-Gen-Marker")) } icon: {
+                        Label { Text(String(localized: "autogen_markers")) } icon: {
                             Image(systemName: "checkmark.circle.badge.questionmark").foregroundStyle(accentColor)
                         }
                     }
@@ -264,7 +264,7 @@ struct RecapSettingsView: View {
                         RecapAdvancedView(serverId: sid)
                             .environmentObject(recapStore)
                     ) {
-                        Label { Text(tr("Advanced", "Erweitert")) } icon: {
+                        Label { Text(String(localized: "advanced")) } icon: {
                             Image(systemName: "slider.horizontal.2.square").foregroundStyle(accentColor)
                         }
                     }
@@ -278,16 +278,16 @@ struct RecapSettingsView: View {
         .tint(accentColor)
         .listStyle(.insetGrouped)
         .scrollIndicators(.hidden)
-        .navigationTitle(tr("Recap Settings", "Recap-Einstellungen"))
+        .navigationTitle(String(localized: "recap_settings"))
         .sheet(item: $exportItem) { file in
             ActivityView(items: [file.url])
         }
         .alert(
-            tr("Export failed", "Export fehlgeschlagen"),
+            String(localized: "export_failed"),
             isPresented: Binding(get: { exportError != nil }, set: { if !$0 { exportError = nil } }),
             presenting: exportError
         ) { _ in
-            Button(tr("OK", "OK"), role: .cancel) {}
+            Button(String(localized: "ok"), role: .cancel) {}
         } message: { msg in
             Text(msg)
         }
@@ -324,10 +324,7 @@ struct RecapSettingsView: View {
         }
         .alert(
             pendingRetention.map {
-                tr(
-                    "Delete \($0.excess) \(periodTypeName($0.type))?",
-                    "\($0.excess) \(periodTypeName($0.type)) löschen?"
-                )
+                String(format: String(localized: "delete_count_period_format"), $0.excess, periodTypeName($0.type))
             } ?? "",
             isPresented: Binding(
                 get: { pendingRetention != nil },
@@ -335,7 +332,7 @@ struct RecapSettingsView: View {
             ),
             presenting: pendingRetention
         ) { pending in
-            Button(tr("Delete", "Löschen"), role: .destructive) {
+            Button(String(localized: "delete"), role: .destructive) {
                 guard let sid = serverStore.activeServer?.stableId else { return }
                 let type = pending.type
                 let newValue = pending.newValue
@@ -347,15 +344,12 @@ struct RecapSettingsView: View {
                 }
                 pendingRetention = nil
             }
-            Button(tr("Cancel", "Abbrechen"), role: .cancel) {
+            Button(String(localized: "cancel"), role: .cancel) {
                 setDraft(pending.type, storedRetention(for: pending.type))
                 pendingRetention = nil
             }
         } message: { _ in
-            Text(tr(
-                "These playlists will be permanently deleted from Navidrome and iCloud.",
-                "Diese Playlists werden unwiderruflich aus Navidrome und iCloud gelöscht."
-            ))
+            Text(String(localized: "these_playlists_will_be_permanently_deleted_from_n"))
         }
     }
 
@@ -387,7 +381,7 @@ struct RecapSettingsView: View {
         if enabled.wrappedValue {
             Stepper(value: retention, in: retentionRange) {
                 HStack {
-                    Text(tr("Keep", "Behalten")).foregroundStyle(.secondary)
+                    Text(String(localized: "keep")).foregroundStyle(.secondary)
                     Spacer()
                     Text("\(retention.wrappedValue)").foregroundStyle(.secondary).monospacedDigit()
                 }
@@ -448,9 +442,9 @@ struct RecapSettingsView: View {
 
     private func periodTypeName(_ type: RecapPeriod.PeriodType) -> String {
         switch type {
-        case .week:  return tr("weekly recaps", "Wochen-Recaps")
-        case .month: return tr("monthly recaps", "Monats-Recaps")
-        case .year:  return tr("yearly recaps", "Jahres-Recaps")
+        case .week:  return String(localized: "weekly_recaps")
+        case .month: return String(localized: "monthly_recaps")
+        case .year:  return String(localized: "yearly_recaps")
         }
     }
 
@@ -465,11 +459,11 @@ struct RecapSettingsView: View {
                     Text(report.message).font(.subheadline)
                 }
             }
-            .navigationTitle(tr("Recap Sync", "Recap Sync"))
+            .navigationTitle(String(localized: "recap_sync"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(tr("Done", "Fertig")) { showSyncReport = false }
+                    Button(String(localized: "done")) { showSyncReport = false }
                 }
             }
         }

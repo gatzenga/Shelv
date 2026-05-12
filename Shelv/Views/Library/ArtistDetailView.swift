@@ -94,7 +94,7 @@ struct ArtistDetailView: View {
                 listBody
             }
         }
-        .searchable(text: $searchQuery, prompt: tr("Search albums…", "Alben suchen…"))
+        .searchable(text: $searchQuery, prompt: String(localized: "search_albums"))
         .navigationTitle(artist.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -114,30 +114,30 @@ struct ArtistDetailView: View {
         }
         .shelveToast($currentToast)
         .alert(
-            tr("Delete Downloads?", "Downloads löschen?"),
+            String(localized: "delete_downloads"),
             isPresented: Binding(get: { albumToDeleteDownloads != nil }, set: { if !$0 { albumToDeleteDownloads = nil } }),
             presenting: albumToDeleteDownloads
         ) { album in
-            Button(tr("Delete", "Löschen"), role: .destructive) {
+            Button(String(localized: "delete"), role: .destructive) {
                 downloadStore.deleteAlbum(album.id)
             }
-            Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+            Button(String(localized: "cancel"), role: .cancel) {}
         } message: { _ in
-            Text(tr("The downloads will be removed from this device.", "Die Downloads werden von diesem Gerät entfernt."))
+            Text(String(localized: "the_downloads_will_be_removed_from_this_device"))
         }
         .alert(
-            tr("Delete Downloads?", "Downloads löschen?"),
+            String(localized: "delete_downloads"),
             isPresented: $showDeleteArtistDownloadConfirm
         ) {
-            Button(tr("Delete", "Löschen"), role: .destructive) {
+            Button(String(localized: "delete"), role: .destructive) {
                 if let match = downloadStore.artists.first(where: { $0.name == artist.name }) {
                     downloadStore.deleteArtist(match.artistId)
                 }
-                currentToast = ShelveToast(message: tr("Downloads deleted", "Downloads gelöscht"))
+                currentToast = ShelveToast(message: String(localized: "downloads_deleted"))
             }
-            Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+            Button(String(localized: "cancel"), role: .cancel) {}
         } message: {
-            Text(tr("The downloads will be removed from this device.", "Die Downloads werden von diesem Gerät entfernt."))
+            Text(String(localized: "the_downloads_will_be_removed_from_this_device"))
         }
         .onChange(of: offlineMode.isOffline) { _, isOffline in
             if isOffline && sortOption.requiresServer {
@@ -163,7 +163,7 @@ struct ArtistDetailView: View {
                     Text(artist.name)
                         .font(.title2).bold()
                     if let count = detail?.albumCount ?? artist.albumCount {
-                        Text("\(count) \(tr("Albums", "Alben"))")
+                        Text("\(count) \(String(localized: "albums"))")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
@@ -177,7 +177,7 @@ struct ArtistDetailView: View {
                                 player.play(songs: songs, startIndex: 0)
                             }
                         } label: {
-                            Label(tr("Play", "Abspielen"), systemImage: "play.fill")
+                            Label(String(localized: "play"), systemImage: "play.fill")
                                 .labelStyle(.titleAndIcon)
                                 .font(.body).bold()
                                 .foregroundStyle(.white)
@@ -198,7 +198,7 @@ struct ArtistDetailView: View {
                                 player.playShuffled(songs: songs)
                             }
                         } label: {
-                            Label(tr("Shuffle", "Zufällig abspielen"), systemImage: "shuffle")
+                            Label(String(localized: "shuffle"), systemImage: "shuffle")
                                 .labelStyle(.titleAndIcon)
                                 .font(.body).bold()
                                 .foregroundStyle(accentColor)
@@ -239,7 +239,7 @@ struct ArtistDetailView: View {
                         .padding(.top, 40)
                         .frame(maxWidth: .infinity)
                 } else if !sortedAlbums.isEmpty {
-                    Text(tr("Albums", "Alben"))
+                    Text(String(localized: "albums"))
                         .font(.title3).bold()
                         .padding(.horizontal)
 
@@ -322,7 +322,7 @@ struct ArtistDetailView: View {
                     }
                 } header: {
                     HStack {
-                        Text(tr("Albums", "Alben"))
+                        Text(String(localized: "albums"))
                             .font(.title3).bold()
                             .textCase(nil)
                             .foregroundStyle(.primary)
@@ -355,7 +355,7 @@ struct ArtistDetailView: View {
             guard !songs.isEmpty else { return }
             await MainActor.run {
                 player.addToQueue(songs)
-                currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange"))
+                currentToast = ShelveToast(message: String(localized: "added_to_queue"))
             }
         }
     }
@@ -366,7 +366,7 @@ struct ArtistDetailView: View {
             guard !songs.isEmpty else { return }
             await MainActor.run {
                 player.addPlayNext(songs)
-                currentToast = ShelveToast(message: tr("Plays Next", "Als nächstes"))
+                currentToast = ShelveToast(message: String(localized: "plays_next"))
             }
         }
     }
@@ -438,10 +438,10 @@ struct ArtistDetailView: View {
                     let songs = await fetchAllSongs(from: albums)
                     guard !songs.isEmpty else { return }
                     player.addPlayNext(songs)
-                    currentToast = ShelveToast(message: tr("Plays Next", "Als nächstes"))
+                    currentToast = ShelveToast(message: String(localized: "plays_next"))
                 }
             } label: {
-                Label(tr("Play Next", "Als nächstes"), systemImage: "text.insert")
+                Label(String(localized: "play_next"), systemImage: "text.insert")
             }
             .disabled(isLoading)
 
@@ -452,10 +452,10 @@ struct ArtistDetailView: View {
                     let songs = await fetchAllSongs(from: albums)
                     guard !songs.isEmpty else { return }
                     player.addToQueue(songs)
-                    currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange"))
+                    currentToast = ShelveToast(message: String(localized: "added_to_queue"))
                 }
             } label: {
-                Label(tr("Add to Queue", "Zur Warteschlange"), systemImage: "text.badge.plus")
+                Label(String(localized: "add_to_queue"), systemImage: "text.badge.plus")
             }
             .disabled(isLoading)
 
@@ -469,7 +469,7 @@ struct ArtistDetailView: View {
                         NotificationCenter.default.post(name: .addSongsToPlaylist, object: songs.map(\.id))
                     }
                 } label: {
-                    Label(tr("Add to Playlist…", "Zur Playlist hinzufügen…"), systemImage: "music.note.list")
+                    Label(String(localized: "add_to_playlist"), systemImage: "music.note.list")
                 }
                 .disabled(isLoading)
             }
@@ -478,7 +478,7 @@ struct ArtistDetailView: View {
 
             Button { isGrid.toggle() } label: {
                 Label(
-                    isGrid ? tr("List view", "Listenansicht") : tr("Grid view", "Rasteransicht"),
+                    isGrid ? String(localized: "list_view") : String(localized: "grid_view"),
                     systemImage: isGrid ? "list.bullet" : "square.grid.2x2"
                 )
             }
@@ -502,7 +502,7 @@ struct ArtistDetailView: View {
                     .pickerStyle(.inline)
                 }
             } label: {
-                Label(tr("Sort", "Sortieren"), systemImage: "arrow.up.arrow.down")
+                Label(String(localized: "sort"), systemImage: "arrow.up.arrow.down")
             }
         } label: {
             Image(systemName: "ellipsis.circle")
@@ -585,11 +585,11 @@ struct ArtistDetailView: View {
                     Button {
                         haptic()
                         Task { await DownloadService.shared.enqueueArtist(artist: artist, serverId: serverStableId()) }
-                        currentToast = ShelveToast(message: tr("Download started", "Download gestartet"))
+                        currentToast = ShelveToast(message: String(localized: "download_started"))
                     } label: {
                         HStack(spacing: 6) {
                             Image(systemName: "arrow.down.circle")
-                            Text(tr("Download", "Herunterladen"))
+                            Text(String(localized: "download"))
                         }
                         .font(.subheadline).bold()
                         .foregroundStyle(accentColor)
@@ -605,11 +605,11 @@ struct ArtistDetailView: View {
                     Button {
                         haptic()
                         Task { await DownloadService.shared.enqueueArtist(artist: artist, serverId: serverStableId()) }
-                        currentToast = ShelveToast(message: tr("Download started", "Download gestartet"))
+                        currentToast = ShelveToast(message: String(localized: "download_started"))
                     } label: {
                         HStack(spacing: 6) {
                             Image(systemName: "arrow.down.circle")
-                            Text(tr("Rest (\(tot - done))", "Rest (\(tot - done))"))
+                            Text("Rest (\(tot - done))")
                         }
                         .font(.subheadline).bold()
                         .foregroundStyle(accentColor)
@@ -625,7 +625,7 @@ struct ArtistDetailView: View {
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "arrow.down.circle")
-                        Text(tr("Delete Downloads", "Downloads löschen"))
+                        Text(String(localized: "delete_downloads_2"))
                     }
                     .font(.subheadline).bold()
                     .foregroundStyle(.red)
@@ -641,7 +641,7 @@ struct ArtistDetailView: View {
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "arrow.down.circle")
-                        Text(tr("Delete Downloads", "Downloads löschen"))
+                        Text(String(localized: "delete_downloads_2"))
                     }
                     .font(.subheadline).bold()
                     .foregroundStyle(.red)

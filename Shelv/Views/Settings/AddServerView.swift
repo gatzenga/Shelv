@@ -26,25 +26,25 @@ struct AddServerView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section(tr("Server", "Server")) {
-                    TextField(tr("Name (optional)", "Name (optional)"), text: $name)
+                Section(String(localized: "server")) {
+                    TextField(String(localized: "name_optional"), text: $name)
                         .focused($focusedField, equals: .name)
                         .autocorrectionDisabled()
 
-                    TextField(tr("URL (e.g. https://music.example.com)", "URL (z.B. https://musik.example.com)"), text: $baseURL)
+                    TextField(String(localized: "url_eg_httpsmusicexamplecom"), text: $baseURL)
                         .focused($focusedField, equals: .url)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
                         .keyboardType(.URL)
                 }
 
-                Section(tr("Account", "Konto")) {
-                    TextField(tr("Username", "Benutzername"), text: $username)
+                Section(String(localized: "account")) {
+                    TextField(String(localized: "username"), text: $username)
                         .focused($focusedField, equals: .username)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
 
-                    SecureField(tr("Password", "Passwort"), text: $password)
+                    SecureField(String(localized: "password"), text: $password)
                         .focused($focusedField, equals: .password)
                 }
 
@@ -59,7 +59,7 @@ struct AddServerView: View {
                                 Image(systemName: testSuccess ? "checkmark.circle.fill" : "network")
                                     .foregroundStyle(testSuccess ? .green : accentColor)
                             }
-                            Text(tr("Test Connection", "Verbindung testen"))
+                            Text(String(localized: "test_connection"))
                                 .foregroundStyle(accentColor)
                         }
                     }
@@ -73,19 +73,19 @@ struct AddServerView: View {
                 }
             }
             .navigationTitle(isEditing
-                ? tr("Edit Server", "Server bearbeiten")
-                : tr("Add Server", "Server hinzufügen")
+                ? String(localized: "edit_server")
+                : String(localized: "add_server")
             )
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(tr("Cancel", "Abbrechen")) { dismiss() }
+                    Button(String(localized: "cancel")) { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     if isSaving {
                         ProgressView()
                     } else {
-                        Button(tr("Save", "Speichern")) { Task { await save() } }
+                        Button(String(localized: "save")) { Task { await save() } }
                             .disabled(!canSave)
                             .bold()
                     }
@@ -114,7 +114,7 @@ struct AddServerView: View {
         do {
             _ = try await SubsonicAPIService.shared.ping(server: tempServer, password: password)
             testSuccess = true
-            testResult = tr("Connection successful!", "Verbindung erfolgreich!")
+            testResult = String(localized: "connection_successful")
         } catch {
             testResult = error.localizedDescription
         }

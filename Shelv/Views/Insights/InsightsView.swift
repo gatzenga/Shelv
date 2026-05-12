@@ -28,9 +28,9 @@ struct InsightsView: View {
         case artists, albums, songs
         var label: String {
             switch self {
-            case .artists: return tr("Artists", "Künstler")
-            case .albums:  return tr("Albums", "Alben")
-            case .songs:   return tr("Songs", "Titel")
+            case .artists: return String(localized: "artists")
+            case .albums:  return String(localized: "albums")
+            case .songs:   return String(localized: "songs")
             }
         }
     }
@@ -60,7 +60,7 @@ struct InsightsView: View {
 
                 mainContent
             }
-            .navigationTitle(tr("Insights", "Insights"))
+            .navigationTitle(String(localized: "insights"))
             .navigationBarTitleDisplayMode(.large)
             .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
@@ -164,7 +164,7 @@ struct InsightsView: View {
         if songsLoading && topSongs.isEmpty {
             VStack(spacing: 16) {
                 ProgressView()
-                Text(tr("Loading top songs…", "Lade Top-Titel…"))
+                Text(String(localized: "loading_top_songs"))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -196,7 +196,7 @@ struct InsightsView: View {
     private var loadingView: some View {
         VStack(spacing: 16) {
             ProgressView()
-            Text(tr("Analysing your library…", "Analysiere deine Library…"))
+            Text(String(localized: "analysing_your_library"))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
@@ -209,7 +209,7 @@ struct InsightsView: View {
             Image(systemName: "chart.bar")
                 .font(.system(size: 48))
                 .foregroundStyle(.quaternary)
-            Text(tr("No data available yet", "Noch keine Daten vorhanden"))
+            Text(String(localized: "no_data_available_yet"))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
@@ -226,7 +226,7 @@ struct InsightsView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-            Button(tr("Retry", "Wiederholen")) {
+            Button(String(localized: "retry")) {
                 Task { lastLoadDate = nil; await loadData() }
             }
             .buttonStyle(.bordered)
@@ -382,7 +382,7 @@ struct InsightsView: View {
             var artistMap: [String: (name: String, coverArt: String?, total: Int)] = [:]
             for album in frequentAlbums {
                 let aid  = album.artistId ?? "_\(album.artist ?? "unknown")"
-                let name = album.artist ?? tr("Unknown Artist", "Unbekannter Künstler")
+                let name = album.artist ?? String(localized: "unknown_artist")
                 guard !excludedArtistNames.contains(name.lowercased()) else { continue }
                 let pc = album.playCount ?? 0
                 if let ex = artistMap[aid] {

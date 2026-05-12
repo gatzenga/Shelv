@@ -167,7 +167,7 @@ func artistListItem(_ artist: Artist, subtitle: String, handler: @escaping CPIte
 }
 
 func playlistListItem(_ playlist: Playlist, handler: @escaping CPItemHandler) -> CPListItem {
-    let subtitle = playlist.songCount.map { "\($0) \(tr("Songs", "Titel"))" } ?? ""
+    let subtitle = playlist.songCount.map { "\($0) \(String(localized: "songs"))" } ?? ""
     let item = CPListItem(text: playlist.name, detailText: subtitle)
     item.setImage(cpPlaceholder)
     item.accessoryType = .disclosureIndicator

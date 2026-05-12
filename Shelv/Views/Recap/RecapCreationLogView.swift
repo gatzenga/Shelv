@@ -13,7 +13,7 @@ struct RecapCreationLogView: View {
                     Image(systemName: "doc.text.magnifyingglass")
                         .font(.largeTitle)
                         .foregroundStyle(.tertiary)
-                    Text(tr("No recap activity yet.", "Noch keine Recap-Aktivität."))
+                    Text(String(localized: "no_recap_activity_yet"))
                         .foregroundStyle(.secondary)
                         .font(.subheadline)
                 }
@@ -29,7 +29,7 @@ struct RecapCreationLogView: View {
                 }
             }
         }
-        .navigationTitle(tr("Recap log", "Recap-Protokoll"))
+        .navigationTitle(String(localized: "recap_log"))
         .navigationBarTitleDisplayMode(.inline)
     }
 

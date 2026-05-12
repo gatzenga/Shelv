@@ -19,7 +19,7 @@ struct RecapPlayLogView: View {
         List {
             Section {
                 HStack {
-                    Text(tr("Total plays", "Gesamte Plays"))
+                    Text(String(localized: "total_plays"))
                     Spacer()
                     Text("\(logCount)")
                         .foregroundStyle(.secondary)
@@ -27,9 +27,9 @@ struct RecapPlayLogView: View {
                 }
             }
 
-            Section(tr("Recent plays", "Letzte Plays")) {
+            Section(String(localized: "recent_plays")) {
                 if logs.isEmpty {
-                    Text(tr("No plays recorded yet.", "Noch keine Plays aufgezeichnet."))
+                    Text(String(localized: "no_plays_recorded_yet"))
                         .foregroundStyle(.secondary)
                         .font(.subheadline)
                 } else {
@@ -75,7 +75,7 @@ struct RecapPlayLogView: View {
                 .listRowSeparator(.hidden)
         }
         .refreshable { await refresh() }
-        .navigationTitle(tr("Recent plays", "Letzte Plays"))
+        .navigationTitle(String(localized: "recent_plays"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {

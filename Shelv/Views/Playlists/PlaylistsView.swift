@@ -37,12 +37,9 @@ struct PlaylistsView: View {
                 } else if visiblePlaylists.isEmpty {
                     List {
                         ContentUnavailableView(
-                            tr("No Playlists", "Keine Playlists"),
+                            String(localized: "no_playlists_2"),
                             systemImage: "music.note.list",
-                            description: Text(tr(
-                                "Create a playlist to get started.",
-                                "Erstelle eine Playlist, um loszulegen."
-                            ))
+                            description: Text(String(localized: "create_a_playlist_to_get_started"))
                         )
                         .frame(maxWidth: .infinity, minHeight: 400)
                         .listRowBackground(Color.clear)
@@ -66,7 +63,7 @@ struct PlaylistsView: View {
                                                let songs = loaded.songs, !songs.isEmpty {
                                                 await MainActor.run {
                                                     haptic(); player.addToQueue(songs)
-                                                    currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange"))
+                                                    currentToast = ShelveToast(message: String(localized: "added_to_queue"))
                                                 }
                                             }
                                         }
@@ -78,7 +75,7 @@ struct PlaylistsView: View {
                                                let songs = loaded.songs, !songs.isEmpty {
                                                 await MainActor.run {
                                                     haptic(); player.addPlayNext(songs)
-                                                    currentToast = ShelveToast(message: tr("Plays Next", "Als nächstes"))
+                                                    currentToast = ShelveToast(message: String(localized: "plays_next"))
                                                 }
                                             }
                                         }
@@ -112,7 +109,7 @@ struct PlaylistsView: View {
                     .scrollIndicators(.hidden)
                 }
             }
-            .navigationTitle(tr("Playlists", "Playlists"))
+            .navigationTitle(String(localized: "playlists"))
             .navigationDestination(for: Playlist.self) { playlist in
                 PlaylistDetailView(playlist: playlist)
                     .id(playlist.id)
@@ -151,38 +148,38 @@ struct PlaylistsView: View {
                 }
             }
             .alert(
-                tr("Delete Playlist?", "Playlist löschen?"),
+                String(localized: "delete_playlist_2"),
                 isPresented: $showDeleteConfirm,
                 presenting: playlistToDelete
             ) { playlist in
-                Button(tr("Delete", "Löschen"), role: .destructive) {
+                Button(String(localized: "delete"), role: .destructive) {
                     Task {
                         do {
                             try await libraryStore.deletePlaylist(playlist)
                         } catch {
                             if !(error is CancellationError) {
-                                currentToast = ShelveToast(message: tr("Could not delete playlist", "Playlist konnte nicht gelöscht werden"), isError: true)
+                                currentToast = ShelveToast(message: String(localized: "could_not_delete_playlist"), isError: true)
                             }
                         }
                     }
                 }
-                Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+                Button(String(localized: "cancel"), role: .cancel) {}
             } message: { playlist in
                 Text("\"\(playlist.name)\"")
             }
             .shelveToast($currentToast)
             .alert(
-                tr("Delete Downloads?", "Downloads löschen?"),
+                String(localized: "delete_downloads"),
                 isPresented: Binding(get: { playlistToDeleteDownloads != nil }, set: { if !$0 { playlistToDeleteDownloads = nil } }),
                 presenting: playlistToDeleteDownloads
             ) { playlist in
-                Button(tr("Delete", "Löschen"), role: .destructive) {
+                Button(String(localized: "delete"), role: .destructive) {
                     deletePlaylistDownloads(playlist)
-                    currentToast = ShelveToast(message: tr("Downloads deleted", "Downloads gelöscht"))
+                    currentToast = ShelveToast(message: String(localized: "downloads_deleted"))
                 }
-                Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+                Button(String(localized: "cancel"), role: .cancel) {}
             } message: { _ in
-                Text(tr("The downloads will be removed from this device.", "Die Downloads werden von diesem Gerät entfernt."))
+                Text(String(localized: "the_downloads_will_be_removed_from_this_device"))
             }
             .sheet(isPresented: $showCreateSheet) {
                 createPlaylistSheet
@@ -199,7 +196,7 @@ struct PlaylistsView: View {
                     await MainActor.run { player.play(songs: songs, startIndex: 0) }
                 }
             }
-        } label: { Label(tr("Play", "Abspielen"), systemImage: "play.fill") }
+        } label: { Label(String(localized: "play"), systemImage: "play.fill") }
 
         Button {
             Task {
@@ -208,7 +205,7 @@ struct PlaylistsView: View {
                     await MainActor.run { player.playShuffled(songs: songs) }
                 }
             }
-        } label: { Label(tr("Shuffle", "Zufällig abspielen"), systemImage: "shuffle") }
+        } label: { Label(String(localized: "shuffle"), systemImage: "shuffle") }
 
         Divider()
 
@@ -218,11 +215,11 @@ struct PlaylistsView: View {
                    let songs = loaded.songs, !songs.isEmpty {
                     await MainActor.run {
                         player.addPlayNext(songs)
-                        currentToast = ShelveToast(message: tr("Plays Next", "Als nächstes"))
+                        currentToast = ShelveToast(message: String(localized: "plays_next"))
                     }
                 }
             }
-        } label: { Label(tr("Play Next", "Als nächstes"), systemImage: "text.insert") }
+        } label: { Label(String(localized: "play_next"), systemImage: "text.insert") }
 
         Button {
             Task {
@@ -230,11 +227,11 @@ struct PlaylistsView: View {
                    let songs = loaded.songs, !songs.isEmpty {
                     await MainActor.run {
                         player.addToQueue(songs)
-                        currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange"))
+                        currentToast = ShelveToast(message: String(localized: "added_to_queue"))
                     }
                 }
             }
-        } label: { Label(tr("Add to Queue", "Zur Warteschlange"), systemImage: "text.badge.plus") }
+        } label: { Label(String(localized: "add_to_queue"), systemImage: "text.badge.plus") }
 
         if enablePlaylists {
             Button {
@@ -244,7 +241,7 @@ struct PlaylistsView: View {
                         NotificationCenter.default.post(name: .addSongsToPlaylist, object: songs.map(\.id))
                     }
                 }
-            } label: { Label(tr("Add to Playlist…", "Zur Playlist hinzufügen…"), systemImage: "music.note.list") }
+            } label: { Label(String(localized: "add_to_playlist"), systemImage: "music.note.list") }
         }
 
         if enableDownloads {
@@ -258,17 +255,17 @@ struct PlaylistsView: View {
                             let missing = songs.filter { !downloadStore.isDownloaded(songId: $0.id) }
                             if !missing.isEmpty { downloadStore.enqueueSongs(missing) }
                             downloadStore.addOfflinePlaylist(playlist.id, songIds: songs.map(\.id))
-                            currentToast = ShelveToast(message: tr("Download started", "Download gestartet"))
+                            currentToast = ShelveToast(message: String(localized: "download_started"))
                         }
                     }
-                } label: { Label(tr("Download Playlist", "Playlist herunterladen"), systemImage: "arrow.down.circle") }
+                } label: { Label(String(localized: "download_playlist"), systemImage: "arrow.down.circle") }
             }
 
             if downloadStore.offlinePlaylistIds.contains(playlist.id) {
                 Button(role: .destructive) {
                     playlistToDeleteDownloads = playlist
                 } label: {
-                    Label(tr("Delete Downloads", "Downloads löschen"), systemImage: "arrow.down.circle")
+                    Label(String(localized: "delete_downloads_2"), systemImage: "arrow.down.circle")
                 }
             }
         }
@@ -279,7 +276,7 @@ struct PlaylistsView: View {
             Button(role: .destructive) {
                 playlistToDelete = playlist
                 showDeleteConfirm = true
-            } label: { Label(tr("Delete Playlist", "Playlist löschen"), systemImage: "trash") }
+            } label: { Label(String(localized: "delete_playlist"), systemImage: "trash") }
         }
     }
 
@@ -300,7 +297,7 @@ struct PlaylistsView: View {
                         let missing = songs.filter { !downloadStore.isDownloaded(songId: $0.id) }
                         if !missing.isEmpty { downloadStore.enqueueSongs(missing) }
                         downloadStore.addOfflinePlaylist(playlist.id, songIds: songs.map(\.id))
-                        currentToast = ShelveToast(message: tr("Download started", "Download gestartet"))
+                        currentToast = ShelveToast(message: String(localized: "download_started"))
                     }
                 }
             } label: { Image(systemName: "arrow.down.circle") }
@@ -336,7 +333,7 @@ struct PlaylistsView: View {
                     ? downloadStore.downloadedCount(for: playlist.id)
                     : (downloadStore.playlistSongIds[playlist.id]?.count ?? playlist.songCount)
                 if let count {
-                    Text("\(count) \(tr("Songs", "Titel"))")
+                    Text("\(count) \(String(localized: "songs"))")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -353,13 +350,13 @@ struct PlaylistsView: View {
     private var createPlaylistSheet: some View {
         NavigationStack {
             Form {
-                Section(tr("Name", "Name")) {
-                    TextField(tr("My Playlist", "Meine Playlist"), text: $newPlaylistName)
+                Section(String(localized: "name")) {
+                    TextField(String(localized: "my_playlist"), text: $newPlaylistName)
                         .focused($nameFieldFocused)
                         .autocorrectionDisabled()
                 }
             }
-            .navigationTitle(tr("New Playlist", "Neue Playlist"))
+            .navigationTitle(String(localized: "new_playlist_2"))
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
@@ -368,12 +365,12 @@ struct PlaylistsView: View {
             }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button(tr("Cancel", "Abbrechen"), role: .cancel) {
+                    Button(String(localized: "cancel"), role: .cancel) {
                         showCreateSheet = false
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(tr("Create", "Erstellen")) {
+                    Button(String(localized: "create")) {
                         let name = newPlaylistName.trimmingCharacters(in: .whitespaces)
                         guard !name.isEmpty else { return }
                         showCreateSheet = false

@@ -11,7 +11,7 @@ final class CarPlayPlaylistsController {
 
     init(interfaceController: CPInterfaceController) {
         self.interfaceController = interfaceController
-        let t = CPListTemplate(title: tr("Playlists", "Playlists"), sections: [])
+        let t = CPListTemplate(title: String(localized: "playlists"), sections: [])
         t.tabImage = UIImage(systemName: "music.note.list")
         rootTemplate = t
     }
@@ -100,7 +100,7 @@ final class CarPlayPlaylistsController {
         let recapIds = RecapStore.shared.recapPlaylistIds
         let playlists = LibraryStore.shared.playlists.filter { !recapIds.contains($0.id) }
         if playlists.isEmpty {
-            let empty = CPListItem(text: tr("No playlists", "Keine Playlists"), detailText: nil)
+            let empty = CPListItem(text: String(localized: "no_playlists"), detailText: nil)
             rootTemplate.updateSections([CPListSection(items: [empty])])
             return
         }
@@ -118,7 +118,7 @@ final class CarPlayPlaylistsController {
             ? LibraryStore.shared.playlists.filter { offlineIds.contains($0.id) && !recapIds.contains($0.id) }
             : []
         if playlists.isEmpty {
-            let empty = CPListItem(text: tr("No offline playlists", "Keine Offline-Playlists"), detailText: nil)
+            let empty = CPListItem(text: String(localized: "no_offline_playlists"), detailText: nil)
             rootTemplate.updateSections([CPListSection(items: [empty])])
             return
         }

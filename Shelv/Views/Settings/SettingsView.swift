@@ -61,26 +61,26 @@ struct SettingsView: View {
         ZStack {
         NavigationStack {
             List {
-                Section(tr("Servers", "Server")) {
+                Section(String(localized: "servers")) {
                     ForEach(serverStore.servers) { server in
                         serverRow(server)
                     }
                     Button {
                         showAddServer = true
                     } label: {
-                        Label(tr("Add Server", "Server hinzufügen"), systemImage: "plus.circle")
+                        Label(String(localized: "add_server"), systemImage: "plus.circle")
                             .foregroundStyle(accentColor)
                     }
                 }
 
-                Section(tr("Appearance", "Erscheinungsbild")) {
-                    Picker(tr("Appearance", "Erscheinungsbild"), selection: $appAppearance) {
-                        Text(tr("System", "System")).tag("system")
-                        Text(tr("Light", "Hell")).tag("light")
-                        Text(tr("Dark", "Dunkel")).tag("dark")
+                Section(String(localized: "appearance")) {
+                    Picker(String(localized: "appearance"), selection: $appAppearance) {
+                        Text(String(localized: "system")).tag("system")
+                        Text(String(localized: "light")).tag("light")
+                        Text(String(localized: "dark")).tag("dark")
                     }
                     .id(appAppearance + themeColorName)
-                    Picker(tr("Accent Color", "Akzentfarbe"), selection: $themeColorName) {
+                    Picker(String(localized: "accent_color"), selection: $themeColorName) {
                         ForEach(AppTheme.options, id: \.name) { option in
                             HStack {
                                 Circle()
@@ -94,57 +94,54 @@ struct SettingsView: View {
                     .id(themeColorName)
                 }
 
-                Section(tr("Playlists & Favorites", "Playlists & Favoriten")) {
+                Section(String(localized: "playlists_favorites")) {
                     Toggle(isOn: $enableFavorites) {
-                        Label { Text(tr("Favorites", "Favoriten")) } icon: {
+                        Label { Text(String(localized: "favorites")) } icon: {
                             Image(systemName: "heart").foregroundStyle(accentColor)
                         }
                     }
                     .tint(accentColor)
                     Toggle(isOn: $enablePlaylists) {
-                        Label { Text(tr("Playlists", "Playlists")) } icon: {
+                        Label { Text(String(localized: "playlists")) } icon: {
                             Image(systemName: "music.note.list").foregroundStyle(accentColor)
                         }
                     }
                     .tint(accentColor)
                 }
 
-                Section(tr("Transcoding", "Transcoding")) {
+                Section(String(localized: "transcoding")) {
                     Toggle(isOn: $transcodingEnabled) {
-                        Label { Text(tr("Transcoding", "Transcoding")) } icon: {
+                        Label { Text(String(localized: "transcoding")) } icon: {
                             Image(systemName: "waveform.badge.magnifyingglass").foregroundStyle(accentColor)
                         }
                     }
                     .tint(accentColor)
                     if transcodingEnabled {
                         NavigationLink(destination: TranscodingSettingsView()) {
-                            Label { Text(tr("Settings", "Einstellungen")) } icon: {
+                            Label { Text(String(localized: "settings")) } icon: {
                                 Image(systemName: "slider.horizontal.3").foregroundStyle(accentColor)
                             }
                         }
                     }
                 }
 
-                Section(tr("Gapless", "Gapless")) {
+                Section(String(localized: "gapless")) {
                     Toggle(isOn: $gaplessEnabled) {
-                        Label { Text(tr("Gapless", "Gapless")) } icon: {
+                        Label { Text(String(localized: "gapless")) } icon: {
                             Image(systemName: "waveform.path").foregroundStyle(accentColor)
                         }
                     }
                     .tint(accentColor)
                     if gaplessEnabled {
-                        Text(tr(
-                            "Pre-cache Original File recommended.\nTranscoded streams are pre-cached automatically.",
-                            "Pre-cache Originaldatei empfohlen.\nTranskodierte Streams werden automatisch pre-gecached."
-                        ))
+                        Text(String(localized: "precache_original_file_recommendedntranscoded_stre"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     }
                 }
 
-                Section(tr("Recap", "Recap")) {
+                Section(String(localized: "recap")) {
                     Toggle(isOn: $recapEnabled) {
-                        Label { Text(tr("Recap", "Recap")) } icon: {
+                        Label { Text(String(localized: "recap")) } icon: {
                             Image(systemName: "calendar.badge.clock").foregroundStyle(accentColor)
                         }
                     }
@@ -155,13 +152,13 @@ struct SettingsView: View {
                             RecapSettingsView()
                                 .environmentObject(serverStore)
                         ) {
-                            Label { Text(tr("Settings", "Einstellungen")) } icon: {
+                            Label { Text(String(localized: "settings")) } icon: {
                                 Image(systemName: "slider.horizontal.3").foregroundStyle(accentColor)
                             }
                         }
 
                         Toggle(isOn: $iCloudSyncEnabled) {
-                            Label { Text(tr("iCloud Sync", "iCloud-Sync")) } icon: {
+                            Label { Text(String(localized: "icloud_sync")) } icon: {
                                 Image(systemName: "icloud").foregroundStyle(accentColor)
                             }
                         }
@@ -171,10 +168,7 @@ struct SettingsView: View {
                         }
 
                         if !iCloudSyncEnabled {
-                            Text(tr(
-                                "Data stays local. Multiple devices may create duplicate recap playlists.",
-                                "Daten bleiben lokal. Mehrere Geräte können doppelte Recap-Playlists erstellen."
-                            ))
+                            Text(String(localized: "data_stays_local_multiple_devices_may_create_dupli"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         }
@@ -183,9 +177,9 @@ struct SettingsView: View {
 
                 downloadsSection
 
-                Section(tr("Lyrics", "Lyrics")) {
+                Section(String(localized: "lyrics")) {
                     HStack {
-                        Label { Text(tr("Database", "Datenbank")) } icon: {
+                        Label { Text(String(localized: "database")) } icon: {
                             Image(systemName: "text.bubble").foregroundStyle(accentColor)
                         }
                         Spacer()
@@ -204,7 +198,7 @@ struct SettingsView: View {
                     }
 
                     Toggle(isOn: $autoFetchLyrics) {
-                        Label { Text(tr("Auto-fetch on playback", "Beim Abspielen laden")) } icon: {
+                        Label { Text(String(localized: "autofetch_on_playback")) } icon: {
                             Image(systemName: "wand.and.stars").foregroundStyle(accentColor)
                         }
                     }
@@ -219,7 +213,7 @@ struct SettingsView: View {
                                 total: Double(lyrTotal)
                             )
                             .tint(accentColor)
-                            Button(tr("Cancel download", "Download abbrechen")) {
+                            Button(String(localized: "cancel_download")) {
                                 lyricsStore.cancelBulkDownload()
                             }
                             .foregroundStyle(.red)
@@ -230,7 +224,7 @@ struct SettingsView: View {
                             guard let sid = serverStore.activeServerID?.uuidString else { return }
                             lyricsStore.startBulkDownload(serverId: sid)
                         } label: {
-                            Label { Text(tr("Download all lyrics", "Alle Lyrics laden")) } icon: {
+                            Label { Text(String(localized: "download_all_lyrics")) } icon: {
                             Image(systemName: "arrow.down.circle").foregroundStyle(accentColor)
                         }
                         }
@@ -239,16 +233,16 @@ struct SettingsView: View {
                     Button(role: .destructive) {
                         showResetLyricsConfirm = true
                     } label: {
-                        Label { Text(tr("Reset lyrics database", "Lyrics zurücksetzen")) } icon: {
+                        Label { Text(String(localized: "reset_lyrics_database")) } icon: {
                             Image(systemName: "trash").foregroundStyle(.red)
                         }
                     }
                     .tint(.red)
                 }
 
-                Section(tr("Cache", "Cache")) {
+                Section(String(localized: "cache")) {
                     Toggle(isOn: $streamPreCacheEnabled) {
-                        Label { Text(tr("Pre-cache original file", "Originaldatei vorab laden")) } icon: {
+                        Label { Text(String(localized: "precache_original_file")) } icon: {
                             Image(systemName: "arrow.down.to.line").foregroundStyle(accentColor)
                         }
                     }
@@ -257,7 +251,7 @@ struct SettingsView: View {
                         showPreCacheInfo = true
                     } label: {
                         Label {
-                            Text(tr("About Pre-cache", "Über Pre-cache"))
+                            Text(String(localized: "about_precache"))
                                 .foregroundStyle(.primary)
                         } icon: {
                             Image(systemName: "info.circle").foregroundStyle(accentColor)
@@ -266,26 +260,23 @@ struct SettingsView: View {
                     .sheet(isPresented: $showPreCacheInfo) {
                         NavigationStack {
                             ScrollView {
-                                Text(tr(
-                                    "Stable, network-independent playback with seamless gapless transitions. The first song may take longer to load.\n\n• Downloads the current song fully before playback\n• While it plays, the next song pre-fetches in the background\n• Every subsequent song starts instantly\n• Cached files are removed when the next song starts\n\nOnly active when transcoding is set to Original or off.",
-                                    "Stabile, netzwerkunabhängige Wiedergabe mit nahtlosen Gapless-Übergängen. Beim ersten Song kann es zu einer längeren Ladezeit kommen.\n\n• Lädt den aktuellen Song vollständig vor der Wiedergabe\n• Währenddessen wird der nächste Song im Hintergrund geladen\n• Ab dem zweiten Song startet die Wiedergabe sofort\n• Gecachte Dateien werden beim Start des nächsten Songs gelöscht\n\nNur wirksam, wenn Transcoding auf Original gestellt oder deaktiviert ist."
-                                ))
+                                Text(String(localized: "stable_networkindependent_playback_with_seamless_g"))
                                 .font(.body)
                                 .padding()
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             }
-                            .navigationTitle(tr("Pre-cache", "Pre-cache"))
+                            .navigationTitle(String(localized: "precache"))
                             .navigationBarTitleDisplayMode(.inline)
                             .toolbar {
                                 ToolbarItem(placement: .confirmationAction) {
-                                    Button(tr("Done", "Fertig")) { showPreCacheInfo = false }
+                                    Button(String(localized: "done")) { showPreCacheInfo = false }
                                 }
                             }
                         }
                         .presentationDetents([.medium, .large])
                     }
                     HStack {
-                        Label { Text(tr("Cache Size", "Cache-Grösse")) } icon: {
+                        Label { Text(String(localized: "cache_size")) } icon: {
                             Image(systemName: "internaldrive").foregroundStyle(accentColor)
                         }
                         Spacer()
@@ -293,26 +284,26 @@ struct SettingsView: View {
                             .foregroundStyle(.secondary)
                     }
                     NavigationLink(destination: CacheLogView()) {
-                        Label { Text(tr("Logs", "Logs")) } icon: {
+                        Label { Text(String(localized: "logs")) } icon: {
                             Image(systemName: "doc.text.magnifyingglass").foregroundStyle(accentColor)
                         }
                     }
                     Button(role: .destructive) {
                         showClearCacheConfirm = true
                     } label: {
-                        Label { Text(tr("Clear Cache", "Cache leeren")) } icon: {
+                        Label { Text(String(localized: "clear_cache")) } icon: {
                             Image(systemName: "trash").foregroundStyle(.red)
                         }
                     }
                     .tint(.red)
                 }
 
-                Section(tr("Links & Contact", "Links & Kontakt")) {
+                Section(String(localized: "links_contact")) {
                     if let url = URL(string: "https://vkugler.app") {
                         Button { openURL(url) } label: {
                             Label {
                                 HStack {
-                                    Text(tr("Developer Website", "Developer-Website"))
+                                    Text(String(localized: "developer_website"))
                                     Spacer()
                                     Image(systemName: "arrow.up.right")
                                         .font(.caption)
@@ -346,7 +337,7 @@ struct SettingsView: View {
                         Button { openURL(url) } label: {
                             Label {
                                 HStack {
-                                    Text(tr("Privacy Policy", "Datenschutz"))
+                                    Text(String(localized: "privacy_policy"))
                                     Spacer()
                                     Image(systemName: "arrow.up.right")
                                         .font(.caption)
@@ -363,7 +354,7 @@ struct SettingsView: View {
                         Button { openURL(url) } label: {
                             Label {
                                 HStack {
-                                    Text(tr("Contact", "Kontakt"))
+                                    Text(String(localized: "contact"))
                                     Spacer()
                                     Image(systemName: "arrow.up.right")
                                         .font(.caption)
@@ -397,7 +388,7 @@ struct SettingsView: View {
                         Button { openURL(url) } label: {
                             Label {
                                 HStack {
-                                    Text(tr("Support my work", "Support my work"))
+                                    Text(String(localized: "support_my_work"))
                                     Spacer()
                                     Image(systemName: "arrow.up.right")
                                         .font(.caption)
@@ -412,14 +403,11 @@ struct SettingsView: View {
                     }
                 }
 
-                Section(tr("Info", "Info")) {
+                Section(String(localized: "info")) {
                     let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "–"
                     let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "–"
                     Text("Shelv \(version) (\(build))")
-                    Text(tr(
-                        "Shelv is an unofficial Navidrome client and has no affiliation with Navidrome or its developers.",
-                        "Shelv ist ein inoffizieller Navidrome-Client und steht in keiner Verbindung zu Navidrome oder dessen Entwicklern."
-                    ))
+                    Text(String(localized: "shelv_is_an_unofficial_navidrome_client_and_has_no"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 }
@@ -431,7 +419,7 @@ struct SettingsView: View {
             .tint(accentColor)
             .listStyle(.insetGrouped)
             .scrollIndicators(.hidden)
-            .navigationTitle(tr("Settings", "Einstellungen"))
+            .navigationTitle(String(localized: "settings"))
             .task {
                 await recalculateCacheSize()
                 if let sid = serverStore.activeServerID?.uuidString {
@@ -466,47 +454,41 @@ struct SettingsView: View {
                     .tint(accentColor)
             }
             .alert(
-                tr("Delete Server?", "Server löschen?"),
+                String(localized: "delete_server"),
                 isPresented: $showDeleteConfirm,
                 presenting: serverToDelete
             ) { server in
-                Button(tr("Delete", "Löschen"), role: .destructive) {
+                Button(String(localized: "delete"), role: .destructive) {
                     serverStore.delete(server: server)
                 }
-                Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+                Button(String(localized: "cancel"), role: .cancel) {}
             } message: { server in
                 Text("\"\(server.displayName)\"")
             }
             .alert(
-                tr("Reset lyrics database?", "Lyrics-Datenbank zurücksetzen?"),
+                String(localized: "reset_lyrics_database_2"),
                 isPresented: $showResetLyricsConfirm
             ) {
-                Button(tr("Reset", "Zurücksetzen"), role: .destructive) {
+                Button(String(localized: "reset"), role: .destructive) {
                     Task {
                         guard let sid = serverStore.activeServerID?.uuidString else { return }
                         await lyricsStore.reset(serverId: sid)
                     }
                 }
-                Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+                Button(String(localized: "cancel"), role: .cancel) {}
             } message: {
-                Text(tr(
-                    "All downloaded lyrics will be removed.",
-                    "Alle heruntergeladenen Lyrics werden entfernt."
-                ))
+                Text(String(localized: "all_downloaded_lyrics_will_be_removed"))
             }
             .alert(
-                tr("Clear Cache?", "Cache leeren?"),
+                String(localized: "clear_cache_2"),
                 isPresented: $showClearCacheConfirm
             ) {
-                Button(tr("Clear", "Leeren"), role: .destructive) {
+                Button(String(localized: "clear"), role: .destructive) {
                     Task { await clearCache() }
                 }
-                Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+                Button(String(localized: "cancel"), role: .cancel) {}
             } message: {
-                Text(tr(
-                    "This will remove all cached images and library data. The library will need to reload on next launch.",
-                    "Alle gecachten Bilder und Bibliotheksdaten werden entfernt. Die Bibliothek wird beim nächsten Start neu geladen."
-                ))
+                Text(String(localized: "this_will_remove_all_cached_images_and_library_dat"))
             }
         }
         .tint(accentColor)
@@ -525,7 +507,7 @@ struct SettingsView: View {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 48))
                 .foregroundStyle(.white)
-            Text(tr("Cache cleared", "Cache geleert"))
+            Text(String(localized: "cache_cleared"))
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.white)
         }
@@ -542,7 +524,7 @@ struct SettingsView: View {
         let total = imgBytes + libBytes
         cacheSize = total > 0
             ? ByteCountFormatter.string(fromByteCount: Int64(total), countStyle: .file)
-            : tr("Empty", "Leer")
+            : String(localized: "empty")
     }
 
     private func clearCache() async {
@@ -561,7 +543,7 @@ struct SettingsView: View {
                 HStack(spacing: 6) {
                     Text(server.displayName).font(.body)
                     if serverStore.activeServerID == server.id {
-                        Text(tr("Active", "Aktiv"))
+                        Text(String(localized: "active"))
                             .font(.caption2)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
@@ -585,18 +567,18 @@ struct SettingsView: View {
             }
             Spacer()
             Menu {
-                Button(tr("Activate", "Aktivieren")) {
+                Button(String(localized: "activate")) {
                     serverStore.activate(server: server)
                 }
-                Button(tr("Edit", "Bearbeiten")) {
+                Button(String(localized: "edit")) {
                     editingServer = server
                 }
                 Divider()
-                Button(tr("Manage Server", "Server verwalten")) {
+                Button(String(localized: "manage_server")) {
                     managingServer = server
                 }
                 Divider()
-                Button(tr("Delete", "Löschen"), role: .destructive) {
+                Button(String(localized: "delete"), role: .destructive) {
                     serverToDelete = server
                     showDeleteConfirm = true
                 }
@@ -616,9 +598,9 @@ struct SettingsView: View {
 
     @ViewBuilder
     private var downloadsSection: some View {
-        Section(tr("Downloads", "Downloads")) {
+        Section(String(localized: "downloads")) {
             Toggle(isOn: $enableDownloads) {
-                Label { Text(tr("Enable Downloads", "Downloads aktivieren")) } icon: {
+                Label { Text(String(localized: "enable_downloads")) } icon: {
                     Image(systemName: "arrow.down.circle").foregroundStyle(accentColor)
                 }
             }
@@ -631,7 +613,7 @@ struct SettingsView: View {
                         if newValue { offlineMode.enterOfflineMode() } else { offlineMode.exitOfflineMode() }
                     }
                 )) {
-                    Label { Text(tr("Offline Mode", "Offline-Modus")) } icon: {
+                    Label { Text(String(localized: "offline_mode")) } icon: {
                         Image(systemName: "wifi.slash").foregroundStyle(accentColor)
                     }
                 }
@@ -640,14 +622,14 @@ struct SettingsView: View {
                 Button {
                     showBulkDownloadSheet = true
                 } label: {
-                    Label { Text(tr("Download Everything", "Alles herunterladen")) } icon: {
+                    Label { Text(String(localized: "download_everything")) } icon: {
                         Image(systemName: "square.and.arrow.down.on.square").foregroundStyle(accentColor)
                     }
                 }
                 .disabled(offlineMode.isOffline)
 
                 HStack {
-                    Label { Text(tr("Max Storage", "Max. Speicher")) } icon: {
+                    Label { Text(String(localized: "max_storage")) } icon: {
                         Image(systemName: "externaldrive").foregroundStyle(accentColor)
                     }
                     Spacer()
@@ -667,7 +649,7 @@ struct SettingsView: View {
                 Button(role: .destructive) {
                     showDeleteAllDownloadsConfirm = true
                 } label: {
-                    Label { Text(tr("Delete All Downloads", "Alle Downloads löschen")) } icon: {
+                    Label { Text(String(localized: "delete_all_downloads")) } icon: {
                         Image(systemName: "trash")
                     }
                     .foregroundStyle(.red)
@@ -680,18 +662,15 @@ struct SettingsView: View {
             }
         }
         .alert(
-            tr("Delete all downloads?", "Alle Downloads löschen?"),
+            String(localized: "delete_all_downloads_2"),
             isPresented: $showDeleteAllDownloadsConfirm
         ) {
-            Button(tr("Delete", "Löschen"), role: .destructive) {
+            Button(String(localized: "delete"), role: .destructive) {
                 DownloadStore.shared.deleteAll()
             }
-            Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+            Button(String(localized: "cancel"), role: .cancel) {}
         } message: {
-            Text(tr(
-                "All downloaded songs, albums and artists will be removed from this device.",
-                "Alle heruntergeladenen Songs, Alben und Künstler werden von diesem Gerät entfernt."
-            ))
+            Text(String(localized: "all_downloaded_songs_albums_and_artists_will_be_re"))
         }
         .task(id: enableDownloads) {
             guard enableDownloads, LibraryStore.shared.albums.isEmpty else { return }
@@ -711,7 +690,7 @@ private struct DownloadStatsCell: View {
             if let stats {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
-                        Text(tr("Used", "Belegt"))
+                        Text(String(localized: "used"))
                         Spacer()
                         Text(ByteCountFormatter.string(fromByteCount: stats.totalBytes, countStyle: .file))
                             .foregroundStyle(.secondary)
@@ -719,7 +698,7 @@ private struct DownloadStatsCell: View {
                     }
                     if let free = stats.freeDiskBytes {
                         HStack {
-                            Text(tr("Free on device", "Frei auf Gerät"))
+                            Text(String(localized: "free_on_device"))
                             Spacer()
                             Text(ByteCountFormatter.string(fromByteCount: free, countStyle: .file))
                                 .foregroundStyle(.secondary)
@@ -727,17 +706,17 @@ private struct DownloadStatsCell: View {
                         }
                     }
                     HStack {
-                        Text(tr("Songs", "Titel"))
+                        Text(String(localized: "songs"))
                         Spacer()
                         Text("\(stats.songCount)").foregroundStyle(.secondary).monospacedDigit()
                     }
                     HStack {
-                        Text(tr("Albums", "Alben"))
+                        Text(String(localized: "albums"))
                         Spacer()
                         Text("\(stats.albumCount)").foregroundStyle(.secondary).monospacedDigit()
                     }
                     HStack {
-                        Text(tr("Artists", "Künstler"))
+                        Text(String(localized: "artists"))
                         Spacer()
                         Text("\(stats.artistCount)").foregroundStyle(.secondary).monospacedDigit()
                     }
@@ -779,7 +758,7 @@ private struct ActiveDownloadProgressCell: View {
         if let progress = store.batchProgress {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text(tr("Active Downloads", "Aktive Downloads"))
+                    Text(String(localized: "active_downloads"))
                         .font(.subheadline.bold())
                     Spacer()
                     Text("\(progress.completed) / \(progress.total)")
@@ -791,12 +770,12 @@ private struct ActiveDownloadProgressCell: View {
                     .tint(accentColor)
                 HStack {
                     if progress.failed > 0 {
-                        Text(tr("\(progress.failed) failed", "\(progress.failed) fehlgeschlagen"))
+                        Text(String(format: String(localized: "failed_count_format"), progress.failed))
                             .font(.caption)
                             .foregroundStyle(.red)
                     }
                     Spacer()
-                    Button(tr("Cancel download", "Download abbrechen")) {
+                    Button(String(localized: "cancel_download")) {
                         Task { await DownloadService.shared.cancelBatch() }
                     }
                     .font(.caption)

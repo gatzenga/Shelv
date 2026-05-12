@@ -13,7 +13,7 @@ final class CarPlayDiscoverController {
 
     init(interfaceController: CPInterfaceController) {
         self.interfaceController = interfaceController
-        let t = CPListTemplate(title: tr("Discover", "Entdecken"), sections: [])
+        let t = CPListTemplate(title: String(localized: "discover"), sections: [])
         t.tabImage = UIImage(systemName: "sparkles")
         rootTemplate = t
     }
@@ -69,7 +69,7 @@ final class CarPlayDiscoverController {
     }
 
     private func showOffline() {
-        let goOnline = CPListItem(text: tr("Go Online", "Online gehen"), detailText: nil)
+        let goOnline = CPListItem(text: String(localized: "go_online"), detailText: nil)
         goOnline.setImage(cpIcon("wifi"))
         goOnline.handler = { _, c in
             Task { @MainActor in OfflineModeService.shared.exitOfflineMode() }
@@ -77,7 +77,7 @@ final class CarPlayDiscoverController {
         }
         rootTemplate.updateSections([CPListSection(
             items: [goOnline],
-            header: tr("You are offline", "Du bist offline"),
+            header: String(localized: "you_are_offline"),
             sectionIndexTitle: nil
         )])
     }
@@ -101,7 +101,7 @@ final class CarPlayDiscoverController {
     }
 
     private func showNoConnection() {
-        let enable = CPListItem(text: tr("Enable Offline Mode", "Offline-Modus aktivieren"), detailText: nil)
+        let enable = CPListItem(text: String(localized: "enable_offline_mode"), detailText: nil)
         enable.setImage(cpIcon("wifi.slash"))
         enable.handler = { _, c in
             Task { @MainActor in OfflineModeService.shared.enterOfflineMode() }
@@ -109,7 +109,7 @@ final class CarPlayDiscoverController {
         }
         rootTemplate.updateSections([CPListSection(
             items: [enable],
-            header: tr("No connection", "Keine Verbindung"),
+            header: String(localized: "no_connection"),
             sectionIndexTitle: nil
         )])
     }
@@ -119,17 +119,17 @@ final class CarPlayDiscoverController {
 
         // Mixes — reine Textzeilen, sauber untereinander
         sections.append(CPListSection(items: [
-            makeMixItem(tr("Mix: Newest Tracks",     "Mix: Neueste Titel"),     type: "newest"),
-            makeMixItem(tr("Mix: Frequently Played", "Mix: Häufig gespielt"),   type: "frequent"),
-            makeMixItem(tr("Mix: Recently Played",   "Mix: Kürzlich gespielt"), type: "recent"),
+            makeMixItem(String(localized: "mix_newest_tracks"),     type: "newest"),
+            makeMixItem(String(localized: "mix_frequently_played"),   type: "frequent"),
+            makeMixItem(String(localized: "mix_recently_played"), type: "recent"),
         ], header: "Mixes", sectionIndexTitle: nil))
 
         // 4 Kategorien als Cover-Rows, kein Section-Header
         let categories: [(String, [Album])] = [
-            (tr("Recently Added",    "Kürzlich hinzugefügt"), LibraryStore.shared.recentlyAdded),
-            (tr("Recently Played",   "Kürzlich gespielt"),    LibraryStore.shared.recentlyPlayed),
-            (tr("Frequently Played", "Häufig gespielt"),     LibraryStore.shared.frequentlyPlayed),
-            (tr("Random",            "Zufällig"),            LibraryStore.shared.randomAlbums),
+            (String(localized: "recently_added"), LibraryStore.shared.recentlyAdded),
+            (String(localized: "recently_played"),    LibraryStore.shared.recentlyPlayed),
+            (String(localized: "frequently_played"),     LibraryStore.shared.frequentlyPlayed),
+            (String(localized: "random"),            LibraryStore.shared.randomAlbums),
         ]
 
         var categoryRows: [any CPListTemplateItem] = []
@@ -141,7 +141,7 @@ final class CarPlayDiscoverController {
         }
 
         // Refresh-Button ganz unten, kein Header
-        let refreshItem = actionListItem(title: tr("Refresh", "Aktualisieren"), systemImage: "arrow.clockwise") { [weak self] _, c in
+        let refreshItem = actionListItem(title: String(localized: "refresh"), systemImage: "arrow.clockwise") { [weak self] _, c in
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 await self.fetchAndBuild()
@@ -217,7 +217,7 @@ final class CarPlayDiscoverController {
                     default:         songs = try await SubsonicAPIService.shared.getRecentSongs(limit: 50)
                     }
                     guard !songs.isEmpty else {
-                        await MainActor.run { self?.presentMixError(title: title, message: tr("No tracks found.", "Keine Titel gefunden.")) }
+                        await MainActor.run { self?.presentMixError(title: title, message: String(localized: "no_tracks_found")) }
                         return
                     }
                     if let s = self {
@@ -228,9 +228,9 @@ final class CarPlayDiscoverController {
                             if !snap.isEmpty {
                                 var freshSections = snap
                                 freshSections[0] = CPListSection(items: [
-                                    s.makeMixItem(tr("Mix: Newest Tracks",     "Mix: Neueste Titel"),     type: "newest"),
-                                    s.makeMixItem(tr("Mix: Frequently Played", "Mix: Häufig gespielt"),   type: "frequent"),
-                                    s.makeMixItem(tr("Mix: Recently Played",   "Mix: Kürzlich gespielt"), type: "recent"),
+                                    s.makeMixItem(String(localized: "mix_newest_tracks"),     type: "newest"),
+                                    s.makeMixItem(String(localized: "mix_frequently_played"),   type: "frequent"),
+                                    s.makeMixItem(String(localized: "mix_recently_played"), type: "recent"),
                                 ], header: "Mixes", sectionIndexTitle: nil)
                                 s.rootTemplate.updateSections(freshSections)
                             }
@@ -248,9 +248,9 @@ final class CarPlayDiscoverController {
         // titleVariants nach Display-Breite — längste zuerst, fallback auf kurze.
         let long  = "\(title) — \(message)"
         let alert = CPAlertTemplate(
-            titleVariants: [long, title, tr("Mix failed", "Mix fehlgeschlagen")],
+            titleVariants: [long, title, String(localized: "mix_failed")],
             actions: [
-                CPAlertAction(title: tr("OK", "OK"), style: .default) { [weak self] _ in
+                CPAlertAction(title: String(localized: "ok"), style: .default) { [weak self] _ in
                     self?.interfaceController.dismissTemplate(animated: true, completion: nil)
                 }
             ]

@@ -46,7 +46,7 @@ struct DiscoverView: View {
                                 Button {
                                     offlineMode.enterOfflineMode()
                                 } label: {
-                                    Label(tr("Go Offline", "Offline gehen"), systemImage: "wifi.slash")
+                                    Label(String(localized: "go_offline"), systemImage: "wifi.slash")
                                         .font(.subheadline.bold())
                                         .padding(.horizontal, 24)
                                         .padding(.vertical, 10)
@@ -61,19 +61,19 @@ struct DiscoverView: View {
                     } else {
                         VStack(spacing: 12) {
                             mixButton(
-                                title: tr("Mix: Newest Tracks", "Mix: Neueste Titel"),
+                                title: String(localized: "mix_newest_tracks"),
                                 icon: "sparkles",
                                 key: "newest"
                             ) { await loadMix(type: "newest") }
 
                             mixButton(
-                                title: tr("Mix: Frequently Played", "Mix: Häufig gespielt"),
+                                title: String(localized: "mix_frequently_played"),
                                 icon: "chart.bar.fill",
                                 key: "frequent"
                             ) { await loadMix(type: "frequent") }
 
                             mixButton(
-                                title: tr("Mix: Recently Played", "Mix: Kürzlich gespielt"),
+                                title: String(localized: "mix_recently_played"),
                                 icon: "clock.fill",
                                 key: "recent"
                             ) { await loadMix(type: "recent") }
@@ -81,15 +81,15 @@ struct DiscoverView: View {
                         .padding(.horizontal)
 
                         albumSection(
-                            title: tr("Recently Added", "Kürzlich hinzugefügt"),
+                            title: String(localized: "recently_added"),
                             albums: libraryStore.recentlyAdded
                         )
                         albumSection(
-                            title: tr("Recently Played", "Kürzlich gespielt"),
+                            title: String(localized: "recently_played"),
                             albums: libraryStore.recentlyPlayed
                         )
                         albumSection(
-                            title: tr("Frequently Played", "Häufig gespielt"),
+                            title: String(localized: "frequently_played"),
                             albums: libraryStore.frequentlyPlayed
                         )
                         randomAlbumSection
@@ -178,8 +178,8 @@ struct DiscoverView: View {
                     Task { await libraryStore.loadDiscover() }
                 }
             }
-            .alert(tr("Error", "Fehler"), isPresented: $showError, presenting: errorMessage) { _ in
-                Button(tr("OK", "OK"), role: .cancel) {}
+            .alert(String(localized: "error"), isPresented: $showError, presenting: errorMessage) { _ in
+                Button(String(localized: "ok"), role: .cancel) {}
             } message: { msg in
                 Text(msg)
             }
@@ -192,12 +192,9 @@ struct DiscoverView: View {
             Image(systemName: "wifi.slash")
                 .font(.system(size: 56))
                 .foregroundStyle(.tertiary)
-            Text(tr("You are offline", "Du bist offline"))
+            Text(String(localized: "you_are_offline"))
                 .font(.title3).bold()
-            Text(tr(
-                "Downloads are still available. Tap the magnifying glass to search your library.",
-                "Downloads sind weiterhin verfügbar. Tippe auf die Lupe um in deiner Bibliothek zu suchen."
-            ))
+            Text(String(localized: "downloads_are_still_available_tap_the_magnifying_g"))
             .font(.subheadline)
             .foregroundStyle(.secondary)
             .multilineTextAlignment(.center)
@@ -205,7 +202,7 @@ struct DiscoverView: View {
             Button {
                 offlineMode.exitOfflineMode()
             } label: {
-                Label(tr("Go Online", "Online gehen"), systemImage: "wifi")
+                Label(String(localized: "go_online"), systemImage: "wifi")
                     .font(.subheadline.bold())
                     .padding(.horizontal, 24)
                     .padding(.vertical, 10)
@@ -224,19 +221,19 @@ struct DiscoverView: View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(spacing: 12) {
                 mixButton(
-                    title: tr("Play: All Downloads", "Play: Alle Downloads"),
+                    title: String(localized: "play_all_downloads"),
                     icon: "play.fill",
                     key: "offline_play"
                 ) { loadOfflineMix(type: "offline_play") }
 
                 mixButton(
-                    title: tr("Shuffle: All Downloads", "Shuffle: Alle Downloads"),
+                    title: String(localized: "shuffle_all_downloads"),
                     icon: "shuffle",
                     key: "offline_shuffle"
                 ) { loadOfflineMix(type: "offline_shuffle") }
 
                 mixButton(
-                    title: tr("Mix: Latest Downloads", "Mix: Neueste Downloads"),
+                    title: String(localized: "mix_latest_downloads"),
                     icon: "arrow.down.circle.fill",
                     key: "offline_newest"
                 ) { loadOfflineMix(type: "offline_newest") }
@@ -248,7 +245,7 @@ struct DiscoverView: View {
                 Button {
                     offlineMode.exitOfflineMode()
                 } label: {
-                    Label(tr("Go Online", "Online gehen"), systemImage: "wifi")
+                    Label(String(localized: "go_online"), systemImage: "wifi")
                         .font(.subheadline.bold())
                         .padding(.horizontal, 24)
                         .padding(.vertical, 10)
@@ -265,7 +262,7 @@ struct DiscoverView: View {
 
     @ViewBuilder
     private var randomAlbumSection: some View {
-        albumSection(title: tr("Random Albums", "Zufällige Alben"), albums: libraryStore.randomAlbums) {
+        albumSection(title: String(localized: "random_albums"), albums: libraryStore.randomAlbums) {
             Button {
                 randomRefreshing = true
                 Task {

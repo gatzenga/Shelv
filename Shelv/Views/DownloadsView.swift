@@ -17,9 +17,9 @@ struct DownloadsView: View {
         case albums, artists, favorites
         var label: String {
             switch self {
-            case .albums:    return tr("Albums", "Alben")
-            case .artists:   return tr("Artists", "Künstler")
-            case .favorites: return tr("Favorites", "Favoriten")
+            case .albums:    return String(localized: "albums")
+            case .artists:   return String(localized: "artists")
+            case .favorites: return String(localized: "favorites")
             }
         }
     }
@@ -48,32 +48,32 @@ struct DownloadsView: View {
                 case .favorites: favoritesList
                 }
             }
-            .navigationTitle(offlineMode.isOffline ? tr("Offline", "Offline") : tr("Downloads", "Downloads"))
+            .navigationTitle(offlineMode.isOffline ? String(localized: "offline") : String(localized: "downloads"))
             .navigationBarTitleDisplayMode(.inline)
             .task { await downloadStore.reload() }
             .alert(
-                tr("Delete Downloads?", "Downloads löschen?"),
+                String(localized: "delete_downloads"),
                 isPresented: Binding(get: { albumToDeleteDownloads != nil }, set: { if !$0 { albumToDeleteDownloads = nil } }),
                 presenting: albumToDeleteDownloads
             ) { album in
-                Button(tr("Delete", "Löschen"), role: .destructive) {
+                Button(String(localized: "delete"), role: .destructive) {
                     downloadStore.deleteAlbum(album.albumId)
                 }
-                Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+                Button(String(localized: "cancel"), role: .cancel) {}
             } message: { _ in
-                Text(tr("The downloads will be removed from this device.", "Die Downloads werden von diesem Gerät entfernt."))
+                Text(String(localized: "the_downloads_will_be_removed_from_this_device"))
             }
             .alert(
-                tr("Delete Downloads?", "Downloads löschen?"),
+                String(localized: "delete_downloads"),
                 isPresented: Binding(get: { artistToDeleteDownloads != nil }, set: { if !$0 { artistToDeleteDownloads = nil } }),
                 presenting: artistToDeleteDownloads
             ) { artist in
-                Button(tr("Delete", "Löschen"), role: .destructive) {
+                Button(String(localized: "delete"), role: .destructive) {
                     downloadStore.deleteArtist(artist.artistId)
                 }
-                Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+                Button(String(localized: "cancel"), role: .cancel) {}
             } message: { _ in
-                Text(tr("The downloads will be removed from this device.", "Die Downloads werden von diesem Gerät entfernt."))
+                Text(String(localized: "the_downloads_will_be_removed_from_this_device"))
             }
         }
     }
@@ -81,7 +81,7 @@ struct DownloadsView: View {
     @ViewBuilder
     private var albumsList: some View {
         if downloadStore.albums.isEmpty {
-            emptyState(title: tr("No downloaded albums", "Keine heruntergeladenen Alben"),
+            emptyState(title: String(localized: "no_downloaded_albums"),
                        icon: "square.grid.2x2")
         } else {
             VStack(spacing: 0) {
@@ -105,7 +105,7 @@ struct DownloadsView: View {
                                 .contextMenu {
                                     Button(role: .destructive) {
                                         haptic(); albumToDeleteDownloads = album
-                                    } label: { Label(tr("Delete Downloads", "Downloads löschen"), systemImage: "trash") }
+                                    } label: { Label(String(localized: "delete_downloads_2"), systemImage: "trash") }
                                 }
                             }
                         }
@@ -154,7 +154,7 @@ struct DownloadsView: View {
     @ViewBuilder
     private var artistsList: some View {
         if downloadStore.artists.isEmpty {
-            emptyState(title: tr("No downloaded artists", "Keine heruntergeladenen Künstler"),
+            emptyState(title: String(localized: "no_downloaded_artists"),
                        icon: "music.mic")
         } else {
             List {
@@ -196,12 +196,12 @@ struct DownloadsView: View {
         let favSongs = downloadStore.favoriteSongs
 
         if favAlbums.isEmpty && favArtists.isEmpty && favSongs.isEmpty {
-            emptyState(title: tr("No favorites downloaded", "Keine Favoriten heruntergeladen"),
+            emptyState(title: String(localized: "no_favorites_downloaded"),
                        icon: "heart")
         } else {
             List {
                 if !favArtists.isEmpty {
-                    Section(tr("Artists", "Künstler")) {
+                    Section(String(localized: "artists")) {
                         ForEach(favArtists) { artist in
                             if let downloaded = downloadStore.artists.first(where: { $0.name == artist.name }) {
                                 NavigationLink(value: downloaded) {
@@ -212,7 +212,7 @@ struct DownloadsView: View {
                     }
                 }
                 if !favAlbums.isEmpty {
-                    Section(tr("Albums", "Alben")) {
+                    Section(String(localized: "albums")) {
                         ForEach(favAlbums) { album in
                             if let downloaded = downloadStore.albums.first(where: { $0.albumId == album.id }) {
                                 NavigationLink(value: downloaded) {
@@ -223,7 +223,7 @@ struct DownloadsView: View {
                     }
                 }
                 if !favSongs.isEmpty {
-                    Section(tr("Songs", "Titel")) {
+                    Section(String(localized: "songs")) {
                         ForEach(favSongs) { song in
                             DownloadedSongRow(song: song, playbackList: favSongs)
                         }
@@ -290,7 +290,7 @@ private struct DownloadedArtistRow: View {
                 .frame(width: 52, height: 52)
             VStack(alignment: .leading, spacing: 2) {
                 Text(artist.name).font(.body).lineLimit(1)
-                Text("\(artist.albumCount) \(tr("Albums", "Alben"))")
+                Text("\(artist.albumCount) \(String(localized: "albums"))")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -330,7 +330,7 @@ struct DownloadedAlbumDetailView: View {
                             let songs = (currentAlbum?.songs ?? album.songs).map { $0.asSong() }
                             player.play(songs: songs, startIndex: 0)
                         } label: {
-                            Label(tr("Play", "Abspielen"), systemImage: "play.fill")
+                            Label(String(localized: "play"), systemImage: "play.fill")
                                 .font(.body).bold().foregroundStyle(.white)
                                 .frame(maxWidth: .infinity).padding(.vertical, 12)
                                 .background(accentColor)
@@ -340,7 +340,7 @@ struct DownloadedAlbumDetailView: View {
                             let songs = (currentAlbum?.songs ?? album.songs).map { $0.asSong() }
                             player.playShuffled(songs: songs)
                         } label: {
-                            Label(tr("Shuffle", "Zufällig abspielen"), systemImage: "shuffle")
+                            Label(String(localized: "shuffle"), systemImage: "shuffle")
                                 .font(.body).bold().foregroundStyle(accentColor)
                                 .frame(maxWidth: .infinity).padding(.vertical, 12)
                                 .background(accentColor.opacity(0.15))
@@ -425,16 +425,16 @@ struct DownloadedArtistDetailView: View {
             if !exists { dismiss() }
         }
         .alert(
-            tr("Delete Downloads?", "Downloads löschen?"),
+            String(localized: "delete_downloads"),
             isPresented: Binding(get: { albumToDeleteDownloads != nil }, set: { if !$0 { albumToDeleteDownloads = nil } }),
             presenting: albumToDeleteDownloads
         ) { album in
-            Button(tr("Delete", "Löschen"), role: .destructive) {
+            Button(String(localized: "delete"), role: .destructive) {
                 downloadStore.deleteAlbum(album.albumId)
             }
-            Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+            Button(String(localized: "cancel"), role: .cancel) {}
         } message: { _ in
-            Text(tr("The downloads will be removed from this device.", "Die Downloads werden von diesem Gerät entfernt."))
+            Text(String(localized: "the_downloads_will_be_removed_from_this_device"))
         }
     }
 }

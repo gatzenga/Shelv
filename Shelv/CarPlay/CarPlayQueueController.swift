@@ -10,7 +10,7 @@ final class CarPlayQueueController {
     private var lastSongIds: [String] = []
 
     init() {
-        let t = CPListTemplate(title: tr("Queue", "Warteschlange"), sections: [])
+        let t = CPListTemplate(title: String(localized: "queue"), sections: [])
         t.tabImage = UIImage(systemName: "list.number")
         rootTemplate = t
     }
@@ -82,7 +82,7 @@ final class CarPlayQueueController {
                     register(item, coverArt: song.coverArt)
                     return item
                 }
-                sections.append(CPListSection(items: items, header: tr("Play Next", "Als nächstes"), sectionIndexTitle: nil))
+                sections.append(CPListSection(items: items, header: String(localized: "play_next"), sectionIndexTitle: nil))
             }
             let albumQueue = albumQueueSongs()
             if !albumQueue.isEmpty {
@@ -99,7 +99,7 @@ final class CarPlayQueueController {
                     register(item, coverArt: song.coverArt)
                     return item
                 }
-                sections.append(CPListSection(items: items, header: tr("Shuffled Queue", "Gemischte Warteschlange"), sectionIndexTitle: nil))
+                sections.append(CPListSection(items: items, header: String(localized: "shuffled_queue"), sectionIndexTitle: nil))
             }
         } else {
             if !player.playNextQueue.isEmpty {
@@ -111,7 +111,7 @@ final class CarPlayQueueController {
                     register(item, coverArt: song.coverArt)
                     return item
                 }
-                sections.append(CPListSection(items: items, header: tr("Play Next", "Als nächstes"), sectionIndexTitle: nil))
+                sections.append(CPListSection(items: items, header: String(localized: "play_next"), sectionIndexTitle: nil))
             }
 
             let albumQueue = albumQueueSongs()
@@ -129,7 +129,7 @@ final class CarPlayQueueController {
                     register(item, coverArt: song.coverArt)
                     return item
                 }
-                sections.append(CPListSection(items: items, header: tr("Up Next", "Nächste Titel"), sectionIndexTitle: nil))
+                sections.append(CPListSection(items: items, header: String(localized: "up_next"), sectionIndexTitle: nil))
             }
 
             if !player.userQueue.isEmpty {
@@ -141,12 +141,12 @@ final class CarPlayQueueController {
                     register(item, coverArt: song.coverArt)
                     return item
                 }
-                sections.append(CPListSection(items: items, header: tr("Your Queue", "Deine Warteschlange"), sectionIndexTitle: nil))
+                sections.append(CPListSection(items: items, header: String(localized: "your_queue"), sectionIndexTitle: nil))
             }
         }
 
         if sections.isEmpty {
-            let empty = CPListItem(text: tr("Queue is empty", "Warteschlange ist leer"), detailText: nil)
+            let empty = CPListItem(text: String(localized: "queue_is_empty"), detailText: nil)
             sections.append(CPListSection(items: [empty], header: nil, sectionIndexTitle: nil))
         }
         return (sections, itemsByCoverId)

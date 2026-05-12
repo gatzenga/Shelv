@@ -62,9 +62,9 @@ struct RecapDetailView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if songs.isEmpty {
                 ContentUnavailableView(
-                    tr("No Songs", "Keine Titel"),
+                    String(localized: "no_songs"),
                     systemImage: "music.note",
-                    description: Text(tr("No songs found for this period.", "Keine Titel für diesen Zeitraum gefunden."))
+                    description: Text(String(localized: "no_songs_found_for_this_period"))
                 )
             } else {
                 List {
@@ -74,7 +74,7 @@ struct RecapDetailView: View {
                                 Button {
                                     player.play(songs: allSongs, startIndex: 0)
                                 } label: {
-                                    Label(tr("Play", "Abspielen"), systemImage: "play.fill")
+                                    Label(String(localized: "play"), systemImage: "play.fill")
                                         .font(.body).bold()
                                         .foregroundStyle(.white)
                                         .frame(maxWidth: .infinity)
@@ -87,7 +87,7 @@ struct RecapDetailView: View {
                                 Button {
                                     player.playShuffled(songs: allSongs)
                                 } label: {
-                                    Label(tr("Shuffle", "Zufällig abspielen"), systemImage: "shuffle")
+                                    Label(String(localized: "shuffle"), systemImage: "shuffle")
                                         .font(.body).bold()
                                         .foregroundStyle(accentColor)
                                         .frame(maxWidth: .infinity)
@@ -120,7 +120,7 @@ struct RecapDetailView: View {
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                 Button {
                                     haptic(); player.addToQueue(songEntry.song)
-                                    currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange"))
+                                    currentToast = ShelveToast(message: String(localized: "added_to_queue"))
                                 } label: {
                                     Image(systemName: "text.badge.plus")
                                 }
@@ -128,7 +128,7 @@ struct RecapDetailView: View {
 
                                 Button {
                                     haptic(); player.addPlayNext(songEntry.song)
-                                    currentToast = ShelveToast(message: tr("Plays Next", "Als nächstes"))
+                                    currentToast = ShelveToast(message: String(localized: "plays_next"))
                                 } label: {
                                     Image(systemName: "text.insert")
                                 }
@@ -173,14 +173,14 @@ struct RecapDetailView: View {
                     Button {
                         player.play(songs: allSongs, startIndex: 0)
                     } label: {
-                        Label(tr("Play", "Abspielen"), systemImage: "play.fill")
+                        Label(String(localized: "play"), systemImage: "play.fill")
                     }
                     .disabled(songs.isEmpty)
 
                     Button {
                         player.playShuffled(songs: allSongs)
                     } label: {
-                        Label(tr("Shuffle", "Zufällig abspielen"), systemImage: "shuffle")
+                        Label(String(localized: "shuffle"), systemImage: "shuffle")
                     }
                     .disabled(songs.isEmpty)
 
@@ -188,17 +188,17 @@ struct RecapDetailView: View {
 
                     Button {
                         player.addPlayNext(allSongs)
-                        currentToast = ShelveToast(message: tr("Plays Next", "Als nächstes"))
+                        currentToast = ShelveToast(message: String(localized: "plays_next"))
                     } label: {
-                        Label(tr("Play Next", "Als nächstes"), systemImage: "text.insert")
+                        Label(String(localized: "play_next"), systemImage: "text.insert")
                     }
                     .disabled(songs.isEmpty)
 
                     Button {
                         player.addToQueue(allSongs)
-                        currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange"))
+                        currentToast = ShelveToast(message: String(localized: "added_to_queue"))
                     } label: {
-                        Label(tr("Add to Queue", "Zur Warteschlange"), systemImage: "text.badge.plus")
+                        Label(String(localized: "add_to_queue"), systemImage: "text.badge.plus")
                     }
                     .disabled(songs.isEmpty)
 
@@ -207,7 +207,7 @@ struct RecapDetailView: View {
                     Button(role: .destructive) {
                         showDeleteRecapConfirm = true
                     } label: {
-                        Label(tr("Delete Recap", "Recap löschen"), systemImage: "trash")
+                        Label(String(localized: "delete_recap"), systemImage: "trash")
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -219,37 +219,37 @@ struct RecapDetailView: View {
         .task { await load() }
         .shelveToast($currentToast)
         .alert(
-            tr("Delete Downloads?", "Downloads löschen?"),
+            String(localized: "delete_downloads"),
             isPresented: $showDeleteDownloadConfirm
         ) {
-            Button(tr("Delete", "Löschen"), role: .destructive) {
+            Button(String(localized: "delete"), role: .destructive) {
                 for song in allSongs {
                     downloadStore.deleteSong(song.id)
                 }
                 downloadStore.removeOfflinePlaylist(entry.playlistId)
-                currentToast = ShelveToast(message: tr("Downloads deleted", "Downloads gelöscht"))
+                currentToast = ShelveToast(message: String(localized: "downloads_deleted"))
             }
-            Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+            Button(String(localized: "cancel"), role: .cancel) {}
         } message: {
-            Text(tr("The downloads will be removed from this device.", "Die Downloads werden von diesem Gerät entfernt."))
+            Text(String(localized: "the_downloads_will_be_removed_from_this_device"))
         }
         .alert(
-            tr("Delete Recap?", "Recap löschen?"),
+            String(localized: "delete_recap_2"),
             isPresented: $showDeleteRecapConfirm
         ) {
-            Button(tr("Delete", "Löschen"), role: .destructive) {
+            Button(String(localized: "delete"), role: .destructive) {
                 Task {
                     do {
                         try await RecapStore.shared.deleteEntry(playlistId: entry.playlistId, serverId: serverId)
                         dismiss()
                     } catch {
                         if !(error is CancellationError) {
-                            currentToast = ShelveToast(message: tr("Could not delete recap", "Recap konnte nicht gelöscht werden"), isError: true)
+                            currentToast = ShelveToast(message: String(localized: "could_not_delete_recap"), isError: true)
                         }
                     }
                 }
             }
-            Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+            Button(String(localized: "cancel"), role: .cancel) {}
         } message: {
             Text(period.playlistName)
         }
@@ -344,11 +344,11 @@ struct RecapDetailView: View {
                     let missing = allSongs.filter { !downloadStore.isDownloaded(songId: $0.id) }
                     if !missing.isEmpty { downloadStore.enqueueSongs(missing) }
                     downloadStore.addOfflinePlaylist(entry.playlistId, songIds: allSongs.map(\.id))
-                    currentToast = ShelveToast(message: tr("Download started", "Download gestartet"))
+                    currentToast = ShelveToast(message: String(localized: "download_started"))
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "arrow.down.circle")
-                        Text(tr("Download", "Herunterladen"))
+                        Text(String(localized: "download"))
                     }
                     .font(.subheadline).bold()
                     .foregroundStyle(accentColor)
@@ -364,11 +364,11 @@ struct RecapDetailView: View {
                     haptic()
                     let missing = allSongs.filter { !downloadStore.isDownloaded(songId: $0.id) }
                     if !missing.isEmpty { downloadStore.enqueueSongs(missing) }
-                    currentToast = ShelveToast(message: tr("Download started", "Download gestartet"))
+                    currentToast = ShelveToast(message: String(localized: "download_started"))
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "arrow.down.circle")
-                        Text(tr("Rest (\(remaining))", "Rest (\(remaining))"))
+                        Text("Rest (\(remaining))")
                     }
                     .font(.subheadline).bold()
                     .foregroundStyle(accentColor)
@@ -386,7 +386,7 @@ struct RecapDetailView: View {
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "arrow.down.circle")
-                        Text(tr("Delete Downloads", "Downloads löschen"))
+                        Text(String(localized: "delete_downloads_2"))
                     }
                     .font(.subheadline).bold()
                     .foregroundStyle(.red)
@@ -407,7 +407,7 @@ struct RecapDetailView: View {
         defer { isLoading = false }
 
         guard let playlist = await libraryStore.loadPlaylistDetail(id: entry.playlistId) else {
-            errorMessage = tr("Playlist could not be loaded.", "Playlist konnte nicht geladen werden.")
+            errorMessage = String(localized: "playlist_could_not_be_loaded")
             return
         }
         let playlistSongs: [Song] = playlist.songs ?? []

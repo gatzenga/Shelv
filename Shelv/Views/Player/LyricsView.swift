@@ -18,7 +18,7 @@ struct LyricsView: View {
     @ViewBuilder
     private func content(for record: LyricsRecord) -> some View {
         if record.isInstrumental {
-            placeholder(icon: "pianokeys", text: tr("Instrumental", "Instrumental"))
+            placeholder(icon: "pianokeys", text: String(localized: "instrumental"))
         } else if let text = record.plainText, !text.isEmpty {
             ScrollView(.vertical, showsIndicators: false) {
                 Text(text)
@@ -30,7 +30,7 @@ struct LyricsView: View {
                     .padding(.vertical, 16)
             }
         } else {
-            placeholder(icon: "text.page.slash", text: tr("No lyrics available", "Keine Lyrics verfügbar"))
+            placeholder(icon: "text.page.slash", text: String(localized: "no_lyrics_available"))
         }
     }
 

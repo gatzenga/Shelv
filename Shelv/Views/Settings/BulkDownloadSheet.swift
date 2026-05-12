@@ -23,20 +23,20 @@ struct BulkDownloadSheet: View {
                 if let plan {
                     planDetails(plan)
                 } else if isPlanning {
-                    ProgressView(tr("Calculating…", "Berechne…"))
+                    ProgressView(String(localized: "calculating"))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
-            .navigationTitle(tr("Download Everything", "Alles herunterladen"))
+            .navigationTitle(String(localized: "download_everything"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(tr("Cancel", "Abbrechen")) { dismiss() }
+                    Button(String(localized: "cancel")) { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(tr("Start", "Starten")) {
+                    Button(String(localized: "start")) {
                         guard let plan else { return }
                         downloadStore.enqueueSongs(plan.planned)
                         let plannedIds = Set(plan.planned.map(\.id))
@@ -60,21 +60,21 @@ struct BulkDownloadSheet: View {
         List {
             Section {
                 HStack {
-                    Text(tr("Songs to download", "Songs")).font(.subheadline)
+                    Text(String(localized: "songs_to_download")).font(.subheadline)
                     Spacer()
                     Text("\(plan.planned.count)")
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
                 }
                 HStack {
-                    Text(tr("Estimated size", "Geschätzte Grösse")).font(.subheadline)
+                    Text(String(localized: "estimated_size")).font(.subheadline)
                     Spacer()
                     Text(ByteCountFormatter.string(fromByteCount: plan.totalBytes, countStyle: .file))
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
                 }
                 HStack {
-                    Text(tr("Storage limit", "Limit")).font(.subheadline)
+                    Text(String(localized: "storage_limit")).font(.subheadline)
                     Spacer()
                     Text(ByteCountFormatter.string(fromByteCount: plan.limitBytes, countStyle: .file))
                         .monospacedDigit()
@@ -82,7 +82,7 @@ struct BulkDownloadSheet: View {
                 }
                 if !plan.skipped.isEmpty {
                     HStack {
-                        Text(tr("Skipped (over limit)", "Übersprungen (über Limit)")).font(.subheadline)
+                        Text(String(localized: "skipped_over_limit")).font(.subheadline)
                         Spacer()
                         Text("\(plan.skipped.count)")
                             .monospacedDigit()
@@ -93,27 +93,24 @@ struct BulkDownloadSheet: View {
 
             if plan.isEmpty {
                 Section {
-                    Text(tr(
-                        "Nothing new fits in the configured storage limit.",
-                        "Es passt nichts Neues in das konfigurierte Speicher-Limit."
-                    ))
+                    Text(String(localized: "nothing_new_fits_in_the_configured_storage_limit"))
                     .foregroundStyle(.secondary)
                 }
             } else {
-                Section(tr("Order", "Reihenfolge")) {
-                    Label(tr("Frequently played first", "Häufig gespielt zuerst"),
+                Section(String(localized: "order")) {
+                    Label(String(localized: "frequently_played_first"),
                           systemImage: "chart.line.uptrend.xyaxis")
-                    Label(tr("Then recently played", "Dann kürzlich gespielt"),
+                    Label(String(localized: "then_recently_played"),
                           systemImage: "clock.arrow.circlepath")
                     if enableFavorites {
-                        Label(tr("Then favorites", "Dann Favoriten"),
+                        Label(String(localized: "then_favorites"),
                               systemImage: "heart")
                     }
                     if recapEnabled && !recapStore.recapPlaylistIds.isEmpty {
-                        Label(tr("Then recap playlists", "Dann Recap-Playlists"),
+                        Label(String(localized: "then_recap_playlists"),
                               systemImage: "calendar.badge.clock")
                     }
-                    Label(tr("Then alphabetical by artist", "Dann alphabetisch"),
+                    Label(String(localized: "then_alphabetical_by_artist"),
                           systemImage: "textformat")
                 }
                 .labelStyle(.titleAndIcon)

@@ -12,31 +12,31 @@ enum SubsonicAPIError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .noServer:              return tr("No server configured", "Kein Server konfiguriert")
-        case .noPassword:            return tr("No password found", "Kein Passwort gefunden")
-        case .invalidURL:            return tr("Invalid server URL", "Ungültige Server-URL")
+        case .noServer:              return String(localized: "no_server_configured")
+        case .noPassword:            return String(localized: "no_password_found")
+        case .invalidURL:            return String(localized: "invalid_server_url")
         case .networkError(let e):
             if let urlError = e as? URLError {
                 switch urlError.code {
                 case .timedOut:
-                    return tr("Connection timed out. Please check your network.", "Zeitüberschreitung. Bitte Netzwerkverbindung prüfen.")
+                    return String(localized: "connection_timed_out_please_check_your_network")
                 case .notConnectedToInternet:
-                    return tr("No internet connection.", "Keine Internetverbindung.")
+                    return String(localized: "no_internet_connection")
                 case .cannotConnectToHost, .cannotFindHost:
-                    return tr("Server not reachable. Please check the URL.", "Server nicht erreichbar. Bitte URL prüfen.")
+                    return String(localized: "server_not_reachable_please_check_the_url")
                 case .networkConnectionLost:
-                    return tr("Connection lost. Please try again.", "Verbindung verloren. Bitte erneut versuchen.")
+                    return String(localized: "connection_lost_please_try_again")
                 case .secureConnectionFailed:
-                    return tr("Secure connection failed. Please check the server certificate.", "Sichere Verbindung fehlgeschlagen. Bitte Serverzertifikat prüfen.")
+                    return String(localized: "secure_connection_failed_please_check_the_server_certificate")
                 default:
-                    return tr("Network error. Please try again.", "Netzwerkfehler. Bitte erneut versuchen.")
+                    return String(localized: "network_error_please_try_again")
                 }
             }
-            return tr("Network error. Please try again.", "Netzwerkfehler. Bitte erneut versuchen.")
+            return String(localized: "network_error_please_try_again")
         case .apiError(_, let m):
-            return m ?? tr("Server returned an error.", "Server hat einen Fehler zurückgegeben.")
+            return m ?? String(localized: "server_returned_an_error")
         case .decodingError:
-            return tr("Unexpected server response.", "Unerwartete Serverantwort.")
+            return String(localized: "unexpected_server_response")
         }
     }
 }

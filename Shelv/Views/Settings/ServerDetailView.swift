@@ -34,17 +34,17 @@ struct ServerDetailView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(alignment: .center) {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(tr("Full Scan", "Vollständiger Scan"))
+                            Text(String(localized: "full_scan"))
                                 .font(.headline)
                             if let lastSync {
                                 Text(
-                                    tr("Last sync: ", "Letzter Sync: ")
+                                    String(localized: "last_sync_2")
                                     + lastSync.formatted(date: .abbreviated, time: .shortened)
                                 )
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                             } else {
-                                Text(tr("Never synced", "Noch nie synchronisiert"))
+                                Text(String(localized: "never_synced"))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -61,7 +61,7 @@ struct ServerDetailView: View {
                     }
 
                     if isScanning {
-                        Text(tr("Scanning library…", "Bibliothek wird gescannt…"))
+                        Text(String(localized: "scanning_library"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -69,7 +69,7 @@ struct ServerDetailView: View {
                     Button {
                         Task { await runFullScan() }
                     } label: {
-                        Text(tr("Start Full Scan", "Vollständig scannen"))
+                        Text(String(localized: "start_full_scan"))
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
@@ -88,25 +88,25 @@ struct ServerDetailView: View {
                 }
             }
 
-            Section(tr("Library", "Bibliothek")) {
+            Section(String(localized: "library")) {
                 infoRow(
                     icon: "square.stack",
-                    label: tr("Albums", "Alben"),
+                    label: String(localized: "albums"),
                     value: storedAlbumCount > 0 ? "\(storedAlbumCount)" : (libraryStore.albums.isEmpty ? "—" : "\(libraryStore.albums.count)")
                 )
                 infoRow(
                     icon: "music.mic",
-                    label: tr("Artists", "Künstler"),
+                    label: String(localized: "artists"),
                     value: storedArtistCount > 0 ? "\(storedArtistCount)" : (libraryStore.artists.isEmpty ? "—" : "\(libraryStore.artists.count)")
                 )
                 infoRow(
                     icon: "music.note",
-                    label: tr("Tracks", "Titel"),
+                    label: String(localized: "tracks"),
                     value: storedSongCount > 0 ? "\(storedSongCount)" : "—"
                 )
             }
 
-            Section(tr("Server", "Server")) {
+            Section(String(localized: "server")) {
                 infoRow(
                     icon: "cpu",
                     label: "Navidrome",
@@ -114,7 +114,7 @@ struct ServerDetailView: View {
                 )
                 infoRow(
                     icon: "antenna.radiowaves.left.and.right",
-                    label: tr("API Version", "API-Version"),
+                    label: String(localized: "api_version"),
                     value: serverInfo?.apiVersion ?? "—"
                 )
             }
@@ -167,7 +167,7 @@ struct ServerDetailView: View {
                 attempts += 1
             }
             if attempts >= maxAttempts {
-                throw SubsonicAPIError.apiError(0, tr("Scan timed out after 2 minutes.", "Scan nach 2 Minuten abgebrochen."))
+                throw SubsonicAPIError.apiError(0, String(localized: "scan_timed_out_after_2_minutes"))
             }
             await withTaskGroup(of: Void.self) { group in
                 group.addTask { await libraryStore.loadAlbums() }

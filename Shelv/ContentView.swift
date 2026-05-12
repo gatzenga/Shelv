@@ -64,7 +64,7 @@ struct ContentView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .offlinePlaybackBlocked)) { _ in
-            offlineToast = ShelveToast(message: tr("Not available offline", "Offline nicht verfügbar"), isError: true)
+            offlineToast = ShelveToast(message: String(localized: "not_available_offline"), isError: true)
         }
         .shelveToast($offlineToast)
         .onChange(of: serverStore.activeServerID) { _, _ in
@@ -86,24 +86,24 @@ struct ContentView: View {
         ZStack {
             TabView(selection: $selectedTab) {
                 DiscoverView()
-                    .tabItem { Label(tr("Discover", "Entdecken"), systemImage: "sparkles") }
+                    .tabItem { Label(String(localized: "discover"), systemImage: "sparkles") }
                     .tag(0)
                 LibraryView()
                     .tabItem {
                         if offlineMode.isOffline && enableDownloads {
-                            Label(tr("Downloads", "Downloads"), systemImage: "arrow.down.circle.fill")
+                            Label(String(localized: "downloads"), systemImage: "arrow.down.circle.fill")
                         } else {
-                            Label(tr("Library", "Bibliothek"), systemImage: "books.vertical.fill")
+                            Label(String(localized: "library"), systemImage: "books.vertical.fill")
                         }
                     }
                     .tag(1)
                 if enablePlaylists {
                     PlaylistsView()
-                        .tabItem { Label(tr("Playlists", "Playlists"), systemImage: "music.note.list") }
+                        .tabItem { Label(String(localized: "playlists"), systemImage: "music.note.list") }
                         .tag(2)
                 }
                 SettingsView()
-                    .tabItem { Label(tr("Settings", "Einstellungen"), systemImage: "gearshape.fill") }
+                    .tabItem { Label(String(localized: "settings"), systemImage: "gearshape.fill") }
                     .tag(3)
             }
             .tint(accentColor)

@@ -21,19 +21,16 @@ struct RecapVerifyView: View {
                 if isLoading {
                     VStack(spacing: 12) {
                         ProgressView()
-                        Text(tr("Checking playlists…", "Playlists werden geprüft…"))
+                        Text(String(localized: "checking_playlists"))
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if diffs.isEmpty {
                     ContentUnavailableView(
-                        tr("All in sync", "Alles synchron"),
+                        String(localized: "all_in_sync"),
                         systemImage: "checkmark.seal",
-                        description: Text(tr(
-                            "All recap playlists match the database.",
-                            "Alle Recap-Playlists entsprechen der Datenbank."
-                        ))
+                        description: Text(String(localized: "all_recap_playlists_match_the_database"))
                     )
                 } else {
                     List {
@@ -45,12 +42,12 @@ struct RecapVerifyView: View {
                     .scrollIndicators(.hidden)
                 }
             }
-            .navigationTitle(tr("Sync", "Abgleich"))
+            .navigationTitle(String(localized: "sync"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     if !isImportContext || diffs.isEmpty {
-                        Button(tr("Done", "Fertig")) {
+                        Button(String(localized: "done")) {
                             completedByButton = true
                             if isImportContext {
                                 Task { await recapStore.completeImport() }
@@ -80,15 +77,14 @@ struct RecapVerifyView: View {
                 HStack(spacing: 10) {
                     Image(systemName: "exclamationmark.triangle")
                         .foregroundStyle(.orange)
-                    Text(tr("Playlist not found on server", "Playlist existiert nicht auf dem Server"))
+                    Text(String(localized: "playlist_not_found_on_server"))
                         .font(.subheadline)
                     Spacer()
                 }
                 .padding(.vertical, 4)
 
                 diffGroup(
-                    label: tr("Songs to add (\(diff.expectedOrder.count))",
-                              "Songs zum Hinzufügen (\(diff.expectedOrder.count))"),
+                    label: String(format: String(localized: "songs_to_add_format"), diff.expectedOrder.count),
                     icon: "plus.circle",
                     tint: .green,
                     songs: diff.expectedOrder
@@ -98,7 +94,7 @@ struct RecapVerifyView: View {
                     metadataRow(
                         icon: "pencil",
                         tint: .blue,
-                        title: tr("Name will change", "Name wird geändert"),
+                        title: String(localized: "name_will_change"),
                         detail: "\"\(diff.currentName)\" → \"\(diff.playlistName)\""
                     )
                 }
@@ -107,15 +103,14 @@ struct RecapVerifyView: View {
                     metadataRow(
                         icon: "text.quote",
                         tint: .blue,
-                        title: tr("Comment will be added", "Kommentar wird ergänzt"),
+                        title: String(localized: "comment_will_be_added"),
                         detail: diff.currentComment.map { "\"\($0)\" → \"Shelv Recap\"" } ?? "\"Shelv Recap\""
                     )
                 }
 
                 if !diff.missingSongs.isEmpty {
                     diffGroup(
-                        label: tr("Missing songs (\(diff.missingSongs.count))",
-                                  "Fehlende Songs (\(diff.missingSongs.count))"),
+                        label: String(format: String(localized: "missing_songs_format"), diff.missingSongs.count),
                         icon: "plus.circle",
                         tint: .green,
                         songs: diff.missingSongs
@@ -124,8 +119,7 @@ struct RecapVerifyView: View {
 
                 if !diff.extraSongs.isEmpty {
                     diffGroup(
-                        label: tr("Extra songs (\(diff.extraSongs.count))",
-                                  "Zusätzliche Songs (\(diff.extraSongs.count))"),
+                        label: String(format: String(localized: "extra_songs_format"), diff.extraSongs.count),
                         icon: "minus.circle",
                         tint: .red,
                         songs: diff.extraSongs
@@ -136,7 +130,7 @@ struct RecapVerifyView: View {
                     HStack(spacing: 10) {
                         Image(systemName: "arrow.up.arrow.down.circle")
                             .foregroundStyle(.orange)
-                        Text(tr("Order has changed", "Reihenfolge wurde geändert"))
+                        Text(String(localized: "order_has_changed"))
                             .font(.subheadline)
                         Spacer()
                     }
@@ -149,7 +143,7 @@ struct RecapVerifyView: View {
                     Button {
                         apply(diff, decision: .update)
                     } label: {
-                        Label(tr("Apply", "Übernehmen"), systemImage: "checkmark")
+                        Label(String(localized: "apply"), systemImage: "checkmark")
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 8)
                             .background(accentColor)
@@ -163,7 +157,7 @@ struct RecapVerifyView: View {
                 Button {
                     apply(diff, decision: .createNew)
                 } label: {
-                    Label(tr("Create new", "Neu erstellen"), systemImage: "plus.rectangle.on.rectangle")
+                    Label(String(localized: "create_new"), systemImage: "plus.rectangle.on.rectangle")
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 8)
                         .background(diff.serverMissing ? accentColor : Color(.tertiarySystemBackground))
@@ -178,7 +172,7 @@ struct RecapVerifyView: View {
             if processingDiffId == diff.id {
                 HStack {
                     ProgressView()
-                    Text(tr("Applying…", "Wird angewendet…"))
+                    Text(String(localized: "applying"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -251,8 +245,8 @@ struct RecapVerifyView: View {
                 try await recapStore.applyDiff(diff, decision: decision, serverId: serverId)
                 diffs.removeAll { $0.id == diff.id }
                 toast = ShelveToast(message: decision == .update
-                    ? tr("Playlist updated", "Playlist aktualisiert")
-                    : tr("New playlist created", "Neue Playlist erstellt"))
+                    ? String(localized: "playlist_updated")
+                    : String(localized: "new_playlist_created"))
             } catch {
                 toast = ShelveToast(message: error.localizedDescription, isError: true)
             }
