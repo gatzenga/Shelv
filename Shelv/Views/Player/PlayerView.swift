@@ -62,12 +62,15 @@ struct PlayerView: View {
 
     private var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
 
-    private func artSize(_ h: CGFloat) -> CGFloat { isPad ? min(380, max(240, h * 0.42)) : 280 }
+    private func artSize(_ h: CGFloat) -> CGFloat {
+        isPad ? min(480, max(300, h * 0.50)) : min(280, h * 0.44)
+    }
     private func playButtonSize(_ h: CGFloat) -> CGFloat { isPad ? min(96, max(72, h * 0.11)) : 72 }
     private func controlSize(_ h: CGFloat) -> CGFloat { isPad ? min(56, max(44, h * 0.065)) : 44 }
     private func vPad(_ h: CGFloat, large: CGFloat, small: CGFloat) -> CGFloat {
-        guard isPad else { return small }
-        return h < 760 ? max(small * 0.6, large * 0.5) : large
+        if isPad { return h < 760 ? max(small * 0.6, large * 0.5) : large }
+        // iPhone SE und ähnlich kleine Displays (h < 680 pt): Abstände halbieren
+        return h < 680 ? max(small * 0.5, 4) : small
     }
 
     var body: some View {
