@@ -163,7 +163,11 @@ Credentials are authenticated using the Subsonic API's token-based method: `MD5(
 
 ## Contributing
 
-Pull requests are welcome. For larger changes, please open an issue first to discuss what you'd like to change. Feature ideas, feedback, and general discussion are welcome on the [Discord server](https://discord.gg/zU3qv9v6Vn).
+Pull requests are welcome. For larger changes, please open an issue first to discuss what you'd like to change. Feature ideas, feedback, and general discussion are welcome on the [Discord server](https://discord.gg/UdJK5mpmZu).
+
+### Translations
+
+Shelv uses Apple's standard localization system (`String(localized:)` with `.strings` files). To add a new language, create a `<language-code>.lproj/Localizable.strings` file (e.g. `zh-Hans.lproj/Localizable.strings`) using the existing `en.lproj/Localizable.strings` as a template. Submit it as a pull request — no code changes are required.
 
 ## License
 
