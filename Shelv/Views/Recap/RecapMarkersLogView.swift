@@ -47,7 +47,7 @@ struct RecapMarkersLogView: View {
         List {
             Section {
                 if weekly.isEmpty {
-                    Text(tr("Loading…", "Lade…"))
+                    Text(tr("recap.recap.markers.log.loading"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
@@ -56,27 +56,24 @@ struct RecapMarkersLogView: View {
                     }
                 }
             } header: {
-                Text(tr("Weekly — last 4 weeks", "Wöchentlich — letzte 4 Wochen"))
+                Text(tr("recap.recap.markers.log.weekly_last_4_weeks"))
             } footer: {
-                Text(tr(
-                    "A week is marked ✓ processed when generate() succeeds. An unprocessed week will be retried on next app start.",
-                    "Eine Woche wird ✓ markiert, sobald generate() erfolgreich war. Nicht markierte Wochen werden beim nächsten App-Start erneut versucht."
-                ))
+                Text(tr("recap.recap.markers.log.week_marked_processed_when_generate_succeeds"))
             }
 
-            Section(tr("Monthly — last month", "Monatlich — letzter Monat")) {
+            Section(tr("recap.recap.markers.log.monthly_last_month")) {
                 if let m = monthly {
                     row(status: m)
                 } else {
-                    Text(tr("—", "—")).font(.caption).foregroundStyle(.secondary)
+                    Text(tr("recap.recap.markers.log.text")).font(.caption).foregroundStyle(.secondary)
                 }
             }
 
-            Section(tr("Yearly — last year", "Jährlich — letztes Jahr")) {
+            Section(tr("recap.recap.markers.log.yearly_last_year")) {
                 if let y = yearly {
                     row(status: y)
                 } else {
-                    Text(tr("—", "—")).font(.caption).foregroundStyle(.secondary)
+                    Text(tr("recap.recap.markers.log.text")).font(.caption).foregroundStyle(.secondary)
                 }
             }
 
@@ -85,7 +82,7 @@ struct RecapMarkersLogView: View {
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
         }
-        .navigationTitle(tr("Auto-gen markers", "Auto-Gen-Marker"))
+        .navigationTitle(tr("recap.recap.markers.log.auto_gen_markers"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -115,33 +112,30 @@ struct RecapMarkersLogView: View {
                     .foregroundStyle(.secondary)
             }
             HStack(spacing: 12) {
-                Text(tr("Marker:", "Marker:")).foregroundStyle(.secondary)
-                Text(status.processed ? tr("set", "gesetzt") : tr("not set", "nicht gesetzt"))
+                Text(tr("recap.recap.markers.log.marker")).foregroundStyle(.secondary)
+                Text(status.processed ? tr("recap.recap.markers.log.set") : tr("recap.recap.markers.log.not_set"))
                     .foregroundStyle(status.processed ? .green : .secondary)
                 Text("·").foregroundStyle(.secondary)
-                Text(tr("Playlist:", "Playlist:")).foregroundStyle(.secondary)
-                Text(status.entryExists ? tr("exists", "vorhanden") : tr("missing", "fehlt"))
+                Text(tr("recap.recap.markers.log.playlist")).foregroundStyle(.secondary)
+                Text(status.entryExists ? tr("recap.recap.markers.log.exists") : tr("recap.recap.markers.log.missing"))
                     .foregroundStyle(status.entryExists ? accentColor : .secondary)
                 Text("·").foregroundStyle(.secondary)
-                Text(tr("Plays:", "Plays:")).foregroundStyle(.secondary)
+                Text(tr("recap.recap.markers.log.plays")).foregroundStyle(.secondary)
                 Text("\(status.plays)")
                     .foregroundStyle(status.plays > 0 ? .primary : .secondary)
             }
             .font(.caption)
 
             if !status.processed && status.plays == 0 {
-                Text(tr("Will retry on next app start (no plays yet).",
-                        "Wird beim nächsten App-Start erneut versucht (keine Plays)."))
+                Text(tr("recap.recap.markers.log.retry_next_app_start_no_plays"))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             } else if !status.processed && status.plays > 0 && !status.entryExists {
-                Text(tr("Pending generation on next app start.",
-                        "Wartet auf Generierung beim nächsten App-Start."))
+                Text(tr("recap.recap.markers.log.pending_generation_next_app_start"))
                     .font(.caption2)
                     .foregroundStyle(.orange)
             } else if status.processed && !status.entryExists {
-                Text(tr("Processed, playlist deleted — will not regenerate.",
-                        "Markiert, Playlist gelöscht — wird nicht regeneriert."))
+                Text(tr("recap.recap.markers.log.processed_playlist_deleted_not_regenerate"))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }

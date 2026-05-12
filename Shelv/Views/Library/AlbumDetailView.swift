@@ -78,7 +78,7 @@ struct AlbumDetailView: View {
             } else if let allSongs = detail?.song {
                 if useDiscGrouping {
                     ForEach(discGroups, id: \.disc) { group in
-                        Section(header: Text(tr("Disc \(group.disc)", "Disc \(group.disc)"))
+                        Section(header: Text(tr("library.album.detail.disc_value", String(describing: group.disc)))
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                             .textCase(nil)
@@ -117,7 +117,7 @@ struct AlbumDetailView: View {
         }
         .listStyle(.plain)
         .scrollIndicators(.hidden)
-        .searchable(text: $searchQuery, prompt: tr("Search songs…", "Titel suchen…"))
+        .searchable(text: $searchQuery, prompt: tr("library.album.detail.search_songs"))
         .navigationDestination(item: $artistDestination) { artist in
             ArtistDetailView(artist: artist)
         }
@@ -139,20 +139,20 @@ struct AlbumDetailView: View {
                     Button {
                         if let songs = detail?.song, !songs.isEmpty {
                             player.addPlayNext(songs)
-                            currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
+                            currentToast = ShelveToast(message: tr("library.album.detail.plays_next"))
                         }
                     } label: {
-                        Label(tr("Play Next", "Als nächstes"), systemImage: "text.insert")
+                        Label(tr("car.play.car.play.queue.play_next"), systemImage: "text.insert")
                     }
                     .disabled(detail == nil)
 
                     Button {
                         if let songs = detail?.song, !songs.isEmpty {
                             player.addToQueue(songs)
-                            currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+                            currentToast = ShelveToast(message: tr("library.album.detail.added_queue"))
                         }
                     } label: {
-                        Label(tr("Add to Queue", "Zur Warteschlange"), systemImage: "text.badge.plus")
+                        Label(tr("car.play.car.play.navigation.add_queue"), systemImage: "text.badge.plus")
                     }
                     .disabled(detail == nil)
 
@@ -163,7 +163,7 @@ struct AlbumDetailView: View {
                                 albumPlaylistIds = AlbumPlaylistIds(ids: songs.map(\.id))
                             }
                         } label: {
-                            Label(tr("Add to Playlist…", "Zur Playlist hinzufügen…"), systemImage: "music.note.list")
+                            Label(tr("library.album.detail.add_playlist"), systemImage: "music.note.list")
                         }
                         .disabled(detail == nil)
                     }
@@ -175,16 +175,16 @@ struct AlbumDetailView: View {
         }
         .shelveToast($currentToast)
         .alert(
-            tr("Delete Downloads?", "Downloads löschen?"),
+            tr("downloads.delete_downloads"),
             isPresented: $showDeleteAlbumDownloadConfirm
         ) {
-            Button(tr("Delete", "Löschen"), role: .destructive) {
+            Button(tr("downloads.delete"), role: .destructive) {
                 downloadStore.deleteAlbum(album.id)
-                currentToast = ShelveToast(message: tr("Downloads deleted", "Downloads gelöscht"))
+                currentToast = ShelveToast(message: tr("library.album.detail.downloads_deleted"))
             }
-            Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+            Button(tr("downloads.cancel"), role: .cancel) {}
         } message: {
-            Text(tr("The downloads will be removed from this device.", "Die Downloads werden von diesem Gerät entfernt."))
+            Text(tr("downloads.downloads_removed_from_device"))
         }
         .sheet(item: $albumPlaylistIds) { item in
             AddToPlaylistSheet(songIds: item.ids)
@@ -238,7 +238,7 @@ struct AlbumDetailView: View {
                             player.play(songs: songs, startIndex: 0)
                         }
                     } label: {
-                        Label(tr("Play", "Abspielen"), systemImage: "play.fill")
+                        Label(tr("car.play.car.play.navigation.play"), systemImage: "play.fill")
                             .font(.body).bold()
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
@@ -254,7 +254,7 @@ struct AlbumDetailView: View {
                             player.playShuffled(songs: songs)
                         }
                     } label: {
-                        Label(tr("Shuffle", "Zufällig"), systemImage: "shuffle")
+                        Label(tr("car.play.car.play.navigation.shuffle"), systemImage: "shuffle")
                             .font(.body).bold()
                             .foregroundStyle(accentColor)
                             .frame(maxWidth: .infinity)
@@ -286,11 +286,11 @@ struct AlbumDetailView: View {
                 if !offlineMode.isOffline {
                     Button {
                         haptic(); downloadStore.enqueueAlbum(album)
-                        currentToast = ShelveToast(message: tr("Download started", "Download gestartet"))
+                        currentToast = ShelveToast(message: tr("library.album.detail.download_started"))
                     } label: {
                         HStack(spacing: 6) {
                             Image(systemName: "arrow.down.circle")
-                            Text(tr("Download", "Herunterladen"))
+                            Text(tr("library.album.detail.download"))
                         }
                         .font(.subheadline).bold()
                         .foregroundStyle(accentColor)
@@ -308,7 +308,7 @@ struct AlbumDetailView: View {
                     } label: {
                         HStack(spacing: 6) {
                             Image(systemName: "arrow.down.circle")
-                            Text(tr("Rest (\(tot - done))", "Rest (\(tot - done))"))
+                            Text(tr("library.album.detail.rest_value", String(describing: tot - done)))
                         }
                         .font(.subheadline).bold()
                         .foregroundStyle(accentColor)
@@ -324,7 +324,7 @@ struct AlbumDetailView: View {
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "arrow.down.circle")
-                        Text(tr("Delete Downloads", "Downloads löschen"))
+                        Text(tr("downloads.delete_downloads.d9dd6fd8"))
                     }
                     .font(.subheadline).bold()
                     .foregroundStyle(.red)
@@ -340,7 +340,7 @@ struct AlbumDetailView: View {
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "arrow.down.circle")
-                        Text(tr("Delete Downloads", "Downloads löschen"))
+                        Text(tr("downloads.delete_downloads.d9dd6fd8"))
                     }
                     .font(.subheadline).bold()
                     .foregroundStyle(.red)
@@ -391,7 +391,7 @@ struct AlbumDetailView: View {
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button {
                 haptic(); player.addToQueue(song)
-                currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+                currentToast = ShelveToast(message: tr("library.album.detail.added_queue"))
             } label: {
                 Image(systemName: "text.badge.plus")
             }
@@ -399,7 +399,7 @@ struct AlbumDetailView: View {
 
             Button {
                 haptic(); player.addPlayNext(song)
-                currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
+                currentToast = ShelveToast(message: tr("library.album.detail.plays_next"))
             } label: {
                 Image(systemName: "text.insert")
             }

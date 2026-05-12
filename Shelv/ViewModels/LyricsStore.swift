@@ -156,7 +156,7 @@ class LyricsStore: ObservableObject {
         Task {
             let rows = await LyricsService.shared.totalRowCount()
             let text = rows == 0
-                ? tr("Empty", "Leer")
+                ? tr("view.models.lyrics.empty")
                 : ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
             await MainActor.run { self.dbSize = text }
         }

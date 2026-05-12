@@ -5,7 +5,7 @@ enum TranscodingCodec: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .raw:  return tr("Original", "Original")
+        case .raw:  return tr("services.transcoding.policy.original")
         case .opus: return "Opus"
         case .mp3:  return "MP3"
         case .aac:  return "AAC"

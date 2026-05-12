@@ -8,10 +8,10 @@ enum AlbumSortOption: String, CaseIterable {
 
     var label: String {
         switch self {
-        case .alphabetical: return tr("Name", "Name")
-        case .frequent:     return tr("Most Played", "Meist gespielt")
-        case .newest:       return tr("Recently Added", "Kürzlich hinzugefügt")
-        case .year:         return tr("Year", "Jahr")
+        case .alphabetical: return tr("library.name")
+        case .frequent:     return tr("library.most_played")
+        case .newest:       return tr("discover.recently_added")
+        case .year:         return tr("library.year")
         }
     }
 
@@ -23,8 +23,8 @@ enum ArtistSortOption: String, CaseIterable {
 
     var label: String {
         switch self {
-        case .alphabetical: return tr("Name", "Name")
-        case .frequent:     return tr("Most Played", "Meist gespielt")
+        case .alphabetical: return tr("library.name")
+        case .frequent:     return tr("library.most_played")
         }
     }
 
@@ -36,8 +36,8 @@ enum SortDirection: String, CaseIterable {
 
     var label: String {
         switch self {
-        case .ascending:  return tr("Ascending", "Aufsteigend")
-        case .descending: return tr("Descending", "Absteigend")
+        case .ascending:  return tr("library.ascending")
+        case .descending: return tr("library.descending")
         }
     }
 }
@@ -178,10 +178,10 @@ struct LibraryView: View {
     @ViewBuilder
     private var segmentPicker: some View {
         Picker("", selection: $segment) {
-            Text(tr("Albums", "Alben")).tag(LibrarySegment.albums)
-            Text(tr("Artists", "Künstler")).tag(LibrarySegment.artists)
+            Text(tr("car.play.car.play.library.albums")).tag(LibrarySegment.albums)
+            Text(tr("car.play.car.play.library.artists")).tag(LibrarySegment.artists)
             if enableFavorites {
-                Text(tr("Favorites", "Favoriten")).tag(LibrarySegment.favorites)
+                Text(tr("car.play.car.play.library.favorites")).tag(LibrarySegment.favorites)
             }
         }
         .pickerStyle(.segmented)
@@ -204,7 +204,7 @@ struct LibraryView: View {
             segmentPicker
             segmentContent
         }
-        .navigationTitle(offlineMode.isOffline ? tr("Downloads", "Downloads") : tr("Library", "Bibliothek"))
+        .navigationTitle(offlineMode.isOffline ? tr("car.play.car.play.library.downloads") : tr("car.play.car.play.library.library"))
         .toolbar { libraryToolbar }
         .task(id: libraryStore.reloadID) {
             switch segment {
@@ -362,30 +362,30 @@ struct LibraryView: View {
         }
         .shelveToast($currentToast)
         .alert(
-            tr("Delete Downloads?", "Downloads löschen?"),
+            tr("downloads.delete_downloads"),
             isPresented: Binding(get: { albumToDeleteDownloads != nil }, set: { if !$0 { albumToDeleteDownloads = nil } }),
             presenting: albumToDeleteDownloads
         ) { album in
-            Button(tr("Delete", "Löschen"), role: .destructive) {
+            Button(tr("downloads.delete"), role: .destructive) {
                 DownloadStore.shared.deleteAlbum(album.id)
             }
-            Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+            Button(tr("downloads.cancel"), role: .cancel) {}
         } message: { _ in
-            Text(tr("The downloads will be removed from this device.", "Die Downloads werden von diesem Gerät entfernt."))
+            Text(tr("downloads.downloads_removed_from_device"))
         }
         .alert(
-            tr("Delete Downloads?", "Downloads löschen?"),
+            tr("downloads.delete_downloads"),
             isPresented: Binding(get: { artistToDeleteDownloads != nil }, set: { if !$0 { artistToDeleteDownloads = nil } }),
             presenting: artistToDeleteDownloads
         ) { artist in
-            Button(tr("Delete", "Löschen"), role: .destructive) {
+            Button(tr("downloads.delete"), role: .destructive) {
                 if let match = downloadStore.artists.first(where: { $0.name == artist.name }) {
                     DownloadStore.shared.deleteArtist(match.artistId)
                 }
             }
-            Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+            Button(tr("downloads.cancel"), role: .cancel) {}
         } message: { _ in
-            Text(tr("The downloads will be removed from this device.", "Die Downloads werden von diesem Gerät entfernt."))
+            Text(tr("downloads.downloads_removed_from_device"))
         }
         .sheet(isPresented: $showAddToPlaylist) {
             AddToPlaylistSheet(songIds: playlistSongIds)
@@ -406,7 +406,7 @@ struct LibraryView: View {
             let songs = await songsForAlbum(album)
             guard !songs.isEmpty else { return }
             player.addToQueue(songs)
-            currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+            currentToast = ShelveToast(message: tr("library.album.detail.added_queue"))
         }
     }
 
@@ -415,7 +415,7 @@ struct LibraryView: View {
             let songs = await songsForAlbum(album)
             guard !songs.isEmpty else { return }
             player.addPlayNext(songs)
-            currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
+            currentToast = ShelveToast(message: tr("library.album.detail.plays_next"))
         }
     }
 
@@ -448,7 +448,7 @@ struct LibraryView: View {
             let songs = await libraryStore.fetchAllSongs(for: artist)
             guard !songs.isEmpty else { return }
             player.addToQueue(songs)
-            currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+            currentToast = ShelveToast(message: tr("library.album.detail.added_queue"))
         }
     }
 
@@ -457,7 +457,7 @@ struct LibraryView: View {
             let songs = await libraryStore.fetchAllSongs(for: artist)
             guard !songs.isEmpty else { return }
             player.addPlayNext(songs)
-            currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
+            currentToast = ShelveToast(message: tr("library.album.detail.plays_next"))
         }
     }
 
@@ -722,7 +722,7 @@ struct LibraryView: View {
                     .foregroundStyle(.primary)
                 let localCount = displayAlbums.filter { $0.artistId == artist.id }.count
                 if localCount > 0 {
-                    Text("\(localCount) \(tr("Albums", "Alben"))")
+                    Text("\(localCount) \(tr("car.play.car.play.library.albums"))")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -767,17 +767,14 @@ struct LibraryView: View {
 
         if !hasSongs && !hasAlbums && !hasArtists {
             ContentUnavailableView(
-                tr("No Favorites", "Keine Favoriten"),
+                tr("library.no_favorites"),
                 systemImage: "heart",
-                description: Text(tr(
-                    "Star songs, albums and artists to see them here.",
-                    "Markiere Titel, Alben und Künstler als Favoriten, um sie hier zu sehen."
-                ))
+                description: Text(tr("library.star_songs_albums_artists_see_them"))
             )
         } else {
             List {
                 if hasArtists {
-                    Section(tr("Artists", "Künstler")) {
+                    Section(tr("car.play.car.play.library.artists")) {
                         ForEach(displayStarredArtists) { artist in
                             NavigationLink(destination: ArtistDetailView(artist: artist)) {
                                 favArtistRow(artist)
@@ -811,7 +808,7 @@ struct LibraryView: View {
                     }
                 }
                 if hasAlbums {
-                    Section(tr("Albums", "Alben")) {
+                    Section(tr("car.play.car.play.library.albums")) {
                         ForEach(displayStarredAlbums) { album in
                             NavigationLink(destination: AlbumDetailView(album: album)) {
                                 favAlbumRow(album)
@@ -842,7 +839,7 @@ struct LibraryView: View {
                     }
                 }
                 if hasSongs {
-                    Section(tr("Songs", "Titel")) {
+                    Section(tr("car.play.car.play.library.songs")) {
                         ForEach(displayStarredSongs) { song in
                             Button { player.playSong(song) } label: {
                                 starredSongRow(song)
@@ -851,12 +848,12 @@ struct LibraryView: View {
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                 Button {
                                     haptic(); player.addToQueue(song)
-                                    currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+                                    currentToast = ShelveToast(message: tr("library.album.detail.added_queue"))
                                 } label: { Image(systemName: "text.badge.plus") }
                                 .tint(accentColor)
                                 Button {
                                     haptic(); player.addPlayNext(song)
-                                    currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
+                                    currentToast = ShelveToast(message: tr("library.album.detail.plays_next"))
                                 } label: { Image(systemName: "text.insert") }
                                 .tint(.orange)
                             }
@@ -891,17 +888,17 @@ struct LibraryView: View {
     @ViewBuilder
     private func albumContextMenuItems(_ album: Album) -> some View {
         Button { playAlbum(album) } label: {
-            Label(tr("Play", "Abspielen"), systemImage: "play.fill")
+            Label(tr("car.play.car.play.navigation.play"), systemImage: "play.fill")
         }
         Button { shuffleAlbum(album) } label: {
-            Label(tr("Shuffle", "Zufällig"), systemImage: "shuffle")
+            Label(tr("car.play.car.play.navigation.shuffle"), systemImage: "shuffle")
         }
         Divider()
         Button { playNextAlbum(album) } label: {
-            Label(tr("Play Next", "Als nächstes"), systemImage: "text.insert")
+            Label(tr("car.play.car.play.queue.play_next"), systemImage: "text.insert")
         }
         Button { queueAlbum(album) } label: {
-            Label(tr("Add to Queue", "Zur Warteschlange"), systemImage: "text.badge.plus")
+            Label(tr("car.play.car.play.navigation.add_queue"), systemImage: "text.badge.plus")
         }
         if !offlineMode.isOffline && (enableFavorites || enablePlaylists) {
             Divider()
@@ -911,15 +908,15 @@ struct LibraryView: View {
                 } label: {
                     Label(
                         libraryStore.isAlbumStarred(album)
-                            ? tr("Unfavorite", "Aus Favoriten entfernen")
-                            : tr("Favorite", "Zu Favoriten"),
+                            ? tr("library.unfavorite")
+                            : tr("library.favorite"),
                         systemImage: libraryStore.isAlbumStarred(album) ? "heart.slash" : "heart"
                     )
                 }
             }
             if enablePlaylists {
                 Button { addAlbumToPlaylist(album) } label: {
-                    Label(tr("Add to Playlist…", "Zur Playlist hinzufügen…"), systemImage: "music.note.list")
+                    Label(tr("library.album.detail.add_playlist"), systemImage: "music.note.list")
                 }
             }
         }
@@ -977,18 +974,18 @@ struct LibraryView: View {
         case .none:
             if !offlineMode.isOffline {
                 Button { DownloadStore.shared.enqueueAlbum(album) } label: {
-                    Label(tr("Download Album", "Album herunterladen"), systemImage: "arrow.down.circle")
+                    Label(tr("library.download_album"), systemImage: "arrow.down.circle")
                 }
             }
         case .partial:
             if !offlineMode.isOffline {
                 Button { DownloadStore.shared.enqueueAlbum(album) } label: {
-                    Label(tr("Download Remaining", "Rest herunterladen"), systemImage: "arrow.down.circle")
+                    Label(tr("library.download_remaining"), systemImage: "arrow.down.circle")
                 }
             }
-            Button(role: .destructive) { albumToDeleteDownloads = album } label: { Label(tr("Delete Downloads", "Downloads löschen"), systemImage: "arrow.down.circle") }
+            Button(role: .destructive) { albumToDeleteDownloads = album } label: { Label(tr("downloads.delete_downloads.d9dd6fd8"), systemImage: "arrow.down.circle") }
         case .complete:
-            Button(role: .destructive) { albumToDeleteDownloads = album } label: { Label(tr("Delete Downloads", "Downloads löschen"), systemImage: "arrow.down.circle") }
+            Button(role: .destructive) { albumToDeleteDownloads = album } label: { Label(tr("downloads.delete_downloads.d9dd6fd8"), systemImage: "arrow.down.circle") }
         }
     }
 
@@ -1000,7 +997,7 @@ struct LibraryView: View {
                 guard !songs.isEmpty else { return }
                 player.play(songs: songs, startIndex: 0)
             }
-        } label: { Label(tr("Play", "Abspielen"), systemImage: "play.fill") }
+        } label: { Label(tr("car.play.car.play.navigation.play"), systemImage: "play.fill") }
 
         Button {
             Task {
@@ -1008,15 +1005,15 @@ struct LibraryView: View {
                 guard !songs.isEmpty else { return }
                 player.playShuffled(songs: songs)
             }
-        } label: { Label(tr("Shuffle", "Zufällig"), systemImage: "shuffle") }
+        } label: { Label(tr("car.play.car.play.navigation.shuffle"), systemImage: "shuffle") }
 
         Divider()
 
         Button { playNextArtist(artist) } label: {
-            Label(tr("Play Next", "Als nächstes"), systemImage: "text.insert")
+            Label(tr("car.play.car.play.queue.play_next"), systemImage: "text.insert")
         }
         Button { queueArtist(artist) } label: {
-            Label(tr("Add to Queue", "Zur Warteschlange"), systemImage: "text.badge.plus")
+            Label(tr("car.play.car.play.navigation.add_queue"), systemImage: "text.badge.plus")
         }
 
         if !offlineMode.isOffline && (enableFavorites || enablePlaylists) {
@@ -1027,8 +1024,8 @@ struct LibraryView: View {
                 } label: {
                     Label(
                         libraryStore.isArtistStarred(artist)
-                            ? tr("Unfavorite", "Aus Favoriten entfernen")
-                            : tr("Favorite", "Zu Favoriten"),
+                            ? tr("library.unfavorite")
+                            : tr("library.favorite"),
                         systemImage: libraryStore.isArtistStarred(artist) ? "heart.slash" : "heart"
                     )
                 }
@@ -1040,7 +1037,7 @@ struct LibraryView: View {
                         guard !songs.isEmpty else { return }
                         NotificationCenter.default.post(name: .addSongsToPlaylist, object: songs.map(\.id))
                     }
-                } label: { Label(tr("Add to Playlist…", "Zur Playlist hinzufügen…"), systemImage: "music.note.list") }
+                } label: { Label(tr("library.album.detail.add_playlist"), systemImage: "music.note.list") }
             }
         }
         if enableDownloads {
@@ -1050,14 +1047,14 @@ struct LibraryView: View {
                     let sid = serverStore.activeServer?.stableId ?? ""
                     Task { await DownloadService.shared.enqueueArtist(artist: artist, serverId: sid) }
                 } label: {
-                    Label(tr("Download Artist", "Künstler herunterladen"), systemImage: "arrow.down.circle")
+                    Label(tr("library.download_artist"), systemImage: "arrow.down.circle")
                 }
             }
             if downloadedArtistNames.contains(artist.name) {
                 Button(role: .destructive) {
                     artistToDeleteDownloads = artist
                 } label: {
-                    Label(tr("Delete Downloads", "Downloads löschen"), systemImage: "arrow.down.circle")
+                    Label(tr("downloads.delete_downloads.d9dd6fd8"), systemImage: "arrow.down.circle")
                 }
             }
         }
@@ -1181,7 +1178,7 @@ struct LibraryView: View {
                     Text(option.label).tag(option.rawValue)
                 }
             } label: {
-                Label(tr("Sort", "Sortieren"), systemImage: "arrow.up.arrow.down")
+                Label(tr("library.artist.detail.sort"), systemImage: "arrow.up.arrow.down")
             }
 
             if sortOption != .alphabetical {
@@ -1190,7 +1187,7 @@ struct LibraryView: View {
                         Text(dir.label).tag(dir.rawValue)
                     }
                 } label: {
-                    Label(tr("Direction", "Richtung"), systemImage: "arrow.up.and.down")
+                    Label(tr("library.direction"), systemImage: "arrow.up.and.down")
                 }
             }
         } label: {
@@ -1205,7 +1202,7 @@ struct LibraryView: View {
                     Text(option.label).tag(option.rawValue)
                 }
             } label: {
-                Label(tr("Sort", "Sortieren"), systemImage: "arrow.up.arrow.down")
+                Label(tr("library.artist.detail.sort"), systemImage: "arrow.up.arrow.down")
             }
 
             if artistSortOption != .alphabetical {
@@ -1214,7 +1211,7 @@ struct LibraryView: View {
                         Text(dir.label).tag(dir.rawValue)
                     }
                 } label: {
-                    Label(tr("Direction", "Richtung"), systemImage: "arrow.up.and.down")
+                    Label(tr("library.direction"), systemImage: "arrow.up.and.down")
                 }
             }
         } label: {

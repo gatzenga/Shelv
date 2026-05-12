@@ -57,7 +57,7 @@ struct PlaylistDetailView: View {
                 }
             } else if songs.isEmpty {
                 Section {
-                    Text(tr("No songs in this playlist.", "Keine Titel in dieser Playlist."))
+                    Text(tr("playlists.playlist.detail.no_songs_playlist"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity)
@@ -109,7 +109,7 @@ struct PlaylistDetailView: View {
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             Button {
                                 haptic(); player.addToQueue(song)
-                                currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+                                currentToast = ShelveToast(message: tr("library.album.detail.added_queue"))
                             } label: {
                                 Image(systemName: "text.badge.plus")
                             }
@@ -117,7 +117,7 @@ struct PlaylistDetailView: View {
 
                             Button {
                                 haptic(); player.addPlayNext(song)
-                                currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
+                                currentToast = ShelveToast(message: tr("library.album.detail.plays_next"))
                             } label: {
                                 Image(systemName: "text.insert")
                             }
@@ -170,14 +170,14 @@ struct PlaylistDetailView: View {
         }
         .listStyle(.plain)
         .scrollIndicators(.hidden)
-        .searchable(text: $searchQuery, prompt: tr("Search songs…", "Titel suchen…"))
+        .searchable(text: $searchQuery, prompt: tr("library.album.detail.search_songs"))
         .environment(\.editMode, .constant(isEditMode ? .active : .inactive))
         .navigationTitle(displayName.isEmpty ? playlist.name : displayName)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 if isEditMode {
-                    Button(tr("Done", "Fertig")) {
+                    Button(tr("player.queue.done")) {
                         isEditMode = false
                     }
                     .bold()
@@ -187,7 +187,7 @@ struct PlaylistDetailView: View {
                             searchQuery = ""
                             isEditMode = true
                         } label: {
-                            Label(tr("Reorder / Delete", "Sortieren / Löschen"), systemImage: "pencil")
+                            Label(tr("playlists.playlist.detail.reorder_delete"), systemImage: "pencil")
                         }
 
                         Button {
@@ -195,7 +195,7 @@ struct PlaylistDetailView: View {
                             newComment = playlist.comment ?? ""
                             showRenameAlert = true
                         } label: {
-                            Label(tr("Rename", "Umbenennen"), systemImage: "pencil.line")
+                            Label(tr("playlists.playlist.detail.rename"), systemImage: "pencil.line")
                         }
 
                         Divider()
@@ -203,34 +203,34 @@ struct PlaylistDetailView: View {
                         Button {
                             if !songs.isEmpty { player.play(songs: songs, startIndex: 0) }
                         } label: {
-                            Label(tr("Play", "Abspielen"), systemImage: "play.fill")
+                            Label(tr("car.play.car.play.navigation.play"), systemImage: "play.fill")
                         }
                         .disabled(songs.isEmpty)
 
                         Button {
                             if !songs.isEmpty { player.playShuffled(songs: songs) }
                         } label: {
-                            Label(tr("Shuffle", "Zufällig"), systemImage: "shuffle")
+                            Label(tr("car.play.car.play.navigation.shuffle"), systemImage: "shuffle")
                         }
                         .disabled(songs.isEmpty)
 
                         Button {
                             if !songs.isEmpty {
                                 player.addPlayNext(songs)
-                                currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
+                                currentToast = ShelveToast(message: tr("library.album.detail.plays_next"))
                             }
                         } label: {
-                            Label(tr("Play Next", "Als nächstes"), systemImage: "text.insert")
+                            Label(tr("car.play.car.play.queue.play_next"), systemImage: "text.insert")
                         }
                         .disabled(songs.isEmpty)
 
                         Button {
                             if !songs.isEmpty {
                                 player.addToQueue(songs)
-                                currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+                                currentToast = ShelveToast(message: tr("library.album.detail.added_queue"))
                             }
                         } label: {
-                            Label(tr("Add to Queue", "Zur Warteschlange"), systemImage: "text.badge.plus")
+                            Label(tr("car.play.car.play.navigation.add_queue"), systemImage: "text.badge.plus")
                         }
                         .disabled(songs.isEmpty)
 
@@ -239,7 +239,7 @@ struct PlaylistDetailView: View {
                         Button(role: .destructive) {
                             showDeleteConfirm = true
                         } label: {
-                            Label(tr("Delete Playlist", "Playlist löschen"), systemImage: "trash")
+                            Label(tr("playlists.playlist.detail.delete_playlist"), systemImage: "trash")
                         }
                     } label: {
                         Image(systemName: "ellipsis.circle")
@@ -249,10 +249,10 @@ struct PlaylistDetailView: View {
             }
         }
         .shelveToast($currentToast)
-        .alert(tr("Rename Playlist", "Playlist umbenennen"), isPresented: $showRenameAlert) {
-            TextField(tr("Name", "Name"), text: $newName)
-            TextField(tr("Comment", "Kommentar"), text: $newComment)
-            Button(tr("Save", "Speichern")) {
+        .alert(tr("playlists.playlist.detail.rename_playlist"), isPresented: $showRenameAlert) {
+            TextField(tr("library.name"), text: $newName)
+            TextField(tr("playlists.playlist.detail.comment"), text: $newComment)
+            Button(tr("playlists.playlist.detail.save")) {
                 let name = newName.trimmingCharacters(in: .whitespaces)
                 guard !name.isEmpty else { return }
                 let comment = newComment.trimmingCharacters(in: .whitespaces)
@@ -262,35 +262,35 @@ struct PlaylistDetailView: View {
                 }
             }
             .bold()
-            Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+            Button(tr("downloads.cancel"), role: .cancel) {}
         }
         .alert(
-            tr("Delete Downloads?", "Downloads löschen?"),
+            tr("downloads.delete_downloads"),
             isPresented: $showDeleteDownloadConfirm
         ) {
-            Button(tr("Delete", "Löschen"), role: .destructive) {
+            Button(tr("downloads.delete"), role: .destructive) {
                 for song in songs { downloadStore.deleteSong(song.id) }
                 downloadStore.removeOfflinePlaylist(playlist.id)
-                currentToast = ShelveToast(message: tr("Downloads deleted", "Downloads gelöscht"))
+                currentToast = ShelveToast(message: tr("library.album.detail.downloads_deleted"))
             }
-            Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+            Button(tr("downloads.cancel"), role: .cancel) {}
         } message: {
-            Text(tr("The downloads will be removed from this device.", "Die Downloads werden von diesem Gerät entfernt."))
+            Text(tr("downloads.downloads_removed_from_device"))
         }
-        .alert(tr("Delete Playlist?", "Playlist löschen?"), isPresented: $showDeleteConfirm) {
-            Button(tr("Delete", "Löschen"), role: .destructive) {
+        .alert(tr("playlists.playlist.detail.delete_playlist.3fd289ef"), isPresented: $showDeleteConfirm) {
+            Button(tr("downloads.delete"), role: .destructive) {
                 Task {
                     do {
                         try await libraryStore.deletePlaylist(playlist)
                         dismiss()
                     } catch {
                         if !(error is CancellationError) {
-                            currentToast = ShelveToast(message: tr("Could not delete playlist", "Playlist konnte nicht gelöscht werden"), isError: true)
+                            currentToast = ShelveToast(message: tr("playlists.playlist.detail.could_not_delete_playlist"), isError: true)
                         }
                     }
                 }
             }
-            Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+            Button(tr("downloads.cancel"), role: .cancel) {}
         } message: {
             Text("\"\(playlist.name)\"")
         }
@@ -331,7 +331,7 @@ struct PlaylistDetailView: View {
                         .multilineTextAlignment(.center)
                 }
                 if !isLoading {
-                    Text("\(songs.count) \(tr("Songs", "Titel"))")
+                    Text("\(songs.count) \(tr("car.play.car.play.library.songs"))")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
@@ -343,7 +343,7 @@ struct PlaylistDetailView: View {
                     Button {
                         if !songs.isEmpty { player.play(songs: songs, startIndex: 0) }
                     } label: {
-                        Label(tr("Play", "Abspielen"), systemImage: "play.fill")
+                        Label(tr("car.play.car.play.navigation.play"), systemImage: "play.fill")
                             .font(.body).bold()
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
@@ -357,7 +357,7 @@ struct PlaylistDetailView: View {
                     Button {
                         if !songs.isEmpty { player.playShuffled(songs: songs) }
                     } label: {
-                        Label(tr("Shuffle", "Zufällig"), systemImage: "shuffle")
+                        Label(tr("car.play.car.play.navigation.shuffle"), systemImage: "shuffle")
                             .font(.body).bold()
                             .foregroundStyle(accentColor)
                             .frame(maxWidth: .infinity)
@@ -390,11 +390,11 @@ struct PlaylistDetailView: View {
                     let missing = songs.filter { !downloadStore.isDownloaded(songId: $0.id) }
                     if !missing.isEmpty { downloadStore.enqueueSongs(missing) }
                     downloadStore.addOfflinePlaylist(playlist.id, songIds: songs.map(\.id))
-                    currentToast = ShelveToast(message: tr("Download started", "Download gestartet"))
+                    currentToast = ShelveToast(message: tr("library.album.detail.download_started"))
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "arrow.down.circle")
-                        Text(tr("Download", "Herunterladen"))
+                        Text(tr("library.album.detail.download"))
                     }
                     .font(.subheadline).bold()
                     .foregroundStyle(accentColor)
@@ -410,11 +410,11 @@ struct PlaylistDetailView: View {
                     haptic()
                     let missing = songs.filter { !downloadStore.isDownloaded(songId: $0.id) }
                     if !missing.isEmpty { downloadStore.enqueueSongs(missing) }
-                    currentToast = ShelveToast(message: tr("Download started", "Download gestartet"))
+                    currentToast = ShelveToast(message: tr("library.album.detail.download_started"))
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "arrow.down.circle")
-                        Text(tr("Rest (\(remaining))", "Rest (\(remaining))"))
+                        Text(tr("playlists.playlist.detail.rest_value", String(describing: remaining)))
                     }
                     .font(.subheadline).bold()
                     .foregroundStyle(accentColor)
@@ -432,7 +432,7 @@ struct PlaylistDetailView: View {
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "arrow.down.circle")
-                        Text(tr("Delete Downloads", "Downloads löschen"))
+                        Text(tr("downloads.delete_downloads.d9dd6fd8"))
                     }
                     .font(.subheadline).bold()
                     .foregroundStyle(.red)
@@ -495,7 +495,7 @@ struct PlaylistDetailView: View {
                 songIndicesToRemove: allOldIndices
             )
         } catch {
-            currentToast = ShelveToast(message: tr("Order could not be saved", "Reihenfolge konnte nicht gespeichert werden"), isError: true)
+            currentToast = ShelveToast(message: tr("playlists.playlist.detail.order_could_not_saved"), isError: true)
             await loadSongs()
         }
         isSyncing = false

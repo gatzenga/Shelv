@@ -25,21 +25,21 @@ struct RecapAdvancedView: View {
 
     var body: some View {
         List {
-            Section(tr("Testing", "Testen")) {
+            Section(tr("recap.recap.advanced.testing")) {
                 Button {
                     testResult = nil
                     Task {
                         let created = await recapStore.generateTest(serverId: serverId)
                         testResult = created
-                            ? tr("Playlist created.", "Playlist erstellt.")
-                            : tr("No plays logged yet — skip songs first.", "Noch keine Plays — zuerst Songs skippen.")
+                            ? tr("recap.recap.advanced.playlist_created")
+                            : tr("recap.recap.advanced.no_plays_logged_yet_skip_songs")
                     }
                 } label: {
                     if recapStore.isGenerating {
                         ProgressView()
                     } else {
                         Label(
-                            tr("Generate test recap (last 7 days)", "Test-Recap erstellen (letzte 7 Tage)"),
+                            tr("recap.recap.advanced.generate_test_recap_last_7_days"),
                             systemImage: "wand.and.stars"
                         )
                         .foregroundStyle(accentColor)
@@ -60,11 +60,11 @@ struct RecapAdvancedView: View {
                     if isResettingLastWeek {
                         HStack {
                             ProgressView()
-                            Text(tr("Resetting…", "Setze zurück…")).foregroundStyle(.red)
+                            Text(tr("recap.recap.advanced.resetting")).foregroundStyle(.red)
                         }
                     } else {
                         Label(
-                            tr("Reset latest weekly recap", "Letzten Wochen-Recap zurücksetzen"),
+                            tr("recap.recap.advanced.reset_latest_weekly_recap"),
                             systemImage: "arrow.uturn.backward.circle"
                         )
                         .foregroundStyle(.red)
@@ -82,11 +82,11 @@ struct RecapAdvancedView: View {
                     if isResettingLastMonth {
                         HStack {
                             ProgressView()
-                            Text(tr("Resetting…", "Setze zurück…")).foregroundStyle(.red)
+                            Text(tr("recap.recap.advanced.resetting")).foregroundStyle(.red)
                         }
                     } else {
                         Label(
-                            tr("Reset latest monthly recap", "Letzten Monats-Recap zurücksetzen"),
+                            tr("recap.recap.advanced.reset_latest_monthly_recap"),
                             systemImage: "arrow.uturn.backward.circle"
                         )
                         .foregroundStyle(.red)
@@ -104,11 +104,11 @@ struct RecapAdvancedView: View {
                     if isResettingLastYear {
                         HStack {
                             ProgressView()
-                            Text(tr("Resetting…", "Setze zurück…")).foregroundStyle(.red)
+                            Text(tr("recap.recap.advanced.resetting")).foregroundStyle(.red)
                         }
                     } else {
                         Label(
-                            tr("Reset latest yearly recap", "Letzten Jahres-Recap zurücksetzen"),
+                            tr("recap.recap.advanced.reset_latest_yearly_recap"),
                             systemImage: "arrow.uturn.backward.circle"
                         )
                         .foregroundStyle(.red)
@@ -121,12 +121,12 @@ struct RecapAdvancedView: View {
                 }
             }
 
-            Section(tr("Destructive actions", "Löschaktionen")) {
+            Section(tr("recap.recap.advanced.destructive_actions")) {
                 Button(role: .destructive) {
                     showResetConfirm = true
                 } label: {
                     Label(
-                        tr("Reset local database", "Lokale Datenbank zurücksetzen"),
+                        tr("recap.recap.advanced.reset_local_database"),
                         systemImage: "arrow.counterclockwise"
                     )
                     .foregroundStyle(.red)
@@ -138,11 +138,11 @@ struct RecapAdvancedView: View {
                     if isIcloudResetting {
                         HStack {
                             ProgressView()
-                            Text(tr("Deleting…", "Lösche…")).foregroundStyle(.red)
+                            Text(tr("recap.recap.advanced.deleting")).foregroundStyle(.red)
                         }
                     } else {
                         Label(
-                            tr("Delete iCloud data", "iCloud-Daten löschen"),
+                            tr("recap.recap.advanced.delete_icloud_data"),
                             systemImage: "icloud.slash"
                         )
                         .foregroundStyle(.red)
@@ -156,11 +156,11 @@ struct RecapAdvancedView: View {
                     if isFullResetting {
                         HStack {
                             ProgressView()
-                            Text(tr("Deleting…", "Lösche…")).foregroundStyle(.red)
+                            Text(tr("recap.recap.advanced.deleting")).foregroundStyle(.red)
                         }
                     } else {
                         Label(
-                            tr("Delete everything", "Alles löschen"),
+                            tr("recap.recap.advanced.delete_everything"),
                             systemImage: "trash.slash"
                         )
                         .foregroundStyle(.red)
@@ -174,13 +174,13 @@ struct RecapAdvancedView: View {
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
         }
-        .navigationTitle(tr("Advanced", "Erweitert"))
+        .navigationTitle(tr("recap.recap.advanced.advanced"))
         .navigationBarTitleDisplayMode(.inline)
         .alert(
-            tr("Reset local database?", "Lokale Datenbank zurücksetzen?"),
+            tr("recap.recap.advanced.reset_local_database.7ca9ccd0"),
             isPresented: $showResetConfirm
         ) {
-            Button(tr("Reset", "Zurücksetzen"), role: .destructive) {
+            Button(tr("recap.recap.advanced.reset"), role: .destructive) {
                 Task {
                     await PlayLogService.shared.resetLog(serverId: serverId)
                     await PlayLogService.shared.resetRegistry(serverId: serverId)
@@ -190,82 +190,64 @@ struct RecapAdvancedView: View {
                     testResult = nil
                 }
             }
-            Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+            Button(tr("downloads.cancel"), role: .cancel) {}
         } message: {
-            Text(tr(
-                "Clears the local cache only. iCloud and Navidrome stay untouched. Next sync will re-fetch from iCloud.",
-                "Löscht nur den lokalen Cache. iCloud und Navidrome bleiben unberührt. Beim nächsten Sync kommt alles aus iCloud zurück."
-            ))
+            Text(tr("recap.recap.advanced.clears_local_cache_only_icloud_navidrome"))
         }
         .alert(
-            tr("Delete iCloud data?", "iCloud-Daten löschen?"),
+            tr("recap.recap.advanced.delete_icloud_data.17547076"),
             isPresented: $showIcloudResetConfirm
         ) {
-            Button(tr("Delete", "Löschen"), role: .destructive) {
+            Button(tr("downloads.delete"), role: .destructive) {
                 Task { await performIcloudReset() }
             }
-            Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+            Button(tr("downloads.cancel"), role: .cancel) {}
         } message: {
-            Text(tr(
-                "All iCloud records for this server will be deleted. Local database and Navidrome playlists stay untouched.",
-                "Alle iCloud-Einträge für diesen Server werden gelöscht. Lokale Datenbank und Navidrome-Playlists bleiben unberührt."
-            ))
+            Text(tr("recap.recap.advanced.icloud_records_server_deleted_local_database"))
         }
         .alert(
-            tr("Reset latest weekly recap?", "Letzten Wochen-Recap zurücksetzen?"),
+            tr("recap.recap.advanced.reset_latest_weekly_recap.2c4b086f"),
             isPresented: $showResetLastWeekConfirm
         ) {
-            Button(tr("Reset", "Zurücksetzen"), role: .destructive) {
+            Button(tr("recap.recap.advanced.reset"), role: .destructive) {
                 Task { await performResetLastWeek() }
             }
-            Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+            Button(tr("downloads.cancel"), role: .cancel) {}
         } message: {
-            Text(tr(
-                "Deletes the newest weekly recap (playlist, iCloud marker, local entry) and clears the auto-generation timestamp. Restart the app to trigger regeneration.",
-                "Löscht den neuesten Wochen-Recap (Playlist, iCloud-Marker, DB-Eintrag) und setzt den Zeitstempel der Auto-Generation zurück. App neu starten, um die Neu-Generation auszulösen."
-            ))
+            Text(tr("recap.recap.advanced.deletes_newest_weekly_recap_playlist_icloud"))
         }
         .alert(
-            tr("Reset latest monthly recap?", "Letzten Monats-Recap zurücksetzen?"),
+            tr("recap.recap.advanced.reset_latest_monthly_recap.afbe0654"),
             isPresented: $showResetLastMonthConfirm
         ) {
-            Button(tr("Reset", "Zurücksetzen"), role: .destructive) {
+            Button(tr("recap.recap.advanced.reset"), role: .destructive) {
                 Task { await performResetLastMonth() }
             }
-            Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+            Button(tr("downloads.cancel"), role: .cancel) {}
         } message: {
-            Text(tr(
-                "Deletes the newest monthly recap and clears its auto-generation timestamp. Restart the app to trigger regeneration.",
-                "Löscht den neuesten Monats-Recap und setzt den Zeitstempel der Auto-Generation zurück. App neu starten, um die Neu-Generation auszulösen."
-            ))
+            Text(tr("recap.recap.advanced.deletes_newest_monthly_recap_clears_its"))
         }
         .alert(
-            tr("Reset latest yearly recap?", "Letzten Jahres-Recap zurücksetzen?"),
+            tr("recap.recap.advanced.reset_latest_yearly_recap.a85dbb0b"),
             isPresented: $showResetLastYearConfirm
         ) {
-            Button(tr("Reset", "Zurücksetzen"), role: .destructive) {
+            Button(tr("recap.recap.advanced.reset"), role: .destructive) {
                 Task { await performResetLastYear() }
             }
-            Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+            Button(tr("downloads.cancel"), role: .cancel) {}
         } message: {
-            Text(tr(
-                "Deletes the newest yearly recap and clears its auto-generation timestamp. Restart the app to trigger regeneration.",
-                "Löscht den neuesten Jahres-Recap und setzt den Zeitstempel der Auto-Generation zurück. App neu starten, um die Neu-Generation auszulösen."
-            ))
+            Text(tr("recap.recap.advanced.deletes_newest_yearly_recap_clears_its"))
         }
         .alert(
-            tr("Delete everything?", "Alles löschen?"),
+            tr("recap.recap.advanced.delete_everything.89188578"),
             isPresented: $showFullResetConfirm
         ) {
-            Button(tr("Delete everything", "Alles löschen"), role: .destructive) {
+            Button(tr("recap.recap.advanced.delete_everything"), role: .destructive) {
                 Task { await performFullReset() }
             }
-            Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+            Button(tr("downloads.cancel"), role: .cancel) {}
         } message: {
-            Text(tr(
-                "All recap playlists on Navidrome, local play logs and iCloud records for this server will be permanently deleted. This bypasses the iCloud sync toggle.",
-                "Alle Recap-Playlists auf Navidrome, lokale Plays und iCloud-Einträge für diesen Server werden unwiderruflich gelöscht. Umgeht den iCloud-Sync-Schalter."
-            ))
+            Text(tr("recap.recap.advanced.recap_playlists_navidrome_local_play_logs"))
         }
     }
 
@@ -275,8 +257,8 @@ struct RecapAdvancedView: View {
         resetLastWeekResult = nil
         let removed = await recapStore.resetLastWeek(serverId: serverId)
         resetLastWeekResult = removed
-            ? tr("Removed — restart the app to regenerate.", "Entfernt — App neu starten zum Regenerieren.")
-            : tr("No weekly recap to reset.", "Kein Wochen-Recap vorhanden.")
+            ? tr("recap.recap.advanced.removed_restart_app_regenerate")
+            : tr("recap.recap.advanced.no_weekly_recap_reset")
     }
 
     private func performResetLastMonth() async {
@@ -285,8 +267,8 @@ struct RecapAdvancedView: View {
         resetLastMonthResult = nil
         let removed = await recapStore.resetLastMonth(serverId: serverId)
         resetLastMonthResult = removed
-            ? tr("Removed — restart the app to regenerate.", "Entfernt — App neu starten zum Regenerieren.")
-            : tr("No monthly recap to reset.", "Kein Monats-Recap vorhanden.")
+            ? tr("recap.recap.advanced.removed_restart_app_regenerate")
+            : tr("recap.recap.advanced.no_monthly_recap_reset")
     }
 
     private func performResetLastYear() async {
@@ -295,8 +277,8 @@ struct RecapAdvancedView: View {
         resetLastYearResult = nil
         let removed = await recapStore.resetLastYear(serverId: serverId)
         resetLastYearResult = removed
-            ? tr("Removed — restart the app to regenerate.", "Entfernt — App neu starten zum Regenerieren.")
-            : tr("No yearly recap to reset.", "Kein Jahres-Recap vorhanden.")
+            ? tr("recap.recap.advanced.removed_restart_app_regenerate")
+            : tr("recap.recap.advanced.no_yearly_recap_reset")
     }
 
     private func performIcloudReset() async {

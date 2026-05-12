@@ -34,17 +34,17 @@ struct ServerDetailView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(alignment: .center) {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(tr("Full Scan", "Vollständiger Scan"))
+                            Text(tr("settings.server.detail.full_scan"))
                                 .font(.headline)
                             if let lastSync {
                                 Text(
-                                    tr("Last sync: ", "Letzter Sync: ")
+                                    tr("settings.server.detail.last_sync")
                                     + lastSync.formatted(date: .abbreviated, time: .shortened)
                                 )
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                             } else {
-                                Text(tr("Never synced", "Noch nie synchronisiert"))
+                                Text(tr("settings.server.detail.never_synced"))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -61,7 +61,7 @@ struct ServerDetailView: View {
                     }
 
                     if isScanning {
-                        Text(tr("Scanning library…", "Bibliothek wird gescannt…"))
+                        Text(tr("settings.server.detail.scanning_library"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -69,7 +69,7 @@ struct ServerDetailView: View {
                     Button {
                         Task { await runFullScan() }
                     } label: {
-                        Text(tr("Start Full Scan", "Vollständig scannen"))
+                        Text(tr("settings.server.detail.start_full_scan"))
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
@@ -88,25 +88,25 @@ struct ServerDetailView: View {
                 }
             }
 
-            Section(tr("Library", "Bibliothek")) {
+            Section(tr("car.play.car.play.library.library")) {
                 infoRow(
                     icon: "square.stack",
-                    label: tr("Albums", "Alben"),
+                    label: tr("car.play.car.play.library.albums"),
                     value: storedAlbumCount > 0 ? "\(storedAlbumCount)" : (libraryStore.albums.isEmpty ? "—" : "\(libraryStore.albums.count)")
                 )
                 infoRow(
                     icon: "music.mic",
-                    label: tr("Artists", "Künstler"),
+                    label: tr("car.play.car.play.library.artists"),
                     value: storedArtistCount > 0 ? "\(storedArtistCount)" : (libraryStore.artists.isEmpty ? "—" : "\(libraryStore.artists.count)")
                 )
                 infoRow(
                     icon: "music.note",
-                    label: tr("Tracks", "Titel"),
+                    label: tr("settings.server.detail.tracks"),
                     value: storedSongCount > 0 ? "\(storedSongCount)" : "—"
                 )
             }
 
-            Section(tr("Server", "Server")) {
+            Section(tr("settings.add.server.server")) {
                 infoRow(
                     icon: "cpu",
                     label: "Navidrome",
@@ -114,7 +114,7 @@ struct ServerDetailView: View {
                 )
                 infoRow(
                     icon: "antenna.radiowaves.left.and.right",
-                    label: tr("API Version", "API-Version"),
+                    label: tr("settings.server.detail.api_version"),
                     value: serverInfo?.apiVersion ?? "—"
                 )
             }
@@ -167,7 +167,7 @@ struct ServerDetailView: View {
                 attempts += 1
             }
             if attempts >= maxAttempts {
-                throw SubsonicAPIError.apiError(0, tr("Scan timed out after 2 minutes.", "Scan nach 2 Minuten abgebrochen."))
+                throw SubsonicAPIError.apiError(0, tr("settings.server.detail.scan_timed_out_after_2_minutes"))
             }
             await withTaskGroup(of: Void.self) { group in
                 group.addTask { await libraryStore.loadAlbums() }

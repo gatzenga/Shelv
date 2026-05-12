@@ -9,9 +9,9 @@ struct RecapRegistryView: View {
 
     var body: some View {
         List {
-            Section(tr("Registry", "Registry")) {
+            Section(tr("recap.recap.registry.registry")) {
                 if recapStore.entries.isEmpty {
-                    Text(tr("No recap playlists yet.", "Noch keine Recap-Playlists."))
+                    Text(tr("recap.recap.registry.no_recap_playlists_yet"))
                         .foregroundStyle(.secondary)
                         .font(.subheadline)
                 } else {
@@ -53,7 +53,7 @@ struct RecapRegistryView: View {
         .refreshable {
             await recapStore.refreshWithCleanup(serverId: serverId)
         }
-        .navigationTitle(tr("Registry", "Registry"))
+        .navigationTitle(tr("recap.recap.registry.registry"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {

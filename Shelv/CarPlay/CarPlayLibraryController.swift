@@ -21,7 +21,7 @@ final class CarPlayLibraryController {
     init(interfaceController: CPInterfaceController) {
         self.interfaceController = interfaceController
         let isOffline = OfflineModeService.shared.isOffline
-        let title = isOffline ? tr("Downloads", "Downloads") : tr("Library", "Bibliothek")
+        let title = isOffline ? tr("car.play.car.play.library.downloads") : tr("car.play.car.play.library.library")
         let t = CPListTemplate(title: title, sections: [])
         t.tabTitle = title
         t.tabImage = UIImage(systemName: isOffline ? "internaldrive" : "books.vertical")
@@ -108,19 +108,19 @@ final class CarPlayLibraryController {
         let isOffline = OfflineModeService.shared.isOffline
 
         // Tab-Titel und -Icon reaktiv aktualisieren (tabTitle ist auf CPTemplate nachträglich settable)
-        rootTemplate.tabTitle = isOffline ? tr("Downloads", "Downloads") : tr("Library", "Bibliothek")
+        rootTemplate.tabTitle = isOffline ? tr("car.play.car.play.library.downloads") : tr("car.play.car.play.library.library")
         rootTemplate.tabImage = UIImage(systemName: isOffline ? "internaldrive" : "books.vertical")
 
         var items: [CPListItem] = [
-            menuListItem(title: tr("Albums", "Alben"), systemImage: "square.stack") { [weak self] _, c in
+            menuListItem(title: tr("car.play.car.play.library.albums"), systemImage: "square.stack") { [weak self] _, c in
                 c(); self?.pushAlbumsList()
             },
-            menuListItem(title: tr("Artists", "Künstler"), systemImage: "music.microphone") { [weak self] _, c in
+            menuListItem(title: tr("car.play.car.play.library.artists"), systemImage: "music.microphone") { [weak self] _, c in
                 c(); self?.pushArtistsList()
             },
         ]
         if UserDefaults.standard.bool(forKey: "enableFavorites") {
-            items.append(menuListItem(title: tr("Favorites", "Favoriten"), systemImage: "heart") { [weak self] _, c in
+            items.append(menuListItem(title: tr("car.play.car.play.library.favorites"), systemImage: "heart") { [weak self] _, c in
                 c(); self?.pushFavorites()
             })
         }
@@ -170,8 +170,8 @@ final class CarPlayLibraryController {
     }
 
     private func pushAlbumsList() {
-        let placeholder = CPListItem(text: tr("Loading…", "Wird geladen…"), detailText: nil)
-        let template = CPListTemplate(title: tr("Albums", "Alben"), sections: [
+        let placeholder = CPListItem(text: tr("car.play.car.play.library.loading"), detailText: nil)
+        let template = CPListTemplate(title: tr("car.play.car.play.library.albums"), sections: [
             CPListSection(items: [placeholder], header: nil, sectionIndexTitle: nil)
         ])
         albumsTemplate = template
@@ -246,8 +246,8 @@ final class CarPlayLibraryController {
     // MARK: - Artists (alphabetische Abschnitte + Buchstabenleiste)
 
     private func pushArtistsList() {
-        let placeholder = CPListItem(text: tr("Loading…", "Wird geladen…"), detailText: nil)
-        let template = CPListTemplate(title: tr("Artists", "Künstler"), sections: [
+        let placeholder = CPListItem(text: tr("car.play.car.play.library.loading"), detailText: nil)
+        let template = CPListTemplate(title: tr("car.play.car.play.library.artists"), sections: [
             CPListSection(items: [placeholder], header: nil, sectionIndexTitle: nil)
         ])
         artistsTemplate = template
@@ -291,7 +291,7 @@ final class CarPlayLibraryController {
             var letterItems: [CPListItem] = []
             for artist in (grouped[letter] ?? []).prefix(cap) {
                 let count = counts[artist.id] ?? 0
-                let item = artistListItem(artist, subtitle: "\(count) \(tr("albums", "Alben"))") { [weak self] _, c in
+                let item = artistListItem(artist, subtitle: "\(count) \(tr("car.play.car.play.library.albums.86d6eaac"))") { [weak self] _, c in
                     c()
                     guard let self else { return }
                     CarPlayNavigation.openArtist(artist, from: self.interfaceController)
@@ -354,7 +354,7 @@ final class CarPlayLibraryController {
         let artists = starredArtists()
         let counts  = albumCountByArtist()
 
-        let template = CPListTemplate(title: tr("Favorites", "Favoriten"), sections: [])
+        let template = CPListTemplate(title: tr("car.play.car.play.library.favorites"), sections: [])
         favoritesTemplate = template
         let built = makeFavoriteSections(songs: songs, albums: albums, artists: artists, counts: counts)
         prefillCoversFromCache(built.itemsByCoverId)
@@ -389,11 +389,11 @@ final class CarPlayLibraryController {
                 }
             }
             if songs.count > kPreviewCount {
-                items.append(showAllListItem(title: tr("Show All (\(songs.count))", "Alle anzeigen (\(songs.count))")) { [weak self] _, c in
+                items.append(showAllListItem(title: tr("car.play.car.play.library.show_value", String(describing: songs.count))) { [weak self] _, c in
                     c(); self?.pushFullFavoriteSongs(songs)
                 })
             }
-            sections.append(CPListSection(items: items, header: tr("Songs", "Titel"), sectionIndexTitle: nil))
+            sections.append(CPListSection(items: items, header: tr("car.play.car.play.library.songs"), sectionIndexTitle: nil))
         }
 
         if !albums.isEmpty {
@@ -411,18 +411,18 @@ final class CarPlayLibraryController {
                 items.append(item)
             }
             if albums.count > kPreviewCount {
-                items.append(showAllListItem(title: tr("Show All (\(albums.count))", "Alle anzeigen (\(albums.count))")) { [weak self] _, c in
+                items.append(showAllListItem(title: tr("car.play.car.play.library.show_value.6ed7271d", String(describing: albums.count))) { [weak self] _, c in
                     c(); self?.pushFullFavoriteAlbums(albums)
                 })
             }
-            sections.append(CPListSection(items: items, header: tr("Albums", "Alben"), sectionIndexTitle: nil))
+            sections.append(CPListSection(items: items, header: tr("car.play.car.play.library.albums"), sectionIndexTitle: nil))
         }
 
         if !artists.isEmpty {
             var items: [CPListItem] = []
             for artist in artists.prefix(kPreviewCount) {
                 let count = counts[artist.id] ?? 0
-                let item = artistListItem(artist, subtitle: "\(count) \(tr("albums", "Alben"))") { [weak self] _, c in
+                let item = artistListItem(artist, subtitle: "\(count) \(tr("car.play.car.play.library.albums.86d6eaac"))") { [weak self] _, c in
                     c()
                     guard let self else { return }
                     CarPlayNavigation.openArtist(artist, from: self.interfaceController)
@@ -434,15 +434,15 @@ final class CarPlayLibraryController {
                 items.append(item)
             }
             if artists.count > kPreviewCount {
-                items.append(showAllListItem(title: tr("Show All (\(artists.count))", "Alle anzeigen (\(artists.count))")) { [weak self] _, c in
+                items.append(showAllListItem(title: tr("car.play.car.play.library.show_value.3ee69804", String(describing: artists.count))) { [weak self] _, c in
                     c(); self?.pushFullFavoriteArtists(artists)
                 })
             }
-            sections.append(CPListSection(items: items, header: tr("Artists", "Künstler"), sectionIndexTitle: nil))
+            sections.append(CPListSection(items: items, header: tr("car.play.car.play.library.artists"), sectionIndexTitle: nil))
         }
 
         if sections.isEmpty {
-            let empty = CPListItem(text: tr("No favorites yet", "Noch keine Favoriten"), detailText: nil)
+            let empty = CPListItem(text: tr("car.play.car.play.library.no_favorites_yet"), detailText: nil)
             sections = [CPListSection(items: [empty], header: nil, sectionIndexTitle: nil)]
         }
         return (sections, itemsByCoverId)
@@ -485,7 +485,7 @@ final class CarPlayLibraryController {
             }
             return CPListSection(items: items, header: nil, sectionIndexTitle: nil)
         }
-        let template = CPListTemplate(title: tr("Favorite Songs", "Lieblingstitel"), sections: [makeSongsSection()])
+        let template = CPListTemplate(title: tr("car.play.car.play.library.favorite_songs"), sections: [makeSongsSection()])
         weakTemplate = template
         CarPlayNavigation.safePush(template, on: interfaceController)
     }
@@ -514,7 +514,7 @@ final class CarPlayLibraryController {
             return (items, coverMap)
         }
         let (items, coverMap) = makeItems()
-        let template = CPListTemplate(title: tr("Favorite Albums", "Lieblingsalben"), sections: [
+        let template = CPListTemplate(title: tr("car.play.car.play.library.favorite_albums"), sections: [
             CPListSection(items: items, header: nil, sectionIndexTitle: nil)
         ])
         weakTemplate = template
@@ -531,7 +531,7 @@ final class CarPlayLibraryController {
             var coverMap: [String: [CPListItem]] = [:]
             let items = artists.map { artist -> CPListItem in
                 let count = counts[artist.id] ?? 0
-                let item = artistListItem(artist, subtitle: "\(count) \(tr("albums", "Alben"))") { [weak self] _, c in
+                let item = artistListItem(artist, subtitle: "\(count) \(tr("car.play.car.play.library.albums.86d6eaac"))") { [weak self] _, c in
                     c()
                     guard let self else { return }
                     CarPlayNavigation.openArtist(artist, from: self.interfaceController)
@@ -550,7 +550,7 @@ final class CarPlayLibraryController {
             return (items, coverMap)
         }
         let (items, coverMap) = makeItems()
-        let template = CPListTemplate(title: tr("Favorite Artists", "Lieblingskünstler"), sections: [
+        let template = CPListTemplate(title: tr("car.play.car.play.library.favorite_artists"), sections: [
             CPListSection(items: items, header: nil, sectionIndexTitle: nil)
         ])
         weakTemplate = template

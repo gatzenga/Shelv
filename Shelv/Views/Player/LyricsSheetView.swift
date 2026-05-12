@@ -27,7 +27,7 @@ struct LyricsSheetView: View {
             Divider()
             bottomControls
         }
-        .navigationTitle(tr("Lyrics", "Lyrics"))
+        .navigationTitle(tr("player.lyrics.sheet.lyrics"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.visible, for: .navigationBar)
         .onAppear {
@@ -61,16 +61,16 @@ struct LyricsSheetView: View {
             ProgressView()
         } else if let record = lyricsStore.currentLyrics {
             if record.isInstrumental {
-                placeholderView(icon: "pianokeys", text: tr("Instrumental", "Instrumental"))
+                placeholderView(icon: "pianokeys", text: tr("player.lyrics.sheet.instrumental"))
             } else if record.isSynced, !parsedLines.isEmpty {
                 syncedView
             } else if let plain = record.plainText, !plain.isEmpty {
                 plainView(plain)
             } else {
-                placeholderView(icon: "text.page.slash", text: tr("No lyrics available", "Keine Lyrics verfügbar"))
+                placeholderView(icon: "text.page.slash", text: tr("player.lyrics.sheet.no_lyrics_available"))
             }
         } else {
-            placeholderView(icon: "text.page.slash", text: tr("No lyrics available", "Keine Lyrics verfügbar"))
+            placeholderView(icon: "text.page.slash", text: tr("player.lyrics.sheet.no_lyrics_available"))
         }
     }
 

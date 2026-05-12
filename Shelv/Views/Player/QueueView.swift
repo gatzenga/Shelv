@@ -39,7 +39,7 @@ struct QueueView: View {
                         Image(systemName: "music.note.list")
                             .font(.largeTitle)
                             .foregroundStyle(.secondary)
-                        Text(tr("Queue is empty", "Warteschlange ist leer"))
+                        Text(tr("car.play.car.play.queue.queue_empty"))
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
@@ -48,7 +48,7 @@ struct QueueView: View {
                     List {
                         if player.isShuffled {
                             if !localPlayNext.isEmpty {
-                                Section(tr("Play Next", "Als nächstes")) {
+                                Section(tr("car.play.car.play.queue.play_next")) {
                                     ForEach(localPlayNext) { song in
                                         Button {
                                             guard editMode == .inactive else { return }
@@ -72,7 +72,7 @@ struct QueueView: View {
                                 }
                             }
                             if !localAlbum.isEmpty {
-                                Section(tr("Shuffled Queue", "Gemischte Warteschlange")) {
+                                Section(tr("car.play.car.play.queue.shuffled_queue")) {
                                     ForEach(localAlbum) { song in
                                         Button {
                                             guard editMode == .inactive else { return }
@@ -98,7 +98,7 @@ struct QueueView: View {
                             }
                         } else {
                             if !localPlayNext.isEmpty {
-                                Section(tr("Play Next", "Als nächstes")) {
+                                Section(tr("car.play.car.play.queue.play_next")) {
                                     ForEach(localPlayNext) { song in
                                         Button {
                                             guard editMode == .inactive else { return }
@@ -123,7 +123,7 @@ struct QueueView: View {
                             }
 
                             if !localAlbum.isEmpty {
-                                Section(tr("Up Next", "Nächste Titel")) {
+                                Section(tr("car.play.car.play.queue.up_next")) {
                                     ForEach(localAlbum) { song in
                                         Button {
                                             guard editMode == .inactive else { return }
@@ -149,7 +149,7 @@ struct QueueView: View {
                             }
 
                             if !localUserQueue.isEmpty {
-                                Section(tr("Your Queue", "Deine Warteschlange")) {
+                                Section(tr("car.play.car.play.queue.queue.6f06e0cd")) {
                                     ForEach(localUserQueue) { song in
                                         Button {
                                             guard editMode == .inactive else { return }
@@ -179,11 +179,11 @@ struct QueueView: View {
                     .environment(\.editMode, $editMode)
                 }
             }
-            .navigationTitle(tr("Queue", "Warteschlange") + (totalCount > 0 ? " (\(totalCount))" : ""))
+            .navigationTitle(tr("car.play.car.play.queue.queue") + (totalCount > 0 ? " (\(totalCount))" : ""))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(tr("Done", "Fertig")) {
+                    Button(tr("player.queue.done")) {
                         if editMode == .active {
                             withAnimation { editMode = .inactive }
                         } else {
@@ -196,14 +196,14 @@ struct QueueView: View {
                 if totalCount > 0 {
                     ToolbarItem(placement: .topBarTrailing) {
                         if editMode == .inactive {
-                            Button(tr("Clear all", "Alles leeren")) {
+                            Button(tr("player.queue.clear")) {
                                 showClearConfirm = true
                             }
                             .foregroundStyle(.red)
                         }
                     }
                     ToolbarItem(placement: .topBarTrailing) {
-                        Button(editMode == .active ? tr("Done", "Fertig") : tr("Edit", "Bearbeiten")) {
+                        Button(editMode == .active ? tr("player.queue.done") : tr("player.queue.edit")) {
                             withAnimation { editMode = editMode == .active ? .inactive : .active }
                         }
                         .foregroundStyle(accentColor)
@@ -217,18 +217,15 @@ struct QueueView: View {
         .onChange(of: player.queue) { _, _ in syncFromPlayer() }
         .onChange(of: player.currentIndex) { _, _ in syncFromPlayer() }
         .onChange(of: player.isShuffled) { _, _ in syncFromPlayer() }
-        .alert(tr("Clear Queue?", "Warteschlange leeren?"), isPresented: $showClearConfirm) {
-            Button(tr("Clear", "Leeren"), role: .destructive) {
+        .alert(tr("player.queue.clear_queue"), isPresented: $showClearConfirm) {
+            Button(tr("player.queue.clear.9529e8af"), role: .destructive) {
                 player.clearUpcomingPlayQueue()
                 player.clearUserQueue()
                 syncFromPlayer()
             }
-            Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+            Button(tr("downloads.cancel"), role: .cancel) {}
         } message: {
-            Text(tr(
-                "All upcoming songs will be removed from the queue.",
-                "Alle kommenden Songs werden aus der Warteschlange entfernt."
-            ))
+            Text(tr("player.queue.upcoming_songs_removed_from_queue"))
         }
     }
 

@@ -80,10 +80,7 @@ struct SearchView: View {
                         Image(systemName: "magnifyingglass")
                             .font(.largeTitle)
                             .foregroundStyle(.secondary)
-                        Text(tr(
-                            "Search for artists, albums or songs",
-                            "Künstler, Alben oder Titel suchen"
-                        ))
+                        Text(tr("search.search_artists_albums_songs"))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -98,7 +95,7 @@ struct SearchView: View {
                 } else {
                     List {
                         if let artists = result?.artist.map({ $0.filter { ($0.albumCount ?? 0) > 0 } }), !artists.isEmpty {
-                            Section(tr("Artists", "Künstler")) {
+                            Section(tr("car.play.car.play.library.artists")) {
                                 ForEach(artists) { artist in
                                     NavigationLink(destination: ArtistDetailView(artist: artist)) {
                                         HStack(spacing: 12) {
@@ -168,7 +165,7 @@ struct SearchView: View {
                         }
 
                         if let albums = result?.album, !albums.isEmpty {
-                            Section(tr("Albums", "Alben")) {
+                            Section(tr("car.play.car.play.library.albums")) {
                                 ForEach(albums) { album in
                                     NavigationLink(destination: AlbumDetailView(album: album)) {
                                         HStack(spacing: 12) {
@@ -228,7 +225,7 @@ struct SearchView: View {
                         }
 
                         if let songs = result?.song, !songs.isEmpty {
-                            Section(tr("Songs", "Titel")) {
+                            Section(tr("car.play.car.play.library.songs")) {
                                 ForEach(songs) { song in
                                     Button {
                                         player.playSong(song)
@@ -265,15 +262,15 @@ struct SearchView: View {
                                     .contextMenu {
                                         Button {
                                             player.playSong(song)
-                                        } label: { Label(tr("Play", "Abspielen"), systemImage: "play.fill") }
+                                        } label: { Label(tr("car.play.car.play.navigation.play"), systemImage: "play.fill") }
                                         Button {
                                             player.addPlayNext(song)
-                                            currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
-                                        } label: { Label(tr("Play Next", "Als nächstes"), systemImage: "text.insert") }
+                                            currentToast = ShelveToast(message: tr("library.album.detail.plays_next"))
+                                        } label: { Label(tr("car.play.car.play.queue.play_next"), systemImage: "text.insert") }
                                         Button {
                                             player.addToQueue(song)
-                                            currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
-                                        } label: { Label(tr("Add to Queue", "Zur Warteschlange"), systemImage: "text.badge.plus") }
+                                            currentToast = ShelveToast(message: tr("library.album.detail.added_queue"))
+                                        } label: { Label(tr("car.play.car.play.navigation.add_queue"), systemImage: "text.badge.plus") }
                                         if !offlineMode.isOffline && (enableFavorites || enablePlaylists) {
                                             Divider()
                                             if enableFavorites {
@@ -282,8 +279,8 @@ struct SearchView: View {
                                                 } label: {
                                                     Label(
                                                         libraryStore.isSongStarred(song)
-                                                            ? tr("Unfavorite", "Aus Favoriten entfernen")
-                                                            : tr("Favorite", "Zu Favoriten"),
+                                                            ? tr("library.unfavorite")
+                                                            : tr("library.favorite"),
                                                         systemImage: libraryStore.isSongStarred(song) ? "heart.slash" : "heart"
                                                     )
                                                 }
@@ -293,7 +290,7 @@ struct SearchView: View {
                                                     playlistSongIds = [song.id]
                                                     showAddToPlaylist = true
                                                 } label: {
-                                                    Label(tr("Add to Playlist…", "Zur Playlist hinzufügen…"), systemImage: "music.note.list")
+                                                    Label(tr("library.album.detail.add_playlist"), systemImage: "music.note.list")
                                                 }
                                             }
                                         }
@@ -301,12 +298,12 @@ struct SearchView: View {
                                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                         Button {
                                             haptic(); player.addToQueue(song)
-                                            currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+                                            currentToast = ShelveToast(message: tr("library.album.detail.added_queue"))
                                         } label: { Image(systemName: "text.badge.plus") }
                                         .tint(accentColor)
                                         Button {
                                             haptic(); player.addPlayNext(song)
-                                            currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
+                                            currentToast = ShelveToast(message: tr("library.album.detail.plays_next"))
                                         } label: { Image(systemName: "text.insert") }
                                         .tint(.orange)
                                     }
@@ -333,7 +330,7 @@ struct SearchView: View {
                             }
                         }
                         if !lyricsResults.isEmpty {
-                            Section(tr("Lyrics", "Lyrics")) {
+                            Section(tr("player.lyrics.sheet.lyrics")) {
                                 ForEach(lyricsResults) { item in
                                     Button {
                                         playLyricsResult(item)
@@ -348,7 +345,7 @@ struct SearchView: View {
                                                     )
                                                 }
                                             VStack(alignment: .leading, spacing: 2) {
-                                                Text(item.songTitle ?? tr("Unknown Song", "Unbekannter Titel"))
+                                                Text(item.songTitle ?? tr("search.unknown_song"))
                                                     .font(.body)
                                                     .foregroundStyle(item.songTitle != nil ? Color.primary : Color.secondary)
                                                 if let artist = item.artistName {
@@ -385,7 +382,7 @@ struct SearchView: View {
                                                 starred: nil, suffix: nil, bitRate: nil
                                             )
                                             haptic(); player.addToQueue(song)
-                                            currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+                                            currentToast = ShelveToast(message: tr("library.album.detail.added_queue"))
                                         } label: { Image(systemName: "text.badge.plus") }
                                         .tint(accentColor)
                                         Button {
@@ -398,7 +395,7 @@ struct SearchView: View {
                                                 starred: nil, suffix: nil, bitRate: nil
                                             )
                                             haptic(); player.addPlayNext(song)
-                                            currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
+                                            currentToast = ShelveToast(message: tr("library.album.detail.plays_next"))
                                         } label: { Image(systemName: "text.insert") }
                                         .tint(.orange)
                                     }
@@ -442,7 +439,7 @@ struct SearchView: View {
                         }
 
                         if hasFavoriteResults {
-                            Section(tr("Favorites", "Favoriten")) {
+                            Section(tr("car.play.car.play.library.favorites")) {
                                 ForEach(matchedFavoriteArtists) { artist in
                                     NavigationLink(destination: ArtistDetailView(artist: artist)) {
                                         HStack(spacing: 12) {
@@ -520,12 +517,12 @@ struct SearchView: View {
                                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                         Button {
                                             haptic(); player.addToQueue(song)
-                                            currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+                                            currentToast = ShelveToast(message: tr("library.album.detail.added_queue"))
                                         } label: { Image(systemName: "text.badge.plus") }
                                         .tint(accentColor)
                                         Button {
                                             haptic(); player.addPlayNext(song)
-                                            currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
+                                            currentToast = ShelveToast(message: tr("library.album.detail.plays_next"))
                                         } label: { Image(systemName: "text.insert") }
                                         .tint(.orange)
                                     }
@@ -544,11 +541,11 @@ struct SearchView: View {
                     .scrollIndicators(.hidden)
                 }
             }
-            .navigationTitle(tr("Search", "Suchen"))
+            .navigationTitle(tr("search.search"))
             .searchable(
                 text: $query,
                 isPresented: $searchFieldActive,
-                prompt: tr("Artists, albums, songs...", "Künstler, Alben, Titel...")
+                prompt: tr("search.artists_albums_songs")
             )
             .onChange(of: query) { _, newValue in
                 searchTask?.cancel()
@@ -565,33 +562,33 @@ struct SearchView: View {
             }
             .shelveToast($currentToast)
             .alert(
-                tr("Delete Downloads?", "Downloads löschen?"),
+                tr("downloads.delete_downloads"),
                 isPresented: Binding(get: { artistToDeleteDownloads != nil }, set: { if !$0 { artistToDeleteDownloads = nil } }),
                 presenting: artistToDeleteDownloads
             ) { artist in
-                Button(tr("Delete", "Löschen"), role: .destructive) {
+                Button(tr("downloads.delete"), role: .destructive) {
                     if let match = downloadStore.artists.first(where: { $0.name == artist.name }) {
                         downloadStore.deleteArtist(match.artistId)
                     }
                 }
-                Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+                Button(tr("downloads.cancel"), role: .cancel) {}
             } message: { _ in
-                Text(tr("The downloads will be removed from this device.", "Die Downloads werden von diesem Gerät entfernt."))
+                Text(tr("downloads.downloads_removed_from_device"))
             }
             .alert(
-                tr("Delete Downloads?", "Downloads löschen?"),
+                tr("downloads.delete_downloads"),
                 isPresented: Binding(get: { albumToDeleteDownloads != nil }, set: { if !$0 { albumToDeleteDownloads = nil } }),
                 presenting: albumToDeleteDownloads
             ) { album in
-                Button(tr("Delete", "Löschen"), role: .destructive) {
+                Button(tr("downloads.delete"), role: .destructive) {
                     downloadStore.deleteAlbum(album.id)
                 }
-                Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+                Button(tr("downloads.cancel"), role: .cancel) {}
             } message: { _ in
-                Text(tr("The downloads will be removed from this device.", "Die Downloads werden von diesem Gerät entfernt."))
+                Text(tr("downloads.downloads_removed_from_device"))
             }
-            .alert(tr("Error", "Fehler"), isPresented: $showError, presenting: errorMessage) { _ in
-                Button(tr("OK", "OK"), role: .cancel) {}
+            .alert(tr("discover.error"), isPresented: $showError, presenting: errorMessage) { _ in
+                Button(tr("car.play.car.play.discover.ok"), role: .cancel) {}
             } message: { msg in
                 Text(msg)
             }
@@ -608,7 +605,7 @@ struct SearchView: View {
             let songs = await libraryStore.fetchAllSongs(for: artist)
             guard !songs.isEmpty else { return }
             player.addToQueue(songs)
-            currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+            currentToast = ShelveToast(message: tr("library.album.detail.added_queue"))
         }
     }
 
@@ -617,7 +614,7 @@ struct SearchView: View {
             let songs = await libraryStore.fetchAllSongs(for: artist)
             guard !songs.isEmpty else { return }
             player.addPlayNext(songs)
-            currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
+            currentToast = ShelveToast(message: tr("library.album.detail.plays_next"))
         }
     }
 
@@ -627,7 +624,7 @@ struct SearchView: View {
                 let songs = try await libraryStore.fetchAlbumSongs(album)
                 guard !songs.isEmpty else { return }
                 player.addToQueue(songs)
-                currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+                currentToast = ShelveToast(message: tr("library.album.detail.added_queue"))
             } catch {
                 errorMessage = error.localizedDescription
                 showError = true
@@ -641,7 +638,7 @@ struct SearchView: View {
                 let songs = try await libraryStore.fetchAlbumSongs(album)
                 guard !songs.isEmpty else { return }
                 player.addPlayNext(songs)
-                currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
+                currentToast = ShelveToast(message: tr("library.album.detail.plays_next"))
             } catch {
                 errorMessage = error.localizedDescription
                 showError = true

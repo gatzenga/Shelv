@@ -10,7 +10,7 @@ struct RecapSyncLogView: View {
                     Image(systemName: "doc.text.magnifyingglass")
                         .font(.largeTitle)
                         .foregroundStyle(.tertiary)
-                    Text(tr("No log entries yet.", "Noch keine Log-Einträge."))
+                    Text(tr("recap.recap.sync.log.no_log_entries_yet"))
                         .foregroundStyle(.secondary)
                         .font(.subheadline)
                 }
@@ -32,7 +32,7 @@ struct RecapSyncLogView: View {
                 }
             }
         }
-        .navigationTitle(tr("Sync log", "Sync-Protokoll"))
+        .navigationTitle(tr("recap.recap.sync.log.sync_log"))
         .navigationBarTitleDisplayMode(.inline)
     }
 }

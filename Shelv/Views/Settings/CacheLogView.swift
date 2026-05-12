@@ -9,12 +9,12 @@ struct CacheLogView: View {
                 Image(systemName: "clock")
                     .font(.largeTitle)
                     .foregroundStyle(.tertiary)
-                Text(tr("No cache events yet.", "Noch keine Cache-Ereignisse."))
+                Text(tr("settings.cache.log.no_cache_events_yet"))
                     .foregroundStyle(.secondary)
                     .font(.subheadline)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .navigationTitle(tr("Cache Log", "Cache-Log"))
+            .navigationTitle(tr("settings.cache.log.cache_log"))
             .navigationBarTitleDisplayMode(.inline)
         } else {
             ScrollView {
@@ -31,11 +31,11 @@ struct CacheLogView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 12)
             }
-            .navigationTitle(tr("Cache Log", "Cache-Log"))
+            .navigationTitle(tr("settings.cache.log.cache_log"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(tr("Clear", "Leeren")) { StreamCacheLog.shared.clear() }
+                    Button(tr("player.queue.clear.9529e8af")) { StreamCacheLog.shared.clear() }
                 }
             }
         }

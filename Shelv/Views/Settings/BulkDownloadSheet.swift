@@ -23,20 +23,20 @@ struct BulkDownloadSheet: View {
                 if let plan {
                     planDetails(plan)
                 } else if isPlanning {
-                    ProgressView(tr("Calculating…", "Berechne…"))
+                    ProgressView(tr("settings.bulk.download.calculating"))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
-            .navigationTitle(tr("Download Everything", "Alles herunterladen"))
+            .navigationTitle(tr("settings.bulk.download.download_everything"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(tr("Cancel", "Abbrechen")) { dismiss() }
+                    Button(tr("downloads.cancel")) { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(tr("Start", "Starten")) {
+                    Button(tr("settings.bulk.download.start")) {
                         guard let plan else { return }
                         downloadStore.enqueueSongs(plan.planned)
                         let plannedIds = Set(plan.planned.map(\.id))
@@ -60,21 +60,21 @@ struct BulkDownloadSheet: View {
         List {
             Section {
                 HStack {
-                    Text(tr("Songs to download", "Songs")).font(.subheadline)
+                    Text(tr("settings.bulk.download.songs_download")).font(.subheadline)
                     Spacer()
                     Text("\(plan.planned.count)")
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
                 }
                 HStack {
-                    Text(tr("Estimated size", "Geschätzte Größe")).font(.subheadline)
+                    Text(tr("settings.bulk.download.estimated_size")).font(.subheadline)
                     Spacer()
                     Text(ByteCountFormatter.string(fromByteCount: plan.totalBytes, countStyle: .file))
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
                 }
                 HStack {
-                    Text(tr("Storage limit", "Limit")).font(.subheadline)
+                    Text(tr("settings.bulk.download.storage_limit")).font(.subheadline)
                     Spacer()
                     Text(ByteCountFormatter.string(fromByteCount: plan.limitBytes, countStyle: .file))
                         .monospacedDigit()
@@ -82,7 +82,7 @@ struct BulkDownloadSheet: View {
                 }
                 if !plan.skipped.isEmpty {
                     HStack {
-                        Text(tr("Skipped (over limit)", "Übersprungen (über Limit)")).font(.subheadline)
+                        Text(tr("settings.bulk.download.skipped_over_limit")).font(.subheadline)
                         Spacer()
                         Text("\(plan.skipped.count)")
                             .monospacedDigit()
@@ -93,27 +93,24 @@ struct BulkDownloadSheet: View {
 
             if plan.isEmpty {
                 Section {
-                    Text(tr(
-                        "Nothing new fits in the configured storage limit.",
-                        "Es passt nichts Neues in das konfigurierte Speicher-Limit."
-                    ))
+                    Text(tr("settings.bulk.download.nothing_new_fits_configured_storage_limit"))
                     .foregroundStyle(.secondary)
                 }
             } else {
-                Section(tr("Order", "Reihenfolge")) {
-                    Label(tr("Frequently played first", "Häufig gespielt zuerst"),
+                Section(tr("settings.bulk.download.order")) {
+                    Label(tr("settings.bulk.download.frequently_played_first"),
                           systemImage: "chart.line.uptrend.xyaxis")
-                    Label(tr("Then recently played", "Dann kürzlich gespielt"),
+                    Label(tr("settings.bulk.download.then_recently_played"),
                           systemImage: "clock.arrow.circlepath")
                     if enableFavorites {
-                        Label(tr("Then favorites", "Dann Favoriten"),
+                        Label(tr("settings.bulk.download.then_favorites"),
                               systemImage: "heart")
                     }
                     if recapEnabled && !recapStore.recapPlaylistIds.isEmpty {
-                        Label(tr("Then recap playlists", "Dann Recap-Playlists"),
+                        Label(tr("settings.bulk.download.then_recap_playlists"),
                               systemImage: "calendar.badge.clock")
                     }
-                    Label(tr("Then alphabetical by artist", "Dann alphabetisch"),
+                    Label(tr("settings.bulk.download.then_alphabetical_by_artist"),
                           systemImage: "textformat")
                 }
                 .labelStyle(.titleAndIcon)

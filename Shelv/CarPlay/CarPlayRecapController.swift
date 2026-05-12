@@ -9,7 +9,7 @@ final class CarPlayRecapController {
 
     init(interfaceController: CPInterfaceController) {
         self.interfaceController = interfaceController
-        let t = CPListTemplate(title: tr("Recap", "Recap"), sections: [])
+        let t = CPListTemplate(title: tr("car.play.car.play.recap.recap"), sections: [])
         t.tabImage = UIImage(systemName: "calendar.badge.clock")
         rootTemplate = t
     }
@@ -53,8 +53,8 @@ final class CarPlayRecapController {
         if entries.isEmpty {
             let empty = CPListItem(
                 text: OfflineModeService.shared.isOffline
-                    ? tr("No offline recaps", "Keine Offline-Recaps")
-                    : tr("No recaps", "Keine Recaps"),
+                    ? tr("car.play.car.play.recap.no_offline_recaps")
+                    : tr("car.play.car.play.recap.no_recaps"),
                 detailText: nil
             )
             rootTemplate.updateSections([CPListSection(items: [empty])])

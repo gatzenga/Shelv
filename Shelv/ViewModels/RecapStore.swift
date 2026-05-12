@@ -180,7 +180,7 @@ class RecapStore: ObservableObject {
             await PlayLogService.shared.cleanupImportRollback()
 
             syncReports = [RecapSyncReport(
-                message: tr("Import finished", "Import abgeschlossen"),
+                message: tr("view.models.recap.import_finished"),
                 isError: false
             )]
             showSyncReport = true
@@ -192,18 +192,12 @@ class RecapStore: ObservableObject {
                 await PlayLogService.shared.cleanupImportRollback()
                 await loadEntries(serverId: serverId)
                 syncReports = [RecapSyncReport(
-                    message: tr(
-                        "Import failed — previous state restored.\n\(importError)",
-                        "Import fehlgeschlagen — vorheriger Zustand wiederhergestellt.\n\(importError)"
-                    ),
+                    message: tr("view.models.recap.import_failed_previous_state_restored_value", String(describing: importError)),
                     isError: true
                 )]
             } catch let rollbackError {
                 syncReports = [RecapSyncReport(
-                    message: tr(
-                        "Import failed and rollback failed. Backup preserved for manual recovery.\nImport: \(importError)\nRollback: \(rollbackError.localizedDescription)",
-                        "Import fehlgeschlagen, Rollback fehlgeschlagen. Backup bleibt erhalten.\nImport: \(importError)\nRollback: \(rollbackError.localizedDescription)"
-                    ),
+                    message: tr("view.models.recap.import_failed_rollback_failed_backup_preserved", String(describing: importError), String(describing: rollbackError.localizedDescription)),
                     isError: true
                 )]
             }
@@ -337,13 +331,13 @@ class RecapStore: ObservableObject {
                         let notFound = expected.filter { !addedIds.contains($0) }
                         for songId in notFound {
                             reports.append(RecapSyncReport(
-                                message: tr("Song not found on server: \(songId)", "Song nicht gefunden: \(songId)"),
+                                message: tr("view.models.recap.song_not_found_server_value", String(describing: songId)),
                                 isError: true
                             ))
                         }
                     }
                     reports.append(RecapSyncReport(
-                        message: tr("\"\(name)\" updated", "\"\(name)\" aktualisiert"),
+                        message: tr("view.models.recap.value_updated", String(describing: name)),
                         isError: false
                     ))
                 } catch {
@@ -407,7 +401,7 @@ class RecapStore: ObservableObject {
 
                     await PlayLogService.shared.registerPlaylist(updatedEntry)
                     reports.append(RecapSyncReport(
-                        message: tr("\"\(name)\" recreated", "\"\(name)\" neu erstellt"),
+                        message: tr("view.models.recap.value_recreated", String(describing: name)),
                         isError: false
                     ))
                 } catch {
@@ -418,7 +412,7 @@ class RecapStore: ObservableObject {
 
         if reports.isEmpty {
             reports.append(RecapSyncReport(
-                message: tr("All playlists up to date", "Alle Playlists aktuell"),
+                message: tr("view.models.recap.playlists_up_date"),
                 isError: false
             ))
         }

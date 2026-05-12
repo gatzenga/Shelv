@@ -14,16 +14,13 @@ struct TranscodingSettingsView: View {
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
     private var infoText: String {
-        tr(
-            "Choose format and bitrate the server should transcode to. \"Original\" requests the source file unchanged. If the server cannot transcode, the original is returned.\n\nTranscoded songs play from a local copy, ensuring stable playback and seamless gapless transitions. The first song may take longer to load.\n\n• The current song is fully downloaded before playback\n• While it plays, the next song pre-fetches in the background\n• Every subsequent song starts instantly\n• Cached files are removed when the next song starts",
-            "Wähle Format und Bitrate die der Server liefern soll. „Original\u{201C} lädt unverändert. Wenn der Server das Format nicht liefert, kommt die Originaldatei zurück.\n\nTranscodierte Songs werden lokal abgespielt – stabile Wiedergabe und nahtlose Gapless-Übergänge. Beim ersten Song kann es zu einer längeren Ladezeit kommen.\n\n• Der aktuelle Song wird vollständig vor der Wiedergabe geladen\n• Währenddessen wird der nächste Song im Hintergrund geladen\n• Ab dem zweiten Song startet die Wiedergabe sofort\n• Gecachte Dateien werden beim Start des nächsten Songs gelöscht"
-        )
+        tr("settings.transcoding.settings.choose_format_bitrate_server_should_transcode")
     }
 
     var body: some View {
         List {
             transcodingSection(
-                title: tr("WiFi", "WLAN"),
+                title: tr("settings.transcoding.settings.wifi"),
                 icon: "wifi",
                 codecBinding: $wifiCodecRaw,
                 bitrateBinding: $wifiBitrate,
@@ -31,7 +28,7 @@ struct TranscodingSettingsView: View {
             )
 
             transcodingSection(
-                title: tr("Cellular", "Mobilfunk"),
+                title: tr("settings.transcoding.settings.cellular"),
                 icon: "antenna.radiowaves.left.and.right",
                 codecBinding: $cellularCodecRaw,
                 bitrateBinding: $cellularBitrate,
@@ -39,7 +36,7 @@ struct TranscodingSettingsView: View {
             )
 
             transcodingSection(
-                title: tr("Downloads", "Downloads"),
+                title: tr("car.play.car.play.library.downloads"),
                 icon: "arrow.down.circle",
                 codecBinding: $downloadCodecRaw,
                 bitrateBinding: $downloadBitrate,
@@ -50,7 +47,7 @@ struct TranscodingSettingsView: View {
                 Button {
                     showInfo = true
                 } label: {
-                    Label(tr("About Transcoding", "Über Transcoding"), systemImage: "info.circle")
+                    Label(tr("settings.transcoding.settings.about_transcoding"), systemImage: "info.circle")
                         .foregroundStyle(accentColor)
                 }
             }
@@ -59,7 +56,7 @@ struct TranscodingSettingsView: View {
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
         }
-        .navigationTitle(tr("Transcoding", "Transcoding"))
+        .navigationTitle(tr("settings.settings.transcoding"))
         .navigationBarTitleDisplayMode(.inline)
         .tint(accentColor)
         .sheet(isPresented: $showInfo) {
@@ -70,11 +67,11 @@ struct TranscodingSettingsView: View {
                         .padding()
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .navigationTitle(tr("Transcoding", "Transcoding"))
+                .navigationTitle(tr("settings.settings.transcoding"))
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .confirmationAction) {
-                        Button(tr("Done", "Fertig")) { showInfo = false }
+                        Button(tr("player.queue.done")) { showInfo = false }
                     }
                 }
             }
@@ -94,7 +91,7 @@ struct TranscodingSettingsView: View {
                     Text(c.label).tag(c.rawValue)
                 }
             } label: {
-                Label { Text(tr("Format", "Format")) } icon: {
+                Label { Text(tr("settings.transcoding.settings.format")) } icon: {
                     Image(systemName: icon).foregroundStyle(accentColor)
                 }
             }
@@ -104,7 +101,7 @@ struct TranscodingSettingsView: View {
                         Text(b.label).tag(b.rawValue)
                     }
                 } label: {
-                    Label { Text(tr("Bitrate", "Bitrate")) } icon: {
+                    Label { Text(tr("settings.transcoding.settings.bitrate")) } icon: {
                         Image(systemName: "speedometer").foregroundStyle(accentColor)
                     }
                 }

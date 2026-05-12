@@ -1,7 +1,5 @@
 import SwiftUI
 
-let appLang: String = Locale.preferredLanguages.first?.hasPrefix("de") == true ? "de" : "en"
-
 extension Notification.Name {
     nonisolated static let recapRegistryUpdated = Notification.Name("shelv.recapRegistryUpdated")
 }
@@ -19,8 +17,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     }
 }
 
-func tr(_ en: String, _ de: String, _ lang: String = appLang) -> String {
-    lang == "de" ? de : en
+func tr(_ key: String, _ arguments: CVarArg...) -> String {
+    let format = NSLocalizedString(key, comment: "")
+    guard !arguments.isEmpty else { return format }
+    return String(format: format, locale: Locale.current, arguments: arguments)
 }
 
 func haptic(_ style: UIImpactFeedbackGenerator.FeedbackStyle = .light) {

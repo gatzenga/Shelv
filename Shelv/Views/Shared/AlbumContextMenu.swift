@@ -29,13 +29,13 @@ struct AlbumContextMenuModifier: ViewModifier {
                     .environmentObject(libraryStore)
                     .tint(AppTheme.color(for: themeColorName))
             }
-            .alert(tr("Delete Downloads?", "Downloads löschen?"), isPresented: $showDeleteAlbumDownloadConfirm) {
-                Button(tr("Delete", "Löschen"), role: .destructive) {
+            .alert(tr("downloads.delete_downloads"), isPresented: $showDeleteAlbumDownloadConfirm) {
+                Button(tr("downloads.delete"), role: .destructive) {
                     DownloadStore.shared.deleteAlbum(album.id)
                 }
-                Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+                Button(tr("downloads.cancel"), role: .cancel) {}
             } message: {
-                Text(tr("The downloads will be removed from this device.", "Die Downloads werden von diesem Gerät entfernt."))
+                Text(tr("downloads.downloads_removed_from_device"))
             }
         } else {
             content.contextMenu { menuItems }
@@ -44,13 +44,13 @@ struct AlbumContextMenuModifier: ViewModifier {
                     .environmentObject(libraryStore)
                     .tint(AppTheme.color(for: themeColorName))
             }
-            .alert(tr("Delete Downloads?", "Downloads löschen?"), isPresented: $showDeleteAlbumDownloadConfirm) {
-                Button(tr("Delete", "Löschen"), role: .destructive) {
+            .alert(tr("downloads.delete_downloads"), isPresented: $showDeleteAlbumDownloadConfirm) {
+                Button(tr("downloads.delete"), role: .destructive) {
                     DownloadStore.shared.deleteAlbum(album.id)
                 }
-                Button(tr("Cancel", "Abbrechen"), role: .cancel) {}
+                Button(tr("downloads.cancel"), role: .cancel) {}
             } message: {
-                Text(tr("The downloads will be removed from this device.", "Die Downloads werden von diesem Gerät entfernt."))
+                Text(tr("downloads.downloads_removed_from_device"))
             }
         }
     }
@@ -63,7 +63,7 @@ struct AlbumContextMenuModifier: ViewModifier {
                 AudioPlayerService.shared.play(songs: songs, startIndex: 0)
             }
         } label: {
-            Label(tr("Play", "Abspielen"), systemImage: "play.fill")
+            Label(tr("car.play.car.play.navigation.play"), systemImage: "play.fill")
         }
 
         Button {
@@ -72,7 +72,7 @@ struct AlbumContextMenuModifier: ViewModifier {
                 AudioPlayerService.shared.playShuffled(songs: songs)
             }
         } label: {
-            Label(tr("Shuffle", "Zufällig"), systemImage: "shuffle")
+            Label(tr("car.play.car.play.navigation.shuffle"), systemImage: "shuffle")
         }
 
         Divider()
@@ -83,7 +83,7 @@ struct AlbumContextMenuModifier: ViewModifier {
                 AudioPlayerService.shared.addPlayNext(songs)
             }
         } label: {
-            Label(tr("Play Next", "Als nächstes"), systemImage: "text.insert")
+            Label(tr("car.play.car.play.queue.play_next"), systemImage: "text.insert")
         }
 
         Button {
@@ -92,7 +92,7 @@ struct AlbumContextMenuModifier: ViewModifier {
                 AudioPlayerService.shared.addToQueue(songs)
             }
         } label: {
-            Label(tr("Add to Queue", "Zur Warteschlange"), systemImage: "text.badge.plus")
+            Label(tr("car.play.car.play.navigation.add_queue"), systemImage: "text.badge.plus")
         }
 
         if !offlineMode.isOffline && (enableFavorites || enablePlaylists) {
@@ -103,8 +103,8 @@ struct AlbumContextMenuModifier: ViewModifier {
                 } label: {
                     Label(
                         libraryStore.isAlbumStarred(album)
-                            ? tr("Unfavorite", "Aus Favoriten entfernen")
-                            : tr("Favorite", "Zu Favoriten"),
+                            ? tr("library.unfavorite")
+                            : tr("library.favorite"),
                         systemImage: libraryStore.isAlbumStarred(album) ? "heart.slash" : "heart"
                     )
                 }
@@ -120,7 +120,7 @@ struct AlbumContextMenuModifier: ViewModifier {
                         }
                     }
                 } label: {
-                    Label(tr("Add to Playlist…", "Zur Playlist hinzufügen…"), systemImage: "music.note.list")
+                    Label(tr("library.album.detail.add_playlist"), systemImage: "music.note.list")
                 }
             }
         }
@@ -143,7 +143,7 @@ struct AlbumContextMenuModifier: ViewModifier {
                 Button {
                     DownloadStore.shared.enqueueAlbum(album)
                 } label: {
-                    Label(tr("Download Album", "Album herunterladen"),
+                    Label(tr("library.download_album"),
                           systemImage: "arrow.down.circle")
                 }
             }
@@ -152,20 +152,20 @@ struct AlbumContextMenuModifier: ViewModifier {
                 Button {
                     DownloadStore.shared.enqueueAlbum(album)
                 } label: {
-                    Label(tr("Download Remaining", "Rest herunterladen"),
+                    Label(tr("library.download_remaining"),
                           systemImage: "arrow.down.circle")
                 }
             }
             Button(role: .destructive) {
                 showDeleteAlbumDownloadConfirm = true
             } label: {
-                Label(tr("Delete Downloads", "Downloads löschen"), systemImage: "arrow.down.circle")
+                Label(tr("downloads.delete_downloads.d9dd6fd8"), systemImage: "arrow.down.circle")
             }
         case .complete:
             Button(role: .destructive) {
                 showDeleteAlbumDownloadConfirm = true
             } label: {
-                Label(tr("Delete Downloads", "Downloads löschen"), systemImage: "arrow.down.circle")
+                Label(tr("downloads.delete_downloads.d9dd6fd8"), systemImage: "arrow.down.circle")
             }
         }
     }
