@@ -40,10 +40,22 @@ final class OfflineModeService: ObservableObject {
 
     func notifyServerError(_ message: String? = nil) {
         guard !isOffline else { return }
+        // Kein Banner, wenn kein Server konfiguriert ist (z.B. beim allerersten App-Start
+        // vor dem Onboarding) — ohne Server gibt es nichts zu kontaktieren.
+        guard SubsonicAPIService.shared.activeServer != nil else { return }
         if let until = bannerCooldownUntil, Date() < until { return }
         bannerCooldownUntil = Date().addingTimeInterval(60)
         lastServerErrorMessage = message
         serverErrorBannerVisible = true
+    }
+
+    /// Wird bei JEDEM erfolgreichen API-Response aufgerufen — blendet den Banner automatisch aus,
+    /// sobald der Server wieder antwortet, ohne dass der User manuell eingreifen muss.
+    func clearServerError() {
+        guard serverErrorBannerVisible || lastServerErrorMessage != nil || bannerCooldownUntil != nil else { return }
+        serverErrorBannerVisible = false
+        lastServerErrorMessage = nil
+        bannerCooldownUntil = nil
     }
 
     func dismissBanner() {

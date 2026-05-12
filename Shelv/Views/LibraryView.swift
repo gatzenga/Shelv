@@ -347,17 +347,12 @@ struct LibraryView: View {
             await withCheckedContinuation { cont in
                 refreshContinuation = cont
                 Task { @MainActor in
-                    let bannerTask = Task {
-                        try? await Task.sleep(for: .seconds(3))
-                        if !Task.isCancelled { offlineMode.notifyServerError() }
-                    }
                     switch currentSegment {
                     case .albums:    await libraryStore.loadAlbums(sortBy: currentSort)
                     case .artists:   await libraryStore.loadArtists()
                     case .favorites: await libraryStore.loadStarred()
                     }
                     await CloudKitSyncService.shared.syncNow()
-                    bannerTask.cancel()
                     if let cont = refreshContinuation {
                         refreshContinuation = nil
                         cont.resume()

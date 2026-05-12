@@ -134,14 +134,9 @@ struct PlaylistsView: View {
                 await withCheckedContinuation { cont in
                     refreshContinuation = cont
                     Task { @MainActor in
-                        let bannerTask = Task {
-                            try? await Task.sleep(for: .seconds(3))
-                            if !Task.isCancelled { offlineMode.notifyServerError() }
-                        }
                         async let reload: Void = libraryStore.loadPlaylists()
                         async let sync:   Void = CloudKitSyncService.shared.syncNow()
                         _ = await (reload, sync)
-                        bannerTask.cancel()
                         if let cont = refreshContinuation {
                             refreshContinuation = nil
                             cont.resume()

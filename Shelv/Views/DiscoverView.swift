@@ -148,14 +148,9 @@ struct DiscoverView: View {
                 await withCheckedContinuation { cont in
                     refreshContinuation = cont
                     Task { @MainActor in
-                        let bannerTask = Task {
-                            try? await Task.sleep(for: .seconds(3))
-                            if !Task.isCancelled { offlineMode.notifyServerError() }
-                        }
                         async let discover: Void = libraryStore.loadDiscover()
                         async let sync:     Void = CloudKitSyncService.shared.syncNow()
                         _ = await (discover, sync)
-                        bannerTask.cancel()
                         if let cont = refreshContinuation {
                             refreshContinuation = nil
                             cont.resume()

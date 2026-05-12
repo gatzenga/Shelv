@@ -344,6 +344,8 @@ class SubsonicAPIService: ObservableObject {
             }
             do {
                 let (data, _) = try await session.data(from: url)
+                // Server hat geantwortet → Banner ausblenden, falls einer aktiv ist.
+                Task { @MainActor in OfflineModeService.shared.clearServerError() }
                 return data
             } catch {
                 if Task.isCancelled || (error as? URLError)?.code == .cancelled {
