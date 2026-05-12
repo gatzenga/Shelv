@@ -15,7 +15,7 @@ struct QueueView: View {
 
     private var totalCount: Int {
         if player.isShuffled {
-            return localAlbum.count
+            return localPlayNext.count + localAlbum.count
         }
         return localPlayNext.count + localAlbum.count + localUserQueue.count
     }
@@ -47,6 +47,30 @@ struct QueueView: View {
                 } else {
                     List {
                         if player.isShuffled {
+                            if !localPlayNext.isEmpty {
+                                Section(tr("Play Next", "Als nächstes")) {
+                                    ForEach(localPlayNext) { song in
+                                        Button {
+                                            guard editMode == .inactive else { return }
+                                            if let idx = localPlayNext.firstIndex(where: { $0.id == song.id }) {
+                                                player.jumpToPlayNext(at: idx)
+                                                dismiss()
+                                            }
+                                        } label: {
+                                            songRow(song)
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                    .onDelete { offsets in
+                                        offsets.sorted(by: >).forEach { player.removeFromPlayNextQueue(at: $0) }
+                                        syncFromPlayer()
+                                    }
+                                    .onMove { from, to in
+                                        localPlayNext.move(fromOffsets: from, toOffset: to)
+                                        player.moveInPlayNextQueue(from: from, to: to)
+                                    }
+                                }
+                            }
                             if !localAlbum.isEmpty {
                                 Section(tr("Shuffled Queue", "Gemischte Warteschlange")) {
                                     ForEach(localAlbum) { song in
