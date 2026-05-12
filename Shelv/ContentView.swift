@@ -24,46 +24,8 @@ struct ContentView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            ZStack {
-                TabView(selection: $selectedTab) {
-                    DiscoverView()
-                        .tabItem { Label(tr("Discover", "Entdecken"), systemImage: "sparkles") }
-                        .tag(0)
-                    LibraryView()
-                        .tabItem {
-                            if offlineMode.isOffline && enableDownloads {
-                                Label(tr("Downloads", "Downloads"), systemImage: "arrow.down.circle.fill")
-                            } else {
-                                Label(tr("Library", "Bibliothek"), systemImage: "books.vertical.fill")
-                            }
-                        }
-                        .tag(1)
-                    if enablePlaylists {
-                        PlaylistsView()
-                            .tabItem { Label(tr("Playlists", "Playlists"), systemImage: "music.note.list") }
-                            .tag(2)
-                    }
-                    SettingsView()
-                        .tabItem { Label(tr("Settings", "Einstellungen"), systemImage: "gearshape.fill") }
-                        .tag(3)
-                }
-                .tint(accentColor)
-
-                PlayerBarOverlay(
-                    isRegularWidth: isRegularWidth,
-                    showPlayer: $showPlayer,
-                    bottomInset: geometry.safeAreaInsets.bottom
-                )
-
-                VStack {
-                    ServerErrorBanner()
-                        .padding(.top, geometry.safeAreaInsets.top + 4)
-                        .animation(.easeInOut, value: offlineMode.serverErrorBannerVisible)
-                    Spacer()
-                }
-                .allowsHitTesting(offlineMode.serverErrorBannerVisible)
-                .ignoresSafeArea(edges: .top)
-            }
+            mainStack(geometry: geometry)
+                .wrappedInGlassContainer()
         }
         .ignoresSafeArea(.keyboard)
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -118,6 +80,63 @@ struct ContentView: View {
             }
         }
     }
+
+    @ViewBuilder
+    private func mainStack(geometry: GeometryProxy) -> some View {
+        ZStack {
+            TabView(selection: $selectedTab) {
+                DiscoverView()
+                    .tabItem { Label(tr("Discover", "Entdecken"), systemImage: "sparkles") }
+                    .tag(0)
+                LibraryView()
+                    .tabItem {
+                        if offlineMode.isOffline && enableDownloads {
+                            Label(tr("Downloads", "Downloads"), systemImage: "arrow.down.circle.fill")
+                        } else {
+                            Label(tr("Library", "Bibliothek"), systemImage: "books.vertical.fill")
+                        }
+                    }
+                    .tag(1)
+                if enablePlaylists {
+                    PlaylistsView()
+                        .tabItem { Label(tr("Playlists", "Playlists"), systemImage: "music.note.list") }
+                        .tag(2)
+                }
+                SettingsView()
+                    .tabItem { Label(tr("Settings", "Einstellungen"), systemImage: "gearshape.fill") }
+                    .tag(3)
+            }
+            .tint(accentColor)
+
+            PlayerBarOverlay(
+                isRegularWidth: isRegularWidth,
+                safeAreaBottom: geometry.safeAreaInsets.bottom,
+                showPlayer: $showPlayer
+            )
+
+            VStack {
+                ServerErrorBanner()
+                    .padding(.top, geometry.safeAreaInsets.top + 4)
+                    .animation(.easeInOut, value: offlineMode.serverErrorBannerVisible)
+                Spacer()
+            }
+            .allowsHitTesting(offlineMode.serverErrorBannerVisible)
+            .ignoresSafeArea(edges: .top)
+        }
+    }
+}
+
+private extension View {
+    /// Wraps the view in a `GlassEffectContainer` on iOS 26+ so multiple `.glassEffect()`-Views
+    /// (Tab-Bar + Player) im selben Glas-System rendern und sich gegenseitig beeinflussen.
+    @ViewBuilder
+    func wrappedInGlassContainer() -> some View {
+        if #available(iOS 26.0, *) {
+            GlassEffectContainer { self }
+        } else {
+            self
+        }
+    }
 }
 
 private struct IdentifiableStrings: Identifiable {
@@ -125,12 +144,21 @@ private struct IdentifiableStrings: Identifiable {
     let ids: [String]
 }
 
-/// Isoliertes PlayerBar-Overlay für iPhone — beobachtet Player ohne ContentView zu invalidieren
+/// Isoliertes PlayerBar-Overlay für iPhone — liest die echte Y-Position der Tab-Bar im Window,
+/// damit der Player IMMER mit gleichem Abstand zur Tab-Bar sitzt, egal ob die Tab-Bar am Rand
+/// klebt oder (wie in iOS 26 mit "Liquid Glass") schwebt.
 private struct PlayerBarOverlay: View {
     let isRegularWidth: Bool
+    let safeAreaBottom: CGFloat
     @Binding var showPlayer: Bool
-    let bottomInset: CGFloat
     @ObservedObject private var player = AudioPlayerService.shared
+    @State private var measuredOffset: CGFloat? = nil
+
+    /// Initialer Schätzwert basiert auf safeArea: Home-Indicator (>20pt) → modernes iPhone (83pt),
+    /// sonst SE-Style (49pt). Wird durch echte UIKit-Messung sofort ersetzt, sobald verfügbar.
+    private var bottomOffset: CGFloat {
+        measuredOffset ?? (safeAreaBottom > 20 ? 83 : 49)
+    }
 
     var body: some View {
         if player.currentSong != nil && !isRegularWidth {
@@ -142,12 +170,57 @@ private struct PlayerBarOverlay: View {
                             showPlayer = true
                         }
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, bottomInset + 49 + 8)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, bottomOffset + 4)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .ignoresSafeArea(edges: .bottom)
+            .onAppear { scheduleMeasurements() }
+            .onChange(of: player.currentSong?.id) { _, _ in scheduleMeasurements() }
+            .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { measureTabBar() }
+            }
         }
+    }
+
+    /// Startet die Messung sofort und wiederholt sie mit Verzögerungen, falls UIKit beim
+    /// ersten Versuch noch nicht fertig layoutet ist (typisch bei App-Cold-Start mit Player).
+    private func scheduleMeasurements() {
+        measureTabBar()
+        DispatchQueue.main.async { measureTabBar() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { measureTabBar() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { measureTabBar() }
+    }
+
+    /// Misst die Distanz vom unteren Bildschirmrand bis zur Oberkante der Tab-Bar.
+    /// Funktioniert sowohl bei klassischen Tab-Bars (kleben am Rand) als auch bei
+    /// schwebenden Tab-Bars (iOS 26 Liquid Glass mit eigenem Bottom-Margin).
+    private func measureTabBar() {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let scene = scenes.first(where: { $0.activationState == .foregroundActive })
+            ?? scenes.first(where: { $0.activationState == .foregroundInactive })
+            ?? scenes.first
+        guard let window = scene?.windows.first(where: { $0.isKeyWindow })
+                ?? scene?.windows.first(where: { !$0.isHidden })
+                ?? scene?.windows.first,
+              let tabBar = findTabBar(in: window.rootViewController)
+                ?? findTabBarInViews(window)
+        else { return }
+
+        let frameInWindow = tabBar.convert(tabBar.bounds, to: window)
+        let distance = window.bounds.height - frameInWindow.minY
+        if distance > 0 { measuredOffset = distance }
+    }
+
+    private func findTabBar(in vc: UIViewController?) -> UITabBar? {
+        guard let vc else { return nil }
+        if let tbc = vc as? UITabBarController { return tbc.tabBar }
+        return vc.children.lazy.compactMap { findTabBar(in: $0) }.first
+    }
+
+    private func findTabBarInViews(_ view: UIView) -> UITabBar? {
+        if let tabBar = view as? UITabBar { return tabBar }
+        return view.subviews.lazy.compactMap { findTabBarInViews($0) }.first
     }
 }
 
