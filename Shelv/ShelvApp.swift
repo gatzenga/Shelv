@@ -17,6 +17,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     }
 }
 
+// Lightweight localization wrapper kept to minimize call-site churn during the
+// migration from hardcoded English/German strings to Localizable.strings keys.
 func tr(_ key: String, _ arguments: CVarArg...) -> String {
     let format = NSLocalizedString(key, comment: "")
     guard !arguments.isEmpty else { return format }
