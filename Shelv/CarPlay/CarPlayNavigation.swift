@@ -99,12 +99,12 @@ enum CarPlayNavigation {
                     presentNowPlaying(on: ic)
                     rebuildActionsAsync()
                 }),
-                ("shuffle",     tr("Shuffle", "Zufällig"), {
+                ("shuffle",     tr("Shuffle", "Zufällig abspielen"), {
                     AudioPlayerService.shared.playShuffled(songs: songs)
                     presentNowPlaying(on: ic)
                     rebuildActionsAsync()
                 }),
-                ("text.insert", tr("Play Next",    "Als Nächstes"), {
+                ("text.insert", tr("Play Next",    "Als nächstes"), {
                     AudioPlayerService.shared.addPlayNext(songs)
                     rebuildActionsAsync()
                 }),
@@ -115,7 +115,7 @@ enum CarPlayNavigation {
             ]
             if enableFavorites {
                 let icon = starred ? "heart.fill" : "heart"
-                let label = starred ? tr("Unfavorite", "Favorit entfernen") : tr("Favorite", "Favorit")
+                let label = starred ? tr("Unfavorite", "Aus Favoriten entfernen") : tr("Favorite", "Zu Favoriten")
                 actions.append((icon, label, {
                     Task { await LibraryStore.shared.toggleStarAlbum(album) }
                 }))
@@ -236,13 +236,13 @@ enum CarPlayNavigation {
 
             var actions: [(icon: String, label: String, handler: () -> Void)] = [
                 ("play.fill",   tr("Play",         "Abspielen"),         playAction({ AudioPlayerService.shared.play(songs: $0, startIndex: 0) }, navigateToPlayer: true)),
-                ("shuffle",     tr("Shuffle",      "Zufällig"),          playAction({ AudioPlayerService.shared.playShuffled(songs: $0) }, navigateToPlayer: true)),
-                ("text.insert", tr("Play Next",    "Als Nächstes"),      playAction({ AudioPlayerService.shared.addPlayNext($0) })),
+                ("shuffle",     tr("Shuffle",      "Zufällig abspielen"),          playAction({ AudioPlayerService.shared.playShuffled(songs: $0) }, navigateToPlayer: true)),
+                ("text.insert", tr("Play Next",    "Als nächstes"),      playAction({ AudioPlayerService.shared.addPlayNext($0) })),
                 ("text.append", tr("Add to Queue", "Zur Warteschlange"), playAction({ AudioPlayerService.shared.addToQueue($0) })),
             ]
             if enableFavorites {
                 let icon = starred ? "heart.fill" : "heart"
-                let label = starred ? tr("Unfavorite", "Favorit entfernen") : tr("Favorite", "Favorit")
+                let label = starred ? tr("Unfavorite", "Aus Favoriten entfernen") : tr("Favorite", "Zu Favoriten")
                 actions.append((icon, label, {
                     Task { await LibraryStore.shared.toggleStarArtist(artist) }
                 }))
@@ -345,12 +345,12 @@ enum CarPlayNavigation {
                     presentNowPlaying(on: ic)
                     rebuildActionsAsync()
                 }),
-                ("shuffle",     tr("Shuffle", "Zufällig"), {
+                ("shuffle",     tr("Shuffle", "Zufällig abspielen"), {
                     AudioPlayerService.shared.playShuffled(songs: songs)
                     presentNowPlaying(on: ic)
                     rebuildActionsAsync()
                 }),
-                ("text.insert", tr("Play Next",    "Als Nächstes"), {
+                ("text.insert", tr("Play Next",    "Als nächstes"), {
                     AudioPlayerService.shared.addPlayNext(songs)
                     rebuildActionsAsync()
                 }),

@@ -268,11 +268,11 @@ struct SearchView: View {
                                         } label: { Label(tr("Play", "Abspielen"), systemImage: "play.fill") }
                                         Button {
                                             player.addPlayNext(song)
-                                            currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
+                                            currentToast = ShelveToast(message: tr("Plays Next", "Als nächstes"))
                                         } label: { Label(tr("Play Next", "Als nächstes"), systemImage: "text.insert") }
                                         Button {
                                             player.addToQueue(song)
-                                            currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+                                            currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange"))
                                         } label: { Label(tr("Add to Queue", "Zur Warteschlange"), systemImage: "text.badge.plus") }
                                         if !offlineMode.isOffline && (enableFavorites || enablePlaylists) {
                                             Divider()
@@ -301,12 +301,12 @@ struct SearchView: View {
                                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                         Button {
                                             haptic(); player.addToQueue(song)
-                                            currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+                                            currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange"))
                                         } label: { Image(systemName: "text.badge.plus") }
                                         .tint(accentColor)
                                         Button {
                                             haptic(); player.addPlayNext(song)
-                                            currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
+                                            currentToast = ShelveToast(message: tr("Plays Next", "Als nächstes"))
                                         } label: { Image(systemName: "text.insert") }
                                         .tint(.orange)
                                     }
@@ -385,7 +385,7 @@ struct SearchView: View {
                                                 starred: nil, suffix: nil, bitRate: nil
                                             )
                                             haptic(); player.addToQueue(song)
-                                            currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+                                            currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange"))
                                         } label: { Image(systemName: "text.badge.plus") }
                                         .tint(accentColor)
                                         Button {
@@ -398,7 +398,7 @@ struct SearchView: View {
                                                 starred: nil, suffix: nil, bitRate: nil
                                             )
                                             haptic(); player.addPlayNext(song)
-                                            currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
+                                            currentToast = ShelveToast(message: tr("Plays Next", "Als nächstes"))
                                         } label: { Image(systemName: "text.insert") }
                                         .tint(.orange)
                                     }
@@ -520,12 +520,12 @@ struct SearchView: View {
                                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                         Button {
                                             haptic(); player.addToQueue(song)
-                                            currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+                                            currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange"))
                                         } label: { Image(systemName: "text.badge.plus") }
                                         .tint(accentColor)
                                         Button {
                                             haptic(); player.addPlayNext(song)
-                                            currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
+                                            currentToast = ShelveToast(message: tr("Plays Next", "Als nächstes"))
                                         } label: { Image(systemName: "text.insert") }
                                         .tint(.orange)
                                     }
@@ -608,7 +608,7 @@ struct SearchView: View {
             let songs = await libraryStore.fetchAllSongs(for: artist)
             guard !songs.isEmpty else { return }
             player.addToQueue(songs)
-            currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+            currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange"))
         }
     }
 
@@ -617,7 +617,7 @@ struct SearchView: View {
             let songs = await libraryStore.fetchAllSongs(for: artist)
             guard !songs.isEmpty else { return }
             player.addPlayNext(songs)
-            currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
+            currentToast = ShelveToast(message: tr("Plays Next", "Als nächstes"))
         }
     }
 
@@ -627,7 +627,7 @@ struct SearchView: View {
                 let songs = try await libraryStore.fetchAlbumSongs(album)
                 guard !songs.isEmpty else { return }
                 player.addToQueue(songs)
-                currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+                currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange"))
             } catch {
                 errorMessage = error.localizedDescription
                 showError = true
@@ -641,7 +641,7 @@ struct SearchView: View {
                 let songs = try await libraryStore.fetchAlbumSongs(album)
                 guard !songs.isEmpty else { return }
                 player.addPlayNext(songs)
-                currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
+                currentToast = ShelveToast(message: tr("Plays Next", "Als nächstes"))
             } catch {
                 errorMessage = error.localizedDescription
                 showError = true

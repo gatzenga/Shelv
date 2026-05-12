@@ -198,7 +198,7 @@ struct ArtistDetailView: View {
                                 player.playShuffled(songs: songs)
                             }
                         } label: {
-                            Label(tr("Shuffle", "Zufällig"), systemImage: "shuffle")
+                            Label(tr("Shuffle", "Zufällig abspielen"), systemImage: "shuffle")
                                 .labelStyle(.titleAndIcon)
                                 .font(.body).bold()
                                 .foregroundStyle(accentColor)
@@ -355,7 +355,7 @@ struct ArtistDetailView: View {
             guard !songs.isEmpty else { return }
             await MainActor.run {
                 player.addToQueue(songs)
-                currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+                currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange"))
             }
         }
     }
@@ -366,7 +366,7 @@ struct ArtistDetailView: View {
             guard !songs.isEmpty else { return }
             await MainActor.run {
                 player.addPlayNext(songs)
-                currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
+                currentToast = ShelveToast(message: tr("Plays Next", "Als nächstes"))
             }
         }
     }
@@ -438,7 +438,7 @@ struct ArtistDetailView: View {
                     let songs = await fetchAllSongs(from: albums)
                     guard !songs.isEmpty else { return }
                     player.addPlayNext(songs)
-                    currentToast = ShelveToast(message: tr("Added as next", "Als nächstes"))
+                    currentToast = ShelveToast(message: tr("Plays Next", "Als nächstes"))
                 }
             } label: {
                 Label(tr("Play Next", "Als nächstes"), systemImage: "text.insert")
@@ -452,7 +452,7 @@ struct ArtistDetailView: View {
                     let songs = await fetchAllSongs(from: albums)
                     guard !songs.isEmpty else { return }
                     player.addToQueue(songs)
-                    currentToast = ShelveToast(message: tr("Added to queue", "Zur Warteschlange"))
+                    currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange"))
                 }
             } label: {
                 Label(tr("Add to Queue", "Zur Warteschlange"), systemImage: "text.badge.plus")

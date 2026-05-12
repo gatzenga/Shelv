@@ -285,7 +285,7 @@ struct SettingsView: View {
                         .presentationDetents([.medium, .large])
                     }
                     HStack {
-                        Label { Text(tr("Cache Size", "Cache-Größe")) } icon: {
+                        Label { Text(tr("Cache Size", "Cache-Grösse")) } icon: {
                             Image(systemName: "internaldrive").foregroundStyle(accentColor)
                         }
                         Spacer()
@@ -727,7 +727,7 @@ private struct DownloadStatsCell: View {
                         }
                     }
                     HStack {
-                        Text(tr("Songs", "Songs"))
+                        Text(tr("Songs", "Titel"))
                         Spacer()
                         Text("\(stats.songCount)").foregroundStyle(.secondary).monospacedDigit()
                     }

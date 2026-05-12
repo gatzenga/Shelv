@@ -43,7 +43,7 @@ actor ImageCacheService {
                 mem.setObject(img, forKey: key as NSString, cost: cost)
                 return img
             }
-            // Fallback: gleiche Cover-ID, andere gecachte Größe
+            // Fallback: gleiche Cover-ID, andere gecachte Grösse
             guard let lastUnderscore = key.lastIndex(of: "_") else { return nil }
             let idPrefix = String(key[key.startIndex..<lastUnderscore]) + "_"
             let fallbackSizes = [300, 600, 200, 150, 120, 100, 80, 50]

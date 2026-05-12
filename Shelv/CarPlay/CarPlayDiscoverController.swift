@@ -126,8 +126,8 @@ final class CarPlayDiscoverController {
 
         // 4 Kategorien als Cover-Rows, kein Section-Header
         let categories: [(String, [Album])] = [
-            (tr("Recently Added",    "Zuletzt hinzugefügt"), LibraryStore.shared.recentlyAdded),
-            (tr("Recently Played",   "Zuletzt gespielt"),    LibraryStore.shared.recentlyPlayed),
+            (tr("Recently Added",    "Kürzlich hinzugefügt"), LibraryStore.shared.recentlyAdded),
+            (tr("Recently Played",   "Kürzlich gespielt"),    LibraryStore.shared.recentlyPlayed),
             (tr("Frequently Played", "Häufig gespielt"),     LibraryStore.shared.frequentlyPlayed),
             (tr("Random",            "Zufällig"),            LibraryStore.shared.randomAlbums),
         ]

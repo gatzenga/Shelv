@@ -28,7 +28,7 @@ struct PlayerBarView: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 if player.showBufferingIndicator {
-                    Text(tr("Loading...", "Lädt..."))
+                    Text(tr("Loading…", "Wird geladen…"))
                         .font(titleFont).bold()
                         .foregroundStyle(.orange)
                         .lineLimit(1)

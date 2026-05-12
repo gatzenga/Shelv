@@ -87,7 +87,7 @@ struct RecapDetailView: View {
                                 Button {
                                     player.playShuffled(songs: allSongs)
                                 } label: {
-                                    Label(tr("Shuffle", "Zufällig"), systemImage: "shuffle")
+                                    Label(tr("Shuffle", "Zufällig abspielen"), systemImage: "shuffle")
                                         .font(.body).bold()
                                         .foregroundStyle(accentColor)
                                         .frame(maxWidth: .infinity)
@@ -120,7 +120,7 @@ struct RecapDetailView: View {
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                 Button {
                                     haptic(); player.addToQueue(songEntry.song)
-                                    currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+                                    currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange"))
                                 } label: {
                                     Image(systemName: "text.badge.plus")
                                 }
@@ -128,7 +128,7 @@ struct RecapDetailView: View {
 
                                 Button {
                                     haptic(); player.addPlayNext(songEntry.song)
-                                    currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
+                                    currentToast = ShelveToast(message: tr("Plays Next", "Als nächstes"))
                                 } label: {
                                     Image(systemName: "text.insert")
                                 }
@@ -180,7 +180,7 @@ struct RecapDetailView: View {
                     Button {
                         player.playShuffled(songs: allSongs)
                     } label: {
-                        Label(tr("Shuffle", "Zufällig"), systemImage: "shuffle")
+                        Label(tr("Shuffle", "Zufällig abspielen"), systemImage: "shuffle")
                     }
                     .disabled(songs.isEmpty)
 
@@ -188,7 +188,7 @@ struct RecapDetailView: View {
 
                     Button {
                         player.addPlayNext(allSongs)
-                        currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
+                        currentToast = ShelveToast(message: tr("Plays Next", "Als nächstes"))
                     } label: {
                         Label(tr("Play Next", "Als nächstes"), systemImage: "text.insert")
                     }
@@ -196,7 +196,7 @@ struct RecapDetailView: View {
 
                     Button {
                         player.addToQueue(allSongs)
-                        currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+                        currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange"))
                     } label: {
                         Label(tr("Add to Queue", "Zur Warteschlange"), systemImage: "text.badge.plus")
                     }

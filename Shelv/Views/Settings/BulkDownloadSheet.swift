@@ -67,7 +67,7 @@ struct BulkDownloadSheet: View {
                         .foregroundStyle(.secondary)
                 }
                 HStack {
-                    Text(tr("Estimated size", "Geschätzte Größe")).font(.subheadline)
+                    Text(tr("Estimated size", "Geschätzte Grösse")).font(.subheadline)
                     Spacer()
                     Text(ByteCountFormatter.string(fromByteCount: plan.totalBytes, countStyle: .file))
                         .monospacedDigit()

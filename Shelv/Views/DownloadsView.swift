@@ -340,7 +340,7 @@ struct DownloadedAlbumDetailView: View {
                             let songs = (currentAlbum?.songs ?? album.songs).map { $0.asSong() }
                             player.playShuffled(songs: songs)
                         } label: {
-                            Label(tr("Shuffle", "Zufällig"), systemImage: "shuffle")
+                            Label(tr("Shuffle", "Zufällig abspielen"), systemImage: "shuffle")
                                 .font(.body).bold().foregroundStyle(accentColor)
                                 .frame(maxWidth: .infinity).padding(.vertical, 12)
                                 .background(accentColor.opacity(0.15))

@@ -291,7 +291,7 @@ final class CarPlayLibraryController {
             var letterItems: [CPListItem] = []
             for artist in (grouped[letter] ?? []).prefix(cap) {
                 let count = counts[artist.id] ?? 0
-                let item = artistListItem(artist, subtitle: "\(count) \(tr("albums", "Alben"))") { [weak self] _, c in
+                let item = artistListItem(artist, subtitle: "\(count) \(tr("Albums", "Alben"))") { [weak self] _, c in
                     c()
                     guard let self else { return }
                     CarPlayNavigation.openArtist(artist, from: self.interfaceController)
@@ -422,7 +422,7 @@ final class CarPlayLibraryController {
             var items: [CPListItem] = []
             for artist in artists.prefix(kPreviewCount) {
                 let count = counts[artist.id] ?? 0
-                let item = artistListItem(artist, subtitle: "\(count) \(tr("albums", "Alben"))") { [weak self] _, c in
+                let item = artistListItem(artist, subtitle: "\(count) \(tr("Albums", "Alben"))") { [weak self] _, c in
                     c()
                     guard let self else { return }
                     CarPlayNavigation.openArtist(artist, from: self.interfaceController)
@@ -531,7 +531,7 @@ final class CarPlayLibraryController {
             var coverMap: [String: [CPListItem]] = [:]
             let items = artists.map { artist -> CPListItem in
                 let count = counts[artist.id] ?? 0
-                let item = artistListItem(artist, subtitle: "\(count) \(tr("albums", "Alben"))") { [weak self] _, c in
+                let item = artistListItem(artist, subtitle: "\(count) \(tr("Albums", "Alben"))") { [weak self] _, c in
                     c()
                     guard let self else { return }
                     CarPlayNavigation.openArtist(artist, from: self.interfaceController)

@@ -63,7 +63,7 @@ struct DownloadProgressRing: View {
     }
 }
 
-/// Durchgestrichenes Download-Icon — Diagonale per Path, skaliert mit Symbol-Größe.
+/// Durchgestrichenes Download-Icon — Diagonale per Path, skaliert mit Symbol-Grösse.
 struct DeleteDownloadIcon: View {
     /// Wenn gesetzt, wird Image+Strich explizit in dieser Farbe gezeichnet
     /// (notwendig für Context-Menu-Items mit role: .destructive, weil Label-

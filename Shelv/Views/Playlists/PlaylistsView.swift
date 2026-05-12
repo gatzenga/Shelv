@@ -66,7 +66,7 @@ struct PlaylistsView: View {
                                                let songs = loaded.songs, !songs.isEmpty {
                                                 await MainActor.run {
                                                     haptic(); player.addToQueue(songs)
-                                                    currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+                                                    currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange"))
                                                 }
                                             }
                                         }
@@ -78,7 +78,7 @@ struct PlaylistsView: View {
                                                let songs = loaded.songs, !songs.isEmpty {
                                                 await MainActor.run {
                                                     haptic(); player.addPlayNext(songs)
-                                                    currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
+                                                    currentToast = ShelveToast(message: tr("Plays Next", "Als nächstes"))
                                                 }
                                             }
                                         }
@@ -208,7 +208,7 @@ struct PlaylistsView: View {
                     await MainActor.run { player.playShuffled(songs: songs) }
                 }
             }
-        } label: { Label(tr("Shuffle", "Zufällig"), systemImage: "shuffle") }
+        } label: { Label(tr("Shuffle", "Zufällig abspielen"), systemImage: "shuffle") }
 
         Divider()
 
@@ -218,7 +218,7 @@ struct PlaylistsView: View {
                    let songs = loaded.songs, !songs.isEmpty {
                     await MainActor.run {
                         player.addPlayNext(songs)
-                        currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
+                        currentToast = ShelveToast(message: tr("Plays Next", "Als nächstes"))
                     }
                 }
             }
@@ -230,7 +230,7 @@ struct PlaylistsView: View {
                    let songs = loaded.songs, !songs.isEmpty {
                     await MainActor.run {
                         player.addToQueue(songs)
-                        currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+                        currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange"))
                     }
                 }
             }

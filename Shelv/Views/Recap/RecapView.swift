@@ -310,7 +310,7 @@ struct RecapView: View {
               let songs = loaded.songs, !songs.isEmpty else { return }
         await MainActor.run {
             AudioPlayerService.shared.addToQueue(songs)
-            currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange hinzugefügt"))
+            currentToast = ShelveToast(message: tr("Added to Queue", "Zur Warteschlange"))
         }
     }
 
@@ -319,7 +319,7 @@ struct RecapView: View {
               let songs = loaded.songs, !songs.isEmpty else { return }
         await MainActor.run {
             AudioPlayerService.shared.addPlayNext(songs)
-            currentToast = ShelveToast(message: tr("Plays Next", "Wird als nächstes gespielt"))
+            currentToast = ShelveToast(message: tr("Plays Next", "Als nächstes"))
         }
     }
 

@@ -72,7 +72,7 @@ struct AlbumContextMenuModifier: ViewModifier {
                 AudioPlayerService.shared.playShuffled(songs: songs)
             }
         } label: {
-            Label(tr("Shuffle", "Zufällig"), systemImage: "shuffle")
+            Label(tr("Shuffle", "Zufällig abspielen"), systemImage: "shuffle")
         }
 
         Divider()
