@@ -349,3 +349,5 @@
 "missing_songs_format" = "Fehlende Songs (%d)";
 "extra_songs_format" = "Zusätzliche Songs (%d)";
 "failed_count_format" = "%d fehlgeschlagen";
+"downloading" = "Laden";
+"downloading_lyrics" = "Texte laden";
