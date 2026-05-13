@@ -12,7 +12,7 @@ extension Notification.Name {
 
 // MARK: - DownloadJob
 
-private struct DownloadJob {
+private struct DownloadJob: Codable {
     let song: Song
     let serverId: String
     var downloadURL: URL
@@ -106,8 +106,36 @@ actor DownloadService {
             cfg.sessionSendsLaunchEvents = true
             cfg.allowsCellularAccess = true
             cfg.httpMaximumConnectionsPerHost = maxConcurrent
-            session = URLSession(configuration: cfg, delegate: coordinator, delegateQueue: nil)
+            let s = URLSession(configuration: cfg, delegate: coordinator, delegateQueue: nil)
+            session = s
+            s.getAllTasks { [weak self] tasks in
+                Task { await self?.restoreInflightTasks(tasks) }
+            }
         }
+    }
+
+    private func restoreInflightTasks(_ tasks: [URLSessionTask]) {
+        for task in tasks {
+            guard let downloadTask = task as? URLSessionDownloadTask,
+                  let desc = downloadTask.taskDescription,
+                  let job = decodeJob(desc) else { continue }
+            let key = Self.key(songId: job.song.id, serverId: job.serverId)
+            guard inflightJobs.values.contains(where: { Self.key(songId: $0.song.id, serverId: $0.serverId) == key }) == false else { continue }
+            inflightJobs[downloadTask.taskIdentifier] = job
+            jobKeyByTask[downloadTask.taskIdentifier] = key
+            publishProgress(key: key, value: 0)
+            stateSubject.send((key, .downloading(progress: 0)))
+        }
+    }
+
+    private func encodeJob(_ job: DownloadJob) -> String? {
+        guard let data = try? JSONEncoder().encode(job) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    private func decodeJob(_ string: String) -> DownloadJob? {
+        guard let data = string.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode(DownloadJob.self, from: data)
     }
 
     // MARK: - Enqueueing
@@ -547,11 +575,12 @@ actor DownloadService {
 
     private func startNextJobs() {
         guard let session else { return }
-        while inflightJobs.count < effectiveMaxConcurrent, !pendingJobs.isEmpty {
+        while !pendingJobs.isEmpty {
             let job = pendingJobs.removeFirst()
             let jobKey = Self.key(songId: job.song.id, serverId: job.serverId)
             pendingJobKeys.remove(jobKey)
             let task = session.downloadTask(with: job.downloadURL)
+            if let desc = encodeJob(job) { task.taskDescription = desc }
             inflightJobs[task.taskIdentifier] = job
             jobKeyByTask[task.taskIdentifier] = jobKey
             let initialProgress: Double = job.requestedFormat != nil ? -1 : 0
@@ -568,13 +597,18 @@ actor DownloadService {
         stateSubject.send((key, .downloading(progress: p)))
     }
 
-    func handleCompletion(taskIdentifier: Int, tempURL: URL, byteSize: Int64, mimeType: String?) async {
-        guard let job = inflightJobs[taskIdentifier] else {
+    func handleCompletion(taskIdentifier: Int, tempURL: URL, byteSize: Int64, mimeType: String?, taskDescription: String?) async {
+        let job: DownloadJob
+        if let existing = inflightJobs[taskIdentifier] {
+            job = existing
+            inflightJobs.removeValue(forKey: taskIdentifier)
+            jobKeyByTask.removeValue(forKey: taskIdentifier)
+        } else if let desc = taskDescription, let decoded = decodeJob(desc) {
+            job = decoded
+        } else {
             try? FileManager.default.removeItem(at: tempURL)
             return
         }
-        inflightJobs.removeValue(forKey: taskIdentifier)
-        jobKeyByTask.removeValue(forKey: taskIdentifier)
 
         let key = Self.key(songId: job.song.id, serverId: job.serverId)
         inCompletionJobs[key] = job
@@ -676,12 +710,18 @@ actor DownloadService {
         startNextJobs()
     }
 
-    func handleError(taskIdentifier: Int, error: Error?) async {
-        guard let job = inflightJobs.removeValue(forKey: taskIdentifier) else {
+    func handleError(taskIdentifier: Int, error: Error?, taskDescription: String?) async {
+        let job: DownloadJob
+        if let existing = inflightJobs.removeValue(forKey: taskIdentifier) {
+            job = existing
+            jobKeyByTask.removeValue(forKey: taskIdentifier)
+        } else if let desc = taskDescription, let decoded = decodeJob(desc) {
+            job = decoded
+            jobKeyByTask.removeValue(forKey: taskIdentifier)
+        } else {
             jobKeyByTask.removeValue(forKey: taskIdentifier)
             return
         }
-        jobKeyByTask.removeValue(forKey: taskIdentifier)
         await retryOrFail(job: job, error: error ?? NSError(domain: "DownloadService", code: 0))
     }
 
@@ -722,8 +762,34 @@ actor DownloadService {
     // MARK: - Batch Tracking
 
     private func incrementBatchTotal(by n: Int) {
+        let wasIdle = batchTotal == 0
         batchTotal += n
         publishBatch()
+        if wasIdle {
+            Task {
+                await BackgroundTaskService.shared.runWithBackgroundTask(
+                    identifier: BackgroundTaskService.downloadIdentifier,
+                    title: String(localized: "downloading")
+                ) { progress, isCancelled in
+                    await self.waitForBatchCompletion(progress: progress, isCancelled: isCancelled)
+                }
+            }
+        }
+    }
+
+    private func waitForBatchCompletion(
+        progress: Progress,
+        isCancelled: @escaping () -> Bool
+    ) async {
+        while batchTotal > 0 && !isCancelled() {
+            let completed = batchCompleted + batchFailed
+            let total = batchTotal
+            if total > 0 {
+                progress.completedUnitCount = Int64(Double(completed) / Double(total) * 100)
+            }
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+        }
+        progress.completedUnitCount = 100
     }
 
     private func incrementBatchCompleted() {
@@ -877,8 +943,9 @@ private final class DownloadSessionCoordinator: NSObject, URLSessionDownloadDele
         }
         let bytes = (try? FileManager.default.attributesOfItem(atPath: safeURL.path)[.size] as? NSNumber)?.int64Value ?? 0
         let mime = (downloadTask.response as? HTTPURLResponse)?.mimeType
+        let desc = downloadTask.taskDescription
         Task { [weak service] in
-            await service?.handleCompletion(taskIdentifier: id, tempURL: safeURL, byteSize: bytes, mimeType: mime)
+            await service?.handleCompletion(taskIdentifier: id, tempURL: safeURL, byteSize: bytes, mimeType: mime, taskDescription: desc)
         }
     }
 
@@ -887,8 +954,9 @@ private final class DownloadSessionCoordinator: NSObject, URLSessionDownloadDele
                     didCompleteWithError error: Error?) {
         guard error != nil else { return }
         let id = task.taskIdentifier
+        let desc = task.taskDescription
         Task { [weak service] in
-            await service?.handleError(taskIdentifier: id, error: error)
+            await service?.handleError(taskIdentifier: id, error: error, taskDescription: desc)
         }
     }
 
