@@ -48,79 +48,99 @@ class LyricsStore: ObservableObject {
         downloadTotal = 0
         currentDownloadServerId = serverId
 
+        Task {
+            await BackgroundTaskService.shared.runWithBackgroundTask(
+                identifier: BackgroundTaskService.lyricsIdentifier,
+                title: String(localized: "downloading_lyrics")
+            ) { [weak self] progress, isCancelled in
+                await self?.runBulkDownloadWork(
+                    serverId: serverId,
+                    progress: progress,
+                    isCancelled: isCancelled
+                )
+            }
+        }
+    }
+
+    private func runBulkDownloadWork(
+        serverId: String,
+        progress: Progress,
+        isCancelled: @escaping () -> Bool
+    ) async {
+        defer {
+            Task { @MainActor [weak self] in
+                self?.isDownloading = false
+                self?.refreshDbSize()
+                Task { await self?.refreshFetchedCount(serverId: serverId) }
+            }
+        }
+
         let api = SubsonicAPIService.shared
         let svc = LyricsService.shared
 
-        downloadTask = Task.detached(priority: .utility) { [weak self] in
-            defer {
-                DispatchQueue.main.async { [weak self] in
-                    self?.isDownloading = false
-                    self?.refreshDbSize()
-                    Task { await self?.refreshFetchedCount(serverId: serverId) }
+        var albums: [Album] = []
+        var offset = 0
+        let pageSize = 500
+        while true {
+            guard !isCancelled() else { return }
+            guard let page = try? await api.getAllAlbums(size: pageSize, offset: offset) else { break }
+            albums.append(contentsOf: page)
+            if page.count < pageSize { break }
+            offset += pageSize
+        }
+        guard !isCancelled() else { return }
+
+        let allSongs: [Song] = await withTaskGroup(of: [Song].self) { group -> [Song] in
+            let maxConcurrent = 10
+            var iterator = albums.makeIterator()
+            var active = 0
+            while active < maxConcurrent, let album = iterator.next() {
+                group.addTask { (try? await api.getAlbum(id: album.id))?.song ?? [] }
+                active += 1
+            }
+            var collected: [Song] = []
+            while let songs = await group.next() {
+                collected.append(contentsOf: songs)
+                if let next = iterator.next() {
+                    group.addTask { (try? await api.getAlbum(id: next.id))?.song ?? [] }
                 }
             }
+            return collected
+        }
+        guard !isCancelled() else { return }
 
-            // Alben direkt via API holen (unabhängig vom LibraryStore-Cache)
-            var albums: [Album] = []
-            var offset = 0
-            let pageSize = 500
-            while true {
-                guard !Task.isCancelled else { return }
-                guard let page = try? await api.getAllAlbums(size: pageSize, offset: offset) else { break }
-                albums.append(contentsOf: page)
-                if page.count < pageSize { break }
-                offset += pageSize
+        let totalCount = allSongs.count
+        await MainActor.run { [weak self] in
+            self?.downloadTotal = totalCount
+            progress.totalUnitCount = Int64(totalCount)
+        }
+
+        await withTaskGroup(of: Void.self) { group in
+            let maxConcurrent = 5
+            var iterator = allSongs.makeIterator()
+            var active = 0
+            while active < maxConcurrent, let song = iterator.next() {
+                group.addTask { _ = await svc.fetchAndSave(song: song, serverId: serverId) }
+                active += 1
             }
-            guard !Task.isCancelled else { return }
-
-            let allSongs: [Song] = await withTaskGroup(of: [Song].self) { group -> [Song] in
-                let maxConcurrent = 10
-                var iterator = albums.makeIterator()
-                var active = 0
-                while active < maxConcurrent, let album = iterator.next() {
-                    group.addTask { (try? await api.getAlbum(id: album.id))?.song ?? [] }
-                    active += 1
+            var fetched = 0
+            var lastPublished = Date.distantPast
+            while await group.next() != nil {
+                if isCancelled() { group.cancelAll(); return }
+                fetched += 1
+                progress.completedUnitCount = Int64(fetched)
+                let now = Date()
+                if now.timeIntervalSince(lastPublished) >= 0.5 {
+                    lastPublished = now
+                    let f = fetched
+                    await MainActor.run { [weak self] in self?.downloadFetched = f }
                 }
-                var collected: [Song] = []
-                while let songs = await group.next() {
-                    collected.append(contentsOf: songs)
-                    if let next = iterator.next() {
-                        group.addTask { (try? await api.getAlbum(id: next.id))?.song ?? [] }
-                    }
+                if let next = iterator.next() {
+                    group.addTask { _ = await svc.fetchAndSave(song: next, serverId: serverId) }
                 }
-                return collected
             }
-            guard !Task.isCancelled else { return }
-
-            let totalCount = allSongs.count
-            await MainActor.run { [weak self] in self?.downloadTotal = totalCount }
-
-            await withTaskGroup(of: Void.self) { group in
-                let maxConcurrent = 5
-                var iterator = allSongs.makeIterator()
-                var active = 0
-                while active < maxConcurrent, let song = iterator.next() {
-                    group.addTask { _ = await svc.fetchAndSave(song: song, serverId: serverId) }
-                    active += 1
-                }
-                var fetched = 0
-                var lastPublished = Date.distantPast
-                while await group.next() != nil {
-                    if Task.isCancelled { group.cancelAll(); return }
-                    fetched += 1
-                    let now = Date()
-                    if now.timeIntervalSince(lastPublished) >= 0.5 {
-                        lastPublished = now
-                        let f = fetched
-                        await MainActor.run { [weak self] in self?.downloadFetched = f }
-                    }
-                    if let next = iterator.next() {
-                        group.addTask { _ = await svc.fetchAndSave(song: next, serverId: serverId) }
-                    }
-                }
-                let finalCount = fetched
-                await MainActor.run { [weak self] in self?.downloadFetched = finalCount }
-            }
+            let finalCount = fetched
+            await MainActor.run { [weak self] in self?.downloadFetched = finalCount }
         }
     }
 
@@ -128,6 +148,11 @@ class LyricsStore: ObservableObject {
         downloadTask?.cancel()
         downloadTask = nil
         isDownloading = false
+        Task {
+            await BackgroundTaskService.shared.cancelTask(
+                identifier: BackgroundTaskService.lyricsIdentifier
+            )
+        }
         if let sid = currentDownloadServerId {
             Task { await self.refreshFetchedCount(serverId: sid) }
         }
