@@ -1,6 +1,6 @@
 import Foundation
 
-enum TranscodingCodec: String, CaseIterable, Identifiable {
+enum TranscodingCodec: String, CaseIterable, Identifiable, Codable {
     case raw, opus, mp3, aac
     var id: String { rawValue }
     var label: String {
