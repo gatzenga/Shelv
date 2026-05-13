@@ -69,12 +69,13 @@ class LibraryStore: ObservableObject {
             async let added    = api.getRecentlyAdded(size: 20)
             async let played   = api.getRecentlyPlayed(size: 20)
             async let frequent = api.getFrequentlyPlayed(size: 20)
-            async let random   = api.getAlbumList(type: "random", size: 20)
-            let (a, p, f, r) = try await (added, played, frequent, random)
+            let (a, p, f) = try await (added, played, frequent)
             recentlyAdded    = a
             recentlyPlayed   = p
             frequentlyPlayed = f
-            randomAlbums     = r
+            if randomAlbums.isEmpty {
+                randomAlbums = try await api.getAlbumList(type: "random", size: 20)
+            }
         } catch {
             if !(error is CancellationError) { errorMessage = error.localizedDescription }
         }

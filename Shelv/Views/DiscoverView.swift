@@ -149,8 +149,9 @@ struct DiscoverView: View {
                     refreshContinuation = cont
                     Task { @MainActor in
                         async let discover: Void = libraryStore.loadDiscover()
+                        async let random:   Void = libraryStore.refreshRandomAlbums()
                         async let sync:     Void = CloudKitSyncService.shared.syncNow()
-                        _ = await (discover, sync)
+                        _ = await (discover, random, sync)
                         if let cont = refreshContinuation {
                             refreshContinuation = nil
                             cont.resume()
