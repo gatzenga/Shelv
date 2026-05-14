@@ -49,9 +49,13 @@ struct PlaybackSettingsView: View {
                 }
                 .tint(accentColor)
                 if replayGainEnabled {
-                    Picker(String(localized: "replay_gain_mode"), selection: $replayGainMode) {
+                    Picker(selection: $replayGainMode) {
                         Text(String(localized: "track_gain")).tag("track")
                         Text(String(localized: "album_gain")).tag("album")
+                    } label: {
+                        Label { Text(String(localized: "replay_gain_mode")) } icon: {
+                            Image(systemName: "switch.2").foregroundStyle(accentColor)
+                        }
                     }
                 }
             }
