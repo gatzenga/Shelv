@@ -222,6 +222,10 @@ final class PlayerEngine: ObservableObject {
         return false
     }
 
+    func setVolume(_ volume: Float) {
+        player.volume = max(0, min(volume, 1.0))
+    }
+
     func stop() {
         removeTimeObserver()
         removeItemFinishedObserver()

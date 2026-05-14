@@ -61,7 +61,8 @@ struct DownloadedSong: Identifiable, Hashable {
             playCount: nil,
             starred: isFavorite ? Date() : nil,
             suffix: fileExtension,
-            bitRate: nil
+            bitRate: nil,
+            replayGain: nil
         )
     }
 }

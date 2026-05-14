@@ -1,5 +1,12 @@
 import Foundation
 
+struct ReplayGain: Codable, Hashable {
+    let trackGain: Float?
+    let albumGain: Float?
+    let trackPeak: Float?
+    let albumPeak: Float?
+}
+
 struct Song: Identifiable, Codable, Hashable {
     let id: String
     let title: String
@@ -16,6 +23,7 @@ struct Song: Identifiable, Codable, Hashable {
     let starred: Date?
     let suffix: String?
     let bitRate: Int?
+    let replayGain: ReplayGain?
 
     var durationFormatted: String {
         guard let d = duration else { return "" }
@@ -25,6 +33,6 @@ struct Song: Identifiable, Codable, Hashable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, title, artist, album, albumId, track, discNumber, duration, coverArt, year, genre, playCount, starred, suffix, bitRate
+        case id, title, artist, album, albumId, track, discNumber, duration, coverArt, year, genre, playCount, starred, suffix, bitRate, replayGain
     }
 }

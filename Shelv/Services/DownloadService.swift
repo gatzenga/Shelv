@@ -242,7 +242,8 @@ actor DownloadService {
                     albumId: song.albumId ?? detail.id, track: song.track, discNumber: song.discNumber,
                     duration: song.duration, coverArt: song.coverArt ?? detail.coverArt,
                     year: song.year, genre: song.genre, playCount: song.playCount,
-                    starred: song.starred, suffix: song.suffix, bitRate: song.bitRate
+                    starred: song.starred, suffix: song.suffix, bitRate: song.bitRate,
+                    replayGain: song.replayGain
                 )
             }
             let albumArtist = detail.artist ?? album.artist

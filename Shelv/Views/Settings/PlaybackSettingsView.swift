@@ -4,6 +4,8 @@ struct PlaybackSettingsView: View {
     @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage("gaplessEnabled") private var gaplessEnabled = false
     @AppStorage("transcodingEnabled") private var transcodingEnabled = false
+    @AppStorage("replayGainEnabled") private var replayGainEnabled = false
+    @AppStorage("replayGainMode") private var replayGainMode = "track"
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
@@ -36,6 +38,21 @@ struct PlaybackSettingsView: View {
                     Text(String(localized: "precache_original_file_recommendedntranscoded_stre"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                }
+            }
+
+            Section(String(localized: "replay_gain")) {
+                Toggle(isOn: $replayGainEnabled) {
+                    Label { Text(String(localized: "replay_gain")) } icon: {
+                        Image(systemName: "dial.medium").foregroundStyle(accentColor)
+                    }
+                }
+                .tint(accentColor)
+                if replayGainEnabled {
+                    Picker(String(localized: "replay_gain_mode"), selection: $replayGainMode) {
+                        Text(String(localized: "track_gain")).tag("track")
+                        Text(String(localized: "album_gain")).tag("album")
+                    }
                 }
             }
 

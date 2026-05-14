@@ -530,7 +530,7 @@ class RecapStore: ObservableObject {
         Song(
             id: id, title: id, artist: nil, album: nil, albumId: nil,
             track: nil, discNumber: nil, duration: nil, coverArt: nil, year: nil, genre: nil,
-            playCount: nil, starred: nil, suffix: nil, bitRate: nil
+            playCount: nil, starred: nil, suffix: nil, bitRate: nil, replayGain: nil
         )
     }
 

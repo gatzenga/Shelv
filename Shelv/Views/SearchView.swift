@@ -345,9 +345,11 @@ struct SearchView: View {
                                                     )
                                                 }
                                             VStack(alignment: .leading, spacing: 2) {
-                                                Text(item.songTitle ?? String(localized: "unknown_song"))
+                                                let songTitle = item.songTitle ?? String(localized: "unknown_song")
+                                                let songTitleColor: Color = item.songTitle != nil ? .primary : .secondary
+                                                Text(songTitle)
                                                     .font(.body)
-                                                    .foregroundStyle(item.songTitle != nil ? Color.primary : Color.secondary)
+                                                    .foregroundStyle(songTitleColor)
                                                 if let artist = item.artistName {
                                                     Text(artist)
                                                         .font(.caption)
@@ -379,7 +381,7 @@ struct SearchView: View {
                                                 artist: item.artistName, album: nil, albumId: nil,
                                                 track: nil, discNumber: nil, duration: item.duration, coverArt: item.coverArt,
                                                 year: nil, genre: nil, playCount: nil,
-                                                starred: nil, suffix: nil, bitRate: nil
+                                                starred: nil, suffix: nil, bitRate: nil, replayGain: nil
                                             )
                                             haptic(); player.addToQueue(song)
                                             currentToast = ShelveToast(message: String(localized: "added_to_queue"))
@@ -392,7 +394,7 @@ struct SearchView: View {
                                                 artist: item.artistName, album: nil, albumId: nil,
                                                 track: nil, discNumber: nil, duration: item.duration, coverArt: item.coverArt,
                                                 year: nil, genre: nil, playCount: nil,
-                                                starred: nil, suffix: nil, bitRate: nil
+                                                starred: nil, suffix: nil, bitRate: nil, replayGain: nil
                                             )
                                             haptic(); player.addPlayNext(song)
                                             currentToast = ShelveToast(message: String(localized: "plays_next"))
@@ -408,7 +410,7 @@ struct SearchView: View {
                                                     artist: item.artistName, album: nil, albumId: nil,
                                                     track: nil, discNumber: nil, duration: item.duration, coverArt: item.coverArt,
                                                     year: nil, genre: nil, playCount: nil,
-                                                    starred: nil, suffix: nil, bitRate: nil
+                                                    starred: nil, suffix: nil, bitRate: nil, replayGain: nil
                                                 )
                                                 haptic(.medium); Task { await libraryStore.toggleStarSong(song) }
                                             } label: {
@@ -418,7 +420,7 @@ struct SearchView: View {
                                                     artist: item.artistName, album: nil, albumId: nil,
                                                     track: nil, discNumber: nil, duration: item.duration, coverArt: item.coverArt,
                                                     year: nil, genre: nil, playCount: nil,
-                                                    starred: nil, suffix: nil, bitRate: nil
+                                                    starred: nil, suffix: nil, bitRate: nil, replayGain: nil
                                                 )
                                                 Image(systemName: libraryStore.isSongStarred(song) ? "heart.slash" : "heart.fill")
                                             }
@@ -683,7 +685,7 @@ struct SearchView: View {
                     artist: item.artistName, album: nil, albumId: nil,
                     track: nil, discNumber: nil, duration: nil, coverArt: item.coverArt,
                     year: nil, genre: nil, playCount: nil,
-                    starred: nil, suffix: nil, bitRate: nil
+                    starred: nil, suffix: nil, bitRate: nil, replayGain: nil
                 )
                 player.playSong(song)
             }

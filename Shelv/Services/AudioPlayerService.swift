@@ -94,6 +94,8 @@ class AudioPlayerService: ObservableObject {
     private var lastArtworkCoverArt: String? = nil
     @AppStorage("gaplessEnabled") private var gaplessEnabled = false
     @AppStorage("streamPreCacheEnabled") private var streamPreCacheEnabled = false
+    @AppStorage("replayGainEnabled") private var replayGainEnabled = false
+    @AppStorage("replayGainMode") private var replayGainMode = "track"
     private var gaplessPreloadTriggered = false
     private var gaplessPreloadSong: Song? = nil
     private var gaplessPreloadURL: URL? = nil
@@ -486,6 +488,7 @@ class AudioPlayerService: ObservableObject {
             self.formatProbeTask?.cancel()
             self.actualStreamFormat = nil
             self.currentSong = song
+            self.applyReplayGain(for: song)
             self.isBuffering = false
             self.isBuffering = true
             self.isSeeking = false
@@ -1003,6 +1006,7 @@ class AudioPlayerService: ObservableObject {
 
                 self.advanceQueueState()
                 self.currentSong = song
+                self.applyReplayGain(for: song)
                 self.currentTime = 0
                 self.isSeeking = false
                 self.isEngineLoaded = true
@@ -1306,5 +1310,22 @@ class AudioPlayerService: ObservableObject {
         var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
         info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = time
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+    }
+
+    private func applyReplayGain(for song: Song) {
+        guard replayGainEnabled, let rg = song.replayGain else {
+            engine.setVolume(1.0)
+            return
+        }
+        let useTrack = replayGainMode == "track"
+        let gain: Float? = useTrack ? (rg.trackGain ?? rg.albumGain) : (rg.albumGain ?? rg.trackGain)
+        guard let gain else {
+            engine.setVolume(1.0)
+            return
+        }
+        let linear = pow(10.0, gain / 20.0)
+        let peak: Float? = useTrack ? rg.trackPeak : rg.albumPeak
+        let volume: Float = peak.map { $0 > 0 ? min(linear, 1.0 / $0) : linear } ?? min(linear, 1.0)
+        engine.setVolume(volume)
     }
 }
