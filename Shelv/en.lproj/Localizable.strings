@@ -310,6 +310,7 @@
 "wifi" = "WiFi";
 "cellular" = "Cellular";
 "about_transcoding" = "About Transcoding";
+"about_transcoding_details" = "Choose format and bitrate the server should transcode. \"Original\" downloads unmodified. If the server can't provide the format, the original file is returned.\n\nTranscoded songs are cached locally — stable playback with seamless gapless transitions. The first song may take longer to load.\n\n• Downloads the current song fully before playback\n• While it plays, the next song pre-fetches in the background\n• Every subsequent song starts instantly\n• Cached files are removed when the next song starts";
 "format" = "Format";
 "bitrate" = "Bitrate";
 "server_unreachable" = "Server unreachable";

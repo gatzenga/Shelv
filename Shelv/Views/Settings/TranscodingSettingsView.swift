@@ -14,7 +14,7 @@ struct TranscodingSettingsView: View {
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
     private var infoText: String {
-        String(localized: "choose_format_and_bitrate_the_server_should_transc")
+        String(localized: "about_transcoding_details")
     }
 
     var body: some View {

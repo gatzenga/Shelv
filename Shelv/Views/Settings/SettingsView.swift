@@ -106,7 +106,7 @@ struct SettingsView: View {
                     }
                 }
 
-                Section(String(localized: "settings")) {
+                Section {
                     NavigationLink(destination: PlaybackSettingsView()) {
                         Label { Text(String(localized: "playback")) } icon: {
                             Image(systemName: "waveform.path").foregroundStyle(accentColor)

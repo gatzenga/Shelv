@@ -38,6 +38,10 @@ struct PlaybackSettingsView: View {
                     .foregroundStyle(.secondary)
                 }
             }
+
+            PlayerBottomSpacer()
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
         }
         .tint(accentColor)
         .listStyle(.insetGrouped)

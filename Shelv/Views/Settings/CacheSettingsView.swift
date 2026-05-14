@@ -74,6 +74,10 @@ struct CacheSettingsView: View {
                     }
                     .tint(.red)
                 }
+
+                PlayerBottomSpacer()
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
             }
             .tint(accentColor)
             .listStyle(.insetGrouped)

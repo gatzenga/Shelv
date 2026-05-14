@@ -310,6 +310,7 @@
 "wifi" = "WLAN";
 "cellular" = "Mobilfunk";
 "about_transcoding" = "Über Transcoding";
+"about_transcoding_details" = "Wähle Format und Bitrate die der Server liefern soll. \"Original\" lädt unverändert. Wenn der Server das Format nicht liefert, kommt die Originaldatei zurück.\n\nTranskodierte Songs werden lokal abgespielt – stabile Wiedergabe und nahtlose Gapless-Übergänge. Beim ersten Song kann es zu einer längeren Ladezeit kommen.\n\n• Der aktuelle Song wird vollständig vor der Wiedergabe geladen\n• Währenddessen wird der nächste Song im Hintergrund geladen\n• Ab dem zweiten Song startet die Wiedergabe sofort\n• Gecachte Dateien werden beim Start des nächsten Songs gelöscht";
 "format" = "Format";
 "bitrate" = "Bitrate";
 "server_unreachable" = "Server nicht erreichbar";

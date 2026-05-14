@@ -31,7 +31,7 @@ struct DownloadsSettingsView: View {
             }
 
             if enableDownloads {
-                Section(String(localized: "offline_mode")) {
+                Section {
                     Toggle(isOn: Binding(
                         get: { offlineMode.isOffline },
                         set: { newValue in
@@ -43,9 +43,7 @@ struct DownloadsSettingsView: View {
                         }
                     }
                     .tint(accentColor)
-                }
 
-                Section(String(localized: "bulk_download")) {
                     Button {
                         showBulkDownloadSheet = true
                     } label: {
@@ -54,9 +52,7 @@ struct DownloadsSettingsView: View {
                         }
                     }
                     .disabled(offlineMode.isOffline)
-                }
 
-                Section(String(localized: "storage")) {
                     HStack {
                         Label { Text(String(localized: "max_storage")) } icon: {
                             Image(systemName: "externaldrive").foregroundStyle(accentColor)
@@ -74,9 +70,7 @@ struct DownloadsSettingsView: View {
                     .onAppear {
                         maxBulkStorageGB = min(maxBulkStorageGB, maxAllowedStorageGB)
                     }
-                }
 
-                Section {
                     Button(role: .destructive) {
                         showDeleteAllDownloadsConfirm = true
                     } label: {
@@ -91,6 +85,10 @@ struct DownloadsSettingsView: View {
                 ActiveDownloadProgressCell()
 
                 DownloadStatsCell()
+
+                PlayerBottomSpacer()
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
             }
         }
         .tint(accentColor)
