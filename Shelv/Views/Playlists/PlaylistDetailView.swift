@@ -450,7 +450,7 @@ struct PlaylistDetailView: View {
         isLoading = true
         if let loaded = await libraryStore.loadPlaylistDetail(id: playlist.id) {
             let allSongs = loaded.songs ?? []
-            originalRanks = Dictionary(uniqueKeysWithValues: allSongs.enumerated().map { ($1.id, $0 + 1) })
+            originalRanks = Dictionary(allSongs.enumerated().map { ($1.id, $0 + 1) }, uniquingKeysWith: { first, _ in first })
             songs = offlineMode.isOffline
                 ? allSongs.filter { downloadStore.isDownloaded(songId: $0.id) }
                 : allSongs
@@ -459,7 +459,7 @@ struct PlaylistDetailView: View {
         if songs.isEmpty && !offlineMode.isOffline && downloadStore.offlinePlaylistIds.contains(playlist.id) {
             let ids = downloadStore.playlistSongIds[playlist.id] ?? []
             if originalRanks.isEmpty {
-                originalRanks = Dictionary(uniqueKeysWithValues: ids.enumerated().map { ($1, $0 + 1) })
+                originalRanks = Dictionary(ids.enumerated().map { ($1, $0 + 1) }, uniquingKeysWith: { first, _ in first })
             }
             songs = ids.compactMap { id in downloadStore.songs.first { $0.songId == id }?.asSong() }
         }
