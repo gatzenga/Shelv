@@ -274,6 +274,7 @@
 "dark" = "深色";
 "accent_color" = "强调色";
 "playlists_favorites" = "播放列表与收藏";
+"playback" = "播放";
 "transcoding" = "转码";
 "gapless" = "无缝播放";
 "autofetch_on_playback" = "播放时自动获取";

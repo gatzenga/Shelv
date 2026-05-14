@@ -274,6 +274,7 @@
 "dark" = "Dark";
 "accent_color" = "Accent Color";
 "playlists_favorites" = "Playlists & Favorites";
+"playback" = "Playback";
 "transcoding" = "Transcoding";
 "gapless" = "Gapless";
 "autofetch_on_playback" = "Auto-fetch on playback";

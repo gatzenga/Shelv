@@ -274,7 +274,8 @@
 "dark" = "Dunkel";
 "accent_color" = "Akzentfarbe";
 "playlists_favorites" = "Playlists & Favoriten";
-"transcoding" = "Transcoding";
+"playback" = "Wiedergabe";
+"transcoding" = "Transkodierung";
 "gapless" = "Gapless";
 "autofetch_on_playback" = "Beim Abspielen laden";
 "cancel_download" = "Download abbrechen";
@@ -309,7 +310,7 @@
 "active_downloads" = "Aktive Downloads";
 "wifi" = "WLAN";
 "cellular" = "Mobilfunk";
-"about_transcoding" = "Über Transcoding";
+"about_transcoding" = "Über Transkodierung";
 "about_transcoding_details" = "Wähle Format und Bitrate die der Server liefern soll. \"Original\" lädt unverändert. Wenn der Server das Format nicht liefert, kommt die Originaldatei zurück.\n\nTranskodierte Songs werden lokal abgespielt – stabile Wiedergabe und nahtlose Gapless-Übergänge. Beim ersten Song kann es zu einer längeren Ladezeit kommen.\n\n• Der aktuelle Song wird vollständig vor der Wiedergabe geladen\n• Währenddessen wird der nächste Song im Hintergrund geladen\n• Ab dem zweiten Song startet die Wiedergabe sofort\n• Gecachte Dateien werden beim Start des nächsten Songs gelöscht";
 "format" = "Format";
 "bitrate" = "Bitrate";
@@ -331,7 +332,7 @@
 "these_playlists_will_be_permanently_deleted_from_n" = "Diese Playlists werden unwiderruflich aus Navidrome und iCloud gelöscht.";
 "precache_original_file_recommendedntranscoded_stre" = "Pre-cache Originaldatei empfohlen.\nTranskodierte Streams werden automatisch pre-gecached.";
 "data_stays_local_multiple_devices_may_create_dupli" = "Daten bleiben lokal. Mehrere Geräte können doppelte Recap-Playlists erstellen.";
-"stable_networkindependent_playback_with_seamless_g" = "Stabile, netzwerkunabhängige Wiedergabe mit nahtlosen Gapless-Übergängen. Beim ersten Song kann es zu einer längeren Ladezeit kommen.\n\n• Lädt den aktuellen Song vollständig vor der Wiedergabe\n• Währenddessen wird der nächste Song im Hintergrund geladen\n• Ab dem zweiten Song startet die Wiedergabe sofort\n• Gecachte Dateien werden beim Start des nächsten Songs gelöscht\n\nNur wirksam, wenn Transcoding auf Original gestellt oder deaktiviert ist.";
+"stable_networkindependent_playback_with_seamless_g" = "Stabile, netzwerkunabhängige Wiedergabe mit nahtlosen Gapless-Übergängen. Beim ersten Song kann es zu einer längeren Ladezeit kommen.\n\n• Lädt den aktuellen Song vollständig vor der Wiedergabe\n• Währenddessen wird der nächste Song im Hintergrund geladen\n• Ab dem zweiten Song startet die Wiedergabe sofort\n• Gecachte Dateien werden beim Start des nächsten Songs gelöscht\n\nNur wirksam, wenn Transkodierung auf Original gestellt oder deaktiviert ist.";
 "shelv_is_an_unofficial_navidrome_client_and_has_no" = "Shelv ist ein inoffizieller Navidrome-Client und steht in keiner Verbindung zu Navidrome oder dessen Entwicklern.";
 "all_downloaded_lyrics_will_be_removed" = "Alle heruntergeladenen Lyrics werden entfernt.";
 "this_will_remove_all_cached_images_and_library_dat" = "Alle gecachten Bilder und Bibliotheksdaten werden entfernt. Die Bibliothek wird beim nächsten Start neu geladen.";
