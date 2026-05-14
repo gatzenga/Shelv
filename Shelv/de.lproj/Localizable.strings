@@ -275,7 +275,7 @@
 "accent_color" = "Akzentfarbe";
 "playlists_favorites" = "Playlists & Favoriten";
 "playback" = "Wiedergabe";
-"replay_gain" = "Replay Gain";
+"replay_gain" = "ReplayGain";
 "replay_gain_mode" = "Modus";
 "track_gain" = "Track Gain";
 "album_gain" = "Album Gain";
