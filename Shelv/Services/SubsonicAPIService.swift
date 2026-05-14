@@ -728,6 +728,21 @@ class SubsonicAPIService: ObservableObject {
         try check(status: body.status, error: body.error)
         return body.lyricsList?.structuredLyrics?.first
     }
+
+    /// URL für getLyricsBySongId — nutzbar mit Background-URLSession.
+    nonisolated func lyricsURL(for songId: String, server: SubsonicServer, password: String) -> URL? {
+        try? buildURL(for: server, password: password, path: "getLyricsBySongId", extra: [
+            URLQueryItem(name: "id", value: songId)
+        ])
+    }
+
+    /// Parst die Antwort eines getLyricsBySongId-Calls. Returnt nil bei API-Fehler oder leerer Response.
+    nonisolated func parseLyricsResponse(data: Data) -> StructuredLyrics? {
+        let dec = JSONDecoder()
+        guard let body = try? dec.decode(Envelope<LyricsListBody>.self, from: data).response,
+              body.status != "failed" else { return nil }
+        return body.lyricsList?.structuredLyrics?.first
+    }
 }
 
 struct StructuredLyrics: Decodable {

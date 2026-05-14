@@ -17,12 +17,36 @@ class LyricsStore: ObservableObject {
     private var loadTask: Task<Void, Never>?
     private var downloadTask: Task<Void, Never>?
     private var currentDownloadServerId: String?
+    private var progressCancellable: AnyCancellable?
 
     // MARK: - Setup
 
     func setup() async {
         await LyricsService.shared.setup()
+        await LyricsBackgroundService.shared.setup()
         refreshDbSize()
+        subscribeToBackgroundProgress()
+    }
+
+    private func subscribeToBackgroundProgress() {
+        progressCancellable = LyricsBackgroundService.shared.progressUpdates
+            .throttle(for: .milliseconds(200), scheduler: DispatchQueue.main, latest: true)
+            .sink { [weak self] update in
+                guard let self else { return }
+                if let update {
+                    self.downloadFetched = update.completed
+                    self.downloadTotal = update.total
+                    self.isDownloading = update.completed < update.total
+                } else {
+                    self.downloadFetched = 0
+                    self.downloadTotal = 0
+                    self.isDownloading = false
+                    if let sid = self.currentDownloadServerId {
+                        Task { await self.refreshFetchedCount(serverId: sid) }
+                    }
+                    self.refreshDbSize()
+                }
+            }
     }
 
     // MARK: - Load lyrics for current song
@@ -48,111 +72,69 @@ class LyricsStore: ObservableObject {
         downloadTotal = 0
         currentDownloadServerId = serverId
 
-        Task {
-            await BackgroundTaskService.shared.runWithBackgroundTask(
-                identifier: BackgroundTaskService.lyricsIdentifier,
-                title: String(localized: "downloading_lyrics")
-            ) { [weak self] progress, isCancelled in
-                await self?.runBulkDownloadWork(
-                    serverId: serverId,
-                    progress: progress,
-                    isCancelled: isCancelled
-                )
-            }
-        }
-    }
-
-    private func runBulkDownloadWork(
-        serverId: String,
-        progress: Progress,
-        isCancelled: @escaping () -> Bool
-    ) async {
-        defer {
-            Task { @MainActor [weak self] in
-                self?.isDownloading = false
-                self?.refreshDbSize()
-                Task { await self?.refreshFetchedCount(serverId: serverId) }
-            }
-        }
-
-        let api = SubsonicAPIService.shared
-        let svc = LyricsService.shared
-
-        var albums: [Album] = []
-        var offset = 0
-        let pageSize = 500
-        while true {
-            guard !isCancelled() else { return }
-            guard let page = try? await api.getAllAlbums(size: pageSize, offset: offset) else { break }
-            albums.append(contentsOf: page)
-            if page.count < pageSize { break }
-            offset += pageSize
-        }
-        guard !isCancelled() else { return }
-
-        let allSongs: [Song] = await withTaskGroup(of: [Song].self) { group -> [Song] in
-            let maxConcurrent = 10
-            var iterator = albums.makeIterator()
-            var active = 0
-            while active < maxConcurrent, let album = iterator.next() {
-                group.addTask { (try? await api.getAlbum(id: album.id))?.song ?? [] }
-                active += 1
-            }
-            var collected: [Song] = []
-            while let songs = await group.next() {
-                collected.append(contentsOf: songs)
-                if let next = iterator.next() {
-                    group.addTask { (try? await api.getAlbum(id: next.id))?.song ?? [] }
+        downloadTask = Task {
+            defer {
+                Task { @MainActor [weak self] in
+                    self?.refreshDbSize()
+                    if let sid = self?.currentDownloadServerId {
+                        await self?.refreshFetchedCount(serverId: sid)
+                    }
+                    // Safety: falls die BG-Session nichts enqueued hat (z.B. weil keine
+                    // Songs vorhanden oder Task früh gecancelt), isDownloading manuell resetten
+                    let running = await LyricsBackgroundService.shared.isRunning()
+                    if !running {
+                        self?.isDownloading = false
+                        self?.downloadFetched = 0
+                        self?.downloadTotal = 0
+                    }
                 }
             }
-            return collected
-        }
-        guard !isCancelled() else { return }
 
-        let totalCount = allSongs.count
-        await MainActor.run { [weak self] in
-            self?.downloadTotal = totalCount
-            progress.totalUnitCount = Int64(totalCount)
-        }
+            let api = SubsonicAPIService.shared
+            var albums: [Album] = []
+            var offset = 0
+            let pageSize = 500
+            while !Task.isCancelled {
+                guard let page = try? await api.getAllAlbums(size: pageSize, offset: offset) else { break }
+                albums.append(contentsOf: page)
+                if page.count < pageSize { break }
+                offset += pageSize
+            }
+            if Task.isCancelled { return }
 
-        await withTaskGroup(of: Void.self) { group in
-            let maxConcurrent = 5
-            var iterator = allSongs.makeIterator()
-            var active = 0
-            while active < maxConcurrent, let song = iterator.next() {
-                group.addTask { _ = await svc.fetchAndSave(song: song, serverId: serverId) }
-                active += 1
-            }
-            var fetched = 0
-            var lastPublished = Date.distantPast
-            while await group.next() != nil {
-                if isCancelled() { group.cancelAll(); return }
-                fetched += 1
-                progress.completedUnitCount = Int64(fetched)
-                let now = Date()
-                if now.timeIntervalSince(lastPublished) >= 0.5 {
-                    lastPublished = now
-                    let f = fetched
-                    await MainActor.run { [weak self] in self?.downloadFetched = f }
+            // Streaming: sobald ein Album-Songs-Fetch zurückkommt, sofort enqueuen.
+            // So füllt sich die Queue inkrementell und der Zähler tickt sofort hoch,
+            // statt erst nach Minuten wenn alles im Speicher ist.
+            await withTaskGroup(of: [Song].self) { group in
+                let maxConcurrent = 10
+                var iterator = albums.makeIterator()
+                var active = 0
+                while active < maxConcurrent, let album = iterator.next() {
+                    group.addTask { (try? await api.getAlbum(id: album.id))?.song ?? [] }
+                    active += 1
                 }
-                if let next = iterator.next() {
-                    group.addTask { _ = await svc.fetchAndSave(song: next, serverId: serverId) }
+                while let songs = await group.next() {
+                    if Task.isCancelled { group.cancelAll(); return }
+                    if !songs.isEmpty {
+                        await LyricsBackgroundService.shared.enqueueSongs(songs, serverId: serverId)
+                    }
+                    if let next = iterator.next() {
+                        group.addTask { (try? await api.getAlbum(id: next.id))?.song ?? [] }
+                    }
                 }
             }
-            let finalCount = fetched
-            await MainActor.run { [weak self] in self?.downloadFetched = finalCount }
         }
     }
 
     func cancelBulkDownload() {
         downloadTask?.cancel()
         downloadTask = nil
-        isDownloading = false
         Task {
-            await BackgroundTaskService.shared.cancelTask(
-                identifier: BackgroundTaskService.lyricsIdentifier
-            )
+            await LyricsBackgroundService.shared.cancelAll()
         }
+        isDownloading = false
+        downloadFetched = 0
+        downloadTotal = 0
         if let sid = currentDownloadServerId {
             Task { await self.refreshFetchedCount(serverId: sid) }
         }

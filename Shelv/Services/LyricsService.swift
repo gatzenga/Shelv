@@ -157,6 +157,18 @@ actor LyricsService {
         }) ?? 0
     }
 
+    /// Liefert in einem Query alle Song-IDs für die schon Lyrics existieren (source != 'none').
+    /// Für Bulk-Enqueue: einmaliger DB-Hit statt N einzelne `lyrics(songId:serverId:)`-Calls.
+    func cachedSongIds(serverId: String) -> Set<String> {
+        guard let pool else { return [] }
+        let rows: [String] = (try? pool.read { db in
+            try String.fetchAll(db,
+                sql: "SELECT songId FROM lyrics WHERE serverId = ? AND source != 'none'",
+                arguments: [serverId])
+        }) ?? []
+        return Set(rows)
+    }
+
     func totalRowCount() -> Int {
         guard let pool else { return 0 }
         return (try? pool.read { db in

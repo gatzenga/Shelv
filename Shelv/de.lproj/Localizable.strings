@@ -351,3 +351,6 @@
 "failed_count_format" = "%d fehlgeschlagen";
 "downloading" = "Laden";
 "downloading_lyrics" = "Texte laden";
+"download_progress_format" = "%d von %d Songs";
+"lyrics_progress_format" = "%d von %d Lyrics";
+"include_navidrome_lyrics" = "Navidrome-Lyrics einbeziehen";

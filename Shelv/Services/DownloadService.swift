@@ -53,7 +53,7 @@ actor DownloadService {
     }()
 
     private let backgroundIdentifier = "ch.vkugler.Shelv.downloads"
-    private let maxConcurrent = 3
+    private let maxConcurrent = 5
     private var effectiveMaxConcurrent: Int {
         TranscodingPolicy.currentDownloadFormat() != nil ? 1 : maxConcurrent
     }
@@ -106,6 +106,8 @@ actor DownloadService {
             cfg.sessionSendsLaunchEvents = true
             cfg.allowsCellularAccess = true
             cfg.httpMaximumConnectionsPerHost = maxConcurrent
+            cfg.shouldUseExtendedBackgroundIdleMode = true
+            cfg.waitsForConnectivity = true
             let s = URLSession(configuration: cfg, delegate: coordinator, delegateQueue: nil)
             session = s
             s.getAllTasks { [weak self] tasks in
@@ -575,7 +577,7 @@ actor DownloadService {
 
     private func startNextJobs() {
         guard let session else { return }
-        while !pendingJobs.isEmpty {
+        while inflightJobs.count < effectiveMaxConcurrent && !pendingJobs.isEmpty {
             let job = pendingJobs.removeFirst()
             let jobKey = Self.key(songId: job.song.id, serverId: job.serverId)
             pendingJobKeys.remove(jobKey)
@@ -762,34 +764,8 @@ actor DownloadService {
     // MARK: - Batch Tracking
 
     private func incrementBatchTotal(by n: Int) {
-        let wasIdle = batchTotal == 0
         batchTotal += n
         publishBatch()
-        if wasIdle {
-            Task {
-                await BackgroundTaskService.shared.runWithBackgroundTask(
-                    identifier: BackgroundTaskService.downloadIdentifier,
-                    title: String(localized: "downloading")
-                ) { progress, isCancelled in
-                    await self.waitForBatchCompletion(progress: progress, isCancelled: isCancelled)
-                }
-            }
-        }
-    }
-
-    private func waitForBatchCompletion(
-        progress: Progress,
-        isCancelled: @escaping () -> Bool
-    ) async {
-        while batchTotal > 0 && !isCancelled() {
-            let completed = batchCompleted + batchFailed
-            let total = batchTotal
-            if total > 0 {
-                progress.completedUnitCount = Int64(Double(completed) / Double(total) * 100)
-            }
-            try? await Task.sleep(nanoseconds: 1_000_000_000)
-        }
-        progress.completedUnitCount = 100
     }
 
     private func incrementBatchCompleted() {
@@ -961,9 +937,9 @@ private final class DownloadSessionCoordinator: NSObject, URLSessionDownloadDele
     }
 
     func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {
+        let identifier = session.configuration.identifier ?? ""
         DispatchQueue.main.async {
-            BackgroundDownloadHandler.shared.completionHandler?()
-            BackgroundDownloadHandler.shared.completionHandler = nil
+            BackgroundDownloadHandler.shared.consume(for: identifier)?()
         }
     }
 }

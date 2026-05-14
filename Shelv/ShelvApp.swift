@@ -1,5 +1,4 @@
 import SwiftUI
-import BackgroundTasks
 
 let appLang: String = Locale.preferredLanguages.first?.hasPrefix("de") == true ? "de" : "en"
 
@@ -9,33 +8,23 @@ extension Notification.Name {
 
 final class BackgroundDownloadHandler {
     static let shared = BackgroundDownloadHandler()
-    var completionHandler: (() -> Void)?
+    private let lock = NSLock()
+    private var handlers: [String: () -> Void] = [:]
+
+    func store(_ handler: @escaping () -> Void, for identifier: String) {
+        lock.withLock { handlers[identifier] = handler }
+    }
+
+    func consume(for identifier: String) -> (() -> Void)? {
+        lock.withLock { handlers.removeValue(forKey: identifier) }
+    }
 }
 
 final class AppDelegate: NSObject, UIApplicationDelegate {
-    func application(
-        _ application: UIApplication,
-        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
-    ) -> Bool {
-        BGTaskScheduler.shared.register(
-            forTaskWithIdentifier: BackgroundTaskService.downloadIdentifier,
-            using: nil
-        ) { task in
-            Task { await BackgroundTaskService.shared.handleBGTask(task) }
-        }
-        BGTaskScheduler.shared.register(
-            forTaskWithIdentifier: BackgroundTaskService.lyricsIdentifier,
-            using: nil
-        ) { task in
-            Task { await BackgroundTaskService.shared.handleBGTask(task) }
-        }
-        return true
-    }
-
     func application(_ application: UIApplication,
                      handleEventsForBackgroundURLSession identifier: String,
                      completionHandler: @escaping () -> Void) {
-        BackgroundDownloadHandler.shared.completionHandler = completionHandler
+        BackgroundDownloadHandler.shared.store(completionHandler, for: identifier)
     }
 }
 

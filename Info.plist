@@ -34,12 +34,6 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>
-		<string>processing</string>
-	</array>
-	<key>BGTaskSchedulerPermittedIdentifiers</key>
-	<array>
-		<string>ch.vkugler.Shelv.download</string>
-		<string>ch.vkugler.Shelv.lyrics</string>
 	</array>
 </dict>
 </plist>

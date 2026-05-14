@@ -24,6 +24,7 @@ struct SettingsView: View {
     @AppStorage("enablePlaylists") private var enablePlaylists = true
     @AppStorage("gaplessEnabled") private var gaplessEnabled = false
     @AppStorage("autoFetchLyrics") private var autoFetchLyrics = true
+    @AppStorage("includeNavidromeLyrics") private var includeNavidromeLyrics = false
     @AppStorage("recapEnabled") private var recapEnabled = false
     @AppStorage("iCloudSyncEnabled") private var iCloudSyncEnabled = true
     @AppStorage("enableDownloads") private var enableDownloads = false
@@ -200,6 +201,13 @@ struct SettingsView: View {
                     Toggle(isOn: $autoFetchLyrics) {
                         Label { Text(String(localized: "autofetch_on_playback")) } icon: {
                             Image(systemName: "wand.and.stars").foregroundStyle(accentColor)
+                        }
+                    }
+                    .tint(accentColor)
+
+                    Toggle(isOn: $includeNavidromeLyrics) {
+                        Label { Text(String(localized: "include_navidrome_lyrics")) } icon: {
+                            Image(systemName: "server.rack").foregroundStyle(accentColor)
                         }
                     }
                     .tint(accentColor)
