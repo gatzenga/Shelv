@@ -125,7 +125,7 @@ private struct DownloadStatsCell: View {
     @State private var stats: DownloadStorageStats?
 
     var body: some View {
-        Group {
+        Section {
             if let stats {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {

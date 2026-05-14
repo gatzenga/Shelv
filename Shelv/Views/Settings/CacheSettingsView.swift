@@ -51,7 +51,7 @@ struct CacheSettingsView: View {
                     }
                 }
 
-                Section(String(localized: "image_cache")) {
+                Section {
                     HStack {
                         Label { Text(String(localized: "cache_size")) } icon: {
                             Image(systemName: "internaldrive").foregroundStyle(accentColor)
