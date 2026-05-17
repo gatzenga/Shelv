@@ -381,8 +381,7 @@ struct PlaylistDetailView: View {
     @ViewBuilder
     private func downloadHeaderButtons() -> some View {
         let isMarked = downloadStore.offlinePlaylistIds.contains(playlist.id)
-        let totalCount = downloadStore.playlistSongIds[playlist.id]?.count ?? songs.count
-        let remaining = isMarked ? max(0, totalCount - downloadStore.downloadedCount(for: playlist.id)) : 0
+        let remaining = isMarked ? songs.filter { !downloadStore.isDownloaded(songId: $0.id) }.count : 0
         HStack(spacing: 10) {
             if !isMarked && !offlineMode.isOffline {
                 Button {
