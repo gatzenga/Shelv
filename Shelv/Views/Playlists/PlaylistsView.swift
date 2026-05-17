@@ -331,7 +331,7 @@ struct PlaylistsView: View {
                     .foregroundStyle(.primary)
                 let count = offlineMode.isOffline
                     ? downloadStore.downloadedCount(for: playlist.id)
-                    : (downloadStore.playlistSongIds[playlist.id]?.count ?? playlist.songCount)
+                    : playlist.songCount
                 if let count {
                     Text("\(count) \(String(localized: "songs"))")
                         .font(.caption)
