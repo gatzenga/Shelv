@@ -391,13 +391,16 @@ class LibraryStore: ObservableObject {
                 if let songs = result.songs {
                     save(songs, name: "playlist_songs_\(id)", serverID: serverID)
                 }
-                if !playlists.contains(where: { $0.id == id }) {
-                    playlists.append(Playlist(
-                        id: result.id, name: result.name, comment: result.comment,
-                        songCount: result.songCount, duration: result.duration, coverArt: result.coverArt
-                    ))
-                    save(playlists, name: "playlists", serverID: serverID)
+                let freshCount = result.songs?.count ?? result.songCount
+                if let idx = playlists.firstIndex(where: { $0.id == id }) {
+                    let p = playlists[idx]
+                    playlists[idx] = Playlist(id: p.id, name: p.name, comment: p.comment,
+                                              songCount: freshCount, duration: result.duration, coverArt: p.coverArt)
+                } else {
+                    playlists.append(Playlist(id: result.id, name: result.name, comment: result.comment,
+                                              songCount: freshCount, duration: result.duration, coverArt: result.coverArt))
                 }
+                save(playlists, name: "playlists", serverID: serverID)
             }
             return result
         } catch {
@@ -449,6 +452,13 @@ class LibraryStore: ObservableObject {
     func addSongsToPlaylist(_ playlist: Playlist, songIds: [String]) async {
         do {
             try await api.updatePlaylist(id: playlist.id, songIdsToAdd: songIds)
+            if let idx = playlists.firstIndex(where: { $0.id == playlist.id }) {
+                let p = playlists[idx]
+                playlists[idx] = Playlist(id: p.id, name: p.name, comment: p.comment,
+                                          songCount: (p.songCount ?? 0) + songIds.count,
+                                          duration: p.duration, coverArt: p.coverArt)
+                if let id = activeServerID { save(playlists, name: "playlists", serverID: id) }
+            }
         } catch {
             if !(error is CancellationError) { errorMessage = error.localizedDescription }
         }
@@ -457,6 +467,13 @@ class LibraryStore: ObservableObject {
     func removeSongsFromPlaylist(_ playlist: Playlist, indices: [Int]) async {
         do {
             try await api.updatePlaylist(id: playlist.id, songIndicesToRemove: indices)
+            if let idx = playlists.firstIndex(where: { $0.id == playlist.id }) {
+                let p = playlists[idx]
+                playlists[idx] = Playlist(id: p.id, name: p.name, comment: p.comment,
+                                          songCount: max(0, (p.songCount ?? 0) - indices.count),
+                                          duration: p.duration, coverArt: p.coverArt)
+                if let id = activeServerID { save(playlists, name: "playlists", serverID: id) }
+            }
         } catch {
             if !(error is CancellationError) { errorMessage = error.localizedDescription }
         }
