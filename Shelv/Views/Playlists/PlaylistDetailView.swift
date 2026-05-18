@@ -409,6 +409,7 @@ struct PlaylistDetailView: View {
                     haptic()
                     let missing = songs.filter { !downloadStore.isDownloaded(songId: $0.id) }
                     if !missing.isEmpty { downloadStore.enqueueSongs(missing) }
+                    downloadStore.syncPlaylistSongIds(playlist.id, songIds: songs.map(\.id))
                     currentToast = ShelveToast(message: String(localized: "download_started"))
                 } label: {
                     HStack(spacing: 6) {
@@ -453,6 +454,9 @@ struct PlaylistDetailView: View {
             songs = offlineMode.isOffline
                 ? allSongs.filter { downloadStore.isDownloaded(songId: $0.id) }
                 : allSongs
+            if !offlineMode.isOffline {
+                downloadStore.syncPlaylistSongIds(playlist.id, songIds: allSongs.map(\.id))
+            }
         }
         // Fallback auf heruntergeladene Songs wenn API fehlschlug und Playlist markiert ist
         if songs.isEmpty && !offlineMode.isOffline && downloadStore.offlinePlaylistIds.contains(playlist.id) {

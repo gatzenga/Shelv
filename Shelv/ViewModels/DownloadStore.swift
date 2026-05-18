@@ -96,6 +96,12 @@ final class DownloadStore: ObservableObject {
         UserDefaults.standard.set(playlistSongIds, forKey: "shelv_offline_playlist_songs_\(serverId)")
     }
 
+    func syncPlaylistSongIds(_ id: String, songIds: [String]) {
+        guard offlinePlaylistIds.contains(id) else { return }
+        playlistSongIds[id] = songIds
+        UserDefaults.standard.set(playlistSongIds, forKey: "shelv_offline_playlist_songs_\(serverId)")
+    }
+
     func removeOfflinePlaylist(_ id: String) {
         offlinePlaylistIds.remove(id)
         playlistSongIds.removeValue(forKey: id)
