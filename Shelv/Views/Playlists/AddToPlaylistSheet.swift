@@ -40,6 +40,7 @@ struct AddToPlaylistSheet: View {
                                 Task {
                                     await libraryStore.addSongsToPlaylist(playlist, songIds: songIds)
                                     addingToPlaylistId = nil
+                                    haptic()
                                     toast = ShelveToast(message: String(format: String(localized: "added_to_playlist_format"), playlist.name))
                                     try? await Task.sleep(for: .milliseconds(1200))
                                     dismiss()
