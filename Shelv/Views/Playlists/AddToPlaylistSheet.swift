@@ -38,12 +38,14 @@ struct AddToPlaylistSheet: View {
                                 guard addingToPlaylistId == nil else { return }
                                 addingToPlaylistId = playlist.id
                                 Task {
-                                    await libraryStore.addSongsToPlaylist(playlist, songIds: songIds)
+                                    let success = await libraryStore.addSongsToPlaylist(playlist, songIds: songIds)
                                     addingToPlaylistId = nil
-                                    haptic()
-                                    toast = ShelveToast(message: String(format: String(localized: "added_to_playlist_format"), playlist.name))
-                                    try? await Task.sleep(for: .milliseconds(1200))
-                                    dismiss()
+                                    if success {
+                                        haptic()
+                                        toast = ShelveToast(message: String(format: String(localized: "added_to_playlist_format"), playlist.name))
+                                        try? await Task.sleep(for: .milliseconds(1200))
+                                        dismiss()
+                                    }
                                 }
                             } label: {
                                 HStack(spacing: 12) {

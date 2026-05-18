@@ -449,7 +449,8 @@ class LibraryStore: ObservableObject {
         }
     }
 
-    func addSongsToPlaylist(_ playlist: Playlist, songIds: [String]) async {
+    @discardableResult
+    func addSongsToPlaylist(_ playlist: Playlist, songIds: [String]) async -> Bool {
         do {
             try await api.updatePlaylist(id: playlist.id, songIdsToAdd: songIds)
             if let idx = playlists.firstIndex(where: { $0.id == playlist.id }) {
@@ -459,8 +460,10 @@ class LibraryStore: ObservableObject {
                                           duration: p.duration, coverArt: p.coverArt)
                 if let id = activeServerID { save(playlists, name: "playlists", serverID: id) }
             }
+            return true
         } catch {
             if !(error is CancellationError) { errorMessage = error.localizedDescription }
+            return false
         }
     }
 
