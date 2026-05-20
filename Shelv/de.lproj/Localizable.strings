@@ -360,3 +360,5 @@
 "download_progress_format" = "%d von %d Songs";
 "lyrics_progress_format" = "%d von %d Lyrics";
 "include_navidrome_lyrics" = "Navidrome-Lyrics einbeziehen";
+"artist_bio_show_more" = "Mehr anzeigen";
+"artist_bio_show_less" = "Weniger anzeigen";

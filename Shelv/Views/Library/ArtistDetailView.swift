@@ -19,6 +19,7 @@ struct ArtistDetailView: View {
     @AppStorage("artistDetailAlbumIsGrid") private var isGrid: Bool = true
 
     @State private var detail: ArtistDetail?
+    @State private var biography: String?
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var showError = false
@@ -257,6 +258,11 @@ struct ArtistDetailView: View {
                     .padding(.horizontal)
                 }
 
+                if let bio = biography, !bio.isEmpty {
+                    ArtistBiographyBox(biography: bio, accentColor: accentColor)
+                        .padding(.horizontal)
+                }
+
                 PlayerBottomSpacer()
             }
         }
@@ -333,6 +339,15 @@ struct ArtistDetailView: View {
                         Spacer()
                     }
                     .padding(.leading, 0)
+                }
+            }
+
+            if let bio = biography, !bio.isEmpty {
+                Section {
+                    ArtistBiographyBox(biography: bio, accentColor: accentColor)
+                        .listRowInsets(EdgeInsets(top: 24, leading: 16, bottom: 0, trailing: 16))
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
                 }
             }
 
@@ -523,7 +538,10 @@ struct ArtistDetailView: View {
             return
         }
         do {
-            detail = try await SubsonicAPIService.shared.getArtist(id: artist.id)
+            async let artistDetail = SubsonicAPIService.shared.getArtist(id: artist.id)
+            async let artistInfo = SubsonicAPIService.shared.getArtistInfo(id: artist.id)
+            detail = try await artistDetail
+            biography = (try? await artistInfo)?.biography?.strippingHTML
         } catch {
             populateFromLocal()
             if detail == nil {
@@ -658,5 +676,52 @@ struct ArtistDetailView: View {
                 .buttonStyle(.plain)
             }
         }
+    }
+}
+
+private struct ArtistBiographyBox: View {
+    let biography: String
+    let accentColor: Color
+    @State private var expanded = false
+
+    private var isLong: Bool { biography.count > 280 }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(biography)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .lineLimit(expanded ? nil : 4)
+                .animation(.easeInOut(duration: 0.2), value: expanded)
+
+            if isLong {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() }
+                } label: {
+                    Text(expanded
+                         ? String(localized: "artist_bio_show_less")
+                         : String(localized: "artist_bio_show_more"))
+                        .font(.subheadline).bold()
+                        .foregroundStyle(accentColor)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+private extension String {
+    var strippingHTML: String {
+        self.replacing(/<[^>]+>/, with: "")
+            .replacingOccurrences(of: "&amp;", with: "&")
+            .replacingOccurrences(of: "&lt;", with: "<")
+            .replacingOccurrences(of: "&gt;", with: ">")
+            .replacingOccurrences(of: "&quot;", with: "\"")
+            .replacingOccurrences(of: "&#39;", with: "'")
+            .replacingOccurrences(of: "&apos;", with: "'")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
