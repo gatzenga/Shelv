@@ -420,6 +420,19 @@ actor PlayLogService {
         registryEntry(playlistId: playlistId) != nil
     }
 
+    func recentUniqueSongIds(serverId: String, limit: Int = 50) -> [String] {
+        guard let pool else { return [] }
+        return (try? pool.read { db in
+            try String.fetchAll(db, sql: """
+                SELECT songId FROM play_log
+                WHERE serverId = ?
+                GROUP BY songId
+                ORDER BY MAX(playedAt) DESC
+                LIMIT ?
+                """, arguments: [serverId, limit])
+        }) ?? []
+    }
+
     // MARK: - Debug
 
     func recentLogs(serverId: String, limit: Int = 50) -> [PlayLogRecord] {

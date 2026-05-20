@@ -83,6 +83,12 @@ private struct ArtistBody: Decodable {
     let artist: ArtistDetail?
 }
 
+private struct ArtistInfoBody: Decodable {
+    let status: String
+    let error: StatusCheck.APIError?
+    let artistInfo2: ArtistInfo?
+}
+
 private struct SearchBody: Decodable {
     let status: String
     let error: StatusCheck.APIError?
@@ -162,6 +168,10 @@ struct ArtistDetail: Decodable {
     let albumCount: Int?
     let coverArt: String?
     let album: [Album]?
+}
+
+struct ArtistInfo: Decodable {
+    let biography: String?
 }
 
 struct SearchResult: Decodable {
@@ -479,6 +489,16 @@ class SubsonicAPIService: ObservableObject {
         return artist
     }
 
+    func getArtistInfo(id: String) async throws -> ArtistInfo {
+        let data = try await fetchData(path: "getArtistInfo2", extra: [
+            URLQueryItem(name: "id", value: id),
+            URLQueryItem(name: "count", value: "0")
+        ])
+        let body = try decoder.decode(Envelope<ArtistInfoBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+        return body.artistInfo2 ?? ArtistInfo(biography: nil)
+    }
+
     func getSong(id: String) async throws -> Song {
         let data = try await fetchData(path: "getSong", extra: [
             URLQueryItem(name: "id", value: id)
@@ -487,6 +507,21 @@ class SubsonicAPIService: ObservableObject {
         try check(status: body.status, error: body.error)
         guard let song = body.song else { throw SubsonicAPIError.apiError(0, "Song not found") }
         return song
+    }
+
+    func getSongsOrdered(ids: [String]) async throws -> [Song] {
+        let indexed = Array(ids.enumerated())
+        let pairs = await withTaskGroup(of: (Int, Song?).self) { group in
+            for (i, id) in indexed {
+                group.addTask { (i, try? await self.getSong(id: id)) }
+            }
+            var result: [(Int, Song)] = []
+            for await (i, song) in group {
+                if let song { result.append((i, song)) }
+            }
+            return result
+        }
+        return pairs.sorted { $0.0 < $1.0 }.map(\.1)
     }
 
     func search(query: String) async throws -> SearchResult {

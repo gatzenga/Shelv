@@ -390,12 +390,24 @@ struct DiscoverView: View {
             switch type {
             case "newest":   songs = try await SubsonicAPIService.shared.getNewestSongs()
             case "frequent": songs = try await SubsonicAPIService.shared.getFrequentSongs(limit: 50)
-            default:         songs = try await SubsonicAPIService.shared.getRecentSongs(limit: 50)
+            default:
+                songs = try await recentMixSongs()
             }
             player.playShuffled(songs: songs)
         } catch {
             errorMessage = error.localizedDescription
             showError = true
         }
+    }
+
+    private func recentMixSongs() async throws -> [Song] {
+        if recapEnabled,
+           let serverId = SubsonicAPIService.shared.activeServer?.stableId {
+            let ids = await PlayLogService.shared.recentUniqueSongIds(serverId: serverId, limit: 50)
+            if !ids.isEmpty {
+                return try await SubsonicAPIService.shared.getSongsOrdered(ids: ids)
+            }
+        }
+        return try await SubsonicAPIService.shared.getRecentSongs(limit: 50)
     }
 }
