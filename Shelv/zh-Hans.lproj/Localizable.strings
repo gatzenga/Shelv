@@ -354,3 +354,10 @@
 "missing_songs_format" = "缺失歌曲（%d）";
 "extra_songs_format" = "额外歌曲（%d）";
 "failed_count_format" = "%d 个失败";
+"artist_bio_show_more" = "显示更多";
+"artist_bio_show_less" = "收起";
+"downloading" = "下载中";
+"downloading_lyrics" = "正在下载歌词";
+"download_progress_format" = "%d / %d 首歌曲";
+"lyrics_progress_format" = "%d / %d 首歌词";
+"include_navidrome_lyrics" = "包含 Navidrome 歌词";
