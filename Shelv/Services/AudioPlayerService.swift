@@ -520,16 +520,28 @@ class AudioPlayerService: ObservableObject {
                     bitrate: fmt.bitrate,
                     songTitle: song.title
                 )
+                // Background-Task damit iOS den Download nicht einfriert wenn Handy gesperrt wird
+                // bevor der erste Song je gespielt hat (kein aktiver Audio-Kontext vorhanden)
+                var bgTask = UIBackgroundTaskIdentifier.invalid
+                bgTask = UIApplication.shared.beginBackgroundTask(withName: "shelv.streamload") {
+                    UIApplication.shared.endBackgroundTask(bgTask)
+                }
                 // Polling bis Datei da ist (alle 200ms, max 60s)
                 // repeat…while: erst schlafen, dann prüfen — Download hat gerade erst gestartet
                 let deadline = Date().addingTimeInterval(60)
                 repeat {
                     try? await Task.sleep(nanoseconds: 200_000_000)
-                    guard self.playbackGeneration == gen else { return }
+                    guard self.playbackGeneration == gen else {
+                        UIApplication.shared.endBackgroundTask(bgTask)
+                        return
+                    }
                     if let local = await StreamCacheService.shared.localURL(for: songId) {
                         let asset = AVURLAsset(url: local, options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])
                         let cmTime = try? await asset.load(.duration)
-                        guard self.playbackGeneration == gen else { return }
+                        guard self.playbackGeneration == gen else {
+                            UIApplication.shared.endBackgroundTask(bgTask)
+                            return
+                        }
                         let precise = cmTime.flatMap { $0.isValid && !$0.isIndefinite ? CMTimeGetSeconds($0) : nil }
                         let resolvedDuration = (precise ?? 0) > 0 ? precise! : Double(song.duration ?? 0)
                         self.currentStreamURL = local
@@ -539,6 +551,8 @@ class AudioPlayerService: ObservableObject {
                         self.duration = resolvedDuration
                         if seekTo > 0 { self.engine.seek(to: seekTo) }
                         self.isEngineLoaded = true
+                        UIApplication.shared.endBackgroundTask(bgTask)
+                        bgTask = .invalid
                         break
                     }
                 } while Date() < deadline
@@ -553,6 +567,7 @@ class AudioPlayerService: ObservableObject {
                     if seekTo > 0 { self.engine.seek(to: seekTo) }
                     self.isEngineLoaded = true
                 }
+                if bgTask != .invalid { UIApplication.shared.endBackgroundTask(bgTask) }
             } else if !url.isFileURL, self.streamPreCacheEnabled || self.isLossless(suffix: song.suffix) {
                 // Original-Remote-Stream mit Pre-Cache → erst vollständig laden, dann lokal abspielen
                 self.engine.stop()
