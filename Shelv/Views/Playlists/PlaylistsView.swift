@@ -338,9 +338,6 @@ struct PlaylistsView: View {
             }
             Spacer()
             PlaylistDownloadBadge(playlistId: playlist.id)
-            Image(systemName: "chevron.right")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
         }
         .padding(.vertical, 4)
     }
