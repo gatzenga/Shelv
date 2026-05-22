@@ -216,7 +216,7 @@ struct ArtistDetailView: View {
                 }
             }
 
-            if enableDownloads, !isLoading, totalArtistSongs > 0 {
+            if enableDownloads, !isLoading, !sortedAlbums.isEmpty {
                 downloadHeaderButtons()
             }
         }
@@ -582,21 +582,25 @@ struct ArtistDetailView: View {
         }
     }
 
-    private var totalArtistSongs: Int {
-        detail?.album?.compactMap(\.songCount).reduce(0, +) ?? 0
-    }
-
-    private var downloadedArtistSongs: Int {
-        downloadStore.songs.filter { $0.artistName == artist.name }.count
-    }
-
     private var artistDownloadStatus: AlbumDownloadStatus {
-        let total = totalArtistSongs
-        let done = downloadedArtistSongs
-        guard total > 0 else { return .none }
-        if done == 0 { return .none }
-        if done >= total { return .complete }
-        return .partial(downloaded: done, total: total)
+        let albums = sortedAlbums
+        guard !albums.isEmpty else { return .none }
+        var totalSongs = 0
+        var downloadedSongs = 0
+        for album in albums {
+            let count = album.songCount ?? 0
+            let status = downloadStore.albumDownloadStatus(albumId: album.id, totalSongs: count)
+            totalSongs += count
+            switch status {
+            case .none: break
+            case .partial(let done, _): downloadedSongs += done
+            case .complete: downloadedSongs += count
+            }
+        }
+        guard totalSongs > 0 else { return .none }
+        if downloadedSongs == 0 { return .none }
+        if downloadedSongs >= totalSongs { return .complete }
+        return .partial(downloaded: downloadedSongs, total: totalSongs)
     }
 
     @ViewBuilder
