@@ -132,8 +132,8 @@ struct ArtistDetailView: View {
             isPresented: $showDeleteArtistDownloadConfirm
         ) {
             Button(String(localized: "delete"), role: .destructive) {
-                if let match = downloadStore.artists.first(where: { $0.name == artist.name }) {
-                    downloadStore.deleteArtist(match.artistId)
+                for album in sortedAlbums {
+                    downloadStore.deleteAlbum(album.id)
                 }
                 currentToast = ShelveToast(message: String(localized: "downloads_deleted"))
             }
