@@ -287,6 +287,32 @@ struct LibraryView: View {
     private var downloadedArtistNames: Set<String> {
         Set(downloadStore.artists.map { $0.name })
     }
+
+    private var downloadedArtistBadgeNames: Set<String> {
+        var names = downloadedArtistNames
+        for song in downloadStore.songs {
+            names.formUnion(splitNavidromeArtist(song.artistName))
+        }
+        return names
+    }
+
+    private func splitNavidromeArtist(_ name: String) -> [String] {
+        let seps = [" feat. ", " feat ", " ft. ", " ft ", " / ", "; "]
+        var parts = [name]
+        for sep in seps {
+            parts = parts.flatMap { part -> [String] in
+                var result: [String] = []
+                var s = part
+                while let range = s.range(of: sep, options: .caseInsensitive) {
+                    result.append(String(s[..<range.lowerBound]))
+                    s = String(s[range.upperBound...])
+                }
+                result.append(s)
+                return result
+            }
+        }
+        return parts.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
     private var downloadedSongIds: Set<String> {
         Set(downloadStore.songs.map { $0.songId })
     }
@@ -694,7 +720,7 @@ struct LibraryView: View {
             ZStack(alignment: .bottomTrailing) {
                 AlbumArtView(coverArtId: artist.coverArt, size: 300, isCircle: true)
                     .aspectRatio(1, contentMode: .fit)
-                if downloadedArtistNames.contains(artist.name) {
+                if downloadedArtistBadgeNames.contains(artist.name) {
                     Image(systemName: "arrow.down.circle.fill")
                         .font(.caption)
                         .foregroundStyle(.white)
@@ -728,7 +754,7 @@ struct LibraryView: View {
                 }
             }
             Spacer()
-            if downloadedArtistNames.contains(artist.name) {
+            if downloadedArtistBadgeNames.contains(artist.name) {
                 Image(systemName: "arrow.down.circle.fill")
                     .font(.caption)
                     .foregroundStyle(.white)
@@ -1090,7 +1116,7 @@ struct LibraryView: View {
                 .frame(width: 44, height: 44)
             Text(artist.name).font(.body).lineLimit(1)
             Spacer()
-            if downloadedArtistNames.contains(artist.name) {
+            if downloadedArtistBadgeNames.contains(artist.name) {
                 Image(systemName: "arrow.down.circle.fill")
                     .font(.caption)
                     .foregroundStyle(.white)
