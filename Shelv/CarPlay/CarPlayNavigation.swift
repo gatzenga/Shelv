@@ -91,6 +91,7 @@ enum CarPlayNavigation {
 
         func makeActionsSection() -> CPListSection {
             let enableFavorites = UserDefaults.standard.bool(forKey: "enableFavorites")
+                && !OfflineModeService.shared.isOffline
             let starred = LibraryStore.shared.isAlbumStarred(album)
 
             var actions: [(icon: String, label: String, handler: () -> Void)] = [
@@ -176,6 +177,14 @@ enum CarPlayNavigation {
                 t.updateSections([makeActionsSection(), snap[1]])
             }
         }
+        Task { @MainActor [weak template] in
+            for await _ in OfflineModeService.shared.$isOffline.dropFirst(1).values {
+                guard let t = template else { return }
+                let snap = t.sections
+                guard snap.count >= 2 else { return }
+                t.updateSections([makeActionsSection(), snap[1]])
+            }
+        }
     }
 
     // MARK: - Artist
@@ -220,6 +229,7 @@ enum CarPlayNavigation {
 
         func makeActionsSection() -> CPListSection {
             let enableFavorites = UserDefaults.standard.bool(forKey: "enableFavorites")
+                && !OfflineModeService.shared.isOffline
             let starred = LibraryStore.shared.isArtistStarred(artist)
 
             func playAction(_ op: @escaping ([Song]) -> Void, navigateToPlayer: Bool = false) -> () -> Void {
@@ -297,6 +307,14 @@ enum CarPlayNavigation {
         }
         Task { @MainActor [weak template] in
             for await _ in LibraryStore.shared.$starredArtists.dropFirst(1).values {
+                guard let t = template else { return }
+                let snap = t.sections
+                guard snap.count >= 2 else { return }
+                t.updateSections([makeActionsSection(), snap[1]])
+            }
+        }
+        Task { @MainActor [weak template] in
+            for await _ in OfflineModeService.shared.$isOffline.dropFirst(1).values {
                 guard let t = template else { return }
                 let snap = t.sections
                 guard snap.count >= 2 else { return }

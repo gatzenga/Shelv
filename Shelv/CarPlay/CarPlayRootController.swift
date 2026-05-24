@@ -213,6 +213,11 @@ final class CarPlayRootController: NSObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.updateNowPlayingButtons() }
             .store(in: &cancellables)
+        // Offline-Toggle: Heart-Button ein-/ausblenden wenn Offline-Modus wechselt.
+        OfflineModeService.shared.$isOffline
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.updateNowPlayingButtons() }
+            .store(in: &cancellables)
         // Bewusst KEINE Sinks auf $isShuffled / $repeatMode: Apple's System-Buttons
         // (CPNowPlayingShuffle-/RepeatButton) lesen ihren Selected-State autonom vom
         // MPRemoteCommandCenter. Würden wir bei jedem State-Wechsel die Buttons neu
@@ -247,6 +252,7 @@ final class CarPlayRootController: NSObject {
         var buttons: [CPNowPlayingButton] = [cachedShuffleButton, cachedRepeatButton]
         if #available(iOS 16.0, *),
            UserDefaults.standard.bool(forKey: "enableFavorites"),
+           !OfflineModeService.shared.isOffline,
            let song {
             let icon = UIImage(systemName: starred ? "heart.fill" : "heart") ?? UIImage()
             buttons.append(CPNowPlayingImageButton(image: icon) { _ in
