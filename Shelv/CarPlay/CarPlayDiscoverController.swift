@@ -31,6 +31,17 @@ final class CarPlayDiscoverController {
             .sink { [weak self] _ in self?.reload() }
             .store(in: &cancellables)
 
+        // Downloads werden in CarPlay asynchron nach load() geladen.
+        // Sobald songs sich ändert, Offline-State neu rendern damit die Mix-Buttons erscheinen.
+        DownloadStore.shared.$songs
+            .receive(on: DispatchQueue.main)
+            .dropFirst()
+            .sink { [weak self] _ in
+                guard OfflineModeService.shared.isOffline else { return }
+                self?.showOffline()
+            }
+            .store(in: &cancellables)
+
         var lastThemeColor = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
         NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
             .receive(on: DispatchQueue.main)
@@ -69,17 +80,30 @@ final class CarPlayDiscoverController {
     }
 
     private func showOffline() {
+        let allDownloads = DownloadStore.shared.songs
+        var sections: [CPListSection] = []
+
+        if !allDownloads.isEmpty {
+            sections.append(CPListSection(items: [
+                makeOfflineMixItem(String(localized: "play_all_downloads"),    type: "play"),
+                makeOfflineMixItem(String(localized: "shuffle_all_downloads"), type: "shuffle"),
+                makeOfflineMixItem(String(localized: "mix_latest_downloads"),  type: "newest"),
+            ], header: "Mixes", sectionIndexTitle: nil))
+        }
+
         let goOnline = CPListItem(text: String(localized: "go_online"), detailText: nil)
         goOnline.setImage(cpIcon("wifi"))
         goOnline.handler = { _, c in
             Task { @MainActor in OfflineModeService.shared.exitOfflineMode() }
             c()
         }
-        rootTemplate.updateSections([CPListSection(
+        sections.append(CPListSection(
             items: [goOnline],
-            header: String(localized: "you_are_offline"),
+            header: allDownloads.isEmpty ? String(localized: "you_are_offline") : nil,
             sectionIndexTitle: nil
-        )])
+        ))
+
+        rootTemplate.updateSections(sections)
     }
 
     private func fetchAndBuild() async {
@@ -107,11 +131,17 @@ final class CarPlayDiscoverController {
             Task { @MainActor in OfflineModeService.shared.enterOfflineMode() }
             c()
         }
-        rootTemplate.updateSections([CPListSection(
-            items: [enable],
-            header: String(localized: "no_connection"),
-            sectionIndexTitle: nil
-        )])
+        let refreshItem = actionListItem(title: String(localized: "refresh"), systemImage: "arrow.clockwise") { [weak self] _, c in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                await self.fetchAndBuild()
+            }
+            c()
+        }
+        rootTemplate.updateSections([
+            CPListSection(items: [enable], header: String(localized: "no_connection"), sectionIndexTitle: nil),
+            CPListSection(items: [refreshItem], header: nil, sectionIndexTitle: nil),
+        ])
     }
 
     private func buildSections(imageMap: [String: UIImage] = [:]) -> [CPListSection] {
@@ -202,6 +232,55 @@ final class CarPlayDiscoverController {
         await applyCoversAsync(template: rootTemplate, coverArtIds: ids) { [weak self] map in
             self?.buildSections(imageMap: map) ?? []
         }
+    }
+
+    private func makeOfflineMixItem(_ title: String, type: String) -> CPListItem {
+        let item = CPListItem(text: title, detailText: nil)
+        item.handler = { [weak self] _, c in
+            c()
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let allDownloads = DownloadStore.shared.songs
+                guard !allDownloads.isEmpty else { return }
+
+                switch type {
+                case "play":
+                    let sorted = allDownloads.map { $0.asSong() }.sorted {
+                        let a = stripArticle($0.artist ?? "").localizedStandardCompare(stripArticle($1.artist ?? ""))
+                        if a != .orderedSame { return a == .orderedAscending }
+                        let b = ($0.album ?? "").localizedStandardCompare($1.album ?? "")
+                        if b != .orderedSame { return b == .orderedAscending }
+                        let d0 = $0.discNumber ?? 0, d1 = $1.discNumber ?? 0
+                        if d0 != d1 { return d0 < d1 }
+                        return ($0.track ?? 0) < ($1.track ?? 0)
+                    }
+                    AudioPlayerService.shared.play(songs: Array(sorted.prefix(500)))
+
+                case "shuffle":
+                    let sampled = Array(allDownloads.shuffled().prefix(500)).map { $0.asSong() }
+                    AudioPlayerService.shared.playShuffled(songs: sampled)
+
+                default: // newest
+                    let top100 = allDownloads.sorted { $0.addedAt > $1.addedAt }.prefix(100).map { $0.asSong() }
+                    AudioPlayerService.shared.playShuffled(songs: Array(top100))
+                }
+
+                CarPlayNavigation.presentNowPlaying(on: self.interfaceController)
+
+                // Mixes-Sektion zurücksetzen (analog zu makeMixItem)
+                let snap = self.rootTemplate.sections
+                if !snap.isEmpty {
+                    var fresh = snap
+                    fresh[0] = CPListSection(items: [
+                        self.makeOfflineMixItem(String(localized: "play_all_downloads"),    type: "play"),
+                        self.makeOfflineMixItem(String(localized: "shuffle_all_downloads"), type: "shuffle"),
+                        self.makeOfflineMixItem(String(localized: "mix_latest_downloads"),  type: "newest"),
+                    ], header: "Mixes", sectionIndexTitle: nil)
+                    self.rootTemplate.updateSections(fresh)
+                }
+            }
+        }
+        return item
     }
 
     private func makeMixItem(_ title: String, type: String) -> CPListItem {
