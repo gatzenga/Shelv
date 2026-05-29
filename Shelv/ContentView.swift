@@ -11,6 +11,7 @@ struct ContentView: View {
     @ObservedObject var offlineMode = OfflineModeService.shared
     @Environment(\.horizontalSizeClass) var horizontalSizeClass
     @State private var selectedTab = 0
+    @State private var searchResetToken = 0
     @State private var showPlayer = false
     @State private var showAddServer = false
     @State private var playlistSongIds: [String]? = nil
@@ -81,10 +82,22 @@ struct ContentView: View {
         }
     }
 
+    /// Tab-Selection-Binding: Bei jedem Wechsel zum Search-Tab (Tag 4) wird der Reset-Token
+    /// erhöht — SearchView leert daraufhin Eingabe + Ergebnisse und fokussiert die Suchleiste neu.
+    private var tabSelection: Binding<Int> {
+        Binding(
+            get: { selectedTab },
+            set: { newValue in
+                if newValue == 4 { searchResetToken += 1 }
+                selectedTab = newValue
+            }
+        )
+    }
+
     @ViewBuilder
     private func mainStack(geometry: GeometryProxy) -> some View {
         ZStack {
-            TabView(selection: $selectedTab) {
+            TabView(selection: tabSelection) {
                 DiscoverView()
                     .tabItem { Label(String(localized: "discover"), systemImage: "sparkles") }
                     .tag(0)
@@ -102,6 +115,9 @@ struct ContentView: View {
                         .tabItem { Label(String(localized: "playlists"), systemImage: "music.note.list") }
                         .tag(2)
                 }
+                SearchView(resetToken: searchResetToken)
+                    .tabItem { Label(String(localized: "search"), systemImage: "magnifyingglass") }
+                    .tag(4)
                 SettingsView()
                     .tabItem { Label(String(localized: "settings"), systemImage: "gearshape.fill") }
                     .tag(3)

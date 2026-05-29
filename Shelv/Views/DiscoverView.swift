@@ -22,7 +22,6 @@ struct DiscoverView: View {
     @State private var errorMessage: String?
     @State private var showError = false
     @State private var randomRefreshing = false
-    @State private var showSearch = false
     @State private var showInsights = false
     @State private var showRecap = false
     @State private var showOfflineHint = false
@@ -118,19 +117,8 @@ struct DiscoverView: View {
                                 Image(systemName: "chart.bar.xaxis")
                             }
                         }
-                        Button {
-                            showSearch = true
-                        } label: {
-                            Image(systemName: "magnifyingglass")
-                        }
                     }
                 }
-            }
-            .sheet(isPresented: $showSearch) {
-                SearchView()
-                    .presentationDetents([.large])
-                    .presentationCornerRadius(24)
-                    .tint(accentColor)
             }
             .sheet(isPresented: $showInsights) {
                 InsightsView()

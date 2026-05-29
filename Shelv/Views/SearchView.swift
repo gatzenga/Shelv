@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct SearchView: View {
+    /// Wird von ContentView bei jedem Tab-Wechsel zu Search erhöht → triggert Reset + Fokus.
+    var resetToken: Int = 0
     @ObservedObject var libraryStore = LibraryStore.shared
     @ObservedObject var offlineMode = OfflineModeService.shared
     @EnvironmentObject var serverStore: ServerStore
@@ -13,7 +15,7 @@ struct SearchView: View {
     @ObservedObject var downloadStore = DownloadStore.shared
 
     @State private var query = ""
-    @State private var searchFieldActive = true
+    @State private var searchFieldActive = false
     @State private var result: SearchResult?
     @State private var lyricsResults: [LyricsSearchResult] = []
     @State private var isSearching = false
@@ -549,6 +551,21 @@ struct SearchView: View {
                 isPresented: $searchFieldActive,
                 prompt: String(localized: "artists_albums_songs")
             )
+            .onChange(of: resetToken) { _, _ in
+                searchTask?.cancel()
+                query = ""
+                result = nil
+                lyricsResults = []
+                // Erst Fokus explizit lösen → zurück in den leeren Initialzustand. Ohne dieses
+                // false→true-Toggle würde ein bereits aktives Suchfeld die Tastatur nicht neu
+                // öffnen (true→true ist kein Zustandswechsel). Die kurze Verzögerung lässt
+                // zusätzlich den Tab-Übergang sichtbar werden, bevor die Tastatur aufgeht.
+                searchFieldActive = false
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(300))
+                    searchFieldActive = true
+                }
+            }
             .onChange(of: query) { _, newValue in
                 searchTask?.cancel()
                 guard !newValue.isEmpty else {
