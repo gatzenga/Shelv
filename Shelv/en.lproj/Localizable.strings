@@ -210,7 +210,7 @@
 "yearly" = "Yearly";
 "unknown_song" = "Unknown Song";
 "search" = "Search";
-"artists_albums_songs" = "Artists, albums, songs...";
+"artists_albums_songs" = "Artists, albums, songs, lyrics...";
 "server" = "Server";
 "name_optional" = "Name (optional)";
 "url_eg_httpsmusicexamplecom" = "URL (e.g. https://music.example.com)";
@@ -332,7 +332,7 @@
 "all_recap_playlists_on_navidrome_local_play_logs_a" = "All recap playlists on Navidrome, local play logs and iCloud records for this server will be permanently deleted. This bypasses the iCloud sync toggle.";
 "a_week_is_marked_processed_when_generate_succeeds_" = "A week is marked ✓ processed when generate() succeeds. An unprocessed week will be retried on next app start.";
 "all_recap_playlists_match_the_database" = "All recap playlists match the database.";
-"search_for_artists_albums_or_songs" = "Search for artists, albums or songs";
+"search_for_artists_albums_or_songs" = "Search for artists, albums, songs and lyrics";
 "nothing_new_fits_in_the_configured_storage_limit" = "Nothing new fits in the configured storage limit.";
 "these_playlists_will_be_permanently_deleted_from_n" = "These playlists will be permanently deleted from Navidrome and iCloud.";
 "precache_original_file_recommendedntranscoded_stre" = "Pre-cache Original File recommended.\nTranscoded streams are pre-cached automatically.";

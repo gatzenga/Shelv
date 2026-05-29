@@ -210,7 +210,7 @@
 "yearly" = "每年";
 "unknown_song" = "未知歌曲";
 "search" = "搜索";
-"artists_albums_songs" = "艺术家、专辑、歌曲…";
+"artists_albums_songs" = "艺术家、专辑、歌曲、歌词…";
 "server" = "服务器";
 "name_optional" = "名称（可选）";
 "url_eg_httpsmusicexamplecom" = "地址（例如 https://music.example.com）";
@@ -331,7 +331,7 @@
 "all_recap_playlists_on_navidrome_local_play_logs_a" = "Navidrome 上的所有回顾播放列表、本地播放记录和此服务器的 iCloud 记录将被永久删除。此操作绕过 iCloud 同步开关。";
 "a_week_is_marked_processed_when_generate_succeeds_" = "当 generate() 成功时，该周被标记为 ✓ 已处理。未处理的周将在下次启动时重试。";
 "all_recap_playlists_match_the_database" = "所有回顾播放列表与数据库匹配。";
-"search_for_artists_albums_or_songs" = "搜索艺术家、专辑或歌曲";
+"search_for_artists_albums_or_songs" = "搜索艺术家、专辑、歌曲和歌词";
 "nothing_new_fits_in_the_configured_storage_limit" = "在配置的存储限制内无法容纳新内容。";
 "these_playlists_will_be_permanently_deleted_from_n" = "这些播放列表将从 Navidrome 和 iCloud 永久删除。";
 "precache_original_file_recommendedntranscoded_stre" = "建议预缓存原始文件。\n转码流将自动预缓存。";
