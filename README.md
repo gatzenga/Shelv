@@ -9,6 +9,8 @@ A native, album and artist focused iOS and iPadOS client for [Navidrome](https:/
 
 **Website:** https://vkugler.app
 
+**App Store**: https://apps.apple.com/us/app/shelv-player/id6762255865
+
 **TestFlight:** https://testflight.apple.com/join/5y4tN6NB  
 
 **Discord:** https://discord.gg/UdJK5mpmZu
