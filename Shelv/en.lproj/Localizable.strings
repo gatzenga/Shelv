@@ -281,6 +281,7 @@
 "album_gain" = "Album Gain";
 "transcoding" = "Transcoding";
 "gapless" = "Gapless";
+"scrobble" = "Scrobble";
 "autofetch_on_playback" = "Auto-fetch on playback";
 "cancel_download" = "Cancel download";
 "download_all_lyrics" = "Download all lyrics";

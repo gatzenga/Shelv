@@ -611,20 +611,6 @@ class AudioPlayerService: ObservableObject {
                 if seekTo > 0 { self.engine.seek(to: seekTo) }
                 self.isEngineLoaded = true
             }
-
-            let scrobbleSongId = song.id
-            let scrobbleServerId = SubsonicAPIService.shared.activeServer?.stableId ?? ""
-            let scrobbleAt = Date().timeIntervalSince1970
-            Task {
-                do {
-                    try await SubsonicAPIService.shared.scrobble(songId: scrobbleSongId, playedAt: scrobbleAt)
-                } catch {
-                    guard !scrobbleServerId.isEmpty else { return }
-                    await PlayLogService.shared.addPendingScrobble(
-                        songId: scrobbleSongId, serverId: scrobbleServerId, playedAt: scrobbleAt
-                    )
-                }
-            }
         }
     }
 
@@ -1029,19 +1015,6 @@ class AudioPlayerService: ObservableObject {
                 MPNowPlayingInfoCenter.default().playbackState = .playing
                 if let url {
                     self.probeStreamFormat(for: song, url: url)
-                }
-                let scrobbleSongId = song.id
-                let scrobbleServerId = SubsonicAPIService.shared.activeServer?.stableId ?? ""
-                let scrobbleAt = Date().timeIntervalSince1970
-                Task {
-                    do {
-                        try await SubsonicAPIService.shared.scrobble(songId: scrobbleSongId, playedAt: scrobbleAt)
-                    } catch {
-                        guard !scrobbleServerId.isEmpty else { return }
-                        await PlayLogService.shared.addPendingScrobble(
-                            songId: scrobbleSongId, serverId: scrobbleServerId, playedAt: scrobbleAt
-                        )
-                    }
                 }
                 self.saveState()
             } else {

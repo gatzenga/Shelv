@@ -6,6 +6,7 @@ struct PlaybackSettingsView: View {
     @AppStorage("transcodingEnabled") private var transcodingEnabled = false
     @AppStorage("replayGainEnabled") private var replayGainEnabled = false
     @AppStorage("replayGainMode") private var replayGainMode = "track"
+    @AppStorage("recapThreshold") private var recapThreshold = 30
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
@@ -56,6 +57,18 @@ struct PlaybackSettingsView: View {
                         Label { Text(String(localized: "replay_gain_mode")) } icon: {
                             Image(systemName: "switch.2").foregroundStyle(accentColor)
                         }
+                    }
+                }
+            }
+
+            Section(String(localized: "scrobble")) {
+                Picker(selection: $recapThreshold) {
+                    ForEach([10, 20, 30, 40, 50], id: \.self) { pct in
+                        Text("\(pct)%").tag(pct)
+                    }
+                } label: {
+                    Label { Text(String(localized: "count_from")) } icon: {
+                        Image(systemName: "checkmark.seal").foregroundStyle(accentColor)
                     }
                 }
             }

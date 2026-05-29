@@ -59,8 +59,7 @@ final class PlayTracker {
     private func finalize() {
         guard let songId = trackedSongId,
               let serverId = trackedServerId,
-              trackedDuration > 0,
-              UserDefaults.standard.bool(forKey: "recapEnabled")
+              trackedDuration > 0
         else {
             reset()
             return
@@ -68,10 +67,26 @@ final class PlayTracker {
         let pct = Double(UserDefaults.standard.integer(forKey: "recapThreshold"))
         let threshold = pct > 0 ? pct / 100.0 : 0.3
         if playedSeconds / trackedDuration >= threshold {
-            let dur = trackedDuration
+            // Server-Scrobble: Song gilt ab der eingestellten Schwelle als gehört
+            // (submission=true → Play-Count auf Navidrome). Bei Fehler in die
+            // scrobble_queue für späteren Flush.
+            let scrobbleAt = Date().timeIntervalSince1970
             Task.detached(priority: .utility) {
-                await PlayLogService.shared.log(songId: songId, serverId: serverId, songDuration: dur)
-                await CloudKitSyncService.shared.uploadPendingEvents()
+                do {
+                    try await SubsonicAPIService.shared.scrobble(songId: songId, playedAt: scrobbleAt)
+                } catch {
+                    await PlayLogService.shared.addPendingScrobble(
+                        songId: songId, serverId: serverId, playedAt: scrobbleAt
+                    )
+                }
+            }
+            // Recap-Play-Log: nur wenn Recap aktiv
+            if UserDefaults.standard.bool(forKey: "recapEnabled") {
+                let dur = trackedDuration
+                Task.detached(priority: .utility) {
+                    await PlayLogService.shared.log(songId: songId, serverId: serverId, songDuration: dur)
+                    await CloudKitSyncService.shared.uploadPendingEvents()
+                }
             }
         }
         reset()

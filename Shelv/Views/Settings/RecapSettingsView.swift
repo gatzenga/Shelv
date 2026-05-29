@@ -25,7 +25,6 @@ struct RecapSettingsView: View {
     @AppStorage("recapWeeklyRetention") private var recapWeeklyRetention = 1
     @AppStorage("recapMonthlyRetention") private var recapMonthlyRetention = 12
     @AppStorage("recapYearlyRetention") private var recapYearlyRetention = 3
-    @AppStorage("recapThreshold")       private var recapThreshold       = 30
 
     @State private var showImportFilePicker = false
     @State private var showSyncReport = false
@@ -78,15 +77,6 @@ struct RecapSettingsView: View {
                     retentionRange: 1...10,
                     type: .year
                 )
-                Picker(selection: $recapThreshold) {
-                    ForEach([10, 20, 30, 40, 50], id: \.self) { pct in
-                        Text("\(pct)%").tag(pct)
-                    }
-                } label: {
-                    Label { Text(String(localized: "count_from")) } icon: {
-                        Image(systemName: "checkmark.seal").foregroundStyle(accentColor)
-                    }
-                }
             }
 
             // MARK: Overview
