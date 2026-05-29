@@ -183,15 +183,15 @@ struct QueueView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(String(localized: "done")) {
-                        if editMode == .active {
-                            withAnimation { editMode = .inactive }
-                        } else {
+                    // Nur im Nicht-Edit-Modus zeigen — sonst stünde links "Done" UND rechts
+                    // der "Done"-Button des Edit-Modus (zwei Done-Buttons gleichzeitig).
+                    if editMode == .inactive {
+                        Button(String(localized: "done")) {
                             dismiss()
                         }
+                        .bold()
+                        .foregroundStyle(accentColor)
                     }
-                    .bold()
-                    .foregroundStyle(accentColor)
                 }
                 if totalCount > 0 {
                     ToolbarItem(placement: .topBarTrailing) {
