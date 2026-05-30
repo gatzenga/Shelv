@@ -71,6 +71,14 @@ struct ContentView: View {
         .onChange(of: serverStore.activeServerID) { _, _ in
             AudioPlayerService.shared.stop()
             libraryStore.resetInMemory()
+            #if DEBUG
+            // Demo-Server aktiv → festes Player-Standbild setzen (nach stop(), sonst würde
+            // es sofort wieder gelöscht) und Recap-Anzeige aktivieren.
+            if SubsonicAPIService.shared.isDemoActive {
+                AudioPlayerService.shared.loadDemoStandby()
+                UserDefaults.standard.set(true, forKey: "recapEnabled")
+            }
+            #endif
         }
         .onChange(of: enablePlaylists) { _, enabled in
             if !enabled && selectedTab == 2 { selectedTab = 0 }

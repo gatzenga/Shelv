@@ -99,8 +99,15 @@ class ServerStore: ObservableObject {
         KeychainService.load(for: server.id)
     }
 
+    /// String-Konstante (statt DemoContent), damit der Filter auch in Release-Builds kompiliert,
+    /// wo `DemoContent` nicht existiert. Hält den Demo-Server zuverlässig aus der Persistenz.
+    private let demoBaseURL = "demo://shelv"
+
     private func save() {
-        if let data = try? JSONEncoder().encode(servers) {
+        // Demo-Server nie persistieren — sonst könnte er über die (zwischen Debug und Release
+        // geteilten) UserDefaults in einen Release-Build durchsickern.
+        let persistable = servers.filter { $0.baseURL != demoBaseURL }
+        if let data = try? JSONEncoder().encode(persistable) {
             UserDefaults.standard.set(data, forKey: saveKey)
         }
     }
@@ -108,7 +115,12 @@ class ServerStore: ObservableObject {
     private func load() {
         if let data = UserDefaults.standard.data(forKey: saveKey),
            let decoded = try? JSONDecoder().decode([SubsonicServer].self, from: data) {
-            servers = decoded
+            // Etwaige persistierte Demo-Server immer verwerfen (auch im Release).
+            servers = decoded.filter { $0.baseURL != demoBaseURL }
         }
+        #if DEBUG
+        // Frischen Demo-Server rein in-memory anhängen — nur in Debug-Builds.
+        servers.append(DemoContent.server)
+        #endif
     }
 }

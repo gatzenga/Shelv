@@ -392,6 +392,30 @@ class AudioPlayerService: ObservableObject {
         saveState()
     }
 
+    #if DEBUG
+    /// Setzt ein festes Player-Standbild für Demo-Screenshots: ein bestimmter Song bei fester
+    /// Position, pausiert, ohne echte Wiedergabe. Die Engine wird bewusst nicht geladen
+    /// (`isEngineLoaded` bleibt `false`), daher überschreibt der Time-Observer `currentTime`
+    /// nicht. `PlayerView` liest `currentTime`/`duration` in `onAppear` direkt.
+    func loadDemoStandby() {
+        engine.stop()
+        isEngineLoaded = false
+        isShuffled = false
+        queue = DemoContent.playerQueue
+        currentIndex = DemoContent.playerCurrentIndex
+        playNextQueue = []
+        userQueue = []
+        truthAlbumQueue = DemoContent.playerQueue
+        truthPlayNextQueue = []
+        truthUserQueue = []
+        currentSong = DemoContent.playerSong
+        currentTime = DemoContent.playerCurrentTime
+        duration = DemoContent.playerDuration
+        isPlaying = false
+        actualStreamFormat = ActualStreamFormat(codecLabel: "MP3", bitrateKbps: 369)
+    }
+    #endif
+
     private func probeStreamFormat(for song: Song, url: URL) {
         formatProbeTask?.cancel()
         if url.isFileURL {

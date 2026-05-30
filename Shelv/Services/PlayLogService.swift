@@ -189,6 +189,9 @@ actor PlayLogService {
     }
 
     func topSongs(serverId: String, from start: Date, to end: Date, limit: Int) -> [RecapSongCount] {
+        #if DEBUG
+        if SubsonicAPIService.shared.isDemoActive { return Array(DemoContent.recapSongCounts().prefix(limit)) }
+        #endif
         guard let pool else { return [] }
         return (try? pool.read { db in
             try Row.fetchAll(db, sql: """

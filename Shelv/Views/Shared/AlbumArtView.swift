@@ -60,11 +60,25 @@ struct AlbumArtView: View {
 
     @MainActor
     private func load() async {
-        guard let id = coverArtId,
-              let url = SubsonicAPIService.shared.coverArtURL(for: id, size: size)
-        else { uiImage = nil; loading = false; return }
+        guard let id = coverArtId else { uiImage = nil; loading = false; return }
 
         let key = "\(id)_\(size)"
+
+        #if DEBUG
+        // Demo-Cover liegen als Asset-Imagesets im Bundle (Präfix `demo_`), nicht im Netz.
+        if id.hasPrefix("demo_") {
+            if let cached = ImageCacheService.shared.cachedImage(key: key) { uiImage = cached }
+            else if let img = UIImage(named: id) {
+                ImageCacheService.shared.cache(img, key: key)
+                uiImage = img
+            }
+            loading = false
+            return
+        }
+        #endif
+
+        guard let url = SubsonicAPIService.shared.coverArtURL(for: id, size: size)
+        else { uiImage = nil; loading = false; return }
 
         if let cached = ImageCacheService.shared.cachedImage(key: key) {
             uiImage = cached; loading = false; return

@@ -248,6 +248,12 @@ class SubsonicAPIService: ObservableObject {
         }
     }
 
+    #if DEBUG
+    /// Aktiv, wenn der Demo-Server gewählt ist. Alle Daten-Methoden liefern dann
+    /// `DemoContent`-Daten statt echter Netzwerk-Antworten. Siehe `DemoContent`.
+    var isDemoActive: Bool { activeServer?.baseURL == DemoContent.serverBaseURL }
+    #endif
+
     private let apiVersion = "1.16.1"
     private let clientName = "Shelv"
     private let decoder: JSONDecoder = {
@@ -439,6 +445,9 @@ class SubsonicAPIService: ObservableObject {
     }
 
     func getAlbumList(type: String, size: Int = 20, offset: Int = 0) async throws -> [Album] {
+        #if DEBUG
+        if isDemoActive { return offset > 0 ? [] : DemoContent.albumList(type: type) }
+        #endif
         let data = try await fetchData(path: "getAlbumList2", extra: [
             URLQueryItem(name: "type", value: type),
             URLQueryItem(name: "size", value: "\(size)"),
@@ -462,6 +471,9 @@ class SubsonicAPIService: ObservableObject {
     }
 
     func getAllArtists() async throws -> [Artist] {
+        #if DEBUG
+        if isDemoActive { return DemoContent.artists }
+        #endif
         let data = try await fetchData(path: "getArtists")
         let body = try decoder.decode(Envelope<ArtistsBody>.self, from: data).response
         try check(status: body.status, error: body.error)
@@ -470,6 +482,12 @@ class SubsonicAPIService: ObservableObject {
     }
 
     func getAlbum(id: String) async throws -> AlbumDetail {
+        #if DEBUG
+        if isDemoActive {
+            guard let d = DemoContent.albumDetail(id: id) else { throw SubsonicAPIError.apiError(0, "Album not found") }
+            return d
+        }
+        #endif
         let data = try await fetchData(path: "getAlbum", extra: [
             URLQueryItem(name: "id", value: id)
         ])
@@ -480,6 +498,12 @@ class SubsonicAPIService: ObservableObject {
     }
 
     func getArtist(id: String) async throws -> ArtistDetail {
+        #if DEBUG
+        if isDemoActive {
+            guard let d = DemoContent.artistDetail(id: id) else { throw SubsonicAPIError.apiError(0, "Artist not found") }
+            return d
+        }
+        #endif
         let data = try await fetchData(path: "getArtist", extra: [
             URLQueryItem(name: "id", value: id)
         ])
@@ -490,6 +514,9 @@ class SubsonicAPIService: ObservableObject {
     }
 
     func getArtistInfo(id: String) async throws -> ArtistInfo {
+        #if DEBUG
+        if isDemoActive { return ArtistInfo(biography: nil) }
+        #endif
         let data = try await fetchData(path: "getArtistInfo2", extra: [
             URLQueryItem(name: "id", value: id),
             URLQueryItem(name: "count", value: "0")
@@ -525,6 +552,9 @@ class SubsonicAPIService: ObservableObject {
     }
 
     func search(query: String) async throws -> SearchResult {
+        #if DEBUG
+        if isDemoActive { return DemoContent.search(query: query) }
+        #endif
         let data = try await fetchData(path: "search3", extra: [
             URLQueryItem(name: "query", value: query),
             URLQueryItem(name: "artistCount", value: "10"),
@@ -663,6 +693,9 @@ class SubsonicAPIService: ObservableObject {
     // MARK: - Favorites (star/unstar/getStarred2)
 
     func getStarred() async throws -> StarredResult {
+        #if DEBUG
+        if isDemoActive { return DemoContent.starred }
+        #endif
         let data = try await fetchData(path: "getStarred2")
         let body = try decoder.decode(Envelope<StarredBody>.self, from: data).response
         try check(status: body.status, error: body.error)
@@ -692,6 +725,9 @@ class SubsonicAPIService: ObservableObject {
     // MARK: - Playlists
 
     func getPlaylists() async throws -> [Playlist] {
+        #if DEBUG
+        if isDemoActive { return DemoContent.playlists }
+        #endif
         let data = try await fetchData(path: "getPlaylists")
         let body = try decoder.decode(Envelope<PlaylistsBody>.self, from: data).response
         try check(status: body.status, error: body.error)
@@ -699,6 +735,12 @@ class SubsonicAPIService: ObservableObject {
     }
 
     func getPlaylist(id: String) async throws -> Playlist {
+        #if DEBUG
+        if isDemoActive {
+            guard let p = DemoContent.playlist(id: id) else { throw SubsonicAPIError.apiError(0, "Playlist not found") }
+            return p
+        }
+        #endif
         let data = try await fetchData(path: "getPlaylist", extra: [
             URLQueryItem(name: "id", value: id)
         ])

@@ -103,11 +103,21 @@ class RecapStore: ObservableObject {
 
     func setup(serverId: String) async {
         await loadEntries(serverId: serverId)
+        #if DEBUG
+        if SubsonicAPIService.shared.isDemoActive { return }  // keine echte Generierung im Demo-Modus
+        #endif
         guard UserDefaults.standard.bool(forKey: "recapEnabled") else { return }
         await generatePendingPeriods(serverId: serverId)
     }
 
     func loadEntries(serverId: String) async {
+        #if DEBUG
+        if SubsonicAPIService.shared.isDemoActive {
+            entries = DemoContent.recapEntries
+            recapPlaylistIds = Set(entries.map { $0.playlistId })
+            return
+        }
+        #endif
         let all = await PlayLogService.shared.allRegistryEntries(serverId: serverId)
         entries = all
         recapPlaylistIds = Set(all.map { $0.playlistId })
