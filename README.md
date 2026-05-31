@@ -7,13 +7,13 @@
 
 A native, album and artist focused iOS and iPadOS client for [Navidrome](https://www.navidrome.org/) and Subsonic-compatible music servers, built with SwiftUI. Includes **Recap** — automatic weekly, monthly, and yearly playlists of your most-played songs, synced across iPhone, iPad, and Mac via iCloud. Also available as a [native macOS app](https://github.com/gatzenga/Shelv-Desktop).
 
-**Website:** https://vkugler.app
+[![Download on the App Store](https://developer.apple.com/app-store/marketing/guidelines/images/badge-download-on-the-app-store.svg)](https://apps.apple.com/us/app/shelv-player/id6762255865)
 
-**App Store**: https://apps.apple.com/us/app/shelv-player/id6762255865
+[![TestFlight](https://img.shields.io/badge/TestFlight-0D96F6?style=for-the-badge&logo=apple&logoColor=white)](https://testflight.apple.com/join/5y4tN6NB)
 
-**TestFlight:** https://testflight.apple.com/join/5y4tN6NB  
+[![Discord](https://img.shields.io/badge/Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/UdJK5mpmZu)
 
-**Discord:** https://discord.gg/UdJK5mpmZu
+[![Website](https://img.shields.io/badge/Website-000000?style=for-the-badge&logo=safari&logoColor=white)](https://vkugler.app)
 
 ![Platform](https://img.shields.io/badge/platform-iOS%20%7C%20iPadOS-lightgrey)
 ![Swift](https://img.shields.io/badge/swift-5-orange)
