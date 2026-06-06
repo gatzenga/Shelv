@@ -142,7 +142,12 @@ struct ServerDetailView: View {
 
     private func loadServerInfo() async {
         guard let password else { return }
-        serverInfo = try? await api.ping(server: server, password: password)
+        async let infoTask   = api.ping(server: server, password: password)
+        async let statusTask = api.getScanStatus(server: server, password: password)
+        serverInfo = try? await infoTask
+        if let status = try? await statusTask, status.count > 0 {
+            UserDefaults.standard.set(status.count, forKey: songCountKey)
+        }
     }
 
     private func runFullScan() async {

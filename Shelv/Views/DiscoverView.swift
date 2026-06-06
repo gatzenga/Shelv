@@ -76,6 +76,12 @@ struct DiscoverView: View {
                                 icon: "clock.fill",
                                 key: "recent"
                             ) { await loadMix(type: "recent") }
+
+                            mixButton(
+                                title: String(localized: "mix_shuffle_all"),
+                                icon: "shuffle",
+                                key: "random"
+                            ) { await loadMix(type: "random") }
                         }
                         .padding(.horizontal)
 
@@ -378,6 +384,7 @@ struct DiscoverView: View {
             switch type {
             case "newest":   songs = try await SubsonicAPIService.shared.getNewestSongs()
             case "frequent": songs = try await SubsonicAPIService.shared.getFrequentSongs(limit: 50)
+            case "random":   songs = try await SubsonicAPIService.shared.getRandomSongs(size: 500)
             default:
                 songs = try await recentMixSongs()
             }

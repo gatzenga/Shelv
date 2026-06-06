@@ -186,6 +186,13 @@ struct StarredResult: Decodable {
     let song: [Song]?
 }
 
+private struct RandomSongsBody: Decodable {
+    let status: String
+    let error: StatusCheck.APIError?
+    let randomSongs: RandomSongsList?
+    struct RandomSongsList: Decodable { let song: [Song]? }
+}
+
 private struct StarredBody: Decodable {
     let status: String
     let error: StatusCheck.APIError?
@@ -581,6 +588,13 @@ class SubsonicAPIService: ObservableObject {
             return songs
         }
         return Array(allSongs.sorted { ($0.playCount ?? 0) > ($1.playCount ?? 0) }.prefix(limit))
+    }
+
+    func getRandomSongs(size: Int = 500) async throws -> [Song] {
+        let data = try await fetchData(path: "getRandomSongs", extra: [URLQueryItem(name: "size", value: "\(size)")])
+        let body = try decoder.decode(Envelope<RandomSongsBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+        return body.randomSongs?.song ?? []
     }
 
     func getRecentSongs(limit: Int = 100) async throws -> [Song] {

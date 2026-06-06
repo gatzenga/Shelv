@@ -6,6 +6,7 @@
 "mix_newest_tracks" = "混音：最新曲目";
 "mix_frequently_played" = "混音：常播曲目";
 "mix_recently_played" = "混音：最近播放";
+"mix_shuffle_all" = "混音：随机播放全部";
 "recently_added" = "最近添加";
 "recently_played" = "最近播放";
 "frequently_played" = "常播曲目";
