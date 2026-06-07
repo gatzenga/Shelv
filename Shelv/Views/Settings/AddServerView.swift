@@ -12,6 +12,7 @@ struct AddServerView: View {
     @State private var baseURL = ""
     @State private var username = ""
     @State private var password = ""
+    @State private var showPassword = false
     @State private var isTesting = false
     @State private var isSaving = false
     @State private var testResult: String?
@@ -44,8 +45,29 @@ struct AddServerView: View {
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
 
-                    SecureField(String(localized: "password"), text: $password)
-                        .focused($focusedField, equals: .password)
+                    if isEditing {
+                        SecureField(String(localized: "password"), text: $password)
+                            .focused($focusedField, equals: .password)
+                    } else {
+                        HStack {
+                            if showPassword {
+                                TextField(String(localized: "password"), text: $password)
+                                    .focused($focusedField, equals: .password)
+                                    .autocorrectionDisabled()
+                                    .textInputAutocapitalization(.never)
+                            } else {
+                                SecureField(String(localized: "password"), text: $password)
+                                    .focused($focusedField, equals: .password)
+                            }
+                            Button {
+                                showPassword.toggle()
+                            } label: {
+                                Image(systemName: showPassword ? "eye.slash" : "eye")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
                 }
 
                 Section {
