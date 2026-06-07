@@ -51,6 +51,24 @@ func cpIcon(_ systemName: String, pointSize: CGFloat = 22, weight: UIImage.Symbo
     return renderer.image { _ in tinted.draw(at: .zero) }
 }
 
+/// Kompakt-Icon für Mix-Listeneinträge — feste 20×20pt-Box mit zentriertem Symbol.
+/// Gleiche Containergrösse für alle Symbole → Text beginnt immer an derselben x-Position.
+/// Kleine Box hält die Zeilenhöhe kompakt (CarPlay dehnt Zeilen an die Bildgrösse).
+func cpListIcon(_ systemName: String, color: UIColor? = nil) -> UIImage {
+    let size = CGSize(width: 20, height: 20)
+    let cfg = UIImage.SymbolConfiguration(pointSize: 13, weight: .medium)
+    let base = UIImage(systemName: systemName, withConfiguration: cfg) ?? UIImage()
+    let tinted = base.withTintColor(color ?? cpAccentColor, renderingMode: .alwaysOriginal)
+    let renderer = UIGraphicsImageRenderer(size: size)
+    return renderer.image { _ in
+        let origin = CGPoint(
+            x: (size.width  - tinted.size.width)  / 2,
+            y: (size.height - tinted.size.height) / 2
+        )
+        tinted.draw(at: origin)
+    }
+}
+
 /// Action-Icon für CPListImageRowItem (horizontale Icon-Reihe).
 /// CarPlay resized Bilder dort auf `maximumImageSize` und kann SF-Symbol-Tints überschreiben —
 /// deshalb rasterisieren wir das Symbol zentriert auf die erwartete Grösse mit eingebrannter Farbe.

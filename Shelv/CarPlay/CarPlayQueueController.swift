@@ -82,7 +82,7 @@ final class CarPlayQueueController {
                     register(item, coverArt: song.coverArt)
                     return item
                 }
-                sections.append(CPListSection(items: items, header: String(localized: "play_next"), sectionIndexTitle: nil))
+                sections.append(CPListSection(items: items, header: "\(String(localized: "play_next")) (\(songs.count))", sectionIndexTitle: nil))
             }
             let albumQueue = albumQueueSongs()
             if !albumQueue.isEmpty {
@@ -99,7 +99,7 @@ final class CarPlayQueueController {
                     register(item, coverArt: song.coverArt)
                     return item
                 }
-                sections.append(CPListSection(items: items, header: String(localized: "shuffled_queue"), sectionIndexTitle: nil))
+                sections.append(CPListSection(items: items, header: "\(String(localized: "shuffled_queue")) (\(albumQueue.count))", sectionIndexTitle: nil))
             }
         } else {
             if !player.playNextQueue.isEmpty {
@@ -111,7 +111,7 @@ final class CarPlayQueueController {
                     register(item, coverArt: song.coverArt)
                     return item
                 }
-                sections.append(CPListSection(items: items, header: String(localized: "play_next"), sectionIndexTitle: nil))
+                sections.append(CPListSection(items: items, header: "\(String(localized: "play_next")) (\(songs.count))", sectionIndexTitle: nil))
             }
 
             let albumQueue = albumQueueSongs()
@@ -129,7 +129,7 @@ final class CarPlayQueueController {
                     register(item, coverArt: song.coverArt)
                     return item
                 }
-                sections.append(CPListSection(items: items, header: String(localized: "up_next"), sectionIndexTitle: nil))
+                sections.append(CPListSection(items: items, header: "\(String(localized: "up_next")) (\(albumQueue.count))", sectionIndexTitle: nil))
             }
 
             if !player.userQueue.isEmpty {
@@ -141,7 +141,7 @@ final class CarPlayQueueController {
                     register(item, coverArt: song.coverArt)
                     return item
                 }
-                sections.append(CPListSection(items: items, header: String(localized: "your_queue"), sectionIndexTitle: nil))
+                sections.append(CPListSection(items: items, header: "\(String(localized: "your_queue")) (\(songs.count))", sectionIndexTitle: nil))
             }
         }
 

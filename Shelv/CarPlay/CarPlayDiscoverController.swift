@@ -149,9 +149,10 @@ final class CarPlayDiscoverController {
 
         // Mixes — reine Textzeilen, sauber untereinander
         sections.append(CPListSection(items: [
-            makeMixItem(String(localized: "mix_newest_tracks"),     type: "newest"),
-            makeMixItem(String(localized: "mix_frequently_played"),   type: "frequent"),
-            makeMixItem(String(localized: "mix_recently_played"), type: "recent"),
+            makeMixItem(String(localized: "mix_newest_tracks"),     type: "newest",   icon: "sparkles"),
+            makeMixItem(String(localized: "mix_frequently_played"), type: "frequent", icon: "chart.bar.fill"),
+            makeMixItem(String(localized: "mix_recently_played"),   type: "recent",   icon: "clock.fill"),
+            makeMixItem(String(localized: "mix_shuffle_all"),       type: "random",   icon: "shuffle"),
         ], header: "Mixes", sectionIndexTitle: nil))
 
         // 4 Kategorien als Cover-Rows, kein Section-Header
@@ -283,36 +284,84 @@ final class CarPlayDiscoverController {
         return item
     }
 
-    private func makeMixItem(_ title: String, type: String) -> CPListItem {
+    private func frequentMixSongs() async throws -> [Song] {
+        // Toggle aktiv UND genug DB-Daten (≥ 50 einzigartige Songs) → DB, sonst serverseitig.
+        if UserDefaults.standard.bool(forKey: "mixUseDatabase"),
+           let serverId = SubsonicAPIService.shared.activeServer?.stableId,
+           await PlayLogService.shared.distinctSongCount(serverId: serverId) >= 50 {
+            let counts = await PlayLogService.shared.topSongs(
+                serverId: serverId,
+                from: .distantPast,
+                to: Date(),
+                limit: 50
+            )
+            if !counts.isEmpty {
+                return try await SubsonicAPIService.shared.getSongsOrdered(ids: counts.map(\.songId))
+            }
+        }
+        let allFrequent = try await SubsonicAPIService.shared.getAlbumList(type: "frequent", size: 500)
+        let sorted = allFrequent.sorted { ($0.playCount ?? 0) > ($1.playCount ?? 0) }
+        let maxPC = sorted.first?.playCount ?? 0
+        let threshold = max(maxPC / 50, 1)
+        var filtered = sorted.filter { ($0.playCount ?? 0) >= threshold }
+        if filtered.count < 30 { filtered = Array(sorted.prefix(30)) }
+        if filtered.count > 80 { filtered = Array(sorted.prefix(80)) }
+        let songs = try await withThrowingTaskGroup(of: [Song].self) { group in
+            for album in filtered {
+                group.addTask { (try? await SubsonicAPIService.shared.getAlbum(id: album.id))?.song ?? [] }
+            }
+            var all: [Song] = []
+            for try await albumSongs in group { all.append(contentsOf: albumSongs) }
+            return all
+        }
+        return Array(songs.sorted { ($0.playCount ?? 0) > ($1.playCount ?? 0) }.prefix(50))
+    }
+
+    private func recentMixSongs() async throws -> [Song] {
+        // Toggle aktiv UND genug DB-Daten → DB, sonst serverseitig (album-basiert).
+        if UserDefaults.standard.bool(forKey: "mixUseDatabase"),
+           let serverId = SubsonicAPIService.shared.activeServer?.stableId,
+           await PlayLogService.shared.distinctSongCount(serverId: serverId) >= 50 {
+            let ids = await PlayLogService.shared.recentUniqueSongIds(serverId: serverId, limit: 50)
+            if !ids.isEmpty {
+                return try await SubsonicAPIService.shared.getSongsOrdered(ids: ids)
+            }
+        }
+        return try await SubsonicAPIService.shared.getRecentSongs(limit: 50)
+    }
+
+    private func makeMixItem(_ title: String, type: String, icon: String? = nil) -> CPListItem {
         let item = CPListItem(text: title, detailText: nil)
+        if let icon { item.setImage(cpListIcon(icon)) }
         item.handler = { [weak self] _, c in
             c()
             Task { [weak self] in
                 do {
+                    guard let self else { return }
                     let songs: [Song]
                     switch type {
                     case "newest":   songs = try await SubsonicAPIService.shared.getNewestSongs()
-                    case "frequent": songs = try await SubsonicAPIService.shared.getFrequentSongs(limit: 50)
-                    default:         songs = try await SubsonicAPIService.shared.getRecentSongs(limit: 50)
+                    case "frequent": songs = try await self.frequentMixSongs()
+                    case "random":   songs = try await SubsonicAPIService.shared.getRandomSongs(size: 500)
+                    default:         songs = try await self.recentMixSongs()
                     }
                     guard !songs.isEmpty else {
-                        await MainActor.run { self?.presentMixError(title: title, message: String(localized: "no_tracks_found")) }
+                        await MainActor.run { self.presentMixError(title: title, message: String(localized: "no_tracks_found")) }
                         return
                     }
-                    if let s = self {
-                        await MainActor.run {
-                            AudioPlayerService.shared.playShuffled(songs: songs)
-                            CarPlayNavigation.presentNowPlaying(on: s.interfaceController)
-                            let snap = s.rootTemplate.sections
-                            if !snap.isEmpty {
-                                var freshSections = snap
-                                freshSections[0] = CPListSection(items: [
-                                    s.makeMixItem(String(localized: "mix_newest_tracks"),     type: "newest"),
-                                    s.makeMixItem(String(localized: "mix_frequently_played"),   type: "frequent"),
-                                    s.makeMixItem(String(localized: "mix_recently_played"), type: "recent"),
-                                ], header: "Mixes", sectionIndexTitle: nil)
-                                s.rootTemplate.updateSections(freshSections)
-                            }
+                    await MainActor.run {
+                        AudioPlayerService.shared.playShuffled(songs: songs)
+                        CarPlayNavigation.presentNowPlaying(on: self.interfaceController)
+                        let snap = self.rootTemplate.sections
+                        if !snap.isEmpty {
+                            var freshSections = snap
+                            freshSections[0] = CPListSection(items: [
+                                self.makeMixItem(String(localized: "mix_newest_tracks"),     type: "newest",   icon: "sparkles"),
+                                self.makeMixItem(String(localized: "mix_frequently_played"), type: "frequent", icon: "chart.bar.fill"),
+                                self.makeMixItem(String(localized: "mix_recently_played"),   type: "recent",   icon: "clock.fill"),
+                                self.makeMixItem(String(localized: "mix_shuffle_all"),       type: "random",   icon: "shuffle"),
+                            ], header: "Mixes", sectionIndexTitle: nil)
+                            self.rootTemplate.updateSections(freshSections)
                         }
                     }
                 } catch {
