@@ -436,6 +436,65 @@ actor PlayLogService {
         }) ?? []
     }
 
+    // MARK: - Database Cleanup (tote IDs)
+
+    /// Alle verschiedenen Song-IDs im Log eines Servers (faltet Plays auf distinct Songs zusammen).
+    func distinctSongIds(serverId: String) -> [String] {
+        guard let pool else { return [] }
+        return (try? pool.read { db in
+            try String.fetchAll(db, sql: "SELECT DISTINCT songId FROM play_log WHERE serverId = ?",
+                                arguments: [serverId])
+        }) ?? []
+    }
+
+    /// Anzahl verschiedener Songs im Log — günstig (COUNT), für die Mix-Schwellenprüfung.
+    func distinctSongCount(serverId: String) -> Int {
+        guard let pool else { return 0 }
+        return (try? pool.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(DISTINCT songId) FROM play_log WHERE serverId = ?",
+                             arguments: [serverId])
+        }) ?? 0
+    }
+
+    /// Play-UUIDs (= CloudKit-RecordNames) für die gegebenen Songs — für die iCloud-Löschung.
+    func uuids(forSongIds songIds: [String], serverId: String) -> [String] {
+        guard let pool, !songIds.isEmpty else { return [] }
+        var result: [String] = []
+        try? pool.read { db in
+            for start in stride(from: 0, to: songIds.count, by: 500) {
+                let chunk = Array(songIds[start..<min(start + 500, songIds.count)])
+                let placeholders = chunk.map { _ in "?" }.joined(separator: ",")
+                var args: [DatabaseValueConvertible] = [serverId]
+                args.append(contentsOf: chunk)
+                let part = try String.fetchAll(db, sql: """
+                    SELECT uuid FROM play_log
+                    WHERE serverId = ? AND uuid IS NOT NULL AND songId IN (\(placeholders))
+                    """, arguments: StatementArguments(args))
+                result.append(contentsOf: part)
+            }
+        }
+        return result
+    }
+
+    /// Löscht alle Plays der gegebenen Songs lokal. Gibt die Anzahl entfernter Zeilen zurück.
+    @discardableResult
+    func deletePlays(forSongIds songIds: [String], serverId: String) -> Int {
+        guard pool != nil, !songIds.isEmpty else { return 0 }
+        var removed = 0
+        safeWrite { db in
+            for start in stride(from: 0, to: songIds.count, by: 500) {
+                let chunk = Array(songIds[start..<min(start + 500, songIds.count)])
+                let placeholders = chunk.map { _ in "?" }.joined(separator: ",")
+                var args: [DatabaseValueConvertible] = [serverId]
+                args.append(contentsOf: chunk)
+                try db.execute(sql: "DELETE FROM play_log WHERE serverId = ? AND songId IN (\(placeholders))",
+                               arguments: StatementArguments(args))
+                removed += db.changesCount
+            }
+        }
+        return removed
+    }
+
     // MARK: - Debug
 
     func recentLogs(serverId: String, limit: Int = 50) -> [PlayLogRecord] {

@@ -8,6 +8,7 @@ struct DiscoverView: View {
     private let player = AudioPlayerService.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage("recapEnabled") private var recapEnabled = false
+    @AppStorage("mixUseDatabase") private var mixUseDatabase = false
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
     private var recapButtonVisible: Bool {
@@ -383,7 +384,7 @@ struct DiscoverView: View {
             let songs: [Song]
             switch type {
             case "newest":   songs = try await SubsonicAPIService.shared.getNewestSongs()
-            case "frequent": songs = try await SubsonicAPIService.shared.getFrequentSongs(limit: 50)
+            case "frequent": songs = try await frequentMixSongs()
             case "random":   songs = try await SubsonicAPIService.shared.getRandomSongs(size: 500)
             default:
                 songs = try await recentMixSongs()
@@ -395,9 +396,47 @@ struct DiscoverView: View {
         }
     }
 
+    private func frequentMixSongs() async throws -> [Song] {
+        // Toggle aktiv UND genug DB-Daten (≥ 50 einzigartige Songs) → lokale Play-Log-DB.
+        // Sonst serverseitig (Navidrome-Frequenzdaten, wie Insights).
+        if mixUseDatabase,
+           let serverId = SubsonicAPIService.shared.activeServer?.stableId,
+           await PlayLogService.shared.distinctSongCount(serverId: serverId) >= 50 {
+            let counts = await PlayLogService.shared.topSongs(
+                serverId: serverId, from: .distantPast, to: Date(), limit: 50)
+            if !counts.isEmpty {
+                return try await SubsonicAPIService.shared.getSongsOrdered(ids: counts.map(\.songId))
+            }
+        }
+        return try await frequentFallbackSongs()
+    }
+
+    /// Server-Methode (wie Insights): Top-500-Alben, dynamischer Schwellenwert, Top 50 Songs nach Playcount.
+    private func frequentFallbackSongs() async throws -> [Song] {
+        let allFrequent = try await SubsonicAPIService.shared.getAlbumList(type: "frequent", size: 500)
+        let sorted = allFrequent.sorted { ($0.playCount ?? 0) > ($1.playCount ?? 0) }
+        let maxPC = sorted.first?.playCount ?? 0
+        let threshold = max(maxPC / 50, 1)
+        var filtered = sorted.filter { ($0.playCount ?? 0) >= threshold }
+        if filtered.count < 30 { filtered = Array(sorted.prefix(30)) }
+        if filtered.count > 80 { filtered = Array(sorted.prefix(80)) }
+        let songs = try await withThrowingTaskGroup(of: [Song].self) { group in
+            for album in filtered {
+                group.addTask { (try? await SubsonicAPIService.shared.getAlbum(id: album.id))?.song ?? [] }
+            }
+            var all: [Song] = []
+            for try await albumSongs in group { all.append(contentsOf: albumSongs) }
+            return all
+        }
+        return Array(songs.sorted { ($0.playCount ?? 0) > ($1.playCount ?? 0) }.prefix(50))
+    }
+
     private func recentMixSongs() async throws -> [Song] {
-        if recapEnabled,
-           let serverId = SubsonicAPIService.shared.activeServer?.stableId {
+        // Toggle aktiv UND genug DB-Daten → echte zuletzt gehörte Songs aus der DB.
+        // Sonst serverseitig (album-basiert über getRecentSongs).
+        if mixUseDatabase,
+           let serverId = SubsonicAPIService.shared.activeServer?.stableId,
+           await PlayLogService.shared.distinctSongCount(serverId: serverId) >= 50 {
             let ids = await PlayLogService.shared.recentUniqueSongIds(serverId: serverId, limit: 50)
             if !ids.isEmpty {
                 return try await SubsonicAPIService.shared.getSongsOrdered(ids: ids)
