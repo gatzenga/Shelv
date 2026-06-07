@@ -425,14 +425,14 @@ struct InsightsView: View {
             if filtered.count < 30 { filtered = Array(sorted.prefix(30)) }
             if filtered.count > 80 { filtered = Array(sorted.prefix(80)) }
 
-            let songs = try await withThrowingTaskGroup(of: [Song].self) { group in
+            let songs = await withTaskGroup(of: [Song].self) { group in
                 for album in filtered {
                     group.addTask {
-                        (try await SubsonicAPIService.shared.getAlbum(id: album.id)).song ?? []
+                        (try? await SubsonicAPIService.shared.getAlbum(id: album.id))?.song ?? []
                     }
                 }
                 var all: [Song] = []
-                for try await albumSongs in group { all.append(contentsOf: albumSongs) }
+                for await albumSongs in group { all.append(contentsOf: albumSongs) }
                 return all
             }
             topSongs = songs
