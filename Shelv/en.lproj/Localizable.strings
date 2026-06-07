@@ -4,7 +4,7 @@
 "enable_offline_mode" = "Enable Offline Mode";
 "no_connection" = "No connection";
 "mix_newest_tracks" = "Mix: Newest Tracks";
-"mix_frequently_played" = "Mix: Frequently Played";
+"mix_frequently_played" = "Mix: Most Played";
 "mix_recently_played" = "Mix: Recently Played";
 "mix_shuffle_all" = "Mix: Shuffle All";
 "recently_added" = "Recently Added";
