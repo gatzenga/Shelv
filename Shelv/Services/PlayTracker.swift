@@ -80,13 +80,12 @@ final class PlayTracker {
                     )
                 }
             }
-            // Recap-Play-Log: nur wenn Recap aktiv
-            if UserDefaults.standard.bool(forKey: "recapEnabled") {
-                let dur = trackedDuration
-                Task.detached(priority: .utility) {
-                    await PlayLogService.shared.log(songId: songId, serverId: serverId, songDuration: dur)
-                    await CloudKitSyncService.shared.uploadPendingEvents()
-                }
+            // Play-Log: immer schreiben — die SQLite-DB ist unabhängig von Recap.
+            // Recap, Mixe und Insights sind allesamt nur Konsumenten dieser Daten.
+            let dur = trackedDuration
+            Task.detached(priority: .utility) {
+                await PlayLogService.shared.log(songId: songId, serverId: serverId, songDuration: dur)
+                await CloudKitSyncService.shared.uploadPendingEvents()
             }
         }
         reset()

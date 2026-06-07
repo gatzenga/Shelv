@@ -77,11 +77,11 @@ actor CloudKitSyncService {
 
     /// Voraussetzungen für *jeden* iCloud-Sync-Pfad:
     /// - iCloud-Sync vom User aktiviert
-    /// - Recap-Feature aktiviert (iCloud existiert nur für Recap-Daten)
     /// - Nicht im Offline-Modus (Server eh nicht erreichbar)
+    /// Unabhängig von Recap: synchronisiert wird die SQLite-DB (Play-Log + Recap-Marker).
+    /// Recap ist nur einer ihrer Konsumenten — die DB existiert auch ohne aktives Recap.
     private var canSync: Bool {
         guard syncEnabled else { return false }
-        guard UserDefaults.standard.bool(forKey: "recapEnabled") else { return false }
         if UserDefaults.standard.bool(forKey: "offlineModeEnabled") { return false }
         return true
     }
