@@ -1,43 +1,21 @@
 import SwiftUI
-import UniformTypeIdentifiers
-
-private struct ShareableFileWrap: Identifiable {
-    let url: URL
-    var id: String { url.path }
-}
-
-private struct ActivityView: UIViewControllerRepresentable {
-    let items: [Any]
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: items, applicationActivities: nil)
-    }
-    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
-}
 
 struct RecapSettingsView: View {
     @EnvironmentObject var serverStore: ServerStore
     @EnvironmentObject var recapStore: RecapStore
     @EnvironmentObject var ckStatus: CloudKitSyncStatus
     @AppStorage("themeColor") private var themeColorName = "violet"
-    @AppStorage("recapWeeklyEnabled")   private var recapWeeklyEnabled   = true
-    @AppStorage("recapMonthlyEnabled")  private var recapMonthlyEnabled  = true
-    @AppStorage("recapYearlyEnabled")   private var recapYearlyEnabled   = true
-    @AppStorage("recapWeeklyRetention") private var recapWeeklyRetention = 1
+    @AppStorage("recapWeeklyEnabled")    private var recapWeeklyEnabled    = true
+    @AppStorage("recapMonthlyEnabled")   private var recapMonthlyEnabled   = true
+    @AppStorage("recapYearlyEnabled")    private var recapYearlyEnabled    = true
+    @AppStorage("recapWeeklyRetention")  private var recapWeeklyRetention  = 1
     @AppStorage("recapMonthlyRetention") private var recapMonthlyRetention = 12
-    @AppStorage("recapYearlyRetention") private var recapYearlyRetention = 3
+    @AppStorage("recapYearlyRetention")  private var recapYearlyRetention  = 3
 
-    @State private var showImportFilePicker = false
-    @State private var showSyncReport = false
     @State private var showVerifySheet = false
-    @State private var isSyncingManually = false
-    @State private var isPreparingExport = false
-    @State private var exportItem: ShareableFileWrap?
-    @State private var exportError: String?
-    @State private var totalPlays: Int = 0
-
-    @State private var weekRetentionDraft: Int = 1
+    @State private var weekRetentionDraft:  Int = 1
     @State private var monthRetentionDraft: Int = 12
-    @State private var yearRetentionDraft: Int = 3
+    @State private var yearRetentionDraft:  Int = 3
     @State private var pendingRetention: PendingRetentionChange?
 
     private struct PendingRetentionChange: Identifiable {
@@ -79,139 +57,9 @@ struct RecapSettingsView: View {
                 )
             }
 
-            // MARK: Overview
-            Section(String(localized: "overview")) {
-                HStack {
-                    Label { Text(String(localized: "total_plays")) } icon: {
-                        Image(systemName: "music.note.list").foregroundStyle(accentColor)
-                    }
-                    Spacer()
-                    Text("\(totalPlays)")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                }
-
-                Button {
-                    showVerifySheet = true
-                } label: {
-                    Label { Text(String(localized: "sync_with_navidrome")) } icon: {
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                            .foregroundStyle(accentColor)
-                    }
-                }
-            }
-
-            // MARK: Datenbank
-            Section(String(localized: "database")) {
-                Button {
-                    guard !isPreparingExport else { return }
-                    isPreparingExport = true
-                    Task {
-                        defer { isPreparingExport = false }
-                        do {
-                            let url = try await recapStore.exportBackupURL()
-                            exportItem = ShareableFileWrap(url: url)
-                        } catch {
-                            exportError = error.localizedDescription
-                        }
-                    }
-                } label: {
-                    HStack {
-                        Label { Text(String(localized: "export_database")) } icon: {
-                            Image(systemName: "square.and.arrow.up").foregroundStyle(accentColor)
-                        }
-                        if isPreparingExport { Spacer(); ProgressView() }
-                    }
-                }
-                .disabled(isPreparingExport)
-
-                Button {
-                    showImportFilePicker = true
-                } label: {
-                    Label { Text(String(localized: "import_database")) } icon: {
-                        Image(systemName: "square.and.arrow.down").foregroundStyle(accentColor)
-                    }
-                }
-            }
-
-            // MARK: iCloud Sync
-            Section(String(localized: "icloud_sync")) {
-                if !ckStatus.accountAvailable {
-                    HStack(spacing: 10) {
-                        Image(systemName: "icloud.slash")
-                            .foregroundStyle(.secondary)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(String(localized: "no_icloud_account"))
-                                .font(.subheadline)
-                            Text(String(localized: "use_exportimport_as_backup_instead"))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .padding(.vertical, 2)
-                } else {
-                    HStack {
-                        Label { Text(String(localized: "last_sync")) } icon: {
-                            Image(systemName: "arrow.triangle.2.circlepath").foregroundStyle(accentColor)
-                        }
-                        Spacer()
-                        if let date = ckStatus.lastSyncDate {
-                            Text(date, style: .relative)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        } else {
-                            Text(String(localized: "never"))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    HStack {
-                        Label { Text(String(localized: "pending_uploads")) } icon: {
-                            Image(systemName: "icloud.and.arrow.up").foregroundStyle(accentColor)
-                        }
-                        Spacer()
-                        Text(ckStatus.pendingUploads > 0 ? "\(ckStatus.pendingUploads)" : "—")
-                            .font(.caption).foregroundStyle(.secondary).monospacedDigit()
-                    }
-
-                    HStack {
-                        Label { Text(String(localized: "pending_scrobbles")) } icon: {
-                            Image(systemName: "waveform.badge.plus").foregroundStyle(accentColor)
-                        }
-                        Spacer()
-                        Text(ckStatus.pendingScrobbles > 0 ? "\(ckStatus.pendingScrobbles)" : "—")
-                            .font(.caption).foregroundStyle(.secondary).monospacedDigit()
-                    }
-
-                    Button {
-                        guard !isSyncingManually else { return }
-                        isSyncingManually = true
-                        Task {
-                            defer { isSyncingManually = false }
-                            await CloudKitSyncService.shared.syncNow()
-                        }
-                    } label: {
-                        HStack {
-                            Label { Text(String(localized: "sync_now")) } icon: {
-                                Image(systemName: "arrow.triangle.2.circlepath").foregroundStyle(accentColor)
-                            }
-                            if isSyncingManually { Spacer(); ProgressView() }
-                        }
-                    }
-                    .disabled(isSyncingManually)
-                }
-            }
-
             // MARK: Logs
             if let sid = serverStore.activeServer?.stableId {
                 Section(String(localized: "logs")) {
-                    NavigationLink(destination: RecapPlayLogView(serverId: sid)) {
-                        Label { Text(String(localized: "recent_plays")) } icon: {
-                            Image(systemName: "list.bullet.clipboard").foregroundStyle(accentColor)
-                        }
-                    }
                     NavigationLink(destination:
                         RecapRegistryView(serverId: sid)
                             .environmentObject(recapStore)
@@ -228,19 +76,6 @@ struct RecapSettingsView: View {
                             Image(systemName: "sparkles.rectangle.stack").foregroundStyle(accentColor)
                         }
                     }
-                    NavigationLink(destination:
-                        RecapSyncLogView()
-                            .environmentObject(ckStatus)
-                    ) {
-                        Label { Text(String(localized: "sync_log")) } icon: {
-                            Image(systemName: "doc.text").foregroundStyle(accentColor)
-                        }
-                    }
-                    NavigationLink(destination: RecapDBLogView()) {
-                        Label { Text(String(localized: "database_errors")) } icon: {
-                            Image(systemName: "exclamationmark.octagon").foregroundStyle(accentColor)
-                        }
-                    }
                     NavigationLink(destination: RecapMarkersLogView(serverId: sid)) {
                         Label { Text(String(localized: "autogen_markers")) } icon: {
                             Image(systemName: "checkmark.circle.badge.questionmark").foregroundStyle(accentColor)
@@ -248,8 +83,16 @@ struct RecapSettingsView: View {
                     }
                 }
 
-                // MARK: Erweitert
-                Section {
+                // MARK: Actions
+                Section(String(localized: "actions")) {
+                    Button {
+                        showVerifySheet = true
+                    } label: {
+                        Label { Text(String(localized: "sync_with_navidrome")) } icon: {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                                .foregroundStyle(accentColor)
+                        }
+                    }
                     NavigationLink(destination:
                         RecapAdvancedView(serverId: sid)
                             .environmentObject(recapStore)
@@ -269,48 +112,11 @@ struct RecapSettingsView: View {
         .listStyle(.insetGrouped)
         .scrollIndicators(.hidden)
         .navigationTitle(String(localized: "recap_settings"))
-        .sheet(item: $exportItem) { file in
-            ActivityView(items: [file.url])
-        }
-        .alert(
-            String(localized: "export_failed"),
-            isPresented: Binding(get: { exportError != nil }, set: { if !$0 { exportError = nil } }),
-            presenting: exportError
-        ) { _ in
-            Button(String(localized: "ok"), role: .cancel) {}
-        } message: { msg in
-            Text(msg)
-        }
-        .fileImporter(isPresented: $showImportFilePicker, allowedContentTypes: [.item]) { result in
-            guard let url = try? result.get(),
-                  let sid = serverStore.activeServer?.stableId else { return }
-            Task { await recapStore.importDatabase(from: url, serverId: sid) }
-        }
-        .sheet(isPresented: $showSyncReport) {
-            syncReportSheet
-        }
-        .sheet(isPresented: $showVerifySheet, onDismiss: {
-            Task { await refreshTotalPlays() }
-        }) {
+        .sheet(isPresented: $showVerifySheet) {
             if let sid = serverStore.activeServer?.stableId {
                 RecapVerifyView(serverId: sid)
                     .environmentObject(recapStore)
             }
-        }
-        .onChange(of: recapStore.showSyncReport) { _, show in
-            if show { showSyncReport = true; recapStore.showSyncReport = false }
-        }
-        .task(id: serverStore.activeServerID) { await refreshTotalPlays() }
-        .task {
-            weekRetentionDraft  = recapWeeklyRetention
-            monthRetentionDraft = recapMonthlyRetention
-            yearRetentionDraft  = recapYearlyRetention
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .recapRegistryUpdated)) { _ in
-            Task { await refreshTotalPlays() }
-        }
-        .onChange(of: ckStatus.lastSyncDate) { _, _ in
-            Task { await refreshTotalPlays() }
         }
         .alert(
             pendingRetention.map {
@@ -341,14 +147,11 @@ struct RecapSettingsView: View {
         } message: { _ in
             Text(String(localized: "these_playlists_will_be_permanently_deleted_from_n"))
         }
-    }
-
-    private func refreshTotalPlays() async {
-        guard let sid = serverStore.activeServer?.stableId else {
-            totalPlays = 0
-            return
+        .task {
+            weekRetentionDraft  = recapWeeklyRetention
+            monthRetentionDraft = recapMonthlyRetention
+            yearRetentionDraft  = recapYearlyRetention
         }
-        totalPlays = await PlayLogService.shared.logCount(serverId: sid)
     }
 
     // MARK: - Period Row
@@ -437,28 +240,4 @@ struct RecapSettingsView: View {
         case .year:  return String(localized: "yearly_recaps")
         }
     }
-
-    // MARK: - Sheets
-
-    private var syncReportSheet: some View {
-        NavigationStack {
-            List(recapStore.syncReports) { report in
-                HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: report.isError ? "exclamationmark.circle" : "checkmark.circle")
-                        .foregroundStyle(report.isError ? .red : accentColor)
-                    Text(report.message).font(.subheadline)
-                }
-            }
-            .navigationTitle(String(localized: "recap_sync"))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(String(localized: "done")) { showSyncReport = false }
-                }
-            }
-        }
-        .presentationDetents([.medium, .large])
-        .presentationCornerRadius(24)
-    }
-
 }

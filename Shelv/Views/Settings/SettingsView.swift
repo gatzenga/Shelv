@@ -8,7 +8,6 @@ struct SettingsView: View {
     @AppStorage("enableFavorites") private var enableFavorites = true
     @AppStorage("enablePlaylists") private var enablePlaylists = true
     @AppStorage("recapEnabled") private var recapEnabled = false
-    @AppStorage("iCloudSyncEnabled") private var iCloudSyncEnabled = true
     @Environment(\.openURL) private var openURL
 
     @State private var showAddServer = false
@@ -87,22 +86,6 @@ struct SettingsView: View {
                                 Image(systemName: "slider.horizontal.3").foregroundStyle(accentColor)
                             }
                         }
-
-                        Toggle(isOn: $iCloudSyncEnabled) {
-                            Label { Text(String(localized: "icloud_sync")) } icon: {
-                                Image(systemName: "icloud").foregroundStyle(accentColor)
-                            }
-                        }
-                        .tint(accentColor)
-                        .onChange(of: iCloudSyncEnabled) { _, _ in
-                            Task { await CloudKitSyncService.shared.handleSyncEnabledChange() }
-                        }
-
-                        if !iCloudSyncEnabled {
-                            Text(String(localized: "data_stays_local_multiple_devices_may_create_dupli"))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        }
                     }
                 }
 
@@ -128,6 +111,14 @@ struct SettingsView: View {
                     NavigationLink(destination: CacheSettingsView()) {
                         Label { Text(String(localized: "cache")) } icon: {
                             Image(systemName: "internaldrive").foregroundStyle(accentColor)
+                        }
+                    }
+                    NavigationLink(destination:
+                        DatabaseSettingsView()
+                            .environmentObject(serverStore)
+                    ) {
+                        Label { Text(String(localized: "database")) } icon: {
+                            Image(systemName: "cylinder").foregroundStyle(accentColor)
                         }
                     }
                 }

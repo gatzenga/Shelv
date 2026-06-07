@@ -9,14 +9,9 @@ struct RecapAdvancedView: View {
     @State private var resetLastWeekResult: String?
     @State private var resetLastMonthResult: String?
     @State private var resetLastYearResult: String?
-    @State private var showResetConfirm = false
-    @State private var showIcloudResetConfirm = false
-    @State private var showFullResetConfirm = false
     @State private var showResetLastWeekConfirm = false
     @State private var showResetLastMonthConfirm = false
     @State private var showResetLastYearConfirm = false
-    @State private var isIcloudResetting = false
-    @State private var isFullResetting = false
     @State private var isResettingLastWeek = false
     @State private var isResettingLastMonth = false
     @State private var isResettingLastYear = false
@@ -121,54 +116,6 @@ struct RecapAdvancedView: View {
                 }
             }
 
-            Section(String(localized: "destructive_actions")) {
-                Button(role: .destructive) {
-                    showResetConfirm = true
-                } label: {
-                    Label(
-                        String(localized: "reset_local_database"),
-                        systemImage: "arrow.counterclockwise"
-                    )
-                    .foregroundStyle(.red)
-                }
-
-                Button(role: .destructive) {
-                    showIcloudResetConfirm = true
-                } label: {
-                    if isIcloudResetting {
-                        HStack {
-                            ProgressView()
-                            Text(String(localized: "deleting")).foregroundStyle(.red)
-                        }
-                    } else {
-                        Label(
-                            String(localized: "delete_icloud_data"),
-                            systemImage: "icloud.slash"
-                        )
-                        .foregroundStyle(.red)
-                    }
-                }
-                .disabled(isIcloudResetting)
-
-                Button(role: .destructive) {
-                    showFullResetConfirm = true
-                } label: {
-                    if isFullResetting {
-                        HStack {
-                            ProgressView()
-                            Text(String(localized: "deleting")).foregroundStyle(.red)
-                        }
-                    } else {
-                        Label(
-                            String(localized: "delete_everything"),
-                            systemImage: "trash.slash"
-                        )
-                        .foregroundStyle(.red)
-                    }
-                }
-                .disabled(isFullResetting)
-            }
-
             PlayerBottomSpacer(activeHeight: 110, inactiveHeight: 0)
                 .listRowInsets(EdgeInsets())
                 .listRowBackground(Color.clear)
@@ -176,35 +123,6 @@ struct RecapAdvancedView: View {
         }
         .navigationTitle(String(localized: "advanced"))
         .navigationBarTitleDisplayMode(.inline)
-        .alert(
-            String(localized: "reset_local_database_2"),
-            isPresented: $showResetConfirm
-        ) {
-            Button(String(localized: "reset"), role: .destructive) {
-                Task {
-                    await PlayLogService.shared.resetLog(serverId: serverId)
-                    await PlayLogService.shared.resetRegistry(serverId: serverId)
-                    await CloudKitSyncService.shared.resetChangeToken()
-                    await recapStore.loadEntries(serverId: serverId)
-                    NotificationCenter.default.post(name: .recapRegistryUpdated, object: nil)
-                    testResult = nil
-                }
-            }
-            Button(String(localized: "cancel"), role: .cancel) {}
-        } message: {
-            Text(String(localized: "clears_the_local_cache_only_icloud_and_navidrome_s"))
-        }
-        .alert(
-            String(localized: "delete_icloud_data_2"),
-            isPresented: $showIcloudResetConfirm
-        ) {
-            Button(String(localized: "delete"), role: .destructive) {
-                Task { await performIcloudReset() }
-            }
-            Button(String(localized: "cancel"), role: .cancel) {}
-        } message: {
-            Text(String(localized: "all_icloud_records_for_this_server_will_be_deleted"))
-        }
         .alert(
             String(localized: "reset_latest_weekly_recap_2"),
             isPresented: $showResetLastWeekConfirm
@@ -238,17 +156,6 @@ struct RecapAdvancedView: View {
         } message: {
             Text(String(localized: "deletes_the_newest_yearly_recap_and_clears_its_aut"))
         }
-        .alert(
-            String(localized: "delete_everything_2"),
-            isPresented: $showFullResetConfirm
-        ) {
-            Button(String(localized: "delete_everything"), role: .destructive) {
-                Task { await performFullReset() }
-            }
-            Button(String(localized: "cancel"), role: .cancel) {}
-        } message: {
-            Text(String(localized: "all_recap_playlists_on_navidrome_local_play_logs_a"))
-        }
     }
 
     private func performResetLastWeek() async {
@@ -281,33 +188,4 @@ struct RecapAdvancedView: View {
             : String(localized: "no_yearly_recap_to_reset")
     }
 
-    private func performIcloudReset() async {
-        isIcloudResetting = true
-        defer { isIcloudResetting = false }
-
-        await CloudKitSyncService.shared.deleteZone(force: true)
-        await PlayLogService.shared.markServerUnsyncedForReUpload(serverId: serverId)
-        await CloudKitSyncService.shared.updatePendingCounts()
-    }
-
-    private func performFullReset() async {
-        isFullResetting = true
-        defer { isFullResetting = false }
-
-        let registry = await PlayLogService.shared.allRegistryEntries(serverId: serverId)
-        for entry in registry {
-            try? await SubsonicAPIService.shared.deletePlaylist(id: entry.playlistId)
-        }
-
-        await CloudKitSyncService.shared.deleteZone(force: true)
-
-        await PlayLogService.shared.resetLog(serverId: serverId)
-        await PlayLogService.shared.resetRegistry(serverId: serverId)
-        await PlayLogService.shared.removeScrobbles(serverId: serverId)
-        await CloudKitSyncService.shared.resetChangeToken()
-        await CloudKitSyncService.shared.updatePendingCounts()
-
-        await recapStore.loadEntries(serverId: serverId)
-        testResult = nil
-    }
 }
