@@ -151,6 +151,7 @@
 "no_entries_to_check" = "没有可检查的条目";
 "no_dead_entries_found" = "未发现失效条目";
 "cleanup_removed_format" = "已移除 %d 首失效歌曲（%d 次播放）";
+"cleanup_complete" = "清理完成";
 "reset_local_database" = "重置本地数据库";
 "deleting" = "删除中…";
 "delete_icloud_data" = "删除 iCloud 数据";

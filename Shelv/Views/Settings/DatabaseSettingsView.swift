@@ -39,6 +39,7 @@ struct DatabaseSettingsView: View {
     @State private var cleanupChecked = 0
     @State private var cleanupTotal = 0
     @State private var cleanupResult: String?
+    @State private var cleanupDone = false
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
@@ -223,6 +224,11 @@ struct DatabaseSettingsView: View {
                     }
                     .disabled(isCleaningDatabase)
 
+                    if cleanupDone {
+                        Label(String(localized: "cleanup_complete"), systemImage: "checkmark.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.green)
+                    }
                     if let result = cleanupResult {
                         Text(result).font(.caption).foregroundStyle(.secondary)
                     }
@@ -367,9 +373,11 @@ struct DatabaseSettingsView: View {
         }
     }
 
+    @MainActor
     private func refreshTotalPlays() async {
         guard let sid = serverStore.activeServer?.stableId else { totalPlays = 0; return }
-        totalPlays = await PlayLogService.shared.logCount(serverId: sid)
+        let count = await PlayLogService.shared.logCount(serverId: sid)
+        totalPlays = count
     }
 
     /// Prüft jeden im Log vorkommenden Song serverseitig. Songs, die der Server definitiv nicht
@@ -380,6 +388,7 @@ struct DatabaseSettingsView: View {
         guard let sid = serverStore.activeServer?.stableId else { return }
         isCleaningDatabase = true
         cleanupResult = nil
+        cleanupDone = false
         cleanupChecked = 0
         cleanupTotal = 0
         defer {
@@ -414,6 +423,8 @@ struct DatabaseSettingsView: View {
         }
 
         guard !dead.isEmpty else {
+            await refreshTotalPlays()
+            cleanupDone = true
             cleanupResult = String(localized: "no_dead_entries_found")
             return
         }
@@ -424,6 +435,7 @@ struct DatabaseSettingsView: View {
             await CloudKitSyncService.shared.deletePlayEvents(uuids: uuids, force: true)
         }
         await refreshTotalPlays()
+        cleanupDone = true
         cleanupResult = String(format: String(localized: "cleanup_removed_format"), dead.count, removed)
     }
 

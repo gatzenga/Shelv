@@ -151,6 +151,7 @@
 "no_entries_to_check" = "Keine Einträge zu prüfen";
 "no_dead_entries_found" = "Keine toten Einträge gefunden";
 "cleanup_removed_format" = "%d tote Songs entfernt (%d Plays)";
+"cleanup_complete" = "Bereinigung abgeschlossen";
 "reset_local_database" = "Lokale Datenbank zurücksetzen";
 "deleting" = "Lösche…";
 "delete_icloud_data" = "iCloud-Daten löschen";
