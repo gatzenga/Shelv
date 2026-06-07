@@ -210,7 +210,7 @@ struct DatabaseSettingsView: View {
                     } label: {
                         if isCleaningDatabase {
                             HStack {
-                                ProgressView()
+                                ProgressView().tint(.red)
                                 Text(cleanupTotal > 0
                                      ? String(format: String(localized: "checking_count_format"), cleanupChecked, cleanupTotal)
                                      : String(localized: "cleaning_up"))
@@ -242,7 +242,7 @@ struct DatabaseSettingsView: View {
                     } label: {
                         if isIcloudResetting {
                             HStack {
-                                ProgressView()
+                                ProgressView().tint(.red)
                                 Text(String(localized: "deleting")).foregroundStyle(.red)
                             }
                         } else {
@@ -260,7 +260,7 @@ struct DatabaseSettingsView: View {
                     } label: {
                         if isFullResetting {
                             HStack {
-                                ProgressView()
+                                ProgressView().tint(.red)
                                 Text(String(localized: "deleting")).foregroundStyle(.red)
                             }
                         } else {
