@@ -56,3 +56,22 @@ struct AppTheme {
         options.first { $0.name == name } ?? options[0]
     }
 }
+
+// MARK: - Theme-Environment (genutzt von den macOS-Views; plattformneutral)
+
+private struct ThemeColorKey: EnvironmentKey {
+    static let defaultValue: Color = AppTheme.options[0].color
+}
+
+extension EnvironmentValues {
+    var themeColor: Color {
+        get { self[ThemeColorKey.self] }
+        set { self[ThemeColorKey.self] = newValue }
+    }
+}
+
+func formFieldLabel(_ text: String) -> some View {
+    Text(text)
+        .font(.callout.weight(.medium))
+        .foregroundStyle(.secondary)
+}
