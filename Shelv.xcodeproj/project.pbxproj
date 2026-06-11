@@ -22,14 +22,14 @@
 			path = "Shelv Mac";
 			sourceTree = "<group>";
 		};
-		BCC0DE0000000000000000C0 /* ShelvCore */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = ShelvCore;
-			sourceTree = "<group>";
-		};
 		BC9C593A2F8E9FB000FF4D25 /* Shelv */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = Shelv;
+			sourceTree = "<group>";
+		};
+		BCC0DE0000000000000000C0 /* ShelvCore */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = ShelvCore;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
