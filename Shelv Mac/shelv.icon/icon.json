@@ -1,0 +1,47 @@
+{
+  "fill" : {
+    "solid" : "display-p3:0.62063,0.55173,0.73025,1.00000"
+  },
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "blend-mode" : "normal",
+          "fill" : "automatic",
+          "glass-specializations" : [
+            {
+              "value" : false
+            },
+            {
+              "appearance" : "dark",
+              "value" : false
+            }
+          ],
+          "hidden" : false,
+          "image-name" : "dark copy 2.png",
+          "name" : "dark copy 2",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              0.5249999999999773,
+              0.5249999999999773
+            ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "squares" : [
+      "macOS"
+    ]
+  }
+}
