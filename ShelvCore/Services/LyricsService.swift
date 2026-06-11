@@ -6,13 +6,13 @@ import GRDB
 struct LyricsRecord: Codable, FetchableRecord, PersistableRecord {
     var songId: String
     var serverId: String
-    var source: String
+    var source: String        // "navidrome" | "lrclib" | "none"
     var plainText: String?
     var syncedLrc: String?
     var isSynced: Bool
     var isInstrumental: Bool
     var language: String?
-    var fetchedAt: Double
+    var fetchedAt: Double     // Date.timeIntervalSince1970
     var songTitle: String?   = nil
     var artistName: String?  = nil
     var coverArt: String?    = nil
@@ -26,7 +26,7 @@ struct LyricsRecord: Codable, FetchableRecord, PersistableRecord {
 struct LyricsSearchResult: Identifiable {
     var id: String { songId }
     let songId: String
-    let songTitle: String?
+    let songTitle: String?   // nil wenn noch nicht in DB gespeichert
     let artistName: String?
     let coverArt: String?
     let snippet: String
@@ -79,13 +79,34 @@ actor LyricsService {
                     t.column("isInstrumental", .boolean).notNull().defaults(to: false)
                     t.column("language",       .text)
                     t.column("fetchedAt",      .double).notNull()
-                    t.column("songTitle",      .text)
-                    t.column("artistName",     .text)
-                    t.column("coverArt",       .text)
                     t.primaryKey(["songId", "serverId"])
                 }
             }
+            // Die iOS- und macOS-App hatten vor der Zusammenführung getrennte
+            // Migrations-Historien (macOS: Metadata-Spalten schon in v1 + eigene
+            // "v2_addDuration"). Alle Spalten-Migrationen prüfen deshalb defensiv,
+            // ob die Spalte bereits existiert — sonst bricht der Start auf
+            // Bestands-Datenbanken der jeweils anderen Linie mit "duplicate column".
+            m.registerMigration("v2_addSongMetadata") { db in
+                let cols = try db.columns(in: "lyrics").map(\.name)
+                let missing = ["songTitle", "artistName", "coverArt"].filter { !cols.contains($0) }
+                guard !missing.isEmpty else { return }
+                try db.alter(table: "lyrics") { t in
+                    for col in missing { t.add(column: col, .text) }
+                }
+            }
+            // Legacy-ID der alten Desktop-App — registriert, damit GRDB deren
+            // Bestands-DBs (applied: v1, v2_addDuration) sauber weiterführt.
             m.registerMigration("v2_addDuration") { db in
+                let cols = try db.columns(in: "lyrics").map(\.name)
+                guard !cols.contains("songDuration") else { return }
+                try db.alter(table: "lyrics") { t in
+                    t.add(column: "songDuration", .integer)
+                }
+            }
+            m.registerMigration("v3_addDuration") { db in
+                let cols = try db.columns(in: "lyrics").map(\.name)
+                guard !cols.contains("songDuration") else { return }
                 try db.alter(table: "lyrics") { t in
                     t.add(column: "songDuration", .integer)
                 }
@@ -93,7 +114,7 @@ actor LyricsService {
             try m.migrate(p)
             pool = p
         } catch {
-            DBErrorLog.logLyrics("setup: \(error.localizedDescription)")
+            print("[LyricsService] DB setup failed: \(error)")
         }
     }
 
@@ -153,6 +174,18 @@ actor LyricsService {
         }) ?? 0
     }
 
+    /// Liefert in einem Query alle Song-IDs für die schon Lyrics existieren (source != 'none').
+    /// Für Bulk-Enqueue: einmaliger DB-Hit statt N einzelne `lyrics(songId:serverId:)`-Calls.
+    func cachedSongIds(serverId: String) -> Set<String> {
+        guard let pool else { return [] }
+        let rows: [String] = (try? pool.read { db in
+            try String.fetchAll(db,
+                sql: "SELECT songId FROM lyrics WHERE serverId = ? AND source != 'none'",
+                arguments: [serverId])
+        }) ?? []
+        return Set(rows)
+    }
+
     func totalRowCount() -> Int {
         guard let pool else { return 0 }
         return (try? pool.read { db in
@@ -191,45 +224,6 @@ actor LyricsService {
         } catch {
             DBErrorLog.logLyrics("reset VACUUM: \(error.localizedDescription)")
         }
-    }
-
-    // MARK: - Search
-
-    func searchLyrics(text: String, serverId: String, limit: Int = 40) -> [LyricsSearchResult] {
-        guard let pool, !text.trimmingCharacters(in: .whitespaces).isEmpty else { return [] }
-        let pattern = "%\(text)%"
-        return (try? pool.read { db in
-            try Row.fetchAll(db, sql: """
-                SELECT songId, songTitle, artistName, coverArt, plainText, songDuration
-                FROM lyrics
-                WHERE serverId = ?
-                  AND source != 'none'
-                  AND isInstrumental = 0
-                  AND plainText LIKE ? COLLATE NOCASE
-                ORDER BY COALESCE(songTitle, songId)
-                LIMIT ?
-                """, arguments: [serverId, pattern, limit])
-            .compactMap { row -> LyricsSearchResult? in
-                guard let songId: String = row["songId"] else { return nil }
-                let songTitle: String? = row["songTitle"]
-                let plainText: String? = row["plainText"]
-                let snippet = plainText.flatMap { extractSnippet(from: $0, query: text) } ?? ""
-                return LyricsSearchResult(
-                    songId: songId,
-                    songTitle: songTitle,
-                    artistName: row["artistName"], coverArt: row["coverArt"],
-                    snippet: snippet,
-                    duration: row["songDuration"]
-                )
-            }
-        }) ?? []
-    }
-
-    private func extractSnippet(from text: String, query: String) -> String? {
-        let lower = query.lowercased()
-        return text.components(separatedBy: "\n")
-            .first { $0.lowercased().contains(lower) }?
-            .trimmingCharacters(in: .whitespaces)
     }
 
     // MARK: - Fetch & Cache
@@ -286,6 +280,45 @@ actor LyricsService {
         }
     }
 
+    // MARK: - Search
+
+    func searchLyrics(text: String, serverId: String, limit: Int = 40) -> [LyricsSearchResult] {
+        guard let pool, !text.trimmingCharacters(in: .whitespaces).isEmpty else { return [] }
+        let pattern = "%\(text)%"
+        return (try? pool.read { db in
+            try Row.fetchAll(db, sql: """
+                SELECT songId, songTitle, artistName, coverArt, plainText, songDuration
+                FROM lyrics
+                WHERE serverId = ?
+                  AND source != 'none'
+                  AND isInstrumental = 0
+                  AND plainText LIKE ? COLLATE NOCASE
+                ORDER BY COALESCE(songTitle, songId)
+                LIMIT ?
+                """, arguments: [serverId, pattern, limit])
+            .compactMap { row -> LyricsSearchResult? in
+                guard let songId: String = row["songId"] else { return nil }
+                let songTitle: String? = row["songTitle"]
+                let plainText: String? = row["plainText"]
+                let snippet = plainText.flatMap { extractSnippet(from: $0, query: text) } ?? ""
+                return LyricsSearchResult(
+                    songId: songId,
+                    songTitle: songTitle,
+                    artistName: row["artistName"], coverArt: row["coverArt"],
+                    snippet: snippet,
+                    duration: row["songDuration"]
+                )
+            }
+        }) ?? []
+    }
+
+    private func extractSnippet(from text: String, query: String) -> String? {
+        let lower = query.lowercased()
+        return text.components(separatedBy: "\n")
+            .first { $0.lowercased().contains(lower) }?
+            .trimmingCharacters(in: .whitespaces)
+    }
+
     // MARK: - Navidrome
 
     private func fetchFromNavidrome(song: Song, serverId: String) async -> LyricsRecord? {
@@ -313,8 +346,7 @@ actor LyricsService {
             isSynced: entry.synced && lrc != nil,
             isInstrumental: false, language: entry.lang,
             fetchedAt: Date().timeIntervalSince1970,
-            songTitle: song.title, artistName: song.artist, coverArt: song.coverArt,
-            songDuration: song.duration
+            songTitle: song.title, artistName: song.artist, coverArt: song.coverArt
         )
     }
 
@@ -330,7 +362,7 @@ actor LyricsService {
         guard let url = comps.url else { return .indeterminate }
 
         var req = URLRequest(url: url, timeoutInterval: 10)
-        req.setValue("Shelv/1.0 (https://github.com/gatzenga/Shelv-Desktop)", forHTTPHeaderField: "User-Agent")
+        req.setValue("Shelv/1.0 (https://github.com/gatzenga/Shelv)", forHTTPHeaderField: "User-Agent")
 
         // Retry bei transient errors (Timeout, 5xx, 429) mit exponential backoff + jitter.
         // Jitter verhindert, dass 5 parallele Bulk-Requests synchron retry'n.
@@ -338,9 +370,11 @@ actor LyricsService {
         var data = Data()
         var http: HTTPURLResponse?
         for (attempt, delay) in backoffsMs.enumerated() {
+            if Task.isCancelled { return .indeterminate }
             if delay > 0 {
                 let jitter = UInt64.random(in: 0...250)
                 try? await Task.sleep(nanoseconds: (delay + jitter) * 1_000_000)
+                if Task.isCancelled { return .indeterminate }
             }
             do {
                 let (d, resp) = try await Self.lrcLibSession.data(for: req)
@@ -350,9 +384,9 @@ actor LyricsService {
                 if h.statusCode == 404 { return .notFound }
                 if h.statusCode == 200 { break }
                 // 429, 5xx → nächster Versuch
-                if attempt == backoffsMs.count - 1 { return .indeterminate }
+                if Task.isCancelled || attempt == backoffsMs.count - 1 { return .indeterminate }
             } catch {
-                if attempt == backoffsMs.count - 1 { return .indeterminate }
+                if Task.isCancelled || attempt == backoffsMs.count - 1 { return .indeterminate }
             }
         }
         guard http?.statusCode == 200 else { return .indeterminate }
@@ -367,8 +401,7 @@ actor LyricsService {
                 plainText: nil, syncedLrc: nil, isSynced: false,
                 isInstrumental: true, language: nil,
                 fetchedAt: Date().timeIntervalSince1970,
-                songTitle: song.title, artistName: song.artist, coverArt: song.coverArt,
-                songDuration: song.duration
+                songTitle: song.title, artistName: song.artist, coverArt: song.coverArt
             ))
         }
 
@@ -381,8 +414,7 @@ actor LyricsService {
             isSynced: lrc.syncedLyrics != nil,
             isInstrumental: false, language: nil,
             fetchedAt: Date().timeIntervalSince1970,
-            songTitle: song.title, artistName: song.artist, coverArt: song.coverArt,
-            songDuration: song.duration
+            songTitle: song.title, artistName: song.artist, coverArt: song.coverArt
         ))
     }
 }
