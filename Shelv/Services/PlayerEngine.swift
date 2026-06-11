@@ -1,4 +1,5 @@
 import AVFoundation
+import AudioToolbox
 import Combine
 import Foundation
 
@@ -224,6 +225,40 @@ final class PlayerEngine: ObservableObject {
 
     func setVolume(_ volume: Float) {
         player.volume = max(0, min(volume, 1.0))
+    }
+
+    /// Liest den echten Codec (und einen Bitrate-Schätzwert) aus dem aktuell geladenen
+    /// Audio-Track. Nur verlässlich, solange `currentURL == url` — sonst nil.
+    /// Unterscheidet ALAC von AAC, was der Container-MIME nicht kann.
+    @MainActor
+    func currentAudioFormat(matching url: URL) async -> (codec: String, bitrateKbps: Int?)? {
+        guard currentURL == url, let asset = player.currentItem?.asset else { return nil }
+        guard let track = try? await asset.loadTracks(withMediaType: .audio).first else { return nil }
+        guard let formats = try? await track.load(.formatDescriptions), let fd = formats.first else { return nil }
+        guard currentURL == url else { return nil }   // Song könnte während des await gewechselt haben
+        let label = PlayerEngine.codecLabel(forFormatID: CMFormatDescriptionGetMediaSubType(fd))
+        let rate = (try? await track.load(.estimatedDataRate)) ?? 0
+        let kbps = rate > 0 ? Int((rate / 1000).rounded()) : nil
+        return (label, kbps)
+    }
+
+    static func codecLabel(forFormatID id: FourCharCode) -> String {
+        switch id {
+        case kAudioFormatAppleLossless: return "ALAC"
+        case kAudioFormatMPEG4AAC, kAudioFormatMPEG4AAC_HE, kAudioFormatMPEG4AAC_HE_V2,
+             kAudioFormatMPEG4AAC_LD, kAudioFormatMPEG4AAC_ELD: return "AAC"
+        case kAudioFormatFLAC: return "FLAC"
+        case kAudioFormatMPEGLayer1, kAudioFormatMPEGLayer2, kAudioFormatMPEGLayer3: return "MP3"
+        case kAudioFormatOpus: return "OPUS"
+        case kAudioFormatLinearPCM: return "WAV"
+        case kAudioFormatAC3: return "AC3"
+        default:
+            let bytes = [UInt8((id >> 24) & 0xff), UInt8((id >> 16) & 0xff),
+                         UInt8((id >> 8) & 0xff), UInt8(id & 0xff)]
+            let s = (String(bytes: bytes, encoding: .ascii) ?? "?")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return s.isEmpty ? "?" : s.uppercased()
+        }
     }
 
     func stop() {
