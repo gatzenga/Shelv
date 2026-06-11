@@ -110,7 +110,7 @@ struct RecapDetailView: View {
                                 NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_play_next"))
                             }
                             Button(String(localized: "add_to_queue")) {
-                                AudioPlayerService.shared.addToUserQueue(entry.song)
+                                AudioPlayerService.shared.addToQueue(entry.song)
                                 NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_queue"))
                             }
                             if enableFavorites || enablePlaylists {
@@ -143,7 +143,7 @@ struct RecapDetailView: View {
                     }
                     .disabled(songs.isEmpty)
                     Button(String(localized: "add_to_queue")) {
-                        AudioPlayerService.shared.addToUserQueue(songs.map { $0.song })
+                        AudioPlayerService.shared.addToQueue(songs.map { $0.song })
                         NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_queue"))
                     }
                     .disabled(songs.isEmpty)

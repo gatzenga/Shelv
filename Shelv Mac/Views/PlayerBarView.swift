@@ -125,7 +125,7 @@ struct PlayerBarView: View {
                         .font(.title2)
                         .help(player.isShuffled ? String(localized: "shuffle_off") : String(localized: "shuffle_on"))
 
-                        Button { player.playPrevious() } label: {
+                        Button { player.previous() } label: {
                             Image(systemName: "backward.fill")
                         }
                         .buttonStyle(.plain)
@@ -145,7 +145,7 @@ struct PlayerBarView: View {
                         .buttonStyle(.plain)
                         .disabled(player.currentSong == nil)
 
-                        Button { player.playNext() } label: {
+                        Button { player.next(triggeredByUser: true) } label: {
                             Image(systemName: "forward.fill")
                         }
                         .buttonStyle(.plain)
@@ -329,8 +329,8 @@ struct QueuePopover: View {
         }
         let start = player.currentIndex + 1
         if start < player.queue.count {
-            albumEntries = player.queue[start...].enumerated().map { offset, item in
-                QueueEntry(id: "alb-\(item.id)", index: start + offset, song: item.song)
+            albumEntries = Array(player.queue[start...]).enumerated().map { offset, song in
+                QueueEntry(id: "alb-\(start + offset)-\(song.id)", index: start + offset, song: song)
             }
         } else {
             albumEntries = []
@@ -412,27 +412,27 @@ struct QueuePopover: View {
                 List {
                     if isShuffled {
                         queueSection(String(localized: "play_next"), entries: playNextEntries,
-                            onTap:   { player.jumpToPlayNextTrack(at: $0.index) },
+                            onTap:   { player.jumpToPlayNext(at: $0.index) },
                             onDelete: { player.removeFromPlayNextQueue(at: $0.index) },
                             onMove:  { player.moveInPlayNextQueue(from: $0, to: $1) })
 
                         queueSection(String(localized: "shuffled_queue"), entries: albumEntries,
-                            onTap:   { player.jumpToAlbumTrack(at: $0.index) },
-                            onDelete: { player.removeFromQueue(at: $0.index) },
-                            onMove:  { player.moveInAlbumQueue(from: $0, to: $1) })
+                            onTap:   { player.jumpToQueueTrack(at: $0.index) },
+                            onDelete: { player.removeFromPlayQueue(at: $0.index) },
+                            onMove:  { player.moveInQueue(from: $0, to: $1) })
                     } else {
                         queueSection(String(localized: "play_next"), entries: playNextEntries,
-                            onTap:   { player.jumpToPlayNextTrack(at: $0.index) },
+                            onTap:   { player.jumpToPlayNext(at: $0.index) },
                             onDelete: { player.removeFromPlayNextQueue(at: $0.index) },
                             onMove:  { player.moveInPlayNextQueue(from: $0, to: $1) })
 
                         queueSection(String(localized: "up_next"), entries: albumEntries,
-                            onTap:   { player.jumpToAlbumTrack(at: $0.index) },
-                            onDelete: { player.removeFromQueue(at: $0.index) },
-                            onMove:  { player.moveInAlbumQueue(from: $0, to: $1) })
+                            onTap:   { player.jumpToQueueTrack(at: $0.index) },
+                            onDelete: { player.removeFromPlayQueue(at: $0.index) },
+                            onMove:  { player.moveInQueue(from: $0, to: $1) })
 
                         queueSection(String(localized: "your_queue"), entries: userQueueEntries,
-                            onTap:   { player.jumpToUserQueueTrack(at: $0.index) },
+                            onTap:   { player.jumpToUserQueue(at: $0.index) },
                             onDelete: { player.removeFromUserQueue(at: $0.index) },
                             onMove:  { player.moveInUserQueue(from: $0, to: $1) })
                     }
@@ -444,7 +444,7 @@ struct QueuePopover: View {
         }
         .alert(String(localized: "clear_queue"), isPresented: $showClearConfirm) {
             Button(String(localized: "clear"), role: .destructive) {
-                player.clearAllQueues()
+                player.clearUpcomingPlayQueue()
             }
             Button(String(localized: "cancel"), role: .cancel) {}
         } message: {

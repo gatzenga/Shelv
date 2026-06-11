@@ -123,7 +123,7 @@ struct ArtistDetailView: View {
                                         Task {
                                             let songs = await vm.fetchSongs(albums: displayAlbums)
                                             guard !songs.isEmpty else { return }
-                                            appState.player.addToUserQueue(songs)
+                                            appState.player.addToQueue(songs)
                                             NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_queue"))
                                         }
                                     } label: {

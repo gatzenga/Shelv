@@ -152,11 +152,11 @@ struct Shelv_DesktopApp: App {
                 .keyboardShortcut(.space, modifiers: [])
                 Divider()
                 Button(String(localized: "next_track")) {
-                    AppState.shared.player.playNext()
+                    AppState.shared.player.next(triggeredByUser: true)
                 }
                 .keyboardShortcut(.rightArrow, modifiers: .command)
                 Button(String(localized: "previous_track")) {
-                    AppState.shared.player.playPrevious()
+                    AppState.shared.player.previous()
                 }
                 .keyboardShortcut(.leftArrow, modifiers: .command)
                 Divider()

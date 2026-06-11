@@ -56,7 +56,7 @@ struct ArtistContextMenuModifier: ViewModifier {
                         let songs = try await fetchSongs()
                         guard !songs.isEmpty else { return }
                         await MainActor.run {
-                            AudioPlayerService.shared.addToUserQueue(songs)
+                            AudioPlayerService.shared.addToQueue(songs)
                             NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_queue"))
                         }
                     } catch {

@@ -31,7 +31,7 @@ struct AlbumContextMenuModifier: ViewModifier {
             }
             Button(String(localized: "add_to_queue")) {
                 withAlbumSongs(errorMsg: String(localized: "action_failed")) { songs in
-                    AudioPlayerService.shared.addToUserQueue(songs)
+                    AudioPlayerService.shared.addToQueue(songs)
                     NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_queue"))
                 }
             }

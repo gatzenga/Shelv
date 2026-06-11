@@ -1,7 +1,11 @@
 import AVFoundation
 import MediaPlayer
 import Combine
+#if os(iOS)
 import UIKit
+#else
+import AppKit
+#endif
 import SwiftUI
 import Network
 
@@ -67,6 +71,13 @@ class AudioPlayerService: ObservableObject {
     @Published var actualStreamFormat: ActualStreamFormat?
     @Published var artworkReloadToken: UUID = UUID()
 
+    #if os(macOS)
+    /// Master-Volume des Desktop-Players (Lautstärkeregler in der PlayerBar).
+    @Published var volume: Float = 1.0 {
+        didSet { engine.volume = volume }
+    }
+    #endif
+
     private var formatProbeTask: Task<Void, Never>?
     private var currentStreamURL: URL?
     private var streamTimeOffset: Double = 0
@@ -112,7 +123,23 @@ class AudioPlayerService: ObservableObject {
     private var resumeTime: Double = 0
     private var lastReportedNowPlayingTime: Double = -1
 
+    // Die alte Desktop-App persistierte unter shelv_mac_* (und einem anderen
+    // Resume-Time-Suffix) — die Keys bleiben pro Plattform erhalten, damit
+    // Bestands-Installationen ihre Queue/Position nicht verlieren.
     private enum StateKey {
+        #if os(macOS)
+        static let queue          = "shelv_mac_queue"
+        static let index          = "shelv_mac_currentIndex"
+        static let playNextQueue  = "shelv_mac_playNextQueue"
+        static let userQueue      = "shelv_mac_userQueue"
+        static let resumeTime     = "shelv_mac_currentTime"
+        static let isShuffled     = "shelv_mac_isShuffled"
+        static let repeatMode     = "shelv_mac_repeatMode"
+        static let truthAlbum     = "shelv_mac_truthAlbum"
+        static let truthPlayNext  = "shelv_mac_truthPlayNext"
+        static let truthUserQueue = "shelv_mac_truthUserQueue"
+        static let volume         = "shelv_mac_volume"
+        #else
         static let queue          = "shelv_player_queue"
         static let index          = "shelv_player_currentIndex"
         static let playNextQueue  = "shelv_player_playNextQueue"
@@ -123,26 +150,51 @@ class AudioPlayerService: ObservableObject {
         static let truthAlbum     = "shelv_player_truthAlbum"
         static let truthPlayNext  = "shelv_player_truthPlayNext"
         static let truthUserQueue = "shelv_player_truthUserQueue"
+        #endif
     }
+
+    #if os(macOS)
+    private var willTerminateObserver: NSObjectProtocol?
+    #endif
 
     private init() {
         _ = NetworkStatus.shared
+        #if os(iOS)
         setupAudioSession()
+        #endif
         setupEngine()
         setupRemoteControls()
+        #if os(iOS)
         setupInterruptionObserver()
+        #endif
         setupNetworkMonitor()
+        #if os(iOS)
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(appDidEnterBackground),
             name: UIApplication.didEnterBackgroundNotification,
             object: nil
         )
+        #else
+        willTerminateObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            Task { @MainActor [self] in self.saveState() }
+        }
+        #endif
         restoreState()
     }
 
     deinit {
         NotificationCenter.default.removeObserver(self)
+        #if os(macOS)
+        if let obs = willTerminateObserver {
+            NotificationCenter.default.removeObserver(obs)
+        }
+        #endif
         networkMonitor.cancel()
     }
 
@@ -184,6 +236,9 @@ class AudioPlayerService: ObservableObject {
         if let data = try? encoder.encode(truthAlbumQueue) { defaults.set(data, forKey: StateKey.truthAlbum) }
         if let data = try? encoder.encode(truthPlayNextQueue) { defaults.set(data, forKey: StateKey.truthPlayNext) }
         if let data = try? encoder.encode(truthUserQueue) { defaults.set(data, forKey: StateKey.truthUserQueue) }
+        #if os(macOS)
+        defaults.set(Double(volume), forKey: StateKey.volume)
+        #endif
     }
 
     private func clearSavedState() {
@@ -198,6 +253,9 @@ class AudioPlayerService: ObservableObject {
         defaults.removeObject(forKey: StateKey.truthAlbum)
         defaults.removeObject(forKey: StateKey.truthPlayNext)
         defaults.removeObject(forKey: StateKey.truthUserQueue)
+        #if os(macOS)
+        defaults.removeObject(forKey: StateKey.volume)
+        #endif
     }
 
     private func restoreState() {
@@ -238,9 +296,15 @@ class AudioPlayerService: ObservableObject {
         if let data = defaults.data(forKey: StateKey.truthUserQueue),
            let t = try? decoder.decode([Song].self, from: data) { truthUserQueue = t }
 
+        #if os(macOS)
+        let savedVolume = defaults.double(forKey: StateKey.volume)
+        volume = savedVolume > 0 ? Float(savedVolume) : 1.0
+        #endif
+
         if let song = currentSong { updateNowPlayingInfo(song: song) }
     }
 
+    #if os(iOS)
     private func setupAudioSession() {
         do {
             try AVAudioSession.sharedInstance().setCategory(
@@ -295,6 +359,7 @@ class AudioPlayerService: ObservableObject {
             }
         }
     }
+    #endif
 
     private func setupRemoteControls() {
         let cc = MPRemoteCommandCenter.shared()
@@ -505,7 +570,11 @@ class AudioPlayerService: ObservableObject {
 
             guard let url = self.resolveURL(for: song) else {
                 if OfflineModeService.shared.isOffline {
+                    #if os(iOS)
                     NotificationCenter.default.post(name: .offlinePlaybackBlocked, object: nil)
+                    #else
+                    NotificationCenter.default.post(name: .showToast, object: String(localized: "not_available_offline"))
+                    #endif
                 }
                 return
             }
@@ -534,6 +603,10 @@ class AudioPlayerService: ObservableObject {
             }
             MPNowPlayingInfoCenter.default().playbackState = .playing
             self.updateNowPlayingInfo(song: song)
+            #if os(macOS)
+            // Navidrome-„spielt gerade"-Anzeige (kein Play-Count): bisheriges Desktop-Verhalten.
+            Task { try? await SubsonicAPIService.shared.scrobble(songId: song.id, submission: false) }
+            #endif
 
             // Transcodierter Remote-Stream → erst cachen, dann lokal abspielen
             if self.isTranscodedRemote(url), let fmt = TranscodingPolicy.currentStreamFormat() {
@@ -551,28 +624,25 @@ class AudioPlayerService: ObservableObject {
                     bitrate: fmt.bitrate,
                     songTitle: song.title
                 )
+                #if os(iOS)
                 // Background-Task damit iOS den Download nicht einfriert wenn Handy gesperrt wird
                 // bevor der erste Song je gespielt hat (kein aktiver Audio-Kontext vorhanden)
                 var bgTask = UIBackgroundTaskIdentifier.invalid
                 bgTask = UIApplication.shared.beginBackgroundTask(withName: "shelv.streamload") {
                     UIApplication.shared.endBackgroundTask(bgTask)
                 }
+                defer { if bgTask != .invalid { UIApplication.shared.endBackgroundTask(bgTask) } }
+                #endif
                 // Polling bis Datei da ist (alle 200ms, max 60s)
                 // repeat…while: erst schlafen, dann prüfen — Download hat gerade erst gestartet
                 let deadline = Date().addingTimeInterval(60)
                 repeat {
                     try? await Task.sleep(nanoseconds: 200_000_000)
-                    guard self.playbackGeneration == gen else {
-                        UIApplication.shared.endBackgroundTask(bgTask)
-                        return
-                    }
+                    guard self.playbackGeneration == gen else { return }
                     if let local = await StreamCacheService.shared.localURL(for: songId) {
                         let asset = AVURLAsset(url: local, options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])
                         let cmTime = try? await asset.load(.duration)
-                        guard self.playbackGeneration == gen else {
-                            UIApplication.shared.endBackgroundTask(bgTask)
-                            return
-                        }
+                        guard self.playbackGeneration == gen else { return }
                         let precise = cmTime.flatMap { $0.isValid && !$0.isIndefinite ? CMTimeGetSeconds($0) : nil }
                         let resolvedDuration = (precise ?? 0) > 0 ? precise! : Double(song.duration ?? 0)
                         self.currentStreamURL = local
@@ -582,8 +652,6 @@ class AudioPlayerService: ObservableObject {
                         self.duration = resolvedDuration
                         if seekTo > 0 { self.engine.seek(to: seekTo) }
                         self.isEngineLoaded = true
-                        UIApplication.shared.endBackgroundTask(bgTask)
-                        bgTask = .invalid
                         break
                     }
                 } while Date() < deadline
@@ -598,7 +666,6 @@ class AudioPlayerService: ObservableObject {
                     if seekTo > 0 { self.engine.seek(to: seekTo) }
                     self.isEngineLoaded = true
                 }
-                if bgTask != .invalid { UIApplication.shared.endBackgroundTask(bgTask) }
             } else if !url.isFileURL, self.streamPreCacheEnabled {
                 // Original-Remote-Stream mit Pre-Cache → erst vollständig laden, dann lokal abspielen
                 self.engine.stop()
@@ -1054,6 +1121,9 @@ class AudioPlayerService: ObservableObject {
                 if let url {
                     self.probeStreamFormat(for: song, url: url)
                 }
+                #if os(macOS)
+                Task { try? await SubsonicAPIService.shared.scrobble(songId: song.id, submission: false) }
+                #endif
                 self.saveState()
             } else {
                 self.gaplessPreloadTriggered = false
@@ -1269,6 +1339,7 @@ class AudioPlayerService: ObservableObject {
 
         if let artId = song.coverArt,
            let artURL = SubsonicAPIService.shared.coverArtURL(for: artId, size: 600) {
+            #if os(iOS)
             let key = "\(artId)_600"
             let isOffline = OfflineModeService.shared.isOffline
             artworkTask = Task { [weak self] in
@@ -1300,9 +1371,36 @@ class AudioPlayerService: ObservableObject {
                     MPNowPlayingInfoCenter.default().nowPlayingInfo = updated
                 }
             }
+            #else
+            // macOS: schlanker NSImage-Load wie in der bisherigen Desktop-App.
+            artworkTask = Task.detached(priority: .utility) { [weak self] in
+                guard let (data, _) = try? await URLSession.shared.data(from: artURL),
+                      !Task.isCancelled,
+                      let nsImage = NSImage(data: data) else { return }
+                let artwork = MPMediaItemArtwork(boundsSize: CGSize(width: 600, height: 600)) { _ in nsImage }
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    self.currentArtwork = artwork
+                    var updated = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
+                    updated[MPMediaItemPropertyArtwork] = artwork
+                    MPNowPlayingInfoCenter.default().nowPlayingInfo = updated
+                }
+            }
+            #endif
         }
 
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+    }
+
+    /// Favoriten-Status des laufenden Songs spiegeln (macOS-PlayerBar nutzt das;
+    /// plattformneutral, da nur Queue-State angefasst wird).
+    func setCurrentSongStarred(_ starred: Bool) {
+        guard var song = currentSong else { return }
+        song.starred = starred ? Date() : nil
+        currentSong = song
+        if queue.indices.contains(currentIndex) {
+            queue[currentIndex].starred = song.starred
+        }
     }
 
 

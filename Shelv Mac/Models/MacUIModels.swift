@@ -131,32 +131,5 @@ enum SortDirection: String, CaseIterable {
     }
 }
 
-struct QueueItem: Identifiable, Equatable {
-    let id: String
-    var song: Song
-
-    init(song: Song) {
-        self.id = UUID().uuidString
-        self.song = song
-    }
-}
-
-enum RepeatMode: CaseIterable {
-    case off, all, one
-
-    var nextMode: RepeatMode {
-        switch self {
-        case .off: return .all
-        case .all: return .one
-        case .one: return .off
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .off:  return "repeat"
-        case .all:  return "repeat"
-        case .one:  return "repeat.1"
-        }
-    }
-}
+// QueueItem und RepeatMode sind mit der Player-Konsolidierung entfallen:
+// die Queue ist jetzt [Song], RepeatMode liefert ShelvCore/AudioPlayerService.

@@ -91,7 +91,7 @@ struct PlaylistDetailView: View {
             .disabled(isLoading || songs.isEmpty)
 
             Button {
-                appState.player.addToUserQueue(songs)
+                appState.player.addToQueue(songs)
                 NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_queue"))
             } label: {
                 Label(String(localized: "add_to_queue"), systemImage: "text.badge.plus")
@@ -160,7 +160,7 @@ struct PlaylistDetailView: View {
                     NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_play_next"))
                 },
                 onAddToQueue: { song in
-                    appState.player.addToUserQueue(song)
+                    appState.player.addToQueue(song)
                     NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_queue"))
                 },
                 onRemoveAt: { index in removeSong(at: index) },

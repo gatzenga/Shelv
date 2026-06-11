@@ -95,7 +95,7 @@ struct FavoritesView: View {
                                         appState.player.addPlayNext(song)
                                         NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_play_next"))
                                     } onAddToQueue: {
-                                        appState.player.addToUserQueue(song)
+                                        appState.player.addToQueue(song)
                                         NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_queue"))
                                     } onRemoveFavorite: {
                                         Task { await libraryStore.toggleStarSong(song) }

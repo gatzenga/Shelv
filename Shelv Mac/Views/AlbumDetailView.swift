@@ -213,7 +213,7 @@ struct AlbumDetailView: View {
             .disabled(vm.isLoading || displaySongs.isEmpty)
 
             Button {
-                appState.player.addToUserQueue(displaySongs)
+                appState.player.addToQueue(displaySongs)
                 NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_queue"))
             } label: {
                 Label(String(localized: "add_to_queue"), systemImage: "text.badge.plus")
@@ -283,7 +283,7 @@ struct AlbumDetailView: View {
             appState.player.addPlayNext(song)
             NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_play_next"))
         } onAddToQueue: {
-            appState.player.addToUserQueue(song)
+            appState.player.addToQueue(song)
             NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_queue"))
         } onFavorite: {
             Task { await libraryStore.toggleStarSong(song) }

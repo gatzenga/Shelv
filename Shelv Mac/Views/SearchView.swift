@@ -90,7 +90,7 @@ struct SearchView: View {
                                         appState.player.addPlayNext(song)
                                         NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_play_next"))
                                     } onAddToQueue: {
-                                        appState.player.addToUserQueue(song)
+                                        appState.player.addToQueue(song)
                                         NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_queue"))
                                     } onFavorite: {
                                         Task { await libraryStore.toggleStarSong(song) }
@@ -116,7 +116,7 @@ struct SearchView: View {
                                         },
                                         onAddToQueue: {
                                             withLyricsSong(item) { song in
-                                                appState.player.addToUserQueue(song)
+                                                appState.player.addToQueue(song)
                                                 NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_queue"))
                                             }
                                         },

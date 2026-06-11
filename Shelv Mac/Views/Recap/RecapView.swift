@@ -109,7 +109,7 @@ struct RecapView: View {
                                         Task {
                                             if let detail = await libraryStore.loadPlaylistDetail(id: entry.playlistId),
                                                let songs = detail.songs, !songs.isEmpty {
-                                                AudioPlayerService.shared.addToUserQueue(songs)
+                                                AudioPlayerService.shared.addToQueue(songs)
                                                 NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_queue"))
                                             } else {
                                                 NotificationCenter.default.post(name: .showToast, object: String(localized: "action_failed"))
