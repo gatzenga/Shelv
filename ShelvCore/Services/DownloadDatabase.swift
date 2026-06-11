@@ -11,14 +11,14 @@ struct DownloadRecord: Codable, FetchableRecord, PersistableRecord {
     var title: String
     var albumTitle: String
     var artistName: String
-    var albumArtistName: String?
-    var albumCoverArtId: String?
     var track: Int?
     var disc: Int?
     var duration: Int?
     var bytes: Int64
     var coverArtId: String?
     var artistCoverArtId: String?
+    var albumArtistName: String?
+    var albumCoverArtId: String?
     var isFavorite: Bool
     var filePath: String
     var fileExtension: String
@@ -78,10 +78,13 @@ actor DownloadDatabase {
         let url = Self.dbURL
         let dir = url.deletingLastPathComponent()
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        Self.applyDataProtection(at: url)
         if let p = try? openAndMigrate(at: url) {
             pool = p
+            Self.applyDataProtection(at: url) // erneut nach WAL/SHM-Erstellung
             return
         }
+        // Recovery: DB + WAL + SHM löschen und neu versuchen
         DBErrorLog.logPlayLog("DownloadDatabase: opening DB failed — recovering by deleting files")
         for suffix in ["", "-wal", "-shm"] {
             let path = url.path + suffix
@@ -91,9 +94,30 @@ actor DownloadDatabase {
         }
         do {
             pool = try openAndMigrate(at: url)
+            Self.applyDataProtection(at: url)
         } catch {
             DBErrorLog.logPlayLog("DownloadDatabase setup totally failed: \(error.localizedDescription)")
         }
+    }
+
+    /// Erlaubt SQLite-Zugriff auch bei gesperrtem Screen (für Background-Downloads).
+    /// iOS-Default ist `.complete` → DB nicht zugänglich wenn Screen lockt → I/O-Errors.
+    private static func applyDataProtection(at url: URL) {
+        #if os(iOS)
+        for suffix in ["", "-wal", "-shm"] {
+            let path = url.path + suffix
+            guard FileManager.default.fileExists(atPath: path) else { continue }
+            try? FileManager.default.setAttributes(
+                [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
+                ofItemAtPath: path
+            )
+        }
+        // Kein iCloud-Backup für die DB
+        var dirURL = url.deletingLastPathComponent()
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try? dirURL.setResourceValues(values)
+        #endif
     }
 
     private func openAndMigrate(at url: URL) throws -> DatabasePool {
@@ -144,6 +168,8 @@ actor DownloadDatabase {
                 t.add(column: "albumCoverArtId", .text)
             }
         }
+        // Stammt aus der alten Desktop-App: Playlist-Download-Marker leben dort in
+        // der DB (iOS nutzt UserDefaults). Tabelle existiert auf iOS einfach mit.
         m.registerMigration("v4_add_playlist_registry") { db in
             try db.create(table: "downloaded_playlists", ifNotExists: true) { t in
                 t.column("playlist_id", .text).primaryKey()
@@ -155,15 +181,85 @@ actor DownloadDatabase {
         return p
     }
 
+    private var consecutiveIOErrors = 0
+    private var circuitOpenUntil: Date?
+    private var hasLoggedCircuitOpen = false
+    private var walProtectionApplied = false
+    private static let maxConsecutiveIOErrors = 3
+    private static let circuitCooldown: TimeInterval = 30
+
     private func safeWrite(_ label: String = #function, _ block: (Database) throws -> Void) {
+        if let until = circuitOpenUntil, Date() < until {
+            return
+        }
+        if circuitOpenUntil != nil {
+            circuitOpenUntil = nil
+            hasLoggedCircuitOpen = false
+            reopenPool(deleteCorruptFiles: true)
+        }
         guard let pool else {
-            DBErrorLog.logPlayLog("DownloadDatabase \(label): pool not initialized")
+            tripCircuit(label: label, error: "pool not initialized")
             return
         }
         do {
             try pool.write(block)
+            consecutiveIOErrors = 0
+            // WAL wird von GRDB lazy beim ersten Write erstellt — Schutz einmalig nachholen
+            if !walProtectionApplied {
+                Self.applyDataProtection(at: Self.dbURL)
+                walProtectionApplied = true
+            }
         } catch {
-            DBErrorLog.logPlayLog("DownloadDatabase \(label): \(error.localizedDescription)")
+            let isIOError = "\(error)".contains("disk I/O") || "\(error)".contains("error 10")
+            if isIOError {
+                consecutiveIOErrors += 1
+                if consecutiveIOErrors == 1 {
+                    DBErrorLog.logPlayLog("DownloadDatabase \(label): \(error.localizedDescription) — attempting reopen")
+                    reopenPool(deleteCorruptFiles: false)
+                    if let p = self.pool {
+                        do {
+                            try p.write(block)
+                            consecutiveIOErrors = 0
+                            return
+                        } catch {
+                            // fall through
+                        }
+                    }
+                }
+                if consecutiveIOErrors >= Self.maxConsecutiveIOErrors {
+                    tripCircuit(label: label, error: error.localizedDescription)
+                }
+            } else {
+                DBErrorLog.logPlayLog("DownloadDatabase \(label): \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func tripCircuit(label: String, error: String) {
+        circuitOpenUntil = Date().addingTimeInterval(Self.circuitCooldown)
+        if !hasLoggedCircuitOpen {
+            DBErrorLog.logPlayLog("DownloadDatabase \(label): \(error) — circuit open for \(Int(Self.circuitCooldown))s, suppressing further writes")
+            hasLoggedCircuitOpen = true
+        }
+        pool = nil
+    }
+
+    private func reopenPool(deleteCorruptFiles: Bool) {
+        let url = Self.dbURL
+        pool = nil
+        walProtectionApplied = false
+        if deleteCorruptFiles {
+            for suffix in ["-wal", "-shm"] {
+                let path = url.path + suffix
+                if FileManager.default.fileExists(atPath: path) {
+                    try? FileManager.default.removeItem(atPath: path)
+                }
+            }
+        }
+        Self.applyDataProtection(at: url)
+        if let p = try? openAndMigrate(at: url) {
+            pool = p
+            Self.applyDataProtection(at: url)
         }
     }
 
@@ -184,6 +280,7 @@ actor DownloadDatabase {
 
     func syncFavorites(serverId: String, starredSongIds: Set<String>) {
         safeWrite { db in
+            // Alle auf 0
             try db.execute(
                 sql: "UPDATE downloads SET isFavorite = 0 WHERE serverId = ?",
                 arguments: [serverId]
@@ -354,7 +451,7 @@ actor DownloadDatabase {
         }) ?? []
     }
 
-    // MARK: - Playlist Registry
+    // MARK: - Playlist Registry (macOS: Marker in der DB; iOS nutzt UserDefaults)
 
     func markPlaylistDownloaded(id: String, name: String) {
         safeWrite { db in
