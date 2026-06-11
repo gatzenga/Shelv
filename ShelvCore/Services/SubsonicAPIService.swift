@@ -1,0 +1,966 @@
+import Foundation
+import Combine
+import CryptoKit
+
+enum SubsonicAPIError: LocalizedError {
+    case noServer
+    case noPassword
+    case invalidURL
+    case networkError(Error)
+    case apiError(Int, String?)
+    case decodingError(Error)
+
+    var errorDescription: String? {
+        switch self {
+        case .noServer:              return String(localized: "no_server_configured")
+        case .noPassword:            return String(localized: "no_password_found")
+        case .invalidURL:            return String(localized: "invalid_server_url")
+        case .networkError(let e):
+            if let urlError = e as? URLError {
+                switch urlError.code {
+                case .timedOut:
+                    return String(localized: "connection_timed_out_please_check_your_network")
+                case .notConnectedToInternet:
+                    return String(localized: "no_internet_connection")
+                case .cannotConnectToHost, .cannotFindHost:
+                    return String(localized: "server_not_reachable_please_check_the_url")
+                case .networkConnectionLost:
+                    return String(localized: "connection_lost_please_try_again")
+                case .secureConnectionFailed:
+                    return String(localized: "secure_connection_failed_please_check_the_server_certificate")
+                default:
+                    return String(localized: "network_error_please_try_again")
+                }
+            }
+            return String(localized: "network_error_please_try_again")
+        case .apiError(_, let m):
+            return m ?? String(localized: "server_returned_an_error")
+        case .decodingError:
+            return String(localized: "unexpected_server_response")
+        }
+    }
+}
+
+private struct Envelope<T: Decodable>: Decodable {
+    let response: T
+
+    enum CodingKeys: String, CodingKey {
+        case response = "subsonic-response"
+    }
+}
+
+private struct StatusCheck: Decodable {
+    let status: String
+    let error: APIError?
+
+    struct APIError: Decodable {
+        let code: Int
+        let message: String?
+    }
+}
+
+private struct AlbumListBody: Decodable {
+    let status: String
+    let error: StatusCheck.APIError?
+    let albumList2: AlbumListContainer?
+}
+
+private struct ArtistsBody: Decodable {
+    let status: String
+    let error: StatusCheck.APIError?
+    let artists: ArtistsContainer?
+}
+
+private struct AlbumBody: Decodable {
+    let status: String
+    let error: StatusCheck.APIError?
+    let album: AlbumDetail?
+}
+
+private struct ArtistBody: Decodable {
+    let status: String
+    let error: StatusCheck.APIError?
+    let artist: ArtistDetail?
+}
+
+private struct ArtistInfoBody: Decodable {
+    let status: String
+    let error: StatusCheck.APIError?
+    let artistInfo2: ArtistInfo?
+}
+
+private struct SearchBody: Decodable {
+    let status: String
+    let error: StatusCheck.APIError?
+    let searchResult3: SearchResult?
+}
+
+private struct SongBody: Decodable {
+    let status: String
+    let error: StatusCheck.APIError?
+    let song: Song?
+}
+
+private struct PingBody: Decodable {
+    let status: String
+    let error: StatusCheck.APIError?
+}
+
+
+private struct PingInfoBody: Decodable {
+    let status: String
+    let version: String
+    let type: String?
+    let serverVersion: String?
+    let error: StatusCheck.APIError?
+}
+
+private struct ScanStatusBody: Decodable {
+    let status: String
+    let error: StatusCheck.APIError?
+    let scanStatus: ScanStatusDetail?
+
+    struct ScanStatusDetail: Decodable {
+        let scanning: Bool
+        let count: Int
+    }
+}
+
+struct ServerInfo {
+    let apiVersion: String
+    let serverVersion: String?
+    let serverType: String?
+}
+
+struct ScanStatus {
+    let scanning: Bool
+    let count: Int
+}
+
+struct AlbumListContainer: Decodable {
+    let album: [Album]?
+}
+
+struct ArtistsContainer: Decodable {
+    let index: [ArtistIndex]?
+}
+
+struct ArtistIndex: Decodable {
+    let name: String
+    let artist: [Artist]?
+}
+
+struct AlbumDetail: Decodable, Identifiable {
+    let id: String
+    let name: String
+    let artist: String?
+    let artistId: String?
+    let coverArt: String?
+    let songCount: Int?
+    let duration: Int?
+    let year: Int?
+    let genre: String?
+    let starred: Date?
+    let song: [Song]?
+
+    var isStarred: Bool { starred != nil }
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, artist, artistId, coverArt, songCount, duration, year, genre, starred, song
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        artist = try c.decodeIfPresent(String.self, forKey: .artist)
+        artistId = try c.decodeIfPresent(String.self, forKey: .artistId)
+        coverArt = try c.decodeIfPresent(String.self, forKey: .coverArt)
+        songCount = try c.decodeIfPresent(Int.self, forKey: .songCount)
+        duration = try c.decodeIfPresent(Int.self, forKey: .duration)
+        year = try c.decodeIfPresent(Int.self, forKey: .year)
+        genre = try c.decodeIfPresent(String.self, forKey: .genre)
+        starred = FlexibleDate.decode(c, .starred)
+        song = try c.decodeIfPresent([Song].self, forKey: .song)
+    }
+
+    init(id: String, name: String, artist: String? = nil, artistId: String? = nil,
+         coverArt: String? = nil, songCount: Int? = nil, duration: Int? = nil,
+         year: Int? = nil, genre: String? = nil, starred: Date? = nil, song: [Song]? = nil) {
+        self.id = id
+        self.name = name
+        self.artist = artist
+        self.artistId = artistId
+        self.coverArt = coverArt
+        self.songCount = songCount
+        self.duration = duration
+        self.year = year
+        self.genre = genre
+        self.starred = starred
+        self.song = song
+    }
+}
+
+struct ArtistDetail: Decodable, Identifiable {
+    let id: String
+    let name: String
+    let albumCount: Int?
+    let coverArt: String?
+    let album: [Album]?
+}
+
+struct ArtistInfo: Decodable {
+    let biography: String?
+}
+
+struct SearchResult: Decodable {
+    let artist: [Artist]?
+    let album: [Album]?
+    let song: [Song]?
+}
+
+struct StarredResult: Decodable {
+    let artist: [Artist]?
+    let album: [Album]?
+    let song: [Song]?
+}
+
+private struct RandomSongsBody: Decodable {
+    let status: String
+    let error: StatusCheck.APIError?
+    let randomSongs: RandomSongsList?
+    struct RandomSongsList: Decodable { let song: [Song]? }
+}
+
+private struct TopSongsBody: Decodable {
+    let status: String
+    let error: StatusCheck.APIError?
+    let topSongs: TopSongsList?
+    struct TopSongsList: Decodable { let song: [Song]? }
+}
+
+private struct StarredBody: Decodable {
+    let status: String
+    let error: StatusCheck.APIError?
+    let starred2: StarredResult?
+}
+
+private struct PlaylistsBody: Decodable {
+    let status: String
+    let error: StatusCheck.APIError?
+    let playlists: PlaylistsContainer?
+
+    struct PlaylistsContainer: Decodable {
+        let playlist: [Playlist]?
+    }
+}
+
+private struct PlaylistBody: Decodable {
+    let status: String
+    let error: StatusCheck.APIError?
+    let playlist: PlaylistDetail?
+
+    struct PlaylistDetail: Decodable {
+        let id: String
+        let name: String
+        let comment: String?
+        let songCount: Int?
+        let duration: Int?
+        let coverArt: String?
+        let entry: [Song]?
+    }
+}
+
+private struct CreatePlaylistBody: Decodable {
+    let status: String
+    let error: StatusCheck.APIError?
+    let playlist: PlaylistBody.PlaylistDetail?
+}
+
+class SubsonicAPIService: ObservableObject {
+    static let shared = SubsonicAPIService()
+
+    private let credentialLock = NSLock()
+    private var _activeServer: SubsonicServer?
+    private var _activePassword: String?
+
+    var activeServer: SubsonicServer? {
+        get { credentialLock.withLock { _activeServer } }
+        set { credentialLock.withLock { _activeServer = newValue } }
+    }
+
+    var activePassword: String? {
+        get { credentialLock.withLock { _activePassword } }
+        set { credentialLock.withLock { _activePassword = newValue } }
+    }
+
+    func setCredentials(server: SubsonicServer, password: String?) {
+        credentialLock.withLock {
+            _activeServer = server
+            _activePassword = password
+        }
+    }
+
+    #if DEBUG
+    /// Aktiv, wenn der Demo-Server gewählt ist. Alle Daten-Methoden liefern dann
+    /// `DemoContent`-Daten statt echter Netzwerk-Antworten. Siehe `DemoContent`.
+    var isDemoActive: Bool { activeServer?.baseURL == DemoContent.serverBaseURL }
+    #endif
+
+    private let apiVersion = "1.16.1"
+    private let clientName = "Shelv"
+    private let decoder: JSONDecoder = {
+        let d = JSONDecoder()
+        d.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let raw = try container.decode(String.self)
+
+            let normalized: String
+            if let dotRange = raw.range(of: "."),
+               let zRange = raw.range(of: "Z", options: .backwards),
+               dotRange.upperBound <= zRange.lowerBound {
+                let fractional = String(raw[dotRange.upperBound..<zRange.lowerBound])
+                let trimmed = String(fractional.prefix(3)).padding(toLength: 3, withPad: "0", startingAt: 0)
+                normalized = String(raw[raw.startIndex..<dotRange.lowerBound]) + "." + trimmed + "Z"
+            } else if let dotRange = raw.range(of: "."),
+                      let plusRange = raw.range(of: "+", range: dotRange.upperBound..<raw.endIndex) {
+                let fractional = String(raw[dotRange.upperBound..<plusRange.lowerBound])
+                let trimmed = String(fractional.prefix(3)).padding(toLength: 3, withPad: "0", startingAt: 0)
+                normalized = String(raw[raw.startIndex..<dotRange.lowerBound]) + "." + trimmed + String(raw[plusRange.lowerBound...])
+            } else {
+                normalized = raw
+            }
+
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let date = formatter.date(from: normalized) { return date }
+
+            formatter.formatOptions = [.withInternetDateTime]
+            if let date = formatter.date(from: normalized) { return date }
+
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Cannot parse date: \(raw)")
+        }
+        return d
+    }()
+
+    private let session: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 30
+        config.timeoutIntervalForResource = 120
+        return URLSession(configuration: config)
+    }()
+
+    private init() {}
+
+    private func resolveCredentials() throws -> (server: SubsonicServer, password: String) {
+        try credentialLock.withLock {
+            guard let s = _activeServer else { throw SubsonicAPIError.noServer }
+            if _activePassword == nil {
+                _activePassword = KeychainService.load(for: s.id)
+            }
+            guard let p = _activePassword else { throw SubsonicAPIError.noPassword }
+            return (s, p)
+        }
+    }
+
+    private func makeAuthParams(server: SubsonicServer, password: String) -> [URLQueryItem] {
+        let s = makeSalt()
+        let t = makeToken(password: password, salt: s)
+        return [
+            URLQueryItem(name: "u", value: server.username),
+            URLQueryItem(name: "t", value: t),
+            URLQueryItem(name: "s", value: s),
+            URLQueryItem(name: "v", value: apiVersion),
+            URLQueryItem(name: "c", value: clientName),
+            URLQueryItem(name: "f", value: "json")
+        ]
+    }
+
+    nonisolated private func makeSalt() -> String {
+        let chars = "abcdefghijklmnopqrstuvwxyz0123456789"
+        return String((0..<8).map { _ in chars.randomElement()! })
+    }
+
+    nonisolated private func makeToken(password: String, salt: String) -> String {
+        let digest = Insecure.MD5.hash(data: Data((password + salt).utf8))
+        return digest.map { String(format: "%02x", $0) }.joined()
+    }
+
+    func authParams() throws -> [URLQueryItem] {
+        let creds = try resolveCredentials()
+        return makeAuthParams(server: creds.server, password: creds.password)
+    }
+
+    private func buildURL(path: String, extra: [URLQueryItem] = []) throws -> URL {
+        let creds = try resolveCredentials()
+        var base = creds.server.baseURL
+        if base.hasSuffix("/") { base.removeLast() }
+        guard var comps = URLComponents(string: "\(base)/rest/\(path)") else {
+            throw SubsonicAPIError.invalidURL
+        }
+        comps.queryItems = makeAuthParams(server: creds.server, password: creds.password) + extra
+        guard let url = comps.url else { throw SubsonicAPIError.invalidURL }
+        return url
+    }
+
+    private func fetchData(path: String, extra: [URLQueryItem] = [], retries: Int = 2) async throws -> Data {
+        let url = try buildURL(path: path, extra: extra)
+        var lastError: Error?
+        for attempt in 0...retries {
+            if attempt > 0 {
+                try await Task.sleep(for: .milliseconds(500 * attempt))
+                try Task.checkCancellation()
+            }
+            do {
+                let (data, _) = try await session.data(from: url)
+                // Server hat geantwortet → Banner ausblenden, falls einer aktiv ist.
+                Task { @MainActor in OfflineModeService.shared.clearServerError() }
+                return data
+            } catch {
+                if Task.isCancelled || (error as? URLError)?.code == .cancelled {
+                    throw CancellationError()
+                }
+                lastError = error
+                let isRetryable = (error as? URLError).map {
+                    [.timedOut, .networkConnectionLost, .notConnectedToInternet, .cannotConnectToHost].contains($0.code)
+                } ?? false
+                if !isRetryable || attempt == retries { break }
+            }
+        }
+        throw SubsonicAPIError.networkError(lastError!)
+    }
+
+    private func check(status: String, error: StatusCheck.APIError?) throws {
+        if status == "failed" {
+            throw SubsonicAPIError.apiError(error?.code ?? 0, error?.message)
+        }
+    }
+
+    nonisolated private func authParams(for server: SubsonicServer, password: String) -> [URLQueryItem] {
+        let s = makeSalt()
+        let t = makeToken(password: password, salt: s)
+        return [
+            URLQueryItem(name: "u", value: server.username),
+            URLQueryItem(name: "t", value: t),
+            URLQueryItem(name: "s", value: s),
+            URLQueryItem(name: "v", value: apiVersion),
+            URLQueryItem(name: "c", value: clientName),
+            URLQueryItem(name: "f", value: "json")
+        ]
+    }
+
+    nonisolated private func buildURL(for server: SubsonicServer, password: String, path: String, extra: [URLQueryItem] = []) throws -> URL {
+        var base = server.baseURL
+        if base.hasSuffix("/") { base.removeLast() }
+        guard var comps = URLComponents(string: "\(base)/rest/\(path)") else {
+            throw SubsonicAPIError.invalidURL
+        }
+        comps.queryItems = authParams(for: server, password: password) + extra
+        guard let url = comps.url else { throw SubsonicAPIError.invalidURL }
+        return url
+    }
+
+    private func fetchData(for server: SubsonicServer, password: String, path: String, extra: [URLQueryItem] = []) async throws -> Data {
+        let url = try buildURL(for: server, password: password, path: path, extra: extra)
+        do {
+            let (data, _) = try await session.data(from: url)
+            return data
+        } catch {
+            throw SubsonicAPIError.networkError(error)
+        }
+    }
+
+    func ping() async throws {
+        let data = try await fetchData(path: "ping")
+        let body = try decoder.decode(Envelope<PingBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+    }
+
+    func ping(server: SubsonicServer, password: String) async throws -> ServerInfo {
+        let data = try await fetchData(for: server, password: password, path: "ping")
+        let body = try decoder.decode(Envelope<PingInfoBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+        return ServerInfo(apiVersion: body.version, serverVersion: body.serverVersion, serverType: body.type)
+    }
+
+    func startScan(server: SubsonicServer, password: String) async throws {
+        let data = try await fetchData(for: server, password: password, path: "startScan")
+        let body = try decoder.decode(Envelope<PingBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+    }
+
+    func getScanStatus(server: SubsonicServer, password: String) async throws -> ScanStatus {
+        let data = try await fetchData(for: server, password: password, path: "getScanStatus")
+        let body = try decoder.decode(Envelope<ScanStatusBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+        let detail = body.scanStatus
+        return ScanStatus(scanning: detail?.scanning ?? false, count: detail?.count ?? 0)
+    }
+
+    func getAlbumList(type: String, size: Int = 20, offset: Int = 0) async throws -> [Album] {
+        #if DEBUG
+        if isDemoActive { return offset > 0 ? [] : DemoContent.albumList(type: type) }
+        #endif
+        let data = try await fetchData(path: "getAlbumList2", extra: [
+            URLQueryItem(name: "type", value: type),
+            URLQueryItem(name: "size", value: "\(size)"),
+            URLQueryItem(name: "offset", value: "\(offset)")
+        ])
+        let body = try decoder.decode(Envelope<AlbumListBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+        return body.albumList2?.album ?? []
+    }
+
+    func getRecentlyAdded(size: Int = 20) async throws -> [Album] {
+        try await getAlbumList(type: "newest", size: size)
+    }
+
+    func getRecentlyPlayed(size: Int = 20) async throws -> [Album] {
+        try await getAlbumList(type: "recent", size: size)
+    }
+
+    func getFrequentlyPlayed(size: Int = 20) async throws -> [Album] {
+        try await getAlbumList(type: "frequent", size: size)
+    }
+
+    func getAllArtists() async throws -> [Artist] {
+        #if DEBUG
+        if isDemoActive { return DemoContent.artists }
+        #endif
+        let data = try await fetchData(path: "getArtists")
+        let body = try decoder.decode(Envelope<ArtistsBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+        let indices = body.artists?.index ?? []
+        return indices.flatMap { $0.artist ?? [] }
+    }
+
+    func getAlbum(id: String) async throws -> AlbumDetail {
+        #if DEBUG
+        if isDemoActive {
+            guard let d = DemoContent.albumDetail(id: id) else { throw SubsonicAPIError.apiError(0, "Album not found") }
+            return d
+        }
+        #endif
+        let data = try await fetchData(path: "getAlbum", extra: [
+            URLQueryItem(name: "id", value: id)
+        ])
+        let body = try decoder.decode(Envelope<AlbumBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+        guard let album = body.album else { throw SubsonicAPIError.apiError(0, "Album not found") }
+        return album
+    }
+
+    func getArtist(id: String) async throws -> ArtistDetail {
+        #if DEBUG
+        if isDemoActive {
+            guard let d = DemoContent.artistDetail(id: id) else { throw SubsonicAPIError.apiError(0, "Artist not found") }
+            return d
+        }
+        #endif
+        let data = try await fetchData(path: "getArtist", extra: [
+            URLQueryItem(name: "id", value: id)
+        ])
+        let body = try decoder.decode(Envelope<ArtistBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+        guard let artist = body.artist else { throw SubsonicAPIError.apiError(0, "Artist not found") }
+        return artist
+    }
+
+    func getArtistInfo(id: String) async throws -> ArtistInfo {
+        #if DEBUG
+        if isDemoActive { return ArtistInfo(biography: nil) }
+        #endif
+        let data = try await fetchData(path: "getArtistInfo2", extra: [
+            URLQueryItem(name: "id", value: id),
+            URLQueryItem(name: "count", value: "0")
+        ])
+        let body = try decoder.decode(Envelope<ArtistInfoBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+        return body.artistInfo2 ?? ArtistInfo(biography: nil)
+    }
+
+    func getSong(id: String) async throws -> Song {
+        let data = try await fetchData(path: "getSong", extra: [
+            URLQueryItem(name: "id", value: id)
+        ])
+        let body = try decoder.decode(Envelope<SongBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+        guard let song = body.song else { throw SubsonicAPIError.apiError(0, "Song not found") }
+        return song
+    }
+
+    func getSongsOrdered(ids: [String]) async throws -> [Song] {
+        let indexed = Array(ids.enumerated())
+        let pairs = await withTaskGroup(of: (Int, Song?).self) { group in
+            for (i, id) in indexed {
+                group.addTask { (i, try? await self.getSong(id: id)) }
+            }
+            var result: [(Int, Song)] = []
+            for await (i, song) in group {
+                if let song { result.append((i, song)) }
+            }
+            return result
+        }
+        return pairs.sorted { $0.0 < $1.0 }.map(\.1)
+    }
+
+    func search(query: String) async throws -> SearchResult {
+        #if DEBUG
+        if isDemoActive { return DemoContent.search(query: query) }
+        #endif
+        let data = try await fetchData(path: "search3", extra: [
+            URLQueryItem(name: "query", value: query),
+            URLQueryItem(name: "artistCount", value: "10"),
+            URLQueryItem(name: "albumCount", value: "10"),
+            URLQueryItem(name: "songCount", value: "20")
+        ])
+        let body = try decoder.decode(Envelope<SearchBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+        return body.searchResult3 ?? SearchResult(artist: nil, album: nil, song: nil)
+    }
+
+    func getNewestSongs(albumCount: Int = 10) async throws -> [Song] {
+        try await fetchSongsFromAlbums(type: "newest", albumCount: albumCount)
+    }
+
+    func getFrequentSongs(albumCount: Int = 30, limit: Int = 100) async throws -> [Song] {
+        let albums = try await getAlbumList(type: "frequent", size: albumCount)
+        let allSongs = try await withThrowingTaskGroup(of: [Song].self) { group in
+            for album in albums {
+                group.addTask { (try await self.getAlbum(id: album.id)).song ?? [] }
+            }
+            var songs: [Song] = []
+            for try await albumSongs in group { songs.append(contentsOf: albumSongs) }
+            return songs
+        }
+        return Array(allSongs.sorted { ($0.playCount ?? 0) > ($1.playCount ?? 0) }.prefix(limit))
+    }
+
+    func getRandomSongs(size: Int = 500, genre: String? = nil) async throws -> [Song] {
+        var extra = [URLQueryItem(name: "size", value: "\(size)")]
+        if let g = genre { extra.append(URLQueryItem(name: "genre", value: g)) }
+        let data = try await fetchData(path: "getRandomSongs", extra: extra)
+        let body = try decoder.decode(Envelope<RandomSongsBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+        return body.randomSongs?.song ?? []
+    }
+
+    func getRecentSongs(albumCount: Int = 30, limit: Int = 100) async throws -> [Song] {
+        let albums = try await getAlbumList(type: "recent", size: albumCount)
+        let indexed = Array(albums.enumerated())
+        let songsByIndex = try await withThrowingTaskGroup(of: (Int, [Song]).self) { group in
+            for (i, album) in indexed {
+                group.addTask { (i, (try await self.getAlbum(id: album.id)).song ?? []) }
+            }
+            var result: [(Int, [Song])] = []
+            for try await pair in group { result.append(pair) }
+            return result
+        }
+        let ordered = songsByIndex.sorted { $0.0 < $1.0 }.flatMap { $0.1 }
+        return Array(ordered.prefix(limit))
+    }
+
+    private func fetchSongsFromAlbums(type: String, albumCount: Int) async throws -> [Song] {
+        let albums = try await getAlbumList(type: type, size: albumCount)
+        return try await withThrowingTaskGroup(of: [Song].self) { group in
+            for album in albums {
+                group.addTask { (try await self.getAlbum(id: album.id)).song ?? [] }
+            }
+            var songs: [Song] = []
+            for try await albumSongs in group { songs.append(contentsOf: albumSongs) }
+            return songs
+        }
+    }
+
+    func scrobble(songId: String, submission: Bool = true, playedAt: Double? = nil) async throws {
+        var extra = [
+            URLQueryItem(name: "id", value: songId),
+            URLQueryItem(name: "submission", value: submission ? "true" : "false")
+        ]
+        if let ts = playedAt {
+            // Subsonic erwartet Millisekunden seit Epoch
+            extra.append(URLQueryItem(name: "time", value: String(Int64(ts * 1000))))
+        }
+        _ = try await fetchData(path: "scrobble", extra: extra)
+    }
+
+    /// Top-Songs eines Künstlers (macOS-Künstlerseite).
+    func getTopSongs(artistName: String, count: Int = 50) async throws -> [Song] {
+        let data = try await fetchData(path: "getTopSongs", extra: [
+            URLQueryItem(name: "artist", value: artistName),
+            URLQueryItem(name: "count", value: "\(count)")
+        ])
+        let body = try decoder.decode(Envelope<TopSongsBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+        return body.topSongs?.song ?? []
+    }
+
+    /// Alle Alben alphabetisch, mit Paging (macOS-Lyrics-Bulk-Download).
+    func getAllAlbums(size: Int = 500, offset: Int = 0) async throws -> [Album] {
+        try await getAlbumList(type: "alphabeticalByName", size: size, offset: offset)
+    }
+
+    /// Ping mit Server-Metadaten für den aktiven Server (macOS-Serververwaltung).
+    func getServerInfo() async throws -> ServerInfo {
+        let data = try await fetchData(path: "ping")
+        let body = try decoder.decode(Envelope<PingInfoBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+        return ServerInfo(apiVersion: body.version, serverVersion: body.serverVersion, serverType: body.type)
+    }
+
+    /// Scan auf dem aktiven Server starten (macOS-Serververwaltung).
+    func startScan() async throws -> ScanStatus {
+        let data = try await fetchData(path: "startScan")
+        let body = try decoder.decode(Envelope<ScanStatusBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+        return ScanStatus(scanning: body.scanStatus?.scanning ?? false, count: body.scanStatus?.count ?? 0)
+    }
+
+    /// Scan-Status des aktiven Servers (macOS-Serververwaltung).
+    func getScanStatus() async throws -> ScanStatus {
+        let data = try await fetchData(path: "getScanStatus")
+        let body = try decoder.decode(Envelope<ScanStatusBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+        return ScanStatus(scanning: body.scanStatus?.scanning ?? false, count: body.scanStatus?.count ?? 0)
+    }
+
+    /// Frequently-Played-Fallback: Top-Alben nach Play-Count, adaptiver Threshold.
+    func frequentMixFallbackSongs() async throws -> [Song] {
+        let allFrequent = try await getAlbumList(type: "frequent", size: 500)
+        let sorted = allFrequent.sorted { ($0.playCount ?? 0) > ($1.playCount ?? 0) }
+        let maxPC = sorted.first?.playCount ?? 0
+        let threshold = max(maxPC / 50, 1)
+        var filtered = sorted.filter { ($0.playCount ?? 0) >= threshold }
+        if filtered.count < 30 { filtered = Array(sorted.prefix(30)) }
+        if filtered.count > 80 { filtered = Array(sorted.prefix(80)) }
+        let songs = try await withThrowingTaskGroup(of: [Song].self) { group in
+            for album in filtered {
+                group.addTask { (try? await self.getAlbum(id: album.id))?.song ?? [] }
+            }
+            var all: [Song] = []
+            for try await albumSongs in group { all.append(contentsOf: albumSongs) }
+            return all
+        }
+        return Array(songs.sorted { ($0.playCount ?? 0) > ($1.playCount ?? 0) }.prefix(50))
+    }
+
+    func authLogin(server: SubsonicServer, password: String) async throws -> String {
+        var base = server.baseURL
+        if base.hasSuffix("/") { base.removeLast() }
+        guard let url = URL(string: "\(base)/auth/login") else { throw SubsonicAPIError.invalidURL }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(["username": server.username, "password": password])
+        let (data, _) = try await session.data(for: request)
+        struct AuthResponse: Decodable { let id: String }
+        return try decoder.decode(AuthResponse.self, from: data).id
+    }
+
+    func streamURL(for songId: String, timeOffset: Int = 0) -> URL? {
+        var extras = [URLQueryItem(name: "id", value: songId)]
+        if let fmt = TranscodingPolicy.currentStreamFormat() {
+            extras.append(URLQueryItem(name: "format", value: fmt.codec.rawValue))
+            extras.append(URLQueryItem(name: "maxBitRate", value: "\(fmt.bitrate)"))
+        } else {
+            extras.append(URLQueryItem(name: "format", value: "raw"))
+        }
+        if timeOffset > 0 {
+            extras.append(URLQueryItem(name: "timeOffset", value: "\(timeOffset)"))
+        }
+        return try? buildURL(path: "stream", extra: extras)
+    }
+
+    func rawStreamURL(for songId: String) -> URL? {
+        try? buildURL(path: "stream", extra: [
+            URLQueryItem(name: "id", value: songId),
+            URLQueryItem(name: "format", value: "raw")
+        ])
+    }
+
+    func downloadURL(for songId: String) -> URL? {
+        try? buildURL(path: "download", extra: [
+            URLQueryItem(name: "id", value: songId)
+        ])
+    }
+
+    nonisolated func downloadURL(for songId: String, server: SubsonicServer, password: String,
+                                 transcoding: (codec: TranscodingCodec, bitrate: Int)? = nil) -> URL? {
+        if let t = transcoding {
+            return try? buildURL(for: server, password: password, path: "stream", extra: [
+                URLQueryItem(name: "id", value: songId),
+                URLQueryItem(name: "format", value: t.codec.rawValue),
+                URLQueryItem(name: "maxBitRate", value: "\(t.bitrate)")
+            ])
+        }
+        return try? buildURL(for: server, password: password, path: "download", extra: [
+            URLQueryItem(name: "id", value: songId)
+        ])
+    }
+
+    nonisolated func coverArtURL(for artId: String, server: SubsonicServer, password: String, size: Int = 600) -> URL? {
+        try? buildURL(for: server, password: password, path: "getCoverArt", extra: [
+            URLQueryItem(name: "id", value: artId),
+            URLQueryItem(name: "size", value: "\(size)")
+        ])
+    }
+
+    func coverArtURL(for artId: String, size: Int = 300) -> URL? {
+        try? buildURL(path: "getCoverArt", extra: [
+            URLQueryItem(name: "id", value: artId),
+            URLQueryItem(name: "size", value: "\(size)")
+        ])
+    }
+
+    // MARK: - Favorites (star/unstar/getStarred2)
+
+    func getStarred() async throws -> StarredResult {
+        #if DEBUG
+        if isDemoActive { return DemoContent.starred }
+        #endif
+        let data = try await fetchData(path: "getStarred2")
+        let body = try decoder.decode(Envelope<StarredBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+        return body.starred2 ?? StarredResult(artist: nil, album: nil, song: nil)
+    }
+
+    func star(songId: String? = nil, albumId: String? = nil, artistId: String? = nil) async throws {
+        var extra: [URLQueryItem] = []
+        if let id = songId   { extra.append(URLQueryItem(name: "id",       value: id)) }
+        if let id = albumId  { extra.append(URLQueryItem(name: "albumId",  value: id)) }
+        if let id = artistId { extra.append(URLQueryItem(name: "artistId", value: id)) }
+        let data = try await fetchData(path: "star", extra: extra)
+        let body = try decoder.decode(Envelope<PingBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+    }
+
+    func unstar(songId: String? = nil, albumId: String? = nil, artistId: String? = nil) async throws {
+        var extra: [URLQueryItem] = []
+        if let id = songId   { extra.append(URLQueryItem(name: "id",       value: id)) }
+        if let id = albumId  { extra.append(URLQueryItem(name: "albumId",  value: id)) }
+        if let id = artistId { extra.append(URLQueryItem(name: "artistId", value: id)) }
+        let data = try await fetchData(path: "unstar", extra: extra)
+        let body = try decoder.decode(Envelope<PingBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+    }
+
+    // MARK: - Playlists
+
+    func getPlaylists() async throws -> [Playlist] {
+        #if DEBUG
+        if isDemoActive { return DemoContent.playlists }
+        #endif
+        let data = try await fetchData(path: "getPlaylists")
+        let body = try decoder.decode(Envelope<PlaylistsBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+        return body.playlists?.playlist ?? []
+    }
+
+    func getPlaylist(id: String) async throws -> Playlist {
+        #if DEBUG
+        if isDemoActive {
+            guard let p = DemoContent.playlist(id: id) else { throw SubsonicAPIError.apiError(0, "Playlist not found") }
+            return p
+        }
+        #endif
+        let data = try await fetchData(path: "getPlaylist", extra: [
+            URLQueryItem(name: "id", value: id)
+        ])
+        let body = try decoder.decode(Envelope<PlaylistBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+        guard let detail = body.playlist else {
+            throw SubsonicAPIError.apiError(0, "Playlist not found")
+        }
+        var playlist = Playlist(
+            id: detail.id, name: detail.name, comment: detail.comment,
+            songCount: detail.songCount, duration: detail.duration, coverArt: detail.coverArt
+        )
+        playlist.songs = detail.entry ?? []
+        return playlist
+    }
+
+    func createPlaylist(name: String, songIds: [String] = [], comment: String? = nil) async throws -> Playlist {
+        var extra = [URLQueryItem(name: "name", value: name)]
+        extra += songIds.map { URLQueryItem(name: "songId", value: $0) }
+        let data = try await fetchData(path: "createPlaylist", extra: extra)
+        let body = try decoder.decode(Envelope<CreatePlaylistBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+        guard let detail = body.playlist else {
+            throw SubsonicAPIError.apiError(0, "Create playlist failed")
+        }
+        if let comment {
+            try? await updatePlaylist(id: detail.id, comment: comment)
+        }
+        return Playlist(
+            id: detail.id, name: detail.name, comment: detail.comment,
+            songCount: detail.songCount, duration: detail.duration, coverArt: detail.coverArt
+        )
+    }
+
+    func updatePlaylist(id: String, name: String? = nil, comment: String? = nil,
+                        songIdsToAdd: [String] = [], songIndicesToRemove: [Int] = []) async throws {
+        var extra = [URLQueryItem(name: "playlistId", value: id)]
+        if let n = name    { extra.append(URLQueryItem(name: "name",    value: n)) }
+        if let c = comment { extra.append(URLQueryItem(name: "comment", value: c)) }
+        extra += songIdsToAdd.map         { URLQueryItem(name: "songIdToAdd",          value: $0) }
+        extra += songIndicesToRemove.map  { URLQueryItem(name: "songIndexToRemove",     value: "\($0)") }
+        let data = try await fetchData(path: "updatePlaylist", extra: extra)
+        let body = try decoder.decode(Envelope<PingBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+    }
+
+    func deletePlaylist(id: String) async throws {
+        let data = try await fetchData(path: "deletePlaylist", extra: [
+            URLQueryItem(name: "id", value: id)
+        ])
+        let body = try decoder.decode(Envelope<PingBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+    }
+
+    // MARK: - Lyrics (OpenSubsonic)
+
+    func getLyricsBySongId(songId: String) async throws -> StructuredLyrics? {
+        let data = try await fetchData(path: "getLyricsBySongId", extra: [
+            URLQueryItem(name: "id", value: songId)
+        ])
+        let body = try decoder.decode(Envelope<LyricsListBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+        return body.lyricsList?.structuredLyrics?.first
+    }
+
+    /// URL für getLyricsBySongId — nutzbar mit Background-URLSession.
+    nonisolated func lyricsURL(for songId: String, server: SubsonicServer, password: String) -> URL? {
+        try? buildURL(for: server, password: password, path: "getLyricsBySongId", extra: [
+            URLQueryItem(name: "id", value: songId)
+        ])
+    }
+
+    /// Parst die Antwort eines getLyricsBySongId-Calls. Returnt nil bei API-Fehler oder leerer Response.
+    nonisolated func parseLyricsResponse(data: Data) -> StructuredLyrics? {
+        let dec = JSONDecoder()
+        guard let body = try? dec.decode(Envelope<LyricsListBody>.self, from: data).response,
+              body.status != "failed" else { return nil }
+        return body.lyricsList?.structuredLyrics?.first
+    }
+}
+
+struct StructuredLyrics: Codable {
+    let synced: Bool
+    let lang: String?
+    let line: [LyricsLine]?
+
+    struct LyricsLine: Codable {
+        let start: Int?
+        let value: String
+    }
+}
+
+private struct LyricsListBody: Decodable {
+    let status: String
+    let error: StatusCheck.APIError?
+    let lyricsList: LyricsList?
+
+    struct LyricsList: Decodable {
+        let structuredLyrics: [StructuredLyrics]?
+    }
+}

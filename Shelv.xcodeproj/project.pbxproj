@@ -27,6 +27,11 @@
 			path = Shelv;
 			sourceTree = "<group>";
 		};
+		BCC0DE0000000000000000C0 /* ShelvCore */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = ShelvCore;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -61,6 +66,7 @@
 			children = (
 				BC9C593A2F8E9FB000FF4D25 /* Shelv */,
 				BC7B83F62FDB17700058CB78 /* Shelv Mac */,
+				BCC0DE0000000000000000C0 /* ShelvCore */,
 				BC7B84A52FDB17F90058CB78 /* Frameworks */,
 				BC9C59392F8E9FB000FF4D25 /* Products */,
 			);
@@ -92,6 +98,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				BC7B83F62FDB17700058CB78 /* Shelv Mac */,
+				BCC0DE0000000000000000C0 /* ShelvCore */,
 			);
 			name = "Shelv Mac";
 			packageProductDependencies = (
@@ -115,6 +122,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				BC9C593A2F8E9FB000FF4D25 /* Shelv */,
+				BCC0DE0000000000000000C0 /* ShelvCore */,
 			);
 			name = Shelv;
 			packageProductDependencies = (
@@ -227,6 +235,7 @@
 				ENABLE_RESOURCE_ACCESS_USB = NO;
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Shelv-Mac-Info.plist";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -273,6 +282,7 @@
 				ENABLE_RESOURCE_ACCESS_USB = NO;
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Shelv-Mac-Info.plist";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
