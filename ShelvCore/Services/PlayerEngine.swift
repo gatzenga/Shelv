@@ -15,6 +15,12 @@ final class PlayerEngine: ObservableObject {
     var onTrackFinished: (() -> Void)?
     var onPlaybackFailed: (() -> Void)?
 
+    /// Master-Volume (macOS-Lautstärkeregler). Auf iOS regelt die Hardware;
+    /// ReplayGain nutzt dort `setVolume(_:)`.
+    var volume: Float = 1.0 {
+        didSet { player.volume = volume }
+    }
+
     private let player: AVQueuePlayer
     private var timeObserverToken: Any?
     private var itemFinishedObserver: NSObjectProtocol?
@@ -73,6 +79,7 @@ final class PlayerEngine: ObservableObject {
         player.pause()
         player.removeAllItems()
         player.automaticallyWaitsToMinimizeStalling = !url.isFileURL
+        player.volume = volume
         player.insert(item, after: nil)
         player.play()
 
