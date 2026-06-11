@@ -101,12 +101,20 @@ actor DownloadService {
 
     func setup() {
         if session == nil {
+            #if os(iOS)
+            // Background-Session: Downloads laufen im nsurlsessiond-Daemon weiter,
+            // auch wenn iOS die App suspendiert. Restore via getAllTasks beim Start.
             let cfg = URLSessionConfiguration.background(withIdentifier: backgroundIdentifier)
             cfg.isDiscretionary = false
             cfg.sessionSendsLaunchEvents = true
+            cfg.shouldUseExtendedBackgroundIdleMode = true
+            #else
+            // macOS: App läuft ohnehin weiter — Standard-Session wie in der
+            // bisherigen Desktop-App (bewährtes Verhalten beibehalten).
+            let cfg = URLSessionConfiguration.default
+            #endif
             cfg.allowsCellularAccess = true
             cfg.httpMaximumConnectionsPerHost = maxConcurrent
-            cfg.shouldUseExtendedBackgroundIdleMode = true
             cfg.waitsForConnectivity = true
             let s = URLSession(configuration: cfg, delegate: coordinator, delegateQueue: nil)
             session = s
@@ -147,7 +155,12 @@ actor DownloadService {
         guard let api = await currentAPI(for: serverId) else { return }
         let downloadedIds = await DownloadDatabase.shared.allSongIds(serverId: serverId)
         let artistCoverById: [String: String] = await MainActor.run {
-            Dictionary(LibraryStore.shared.artists.compactMap { a in
+            #if os(macOS)
+            let artists = LibraryViewModel.shared.artists
+            #else
+            let artists = LibraryStore.shared.artists
+            #endif
+            return Dictionary(artists.compactMap { a in
                 a.coverArt.map { (a.name, $0) }
             }, uniquingKeysWith: { first, _ in first })
         }
@@ -938,9 +951,11 @@ private final class DownloadSessionCoordinator: NSObject, URLSessionDownloadDele
     }
 
     func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {
+        #if os(iOS)
         let identifier = session.configuration.identifier ?? ""
         DispatchQueue.main.async {
             BackgroundDownloadHandler.shared.consume(for: identifier)?()
         }
+        #endif
     }
 }
