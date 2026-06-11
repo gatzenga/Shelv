@@ -190,10 +190,7 @@ struct SearchView: View {
             } else {
                 let fallback = Song(
                     id: item.songId, title: item.songTitle ?? item.songId,
-                    artist: item.artistName, artistId: nil, album: nil, albumId: nil,
-                    coverArt: item.coverArt, duration: nil, track: nil, discNumber: nil,
-                    year: nil, genre: nil, starred: nil, playCount: nil,
-                    bitRate: nil, contentType: nil, suffix: nil, replayGain: nil
+                    artist: item.artistName, coverArt: item.coverArt
                 )
                 await MainActor.run { action(fallback) }
             }
@@ -217,10 +214,7 @@ struct SearchView: View {
             } else {
                 let fallback = Song(
                     id: item.songId, title: item.songTitle ?? item.songId,
-                    artist: item.artistName, artistId: nil, album: nil, albumId: nil,
-                    coverArt: item.coverArt, duration: nil, track: nil, discNumber: nil,
-                    year: nil, genre: nil, starred: nil, playCount: nil,
-                    bitRate: nil, contentType: nil, suffix: nil, replayGain: nil
+                    artist: item.artistName, coverArt: item.coverArt
                 )
                 appState.player.play(songs: [fallback], startIndex: 0)
             }

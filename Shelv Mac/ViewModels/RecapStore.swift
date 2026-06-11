@@ -494,13 +494,7 @@ class RecapStore: ObservableObject {
     }
 
     private func placeholderSong(id: String) -> Song {
-        Song(
-            id: id, title: id, artist: nil, artistId: nil,
-            album: nil, albumId: nil, coverArt: nil,
-            duration: nil, track: nil, discNumber: nil,
-            year: nil, genre: nil, starred: nil, playCount: nil,
-            bitRate: nil, contentType: nil, suffix: nil, replayGain: nil
-        )
+        Song(id: id, title: id)
     }
 
     func applyDiff(_ diff: RecapDiff, decision: RecapDiffDecision, serverId: String) async throws {

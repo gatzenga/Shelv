@@ -13,7 +13,7 @@ struct SubsonicServer: Identifiable, Codable {
 
     var stableId: String { remoteUserId ?? "" }
 
-    init(name: String, baseURL: String, username: String) {
+    init(name: String = "", baseURL: String, username: String) {
         self.id = UUID()
         self.name = name
         self.baseURL = baseURL

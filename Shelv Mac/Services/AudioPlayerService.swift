@@ -724,7 +724,7 @@ class AudioPlayerService: ObservableObject {
 
     func setCurrentSongStarred(_ starred: Bool) {
         guard var song = currentSong else { return }
-        song.starred = starred ? "starred" : nil
+        song.starred = starred ? Date() : nil
         currentSong = song
         if currentIndex < queue.count {
             queue[currentIndex].song.starred = song.starred

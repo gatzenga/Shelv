@@ -47,7 +47,7 @@ struct ArtistDetailView: View {
             let sorted = filtered.sorted { ($0.playCount ?? 0) < ($1.playCount ?? 0) }
             return direction == .ascending ? sorted : Array(sorted.reversed())
         case .recentlyAdded:
-            let sorted = filtered.sorted { ($0.created ?? "") < ($1.created ?? "") }
+            let sorted = filtered.sorted { ($0.created ?? .distantPast) < ($1.created ?? .distantPast) }
             return direction == .ascending ? sorted : Array(sorted.reversed())
         case .year:
             let sorted = filtered.sorted { ($0.year ?? 0) < ($1.year ?? 0) }
@@ -144,7 +144,7 @@ struct ArtistDetailView: View {
                                                 await libraryStore.toggleStarArtist(
                                                     Artist(id: detail.id, name: detail.name,
                                                            albumCount: detail.albumCount, coverArt: detail.coverArt,
-                                                           starred: isStarred ? "1" : nil)
+                                                           starred: isStarred ? Date() : nil)
                                                 )
                                             }
                                         } label: {

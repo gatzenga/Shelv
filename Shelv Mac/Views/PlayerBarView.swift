@@ -73,10 +73,7 @@ struct PlayerBarView: View {
                                         appState.navigationPath = NavigationPath()
                                         appState.navigationPath.append(
                                             Album(id: id, name: name, artist: song.artist,
-                                                  artistId: song.artistId, coverArt: song.coverArt,
-                                                  songCount: nil, duration: nil, year: nil,
-                                                  genre: nil, starred: nil, playCount: nil,
-                                                  created: nil)
+                                                  artistId: song.artistId, coverArt: song.coverArt)
                                         )
                                     }
                                     .buttonStyle(.plain)

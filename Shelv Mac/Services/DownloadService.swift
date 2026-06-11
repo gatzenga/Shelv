@@ -207,17 +207,17 @@ actor DownloadService {
                     artistId: song.artistId ?? detail.artistId,
                     album: song.album ?? detail.name,
                     albumId: song.albumId ?? detail.id,
-                    coverArt: song.coverArt ?? detail.coverArt,
-                    duration: song.duration,
                     track: song.track,
                     discNumber: song.discNumber,
+                    duration: song.duration,
+                    coverArt: song.coverArt ?? detail.coverArt,
                     year: song.year,
                     genre: song.genre,
-                    starred: song.starred,
                     playCount: song.playCount,
-                    bitRate: song.bitRate,
+                    starred: song.starred,
                     contentType: song.contentType,
                     suffix: song.suffix,
+                    bitRate: song.bitRate,
                     replayGain: song.replayGain
                 )
             }

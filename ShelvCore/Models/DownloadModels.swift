@@ -50,6 +50,7 @@ struct DownloadedSong: Identifiable, Hashable {
             id: songId,
             title: title,
             artist: artistName,
+            artistId: artistId,
             album: albumTitle,
             albumId: albumId,
             track: track,

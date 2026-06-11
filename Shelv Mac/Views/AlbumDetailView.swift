@@ -232,8 +232,7 @@ struct AlbumDetailView: View {
                                        artistId: album.artistId, coverArt: album.coverArt,
                                        songCount: album.songCount, duration: album.duration,
                                        year: album.year, genre: album.genre,
-                                       starred: album.starred, playCount: nil,
-                                       created: nil)
+                                       starred: album.starred)
                 let isStarred = libraryStore.isAlbumStarred(albumModel)
                 Button {
                     Task { await libraryStore.toggleStarAlbum(albumModel) }
@@ -314,7 +313,7 @@ struct AlbumDetailView: View {
                                artistId: album.artistId, coverArt: album.coverArt,
                                songCount: album.songCount, duration: album.duration,
                                year: album.year, genre: album.genre,
-                               starred: album.starred, playCount: nil, created: nil)
+                               starred: album.starred)
         let status = downloadStore.albumDownloadStatus(albumId: album.id, totalSongs: total)
         switch status {
         case .none:

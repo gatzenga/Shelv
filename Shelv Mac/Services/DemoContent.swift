@@ -79,10 +79,10 @@ enum DemoContent {
         spec.tracks.enumerated().map { idx, t in
             Song(id: "\(spec.albumId)-\(idx + 1)", title: t.0, artist: spec.artistName,
                  artistId: spec.artistId, album: spec.title, albumId: spec.albumId,
-                 coverArt: spec.cover, duration: t.1, track: idx + 1, discNumber: 1,
-                 year: spec.year, genre: "Ambient", starred: nil,
-                 playCount: max(0, 12 - idx * 2), bitRate: 320,
-                 contentType: "audio/mpeg", suffix: "mp3", replayGain: nil)
+                 track: idx + 1, discNumber: 1, duration: t.1,
+                 coverArt: spec.cover, year: spec.year, genre: "Ambient",
+                 playCount: max(0, 12 - idx * 2),
+                 contentType: "audio/mpeg", suffix: "mp3", bitRate: 320)
         }
     }
 
@@ -91,8 +91,8 @@ enum DemoContent {
         return Album(id: spec.albumId, name: spec.title, artist: spec.artistName,
                      artistId: spec.artistId, coverArt: spec.cover, songCount: s.count,
                      duration: s.reduce(0) { $0 + ($1.duration ?? 0) }, year: spec.year,
-                     genre: "Ambient", starred: nil,
-                     playCount: s.reduce(0) { $0 + ($1.playCount ?? 0) }, created: nil)
+                     genre: "Ambient",
+                     playCount: s.reduce(0) { $0 + ($1.playCount ?? 0) })
     }
 
     static let albums: [Album] = specs.map(album(for:))

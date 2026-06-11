@@ -1,5 +1,11 @@
 import Foundation
 
+// Kern-Modelle (Song, Album, Artist, Playlist, SubsonicServer, ReplayGain)
+// leben seit der Target-Zusammenführung in ShelvCore/Models/.
+// Hier verbleiben: der ServerConfig-Pfad + Response-Wrapper des (noch)
+// macOS-eigenen SubsonicAPIService [TODO(W3): mit iOS-API zusammenführen]
+// sowie macOS-spezifische UI-Enums und Player-Typen.
+
 struct ServerConfig: Codable, Equatable {
     var serverURL: String
     var username: String
@@ -7,27 +13,6 @@ struct ServerConfig: Codable, Equatable {
 
     var isValid: Bool {
         !serverURL.isEmpty && !username.isEmpty && !password.isEmpty
-    }
-}
-
-struct SubsonicServer: Identifiable, Codable {
-    let id: UUID
-    var name: String
-    var baseURL: String
-    var username: String
-    var remoteUserId: String?
-
-    var displayName: String {
-        name.isEmpty ? baseURL : name
-    }
-
-    var stableId: String { remoteUserId ?? "" }
-
-    init(name: String = "", baseURL: String, username: String) {
-        self.id = UUID()
-        self.name = name
-        self.baseURL = baseURL
-        self.username = username
     }
 }
 
@@ -105,16 +90,6 @@ struct ArtistIndex: Codable, Identifiable {
     }
 }
 
-struct Artist: Codable, Identifiable, Hashable {
-    let id: String
-    let name: String
-    let albumCount: Int?
-    let coverArt: String?
-    let starred: String?
-
-    var isStarred: Bool { starred != nil }
-}
-
 struct ArtistDetail: Codable, Identifiable {
     let id: String
     let name: String
@@ -127,28 +102,6 @@ struct AlbumListResult: Codable {
     let album: [Album]
 }
 
-struct Album: Codable, Identifiable, Hashable {
-    let id: String
-    let name: String
-    let artist: String?
-    let artistId: String?
-    let coverArt: String?
-    let songCount: Int?
-    let duration: Int?
-    let year: Int?
-    let genre: String?
-    let starred: String?
-    let playCount: Int?
-    let created: String?
-
-    var isStarred: Bool { starred != nil }
-
-    var displayYear: String {
-        guard let y = year else { return "" }
-        return "\(y)"
-    }
-}
-
 struct AlbumDetail: Codable, Identifiable {
     let id: String
     let name: String
@@ -159,51 +112,44 @@ struct AlbumDetail: Codable, Identifiable {
     let duration: Int?
     let year: Int?
     let genre: String?
-    let starred: String?
+    let starred: Date?
     let song: [Song]
 
     var isStarred: Bool { starred != nil }
-}
 
-struct ReplayGain: Codable, Hashable {
-    let trackGain: Float?
-    let albumGain: Float?
-    let trackPeak: Float?
-    let albumPeak: Float?
-}
-
-struct Song: Codable, Identifiable, Hashable {
-    let id: String
-    let title: String
-    let artist: String?
-    let artistId: String?
-    let album: String?
-    let albumId: String?
-    let coverArt: String?
-    let duration: Int?
-    let track: Int?
-    let discNumber: Int?
-    let year: Int?
-    let genre: String?
-    var starred: String?
-    let playCount: Int?
-    let bitRate: Int?
-    let contentType: String?
-    let suffix: String?
-    let replayGain: ReplayGain?
-
-    var isStarred: Bool { starred != nil }
-
-    var durationString: String {
-        guard let d = duration else { return "--:--" }
-        let m = d / 60
-        let s = d % 60
-        return String(format: "%d:%02d", m, s)
+    enum CodingKeys: String, CodingKey {
+        case id, name, artist, artistId, coverArt, songCount, duration, year, genre, starred, song
     }
 
-    var displayTrack: String {
-        guard let t = track else { return "" }
-        return "\(t)"
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        artist = try c.decodeIfPresent(String.self, forKey: .artist)
+        artistId = try c.decodeIfPresent(String.self, forKey: .artistId)
+        coverArt = try c.decodeIfPresent(String.self, forKey: .coverArt)
+        songCount = try c.decodeIfPresent(Int.self, forKey: .songCount)
+        duration = try c.decodeIfPresent(Int.self, forKey: .duration)
+        year = try c.decodeIfPresent(Int.self, forKey: .year)
+        genre = try c.decodeIfPresent(String.self, forKey: .genre)
+        starred = FlexibleDate.decode(c, .starred)
+        song = try c.decodeIfPresent([Song].self, forKey: .song) ?? []
+    }
+
+    init(id: String, name: String, artist: String? = nil, artistId: String? = nil,
+         coverArt: String? = nil, songCount: Int? = nil, duration: Int? = nil,
+         year: Int? = nil, genre: String? = nil, starred: Date? = nil, song: [Song]) {
+        self.id = id
+        self.name = name
+        self.artist = artist
+        self.artistId = artistId
+        self.coverArt = coverArt
+        self.songCount = songCount
+        self.duration = duration
+        self.year = year
+        self.genre = genre
+        self.starred = starred
+        self.song = song
     }
 }
 
@@ -221,15 +167,6 @@ struct Starred2Result: Codable {
     let artist: [Artist]?
     let album: [Album]?
     let song: [Song]?
-}
-
-struct Playlist: Codable, Identifiable, Hashable {
-    let id: String
-    let name: String
-    let comment: String?
-    let songCount: Int?
-    let duration: Int?
-    let coverArt: String?
 }
 
 struct PlaylistDetail: Codable, Identifiable, Hashable {
