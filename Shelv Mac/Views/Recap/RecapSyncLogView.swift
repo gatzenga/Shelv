@@ -18,8 +18,8 @@ struct RecapSyncLogView: View {
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 4) {
-                        ForEach(ckStatus.debugLogEntries) { entry in
-                            Text(entry.text)
+                        ForEach(ckStatus.debugLogEntries, id: \.self) { entry in
+                            Text(entry)
                                 .font(.system(.caption2, design: .monospaced))
                                 .textSelection(.enabled)
                                 .fixedSize(horizontal: false, vertical: true)

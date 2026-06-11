@@ -37,7 +37,7 @@ struct RecapCreationLogView: View {
     }
 
     private var blocks: [LogBlock] {
-        groupLogs(ckStatus.recapCreationLog.map { $0.text })
+        groupLogs(ckStatus.recapCreationLog)
     }
 
     @ViewBuilder
