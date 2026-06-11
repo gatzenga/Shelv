@@ -306,7 +306,7 @@ class LibraryViewModel: ObservableObject {
             return loadPlaylistDetailCache(id: id)
         }
         do {
-            let detail = try await api.getPlaylist(id: id)
+            let detail = PlaylistDetail(try await api.getPlaylist(id: id))
             savePlaylistDetailCache(detail)
             let freshCount = detail.songs?.count ?? detail.songCount
             if let idx = playlists.firstIndex(where: { $0.id == id }) {

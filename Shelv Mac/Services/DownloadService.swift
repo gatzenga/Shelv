@@ -198,7 +198,7 @@ actor DownloadService {
                   !suppressedAlbumIds.contains(album.id) else { return }
             if let name = detail.artist, suppressedArtistNames.contains(name) { return }
             let albumArtist = detail.artist ?? album.artist
-            let songs = detail.song.map { song -> Song in
+            let songs = (detail.song ?? []).map { song -> Song in
                 if song.artist != nil && song.albumId != nil { return song }
                 return Song(
                     id: song.id,
@@ -238,7 +238,7 @@ actor DownloadService {
             guard enqueueEpoch == epoch,
                   !suppressedArtistIds.contains(artist.id),
                   !suppressedArtistNames.contains(artist.name) else { return }
-            for album in detail.album {
+            for album in detail.album ?? [] {
                 guard enqueueEpoch == epoch,
                       !suppressedArtistIds.contains(artist.id),
                       !suppressedArtistNames.contains(artist.name) else { return }

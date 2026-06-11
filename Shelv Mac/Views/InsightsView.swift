@@ -412,7 +412,7 @@ struct InsightsView: View {
             let songs = try await withThrowingTaskGroup(of: [Song].self) { group -> [Song] in
                 for album in filtered {
                     group.addTask {
-                        try await SubsonicAPIService.shared.getAlbum(id: album.id).song
+                        try await SubsonicAPIService.shared.getAlbum(id: album.id).song ?? []
                     }
                 }
                 var all: [Song] = []

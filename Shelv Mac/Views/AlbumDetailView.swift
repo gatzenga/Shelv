@@ -496,7 +496,7 @@ class AlbumDetailViewModel: ObservableObject {
         do {
             let detail = try await api.getAlbum(id: albumId)
             album = detail
-            songs = detail.song
+            songs = detail.song ?? []
         } catch {
             if let fallback {
                 populateFromLocal(fallback)

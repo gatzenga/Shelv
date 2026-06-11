@@ -129,6 +129,7 @@ private struct ScanStatusBody: Decodable {
 struct ServerInfo {
     let apiVersion: String
     let serverVersion: String?
+    let serverType: String?
 }
 
 struct ScanStatus {
@@ -149,7 +150,7 @@ struct ArtistIndex: Decodable {
     let artist: [Artist]?
 }
 
-struct AlbumDetail: Decodable {
+struct AlbumDetail: Decodable, Identifiable {
     let id: String
     let name: String
     let artist: String?
@@ -159,10 +160,48 @@ struct AlbumDetail: Decodable {
     let duration: Int?
     let year: Int?
     let genre: String?
+    let starred: Date?
     let song: [Song]?
+
+    var isStarred: Bool { starred != nil }
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, artist, artistId, coverArt, songCount, duration, year, genre, starred, song
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        artist = try c.decodeIfPresent(String.self, forKey: .artist)
+        artistId = try c.decodeIfPresent(String.self, forKey: .artistId)
+        coverArt = try c.decodeIfPresent(String.self, forKey: .coverArt)
+        songCount = try c.decodeIfPresent(Int.self, forKey: .songCount)
+        duration = try c.decodeIfPresent(Int.self, forKey: .duration)
+        year = try c.decodeIfPresent(Int.self, forKey: .year)
+        genre = try c.decodeIfPresent(String.self, forKey: .genre)
+        starred = FlexibleDate.decode(c, .starred)
+        song = try c.decodeIfPresent([Song].self, forKey: .song)
+    }
+
+    init(id: String, name: String, artist: String? = nil, artistId: String? = nil,
+         coverArt: String? = nil, songCount: Int? = nil, duration: Int? = nil,
+         year: Int? = nil, genre: String? = nil, starred: Date? = nil, song: [Song]? = nil) {
+        self.id = id
+        self.name = name
+        self.artist = artist
+        self.artistId = artistId
+        self.coverArt = coverArt
+        self.songCount = songCount
+        self.duration = duration
+        self.year = year
+        self.genre = genre
+        self.starred = starred
+        self.song = song
+    }
 }
 
-struct ArtistDetail: Decodable {
+struct ArtistDetail: Decodable, Identifiable {
     let id: String
     let name: String
     let albumCount: Int?
@@ -191,6 +230,13 @@ private struct RandomSongsBody: Decodable {
     let error: StatusCheck.APIError?
     let randomSongs: RandomSongsList?
     struct RandomSongsList: Decodable { let song: [Song]? }
+}
+
+private struct TopSongsBody: Decodable {
+    let status: String
+    let error: StatusCheck.APIError?
+    let topSongs: TopSongsList?
+    struct TopSongsList: Decodable { let song: [Song]? }
 }
 
 private struct StarredBody: Decodable {
@@ -434,7 +480,7 @@ class SubsonicAPIService: ObservableObject {
         let data = try await fetchData(for: server, password: password, path: "ping")
         let body = try decoder.decode(Envelope<PingInfoBody>.self, from: data).response
         try check(status: body.status, error: body.error)
-        return ServerInfo(apiVersion: body.version, serverVersion: body.serverVersion)
+        return ServerInfo(apiVersion: body.version, serverVersion: body.serverVersion, serverType: body.type)
     }
 
     func startScan(server: SubsonicServer, password: String) async throws {
@@ -577,8 +623,8 @@ class SubsonicAPIService: ObservableObject {
         try await fetchSongsFromAlbums(type: "newest", albumCount: albumCount)
     }
 
-    func getFrequentSongs(limit: Int = 100) async throws -> [Song] {
-        let albums = try await getAlbumList(type: "frequent", size: 30)
+    func getFrequentSongs(albumCount: Int = 30, limit: Int = 100) async throws -> [Song] {
+        let albums = try await getAlbumList(type: "frequent", size: albumCount)
         let allSongs = try await withThrowingTaskGroup(of: [Song].self) { group in
             for album in albums {
                 group.addTask { (try await self.getAlbum(id: album.id)).song ?? [] }
@@ -590,15 +636,17 @@ class SubsonicAPIService: ObservableObject {
         return Array(allSongs.sorted { ($0.playCount ?? 0) > ($1.playCount ?? 0) }.prefix(limit))
     }
 
-    func getRandomSongs(size: Int = 500) async throws -> [Song] {
-        let data = try await fetchData(path: "getRandomSongs", extra: [URLQueryItem(name: "size", value: "\(size)")])
+    func getRandomSongs(size: Int = 500, genre: String? = nil) async throws -> [Song] {
+        var extra = [URLQueryItem(name: "size", value: "\(size)")]
+        if let g = genre { extra.append(URLQueryItem(name: "genre", value: g)) }
+        let data = try await fetchData(path: "getRandomSongs", extra: extra)
         let body = try decoder.decode(Envelope<RandomSongsBody>.self, from: data).response
         try check(status: body.status, error: body.error)
         return body.randomSongs?.song ?? []
     }
 
-    func getRecentSongs(limit: Int = 100) async throws -> [Song] {
-        let albums = try await getAlbumList(type: "recent", size: 30)
+    func getRecentSongs(albumCount: Int = 30, limit: Int = 100) async throws -> [Song] {
+        let albums = try await getAlbumList(type: "recent", size: albumCount)
         let indexed = Array(albums.enumerated())
         let songsByIndex = try await withThrowingTaskGroup(of: (Int, [Song]).self) { group in
             for (i, album) in indexed {
@@ -624,16 +672,76 @@ class SubsonicAPIService: ObservableObject {
         }
     }
 
-    func scrobble(songId: String, playedAt: Double? = nil) async throws {
+    func scrobble(songId: String, submission: Bool = true, playedAt: Double? = nil) async throws {
         var extra = [
             URLQueryItem(name: "id", value: songId),
-            URLQueryItem(name: "submission", value: "true")
+            URLQueryItem(name: "submission", value: submission ? "true" : "false")
         ]
         if let ts = playedAt {
             // Subsonic erwartet Millisekunden seit Epoch
             extra.append(URLQueryItem(name: "time", value: String(Int64(ts * 1000))))
         }
         _ = try await fetchData(path: "scrobble", extra: extra)
+    }
+
+    /// Top-Songs eines Künstlers (macOS-Künstlerseite).
+    func getTopSongs(artistName: String, count: Int = 50) async throws -> [Song] {
+        let data = try await fetchData(path: "getTopSongs", extra: [
+            URLQueryItem(name: "artist", value: artistName),
+            URLQueryItem(name: "count", value: "\(count)")
+        ])
+        let body = try decoder.decode(Envelope<TopSongsBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+        return body.topSongs?.song ?? []
+    }
+
+    /// Alle Alben alphabetisch, mit Paging (macOS-Lyrics-Bulk-Download).
+    func getAllAlbums(size: Int = 500, offset: Int = 0) async throws -> [Album] {
+        try await getAlbumList(type: "alphabeticalByName", size: size, offset: offset)
+    }
+
+    /// Ping mit Server-Metadaten für den aktiven Server (macOS-Serververwaltung).
+    func getServerInfo() async throws -> ServerInfo {
+        let data = try await fetchData(path: "ping")
+        let body = try decoder.decode(Envelope<PingInfoBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+        return ServerInfo(apiVersion: body.version, serverVersion: body.serverVersion, serverType: body.type)
+    }
+
+    /// Scan auf dem aktiven Server starten (macOS-Serververwaltung).
+    func startScan() async throws -> ScanStatus {
+        let data = try await fetchData(path: "startScan")
+        let body = try decoder.decode(Envelope<ScanStatusBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+        return ScanStatus(scanning: body.scanStatus?.scanning ?? false, count: body.scanStatus?.count ?? 0)
+    }
+
+    /// Scan-Status des aktiven Servers (macOS-Serververwaltung).
+    func getScanStatus() async throws -> ScanStatus {
+        let data = try await fetchData(path: "getScanStatus")
+        let body = try decoder.decode(Envelope<ScanStatusBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+        return ScanStatus(scanning: body.scanStatus?.scanning ?? false, count: body.scanStatus?.count ?? 0)
+    }
+
+    /// Frequently-Played-Fallback: Top-Alben nach Play-Count, adaptiver Threshold.
+    func frequentMixFallbackSongs() async throws -> [Song] {
+        let allFrequent = try await getAlbumList(type: "frequent", size: 500)
+        let sorted = allFrequent.sorted { ($0.playCount ?? 0) > ($1.playCount ?? 0) }
+        let maxPC = sorted.first?.playCount ?? 0
+        let threshold = max(maxPC / 50, 1)
+        var filtered = sorted.filter { ($0.playCount ?? 0) >= threshold }
+        if filtered.count < 30 { filtered = Array(sorted.prefix(30)) }
+        if filtered.count > 80 { filtered = Array(sorted.prefix(80)) }
+        let songs = try await withThrowingTaskGroup(of: [Song].self) { group in
+            for album in filtered {
+                group.addTask { (try? await self.getAlbum(id: album.id))?.song ?? [] }
+            }
+            var all: [Song] = []
+            for try await albumSongs in group { all.append(contentsOf: albumSongs) }
+            return all
+        }
+        return Array(songs.sorted { ($0.playCount ?? 0) > ($1.playCount ?? 0) }.prefix(50))
     }
 
     func authLogin(server: SubsonicServer, password: String) async throws -> String {
@@ -836,12 +944,12 @@ class SubsonicAPIService: ObservableObject {
     }
 }
 
-struct StructuredLyrics: Decodable {
+struct StructuredLyrics: Codable {
     let synced: Bool
     let lang: String?
     let line: [LyricsLine]?
 
-    struct LyricsLine: Decodable {
+    struct LyricsLine: Codable {
         let start: Int?
         let value: String
     }

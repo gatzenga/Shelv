@@ -360,7 +360,7 @@ class ArtistDetailViewModel: ObservableObject {
             async let artistInfo = api.getArtistInfo(id: artistId)
             let detail = try await artistDetail
             artist = detail
-            albums = detail.album.sorted { ($0.year ?? 0) > ($1.year ?? 0) }
+            albums = (detail.album ?? []).sorted { ($0.year ?? 0) > ($1.year ?? 0) }
             biography = (try? await artistInfo)?.biography?.strippingHTML
         } catch {
             populateFromLocal(artistId: artistId, artistName: artistName)
@@ -401,7 +401,7 @@ class ArtistDetailViewModel: ObservableObject {
             return try await withThrowingTaskGroup(of: (Int, [Song]).self) { group in
                 for (i, album) in indexed {
                     group.addTask {
-                        let s = try await SubsonicAPIService.shared.getAlbum(id: album.id).song
+                        let s = try await SubsonicAPIService.shared.getAlbum(id: album.id).song ?? []
                         return (i, s)
                     }
                 }

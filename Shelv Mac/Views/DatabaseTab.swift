@@ -410,10 +410,10 @@ private func songIsDead(id: String) async -> Bool {
     do {
         _ = try await SubsonicAPIService.shared.getSong(id: id)
         return false
-    } catch APIError.notFound {
-        return true
-    } catch APIError.missingData {
-        return true
+    } catch SubsonicAPIError.apiError(let code, let message) {
+        if code == 70 { return true }
+        if code == 0, (message ?? "").range(of: "not found", options: .caseInsensitive) != nil { return true }
+        return false
     } catch {
         return false
     }

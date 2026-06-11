@@ -96,7 +96,7 @@ struct AlbumContextMenuModifier: ViewModifier {
             }
             do {
                 let detail = try await SubsonicAPIService.shared.getAlbum(id: album.id)
-                await MainActor.run { action(detail.song) }
+                await MainActor.run { action(detail.song ?? []) }
             } catch {
                 NotificationCenter.default.post(name: .showToast, object: errorMsg)
             }

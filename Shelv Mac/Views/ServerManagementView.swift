@@ -4,7 +4,7 @@ struct ServerManagementView: View {
     @EnvironmentObject var appState: AppState
 
     @State private var serverInfo: ServerInfo?
-    @State private var scanStatus: ScanStatusBody?
+    @State private var scanStatus: ScanStatus?
     @State private var albumCount: Int?
     @State private var artistCount: Int?
     @State private var isLoadingInfo = true

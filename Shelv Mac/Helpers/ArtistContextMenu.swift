@@ -128,8 +128,8 @@ struct ArtistContextMenuModifier: ViewModifier {
         }
         let detail = try await SubsonicAPIService.shared.getArtist(id: artist.id)
         return try await withThrowingTaskGroup(of: [Song].self) { group -> [Song] in
-            for album in detail.album {
-                group.addTask { try await SubsonicAPIService.shared.getAlbum(id: album.id).song }
+            for album in detail.album ?? [] {
+                group.addTask { try await SubsonicAPIService.shared.getAlbum(id: album.id).song ?? [] }
             }
             var result: [Song] = []
             for try await albumSongs in group { result.append(contentsOf: albumSongs) }
