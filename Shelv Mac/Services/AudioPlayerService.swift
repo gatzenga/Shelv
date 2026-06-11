@@ -948,9 +948,6 @@ class AudioPlayerService: ObservableObject {
                 self.currentTime = adjusted
                 self.timePublisher.send((time: adjusted, duration: self.duration))
                 self.updateNowPlayingInfo()
-                if let songId = self.currentSong?.id {
-                    self.scrobbleIfNeeded(songId: songId)
-                }
                 self.checkGaplessTrigger(currentTime: adjusted)
             }
             .store(in: &engineSubscriptions)
@@ -1146,28 +1143,8 @@ class AudioPlayerService: ObservableObject {
         }
     }
 
-    // MARK: - Scrobble
-
-    private func scrobbleIfNeeded(songId: String) {
-        guard !hasScrobbledCurrent else { return }
-        let pct = Double(UserDefaults.standard.integer(forKey: "recapThreshold"))
-        let fraction = pct > 0 ? pct / 100.0 : 0.3
-        let threshold = duration * fraction
-        guard threshold > 0, currentTime >= threshold else { return }
-        hasScrobbledCurrent = true
-        let serverId = AppState.shared.serverStore.activeServer?.stableId ?? ""
-        let scrobbleAt = Date().timeIntervalSince1970
-        Task {
-            do {
-                try await apiService.scrobble(songId: songId, submission: true, playedAt: scrobbleAt)
-            } catch {
-                guard !serverId.isEmpty else { return }
-                await PlayLogService.shared.addPendingScrobble(
-                    songId: songId, serverId: serverId, playedAt: scrobbleAt
-                )
-            }
-        }
-    }
+    // Server-Scrobbling (Threshold-Submission) übernimmt der geteilte PlayTracker —
+    // hier wäre es doppelt. NowPlaying-Pings (submission: false) bleiben im Player.
 
     // MARK: - Artwork
 
