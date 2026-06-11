@@ -37,7 +37,10 @@ struct TranscodingPolicy {
     /// `nil` = kein Transcoding, Original wird angefordert.
     static func currentStreamFormat() -> (codec: TranscodingCodec, bitrate: Int)? {
         guard UserDefaults.standard.bool(forKey: "transcodingEnabled") else { return nil }
-        let isWifi = NetworkStatus.shared.isOnWifi
+        // Data-Saver (macOS-Menü): erzwingt das Cellular-Profil auch im WLAN.
+        // Auf iOS ist der Key nie gesetzt → kein Verhaltensunterschied.
+        let dataSaver = UserDefaults.standard.bool(forKey: "dataSaverEnabled")
+        let isWifi = !dataSaver && NetworkStatus.shared.isOnWifi
         let codecKey = isWifi ? "transcodingWifiCodec" : "transcodingCellularCodec"
         let bitrateKey = isWifi ? "transcodingWifiBitrate" : "transcodingCellularBitrate"
         let codecRaw = UserDefaults.standard.string(forKey: codecKey) ?? "raw"

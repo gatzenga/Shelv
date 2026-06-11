@@ -42,7 +42,12 @@ final class OfflineModeService: ObservableObject {
         guard !isOffline else { return }
         // Kein Banner, wenn kein Server konfiguriert ist (z.B. beim allerersten App-Start
         // vor dem Onboarding) — ohne Server gibt es nichts zu kontaktieren.
+        // TODO(W3): Guard vereinheitlichen, sobald SubsonicAPIService geteilt ist.
+        #if os(macOS)
+        guard SubsonicAPIService.shared.hasConfig else { return }
+        #else
         guard SubsonicAPIService.shared.activeServer != nil else { return }
+        #endif
         if let until = bannerCooldownUntil, Date() < until { return }
         bannerCooldownUntil = Date().addingTimeInterval(60)
         lastServerErrorMessage = message
