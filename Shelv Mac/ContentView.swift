@@ -73,6 +73,14 @@ struct MainWindowView: View {
                 .onChange(of: appState.serverStore.activeServerID) { _, _ in
                     appState.player.stop()
                     libraryStore.reset()
+                    #if DEBUG
+                    // Demo-Server aktiv → festes Player-Standbild (nach stop(), sonst sofort
+                    // wieder gelöscht) + Recap-Anzeige aktivieren. Wie iOS-ContentView.
+                    if SubsonicAPIService.shared.isDemoActive {
+                        appState.player.loadDemoStandby()
+                        UserDefaults.standard.set(true, forKey: "recapEnabled")
+                    }
+                    #endif
                 }
                 .background(Color(NSColor.windowBackgroundColor))
 

@@ -806,7 +806,12 @@ class SubsonicAPIService: ObservableObject {
     }
 
     func coverArtURL(for artId: String, size: Int = 300) -> URL? {
-        try? buildURL(path: "getCoverArt", extra: [
+        #if DEBUG
+        // Demo-Server ist passwortlos → buildURL würde werfen. Synthetische URL mit der
+        // demo_-Asset-ID, damit der Cover-Loader (Mac: CoverArtView) sie als Asset auflöst.
+        if isDemoActive { return URL(string: "demo://shelv/getCoverArt?id=\(artId)&size=\(size)") }
+        #endif
+        return try? buildURL(path: "getCoverArt", extra: [
             URLQueryItem(name: "id", value: artId),
             URLQueryItem(name: "size", value: "\(size)")
         ])

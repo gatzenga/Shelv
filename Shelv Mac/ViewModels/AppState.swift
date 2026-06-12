@@ -58,6 +58,10 @@ class AppState: ObservableObject {
         serverStore.activate(server: server)
         isLoggedIn = api.hasConfig
         resetNavigation()
+        // Imperativ statt nur über ContentView.onChange: Wechsel echter Server → Demo
+        // ändert isLoggedIn nicht, dadurch re-evaluiert die View nicht zuverlässig und
+        // die onChange(activeServerID) feuert evtl. nicht. stop() + Standby atomar hier.
+        player.stop()
         #if DEBUG
         if api.isDemoActive {
             UserDefaults.standard.set(true, forKey: "recapEnabled")
