@@ -55,8 +55,12 @@ struct InsightsView: View {
                     switch segment {
                     case .artists:
                         ForEach(Array(topArtists.enumerated()), id: \.element.id) { i, e in
-                            row(rank: i + 1, url: e.coverArt.flatMap { api.coverArtURL(for: $0, size: 200) },
-                                isCircle: true, title: e.name, subtitle: nil, plays: e.totalPlayCount)
+                            NavigationLink {
+                                ArtistDetailView(artist: libraryArtist(for: e))
+                            } label: {
+                                row(rank: i + 1, url: artistCoverURL(for: e),
+                                    isCircle: true, title: e.name, subtitle: nil, plays: e.totalPlayCount)
+                            }
                         }
                     case .albums:
                         ForEach(Array(topAlbums.enumerated()), id: \.element.id) { i, e in
@@ -80,7 +84,25 @@ struct InsightsView: View {
                 }
             }
         }
-        .task { await load() }
+        .task {
+            async let artists: Void = LibraryStore.shared.loadArtists()   // fürs Künstler-Matching
+            await load()
+            _ = await artists
+        }
+    }
+
+    // MARK: - Künstler-Auflösung
+
+    /// Echtes Library-Artist-Objekt (für Navigation + Bild); Fallback: aus dem Eintrag konstruiert.
+    private func libraryArtist(for entry: TopArtistEntry) -> Artist {
+        LibraryStore.shared.artists.first { $0.id == entry.id || $0.name == entry.name }
+            ?? Artist(id: entry.id, name: entry.name, coverArt: entry.coverArt)
+    }
+
+    private func artistCoverURL(for entry: TopArtistEntry) -> URL? {
+        let artist = libraryArtist(for: entry)
+        if let url = artist.coverURL(200) { return url }
+        return entry.coverArt.flatMap { api.coverArtURL(for: $0, size: 200) }
     }
 
     // MARK: - Row
@@ -90,10 +112,10 @@ struct InsightsView: View {
         let isTop3 = rank <= 3
         HStack(spacing: 20) {
             Text("\(rank)")
-                .font(isTop3 ? .title.bold() : .title3)
+                .font(isTop3 ? .title3.bold() : .body)
                 .foregroundStyle(isTop3 ? AnyShapeStyle(accent) : AnyShapeStyle(.secondary))
                 .monospacedDigit()
-                .frame(width: 52, alignment: .trailing)
+                .frame(width: 44, alignment: .trailing)
             CoverArtView(url: url, size: 80,
                          cornerRadius: isCircle ? 40 : 8, isCircle: isCircle)
             VStack(alignment: .leading, spacing: 2) {

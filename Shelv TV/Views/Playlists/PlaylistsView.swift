@@ -59,6 +59,8 @@ struct PlaylistCard: View {
     }
 }
 
+/// Playlist-Seite im selben Zweispalter wie das Album: links Cover + Aktionen
+/// (immer sichtbar), rechts die scrollende Songliste (mit Covern, gemischte Alben).
 struct PlaylistDetailView: View {
     let playlist: Playlist
     @AppStorage("enableFavorites") private var enableFavorites = true
@@ -68,41 +70,40 @@ struct PlaylistDetailView: View {
     @State private var songs: [Song] = []
 
     var body: some View {
-        List {
-            // Kopf — reine Anzeige
-            Section {
-                HStack(alignment: .top, spacing: 40) {
-                    CoverArtView(url: playlist.coverURL(600), size: 320, cornerRadius: 12)
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text(playlist.name).font(.title).bold().lineLimit(2)
-                        if let count = playlist.songCount {
-                            Text("\(count) \(String(localized: "songs"))")
-                                .font(.title3).foregroundStyle(.secondary)
-                        }
+        HStack(alignment: .top, spacing: 60) {
+            // Linke Spalte — fix
+            VStack(alignment: .leading, spacing: 24) {
+                CoverArtView(url: playlist.coverURL(600), size: 380, cornerRadius: 12)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(playlist.name).font(.title2).bold().lineLimit(2)
+                    if let count = playlist.songCount {
+                        Text("\(count) \(String(localized: "songs"))")
+                            .font(.body).foregroundStyle(.secondary)
                     }
-                    Spacer()
                 }
-                .padding(.vertical, 16)
-                .listRowBackground(Color.clear)
-            }
 
-            // Aktionen — einzeln fokussierbar
-            Section {
-                HStack(spacing: 24) {
-                    Button { player.play(songs: songs, startIndex: 0) } label: {
-                        Label(String(localized: "play"), systemImage: "play.fill")
+                VStack(spacing: 14) {
+                    actionButton(String(localized: "play"), "play.fill") {
+                        player.play(songs: songs, startIndex: 0)
                     }
-                    Button { player.playShuffled(songs: songs) } label: {
-                        Label(String(localized: "shuffle"), systemImage: "shuffle")
+                    actionButton(String(localized: "shuffle"), "shuffle") {
+                        player.playShuffled(songs: songs)
+                    }
+                    actionButton(String(localized: "play_next"), "text.line.first.and.arrowtriangle.forward") {
+                        player.addPlayNext(songs)
+                    }
+                    actionButton(String(localized: "add_to_queue"), "text.append") {
+                        player.addToQueue(songs)
                     }
                 }
-                .buttonStyle(.bordered)
                 .disabled(songs.isEmpty)
-                .listRowBackground(Color.clear)
-            }
 
-            // Songs — mit Cover (gemischte Alben), Context-Menü für Queue/Favorit
-            Section {
+                Spacer()
+            }
+            .frame(width: 380)
+
+            // Rechte Spalte — Songliste
+            List {
                 ForEach(Array(songs.enumerated()), id: \.element.id) { index, song in
                     SongRow(song: song, index: index) {
                         player.play(songs: songs, startIndex: index)
@@ -123,6 +124,16 @@ struct PlaylistDetailView: View {
                 }
             }
         }
+        .padding(.horizontal, 60)
+        .padding(.top, 40)
         .task { songs = await LibraryStore.shared.playlistSongs(playlist) }
+    }
+
+    private func actionButton(_ title: String, _ icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: icon)
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
     }
 }

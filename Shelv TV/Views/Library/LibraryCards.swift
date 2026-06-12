@@ -72,9 +72,9 @@ struct SongRow: View {
                     CoverArtView(url: song.coverURL(200), size: 64, cornerRadius: 6)
                 } else {
                     Text("\(index + 1)")
-                        .font(.title3.monospacedDigit())
+                        .font(.body.monospacedDigit())
                         .foregroundStyle(.secondary)
-                        .frame(width: 50, alignment: .trailing)
+                        .frame(width: 44, alignment: .trailing)
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(song.title).lineLimit(1)

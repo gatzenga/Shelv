@@ -1,5 +1,7 @@
 import SwiftUI
 
+/// Album-Seite im tvOS-Zweispalter (wie Apple Music): links Cover + Metadaten +
+/// Aktionen (bleiben immer sichtbar), rechts die scrollende Trackliste.
 struct AlbumDetailView: View {
     let album: Album
     @AppStorage("enableFavorites") private var enableFavorites = true
@@ -10,49 +12,47 @@ struct AlbumDetailView: View {
     @State private var albumStarred = false
 
     var body: some View {
-        List {
-            // Kopf — reine Anzeige (Cover + Metadaten)
-            Section {
-                HStack(alignment: .top, spacing: 40) {
-                    CoverArtView(url: album.coverURL(600), size: 320, cornerRadius: 12)
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text(album.name).font(.title).bold().lineLimit(2)
-                        if let artist = album.artist {
-                            Text(artist).font(.title3).foregroundStyle(.secondary)
-                        }
-                        if let year = album.year {
-                            Text(String(year)).font(.callout).foregroundStyle(.secondary)
-                        }
+        HStack(alignment: .top, spacing: 60) {
+            // Linke Spalte — fix
+            VStack(alignment: .leading, spacing: 24) {
+                CoverArtView(url: album.coverURL(600), size: 380, cornerRadius: 12)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(album.name).font(.title2).bold().lineLimit(2)
+                    if let artist = album.artist {
+                        Text(artist).font(.body).foregroundStyle(.secondary).lineLimit(1)
                     }
-                    Spacer()
+                    if let year = album.year {
+                        Text(String(year)).font(.callout).foregroundStyle(.secondary)
+                    }
                 }
-                .padding(.vertical, 16)
-                .listRowBackground(Color.clear)
-            }
 
-            // Aktionen — einzeln fokussierbar
-            Section {
-                HStack(spacing: 24) {
-                    Button { player.play(songs: songs, startIndex: 0) } label: {
-                        Label(String(localized: "play"), systemImage: "play.fill")
+                VStack(spacing: 14) {
+                    actionButton(String(localized: "play"), "play.fill") {
+                        player.play(songs: songs, startIndex: 0)
                     }
-                    Button { player.playShuffled(songs: songs) } label: {
-                        Label(String(localized: "shuffle"), systemImage: "shuffle")
+                    actionButton(String(localized: "shuffle"), "shuffle") {
+                        player.playShuffled(songs: songs)
+                    }
+                    actionButton(String(localized: "play_next"), "text.line.first.and.arrowtriangle.forward") {
+                        player.addPlayNext(songs)
+                    }
+                    actionButton(String(localized: "add_to_queue"), "text.append") {
+                        player.addToQueue(songs)
                     }
                     if enableFavorites {
-                        Button { toggleAlbumStar() } label: {
-                            Label(String(localized: "favorite"),
-                                  systemImage: albumStarred ? "heart.fill" : "heart")
+                        actionButton(String(localized: "favorite"), albumStarred ? "heart.fill" : "heart") {
+                            toggleAlbumStar()
                         }
                     }
                 }
-                .buttonStyle(.bordered)
                 .disabled(songs.isEmpty)
-                .listRowBackground(Color.clear)
-            }
 
-            // Songs — Tracknummer statt (redundantem) Cover, Context-Menü für Queue/Favorit
-            Section {
+                Spacer()
+            }
+            .frame(width: 380)
+
+            // Rechte Spalte — Trackliste
+            List {
                 ForEach(Array(songs.enumerated()), id: \.element.id) { index, song in
                     SongRow(song: song, index: index, showArtwork: false) {
                         player.play(songs: songs, startIndex: index)
@@ -73,10 +73,20 @@ struct AlbumDetailView: View {
                 }
             }
         }
+        .padding(.horizontal, 60)
+        .padding(.top, 40)
         .task {
             songs = await LibraryStore.shared.albumSongs(album)
             albumStarred = album.starred != nil
         }
+    }
+
+    private func actionButton(_ title: String, _ icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: icon)
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
     }
 
     private func toggleAlbumStar() {
