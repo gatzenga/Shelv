@@ -1,7 +1,6 @@
 import SwiftUI
 
-/// Tab-Gerüst der tvOS-App. Tab-Inhalte werden in den jeweiligen Tasks gefüllt;
-/// hier zunächst Platzhalter, damit Navigation und Struktur stehen.
+/// Tab-Gerüst der tvOS-App: Now Playing · Discover · Library · Playlists · Suche · Settings.
 struct MainTabView: View {
     @AppStorage("enablePlaylists") private var enablePlaylists = true
 
@@ -24,19 +23,8 @@ struct MainTabView: View {
             SearchView()
                 .tabItem { Label(String(localized: "search"), systemImage: "magnifyingglass") }
 
-            Placeholder("Settings")
+            SettingsView()
                 .tabItem { Label(String(localized: "settings"), systemImage: "gearshape") }
         }
-    }
-}
-
-private struct Placeholder: View {
-    let title: String
-    init(_ title: String) { self.title = title }
-    var body: some View {
-        Text(title)
-            .font(.largeTitle)
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
