@@ -40,6 +40,7 @@ struct SettingsView: View {
 
                 Section {
                     NavigationLink(String(localized: "cache")) { CacheSettingsView() }
+                    NavigationLink(String(localized: "database")) { DatabaseSettingsView() }
                 }
             }
             .navigationTitle(String(localized: "settings"))
