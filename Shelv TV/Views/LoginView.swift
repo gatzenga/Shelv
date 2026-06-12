@@ -50,6 +50,7 @@ struct LoginView: View {
             #if DEBUG
             Button(String(localized: "try_demo")) {
                 serverStore.activate(server: DemoContent.server)
+                AudioPlayerService.shared.loadDemoStandby()   // fester Player-Standby wie iOS/Mac
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
