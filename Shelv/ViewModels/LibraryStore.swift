@@ -395,10 +395,12 @@ class LibraryStore: ObservableObject {
                 if let idx = playlists.firstIndex(where: { $0.id == id }) {
                     let p = playlists[idx]
                     playlists[idx] = Playlist(id: p.id, name: p.name, comment: p.comment,
-                                              songCount: freshCount, duration: result.duration, coverArt: p.coverArt)
+                                              songCount: freshCount, duration: result.duration, coverArt: p.coverArt,
+                                              created: p.created, changed: p.changed)
                 } else {
                     playlists.append(Playlist(id: result.id, name: result.name, comment: result.comment,
-                                              songCount: freshCount, duration: result.duration, coverArt: result.coverArt))
+                                              songCount: freshCount, duration: result.duration, coverArt: result.coverArt,
+                                              created: result.created, changed: result.changed))
                 }
                 save(playlists, name: "playlists", serverID: serverID)
             }
@@ -439,7 +441,8 @@ class LibraryStore: ObservableObject {
             if let idx = playlists.firstIndex(where: { $0.id == playlist.id }) {
                 let updated = Playlist(
                     id: playlist.id, name: newName, comment: newComment ?? playlist.comment,
-                    songCount: playlist.songCount, duration: playlist.duration, coverArt: playlist.coverArt
+                    songCount: playlist.songCount, duration: playlist.duration, coverArt: playlist.coverArt,
+                    created: playlist.created, changed: playlist.changed
                 )
                 playlists[idx] = updated
             }
@@ -457,7 +460,8 @@ class LibraryStore: ObservableObject {
                 let p = playlists[idx]
                 playlists[idx] = Playlist(id: p.id, name: p.name, comment: p.comment,
                                           songCount: (p.songCount ?? 0) + songIds.count,
-                                          duration: p.duration, coverArt: p.coverArt)
+                                          duration: p.duration, coverArt: p.coverArt,
+                                          created: p.created, changed: p.changed)
                 if let id = activeServerID { save(playlists, name: "playlists", serverID: id) }
             }
             return true
@@ -474,7 +478,8 @@ class LibraryStore: ObservableObject {
                 let p = playlists[idx]
                 playlists[idx] = Playlist(id: p.id, name: p.name, comment: p.comment,
                                           songCount: max(0, (p.songCount ?? 0) - indices.count),
-                                          duration: p.duration, coverArt: p.coverArt)
+                                          duration: p.duration, coverArt: p.coverArt,
+                                          created: p.created, changed: p.changed)
                 if let id = activeServerID { save(playlists, name: "playlists", serverID: id) }
             }
         } catch {
