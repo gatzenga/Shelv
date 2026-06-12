@@ -392,3 +392,5 @@
 "no_lyrics" = "Keine Lyrics verfügbar";
 
 "recaps" = "Recaps";
+
+"auto_fetch_lyrics" = "Lyrics automatisch laden";

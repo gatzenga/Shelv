@@ -390,3 +390,5 @@
 "no_lyrics" = "暂无歌词";
 
 "recaps" = "回顾";
+
+"auto_fetch_lyrics" = "自动获取歌词";

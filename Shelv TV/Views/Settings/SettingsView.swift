@@ -5,6 +5,7 @@ struct SettingsView: View {
     @AppStorage("themeColor") private var themeColor = "violet"
     @AppStorage("enablePlaylists") private var enablePlaylists = true
     @AppStorage("enableFavorites") private var enableFavorites = true
+    @AppStorage("autoFetchLyrics") private var autoFetchLyrics = true
 
     private var isGerman: Bool { Locale.preferredLanguages.first?.hasPrefix("de") == true }
 
@@ -31,6 +32,10 @@ struct SettingsView: View {
 
                 Section {
                     NavigationLink(String(localized: "playback")) { PlaybackSettingsView() }
+                }
+
+                Section(String(localized: "lyrics")) {
+                    Toggle(String(localized: "auto_fetch_lyrics"), isOn: $autoFetchLyrics)
                 }
             }
             .navigationTitle(String(localized: "settings"))
