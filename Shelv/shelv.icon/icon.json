@@ -27,6 +27,29 @@
               0.5249999999999773
             ]
           }
+        },
+        {
+          "blend-mode" : "normal",
+          "fill" : "automatic",
+          "glass-specializations" : [
+            {
+              "value" : false
+            },
+            {
+              "appearance" : "dark",
+              "value" : false
+            }
+          ],
+          "hidden" : true,
+          "image-name" : "dark copy 2.png",
+          "name" : "dark copy 2",
+          "position" : {
+            "scale" : 1.1,
+            "translation-in-points" : [
+              0.5249999999999773,
+              0.5249999999999773
+            ]
+          }
         }
       ],
       "shadow" : {
@@ -41,7 +64,7 @@
   ],
   "supported-platforms" : {
     "squares" : [
-      "macOS"
+      "iOS"
     ]
   }
 }
