@@ -18,20 +18,22 @@ struct RecapView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                if recapPlaylists.isEmpty {
-                    ContentUnavailableView(
-                        String(localized: "no_recaps_yet"),
-                        systemImage: "sparkles.rectangle.stack"
-                    )
-                    .frame(maxWidth: .infinity, minHeight: 300)
-                } else {
-                    LazyVGrid(columns: columns, spacing: 60) {
-                        ForEach(recapPlaylists) { PlaylistCard(playlist: $0) }
+                Group {
+                    if recapPlaylists.isEmpty {
+                        ContentUnavailableView(
+                            String(localized: "no_recaps_yet"),
+                            systemImage: "sparkles.rectangle.stack"
+                        )
+                        .frame(maxWidth: .infinity, minHeight: 300)
+                    } else {
+                        LazyVGrid(columns: columns, spacing: 60) {
+                            ForEach(recapPlaylists) { PlaylistCard(playlist: $0) }
+                        }
                     }
                 }
+                .padding(50)
             }
             .scrollClipDisabled()
-            .padding(50)
             .task { await library.loadPlaylists() }
         }
     }

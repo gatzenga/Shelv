@@ -13,24 +13,27 @@ struct PlaylistsView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                if playlists.isEmpty && store.isLoadingPlaylists {
-                    ProgressView().frame(maxWidth: .infinity, minHeight: 300)
-                } else if playlists.isEmpty {
-                    ContentUnavailableView(
-                        String(localized: "no_playlists_2"),
-                        systemImage: "music.note.list"
-                    )
-                    .frame(maxWidth: .infinity, minHeight: 300)
-                } else {
-                    LazyVGrid(columns: columns, spacing: 60) {
-                        ForEach(playlists) { playlist in
-                            PlaylistCard(playlist: playlist)
+                Group {
+                    if playlists.isEmpty && store.isLoadingPlaylists {
+                        ProgressView().frame(maxWidth: .infinity, minHeight: 300)
+                    } else if playlists.isEmpty {
+                        ContentUnavailableView(
+                            String(localized: "no_playlists_2"),
+                            systemImage: "music.note.list"
+                        )
+                        .frame(maxWidth: .infinity, minHeight: 300)
+                    } else {
+                        LazyVGrid(columns: columns, spacing: 60) {
+                            ForEach(playlists) { playlist in
+                                PlaylistCard(playlist: playlist)
+                            }
                         }
                     }
                 }
+                // Lift-Puffer im Scrollbereich, sonst clippt der .card-Lift.
+                .padding(50)
             }
             .scrollClipDisabled()
-            .padding(50)
             .task { await store.loadPlaylists() }
         }
     }
@@ -41,7 +44,7 @@ struct PlaylistCard: View {
     var size: CGFloat = 280
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 18) {
             NavigationLink {
                 PlaylistDetailView(playlist: playlist)
             } label: {

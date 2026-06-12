@@ -7,7 +7,7 @@ struct AlbumCard: View {
     var size: CGFloat = 260
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 18) {
             NavigationLink {
                 AlbumDetailView(album: album)
             } label: {

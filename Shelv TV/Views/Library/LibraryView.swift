@@ -18,20 +18,26 @@ struct LibraryView: View {
                 }
                 .pickerStyle(.segmented)
                 .frame(maxWidth: 700)
+                .padding(.top, 50)
 
                 ScrollView {
-                    switch segment {
-                    case 0:
-                        grid(store.albums) { AlbumCard(album: $0) }
-                    case 1:
-                        grid(store.artists) { ArtistCard(artist: $0) }
-                    default:
-                        favorites
+                    Group {
+                        switch segment {
+                        case 0:
+                            grid(store.albums) { AlbumCard(album: $0) }
+                        case 1:
+                            grid(store.artists) { ArtistCard(artist: $0) }
+                        default:
+                            favorites
+                        }
                     }
+                    // Lift-Puffer innerhalb des Scrollbereichs — sonst clippt der
+                    // .card-Lift der Randkarten an den ScrollView-Kanten.
+                    .padding(.horizontal, 50)
+                    .padding(.vertical, 30)
                 }
                 .scrollClipDisabled()
             }
-            .padding(50)
             .task { await store.loadAlbums() }
             .task { await store.loadArtists() }
             .task(id: enableFavorites) { if enableFavorites { await store.loadStarred() } }
