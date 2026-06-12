@@ -17,7 +17,7 @@ struct MainTabView: View {
                 .tabItem { Label(String(localized: "library"), systemImage: "square.stack") }
 
             if enablePlaylists {
-                Placeholder("Playlists")
+                PlaylistsView()
                     .tabItem { Label(String(localized: "playlists"), systemImage: "music.note.list") }
             }
 
