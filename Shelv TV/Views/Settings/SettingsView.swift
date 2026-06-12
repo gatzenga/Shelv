@@ -59,7 +59,6 @@ struct SettingsView: View {
                     NavigationLink(String(localized: "database")) { DatabaseSettingsView() }
                 }
             }
-            .navigationTitle(String(localized: "settings"))
         }
     }
 }

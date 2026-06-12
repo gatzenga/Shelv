@@ -1,47 +1,173 @@
 import SwiftUI
 
-struct InsightsView: View {
-    private let api = SubsonicAPIService.shared
-    private let columns = [GridItem(.adaptive(minimum: 260), spacing: 40)]
+private struct TopArtistEntry: Identifiable {
+    let id: String
+    let name: String
+    let coverArt: String?
+    let totalPlayCount: Int
+}
 
-    @State private var topAlbums: [Album] = []
-    @State private var totalPlays = 0
+private struct TopAlbumEntry: Identifiable {
+    var id: String { album.id }
+    let album: Album
+    let playCount: Int
+}
+
+/// Insights wie iOS: segmentiert nach Künstler / Alben / Songs, jeweils als
+/// gerankte Liste mit Playcount. Rein serverbasiert (frequent-Alben), keine DB nötig.
+struct InsightsView: View {
+    @AppStorage("themeColor") private var themeColor = "violet"
+    private var accent: Color { AppTheme.color(for: themeColor) }
+    private let api = SubsonicAPIService.shared
+    private let player = AudioPlayerService.shared
+
+    private enum Segment: Int, CaseIterable {
+        case artists, albums, songs
+        var label: String {
+            switch self {
+            case .artists: return String(localized: "artists")
+            case .albums:  return String(localized: "albums")
+            case .songs:   return String(localized: "songs")
+            }
+        }
+    }
+
+    @State private var segment: Segment = .artists
+    @State private var topArtists: [TopArtistEntry] = []
+    @State private var topAlbums: [TopAlbumEntry] = []
+    @State private var topSongs: [Song] = []
     @State private var isLoading = true
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 30) {
-                VStack(spacing: 6) {
-                    Text("\(totalPlays)")
-                        .font(.system(size: 90, weight: .bold))
-                        .foregroundStyle(.tint)
-                    Text(String(localized: "total_plays"))
-                        .font(.title3).foregroundStyle(.secondary)
-                }
-                .padding(.bottom, 20)
+        VStack(spacing: 0) {
+            Picker("", selection: $segment) {
+                ForEach(Segment.allCases, id: \.self) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .frame(maxWidth: 700)
+            .padding(.top, 40)
+            .padding(.bottom, 24)
+            .frame(maxWidth: .infinity)
+            .background(.regularMaterial)
+            .zIndex(1)
 
-                if !topAlbums.isEmpty {
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text(String(localized: "most_played"))
-                            .font(.title2).bold()
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        LazyVGrid(columns: columns, spacing: 40) {
-                            ForEach(topAlbums) { AlbumCard(album: $0) }
+            if isLoading && topArtists.isEmpty {
+                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                List {
+                    switch segment {
+                    case .artists:
+                        ForEach(Array(topArtists.enumerated()), id: \.element.id) { i, e in
+                            row(rank: i + 1, coverArt: e.coverArt, isCircle: true,
+                                title: e.name, subtitle: nil, plays: e.totalPlayCount)
+                        }
+                    case .albums:
+                        ForEach(Array(topAlbums.enumerated()), id: \.element.id) { i, e in
+                            NavigationLink {
+                                AlbumDetailView(album: e.album)
+                            } label: {
+                                row(rank: i + 1, coverArt: e.album.coverArt, isCircle: false,
+                                    title: e.album.name, subtitle: e.album.artist, plays: e.playCount)
+                            }
+                        }
+                    case .songs:
+                        ForEach(Array(topSongs.enumerated()), id: \.element.id) { i, song in
+                            Button {
+                                player.play(songs: topSongs, startIndex: i)
+                            } label: {
+                                row(rank: i + 1, coverArt: song.coverArt, isCircle: false,
+                                    title: song.title, subtitle: song.artist, plays: song.playCount ?? 0)
+                            }
                         }
                     }
                 }
             }
-            .padding(50)
         }
-        .navigationTitle(String(localized: "insights"))
         .task { await load() }
     }
 
-    private func load() async {
-        topAlbums = (try? await api.getAlbumList(type: "frequent", size: 24)) ?? []
-        if let sid = api.activeServer?.stableId, !sid.isEmpty {
-            totalPlays = await PlayLogService.shared.logCount(serverId: sid)
+    // MARK: - Row
+
+    @ViewBuilder
+    private func row(rank: Int, coverArt: String?, isCircle: Bool, title: String, subtitle: String?, plays: Int) -> some View {
+        let isTop3 = rank <= 3
+        HStack(spacing: 20) {
+            Text("\(rank)")
+                .font(isTop3 ? .title.bold() : .title3)
+                .foregroundStyle(isTop3 ? AnyShapeStyle(accent) : AnyShapeStyle(.secondary))
+                .monospacedDigit()
+                .frame(width: 52, alignment: .trailing)
+            CoverArtView(url: coverArt.flatMap { api.coverArtURL(for: $0, size: 200) }, size: 80,
+                         cornerRadius: isCircle ? 40 : 8, isCircle: isCircle)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(isTop3 ? .title3.bold() : .title3).lineLimit(1)
+                if let subtitle {
+                    Text(subtitle).font(.callout).foregroundStyle(.secondary).lineLimit(1)
+                }
+            }
+            Spacer(minLength: 0)
+            HStack(spacing: 6) {
+                Image(systemName: "play.fill").font(.caption)
+                Text("\(plays)").font(.callout.monospacedDigit())
+            }
+            .foregroundStyle(isTop3 ? AnyShapeStyle(accent) : AnyShapeStyle(.secondary))
         }
+        .padding(.vertical, 6)
+    }
+
+    // MARK: - Daten (portiert aus iOS)
+
+    private func load() async {
+        guard let frequent = try? await api.getAlbumList(type: "frequent", size: 500) else {
+            isLoading = false; return
+        }
+
+        topAlbums = frequent
+            .sorted { ($0.playCount ?? 0) > ($1.playCount ?? 0) }
+            .prefix(20)
+            .map { TopAlbumEntry(album: $0, playCount: $0.playCount ?? 0) }
+
+        let excluded: Set<String> = [
+            "various artists", "various artist", "various", "va", "v.a.", "v/a",
+            "diverse", "divers", "sampler", "compilation", "compilations",
+            "verschiedene künstler", "verschiedene", "unknown artist", "unbekannt"
+        ]
+        var map: [String: (name: String, cover: String?, total: Int)] = [:]
+        for album in frequent {
+            let name = album.artist ?? String(localized: "unknown_artist")
+            guard !excluded.contains(name.lowercased()) else { continue }
+            let aid = album.artistId ?? "_\(name)"
+            let pc = album.playCount ?? 0
+            if let ex = map[aid] {
+                map[aid] = (ex.name, ex.cover, ex.total + pc)
+            } else {
+                map[aid] = (name, album.artistId, pc)
+            }
+        }
+        topArtists = map
+            .map { TopArtistEntry(id: $0.key, name: $0.value.name, coverArt: $0.value.cover, totalPlayCount: $0.value.total) }
+            .sorted { $0.totalPlayCount > $1.totalPlayCount }
+            .prefix(20).map { $0 }
+
         isLoading = false
+        await loadTopSongs(from: frequent)
+    }
+
+    private func loadTopSongs(from frequent: [Album]) async {
+        let sorted = frequent.sorted { ($0.playCount ?? 0) > ($1.playCount ?? 0) }
+        var pool = Array(sorted.prefix(80))
+        if pool.isEmpty { pool = sorted }
+
+        let songs = await withTaskGroup(of: [Song].self) { group in
+            for album in pool {
+                group.addTask { (try? await self.api.getAlbum(id: album.id))?.song ?? [] }
+            }
+            var all: [Song] = []
+            for await s in group { all += s }
+            return all
+        }
+        topSongs = songs
+            .sorted { ($0.playCount ?? 0) > ($1.playCount ?? 0) }
+            .prefix(20).map { $0 }
     }
 }
