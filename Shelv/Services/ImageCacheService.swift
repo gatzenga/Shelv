@@ -33,7 +33,7 @@ actor ImageCacheService {
 
     func diskOnlyImage(key: String) async -> UIImage? {
         if let hit = memory.object(forKey: key as NSString) { return hit }
-        let diskURL = cacheDir.appendingPathComponent(key)
+        let diskURL = cacheDir.appendingPathComponent(key.pathSafeComponent)
         let dir = cacheDir
         let mem = memory
         return await Task.detached(priority: .medium) { () -> UIImage? in
@@ -50,7 +50,7 @@ actor ImageCacheService {
             for size in fallbackSizes {
                 let fallbackKey = "\(idPrefix)\(size)"
                 guard fallbackKey != key else { continue }
-                let fallbackURL = dir.appendingPathComponent(fallbackKey)
+                let fallbackURL = dir.appendingPathComponent(fallbackKey.pathSafeComponent)
                 guard let data = try? Data(contentsOf: fallbackURL),
                       let img = UIImage(data: data) else { continue }
                 let cost = Int(img.size.width * img.size.height * 4)
@@ -68,7 +68,7 @@ actor ImageCacheService {
             return await existing.value
         }
 
-        let diskURL = cacheDir.appendingPathComponent(key)
+        let diskURL = cacheDir.appendingPathComponent(key.pathSafeComponent)
 
         let task = Task.detached(priority: .medium) { () -> UIImage? in
             if Task.isCancelled { return nil }

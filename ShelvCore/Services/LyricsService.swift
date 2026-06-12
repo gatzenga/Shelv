@@ -67,6 +67,7 @@ actor LyricsService {
                 withIntermediateDirectories: true
             )
             let p = try DatabasePool(path: url.path)
+            Self.applyDataProtection(at: url)
             var m = DatabaseMigrator()
             m.registerMigration("v1_createLyrics") { db in
                 try db.create(table: "lyrics", ifNotExists: true) { t in
@@ -122,6 +123,19 @@ actor LyricsService {
         FileManager.default
             .urls(for: .cachesDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("shelv_lyrics/lyrics.db")
+    }
+
+    private static func applyDataProtection(at url: URL) {
+        #if os(iOS)
+        for suffix in ["", "-wal", "-shm"] {
+            let path = url.path + suffix
+            guard FileManager.default.fileExists(atPath: path) else { continue }
+            try? FileManager.default.setAttributes(
+                [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
+                ofItemAtPath: path
+            )
+        }
+        #endif
     }
 
     nonisolated static func diskSizeBytes() -> Int {

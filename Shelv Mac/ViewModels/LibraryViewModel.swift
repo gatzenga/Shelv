@@ -388,12 +388,12 @@ class LibraryViewModel: ObservableObject {
     private func savePlaylistDetailCache(_ detail: PlaylistDetail) {
         let dir = Self.playlistCacheDir
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let url = dir.appendingPathComponent("playlist_\(detail.id).json")
+        let url = dir.appendingPathComponent("playlist_\(detail.id.pathSafeComponent).json")
         try? JSONEncoder().encode(detail).write(to: url)
     }
 
     private func loadPlaylistDetailCache(id: String) -> PlaylistDetail? {
-        let url = Self.playlistCacheDir.appendingPathComponent("playlist_\(id).json")
+        let url = Self.playlistCacheDir.appendingPathComponent("playlist_\(id.pathSafeComponent).json")
         guard let data = try? Data(contentsOf: url) else { return nil }
         return try? JSONDecoder().decode(PlaylistDetail.self, from: data)
     }
