@@ -3,8 +3,11 @@ import SwiftUI
 struct DiscoverView: View {
     @ObservedObject var library = LibraryStore.shared
     @AppStorage("mixUseDatabase") private var mixUseDatabase = false
+    @AppStorage("themeColor") private var themeColor = "violet"
     private let api = SubsonicAPIService.shared
     private let player = AudioPlayerService.shared
+
+    private var accent: Color { AppTheme.color(for: themeColor) }
 
     @State private var newest: [Album] = []
     @State private var recent: [Album] = []
@@ -13,18 +16,24 @@ struct DiscoverView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 44) {
-                    // Smart-Mixe + Insights-Ecke
-                    HStack(alignment: .top, spacing: 24) {
-                        mixButton(String(localized: "mix_newest_tracks"), "sparkles") { await play(.newest) }
-                        mixButton(String(localized: "mix_frequently_played"), "flame") { await play(.frequent) }
-                        mixButton(String(localized: "mix_recently_played"), "clock") { await play(.recent) }
-                        mixButton(String(localized: "mix_shuffle_all"), "shuffle") { await play(.random) }
+                VStack(alignment: .leading, spacing: 40) {
+                    // Insights als kleiner Button in der Ecke
+                    HStack {
                         Spacer()
                         NavigationLink { InsightsView() } label: {
                             Image(systemName: "chart.bar.xaxis").font(.title2)
                         }
+                        .buttonStyle(.borderless)
                     }
+
+                    // Smart-Mixe als Akzent-Pillen (wie iOS/Mac)
+                    VStack(spacing: 16) {
+                        MixPill(title: String(localized: "mix_newest_tracks"), icon: "sparkles", accent: accent) { await play(.newest) }
+                        MixPill(title: String(localized: "mix_frequently_played"), icon: "chart.bar.fill", accent: accent) { await play(.frequent) }
+                        MixPill(title: String(localized: "mix_recently_played"), icon: "clock.fill", accent: accent) { await play(.recent) }
+                        MixPill(title: String(localized: "mix_shuffle_all"), icon: "shuffle", accent: accent) { await play(.random) }
+                    }
+                    .frame(maxWidth: 820)
 
                     albumRow(String(localized: "recently_added"), newest)
                     albumRow(String(localized: "recently_played"), recent)
@@ -84,17 +93,6 @@ struct DiscoverView: View {
 
     // MARK: - UI
 
-    private func mixButton(_ title: String, _ icon: String, action: @escaping () async -> Void) -> some View {
-        Button { Task { await action() } } label: {
-            VStack(spacing: 14) {
-                Image(systemName: icon).font(.system(size: 40))
-                Text(title).font(.callout).lineLimit(2).multilineTextAlignment(.center)
-            }
-            .frame(width: 260, height: 180)
-        }
-        .buttonStyle(.card)
-    }
-
     @ViewBuilder
     private func albumRow(_ title: String, _ albums: [Album]) -> some View {
         if !albums.isEmpty {
@@ -109,5 +107,45 @@ struct DiscoverView: View {
                 .scrollClipDisabled()
             }
         }
+    }
+}
+
+/// Smart-Mix-Zeile in Akzentfarbe (wie iOS/Mac) — fokussierbar mit dezentem Zoom.
+private struct MixPill: View {
+    let title: String
+    let icon: String
+    let accent: Color
+    let action: () async -> Void
+
+    @FocusState private var focused: Bool
+    @State private var loading = false
+
+    var body: some View {
+        Button {
+            Task { loading = true; await action(); loading = false }
+        } label: {
+            HStack(spacing: 18) {
+                Image(systemName: icon).frame(width: 32)
+                Text(title).font(.title3).bold()
+                Spacer()
+                if loading {
+                    ProgressView().tint(.white)
+                } else {
+                    Image(systemName: "play.fill").font(.callout)
+                }
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 30)
+            .padding(.vertical, 22)
+            .frame(maxWidth: .infinity)
+            .background(accent)
+            .clipShape(Capsule())
+            .scaleEffect(focused ? 1.03 : 1.0)
+            .shadow(color: .black.opacity(focused ? 0.4 : 0), radius: 14, y: 6)
+            .animation(.easeOut(duration: 0.15), value: focused)
+        }
+        .buttonStyle(.borderless)
+        .focused($focused)
+        .disabled(loading)
     }
 }
