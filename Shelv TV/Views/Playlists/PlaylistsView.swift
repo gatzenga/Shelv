@@ -35,20 +35,21 @@ struct PlaylistCard: View {
     var size: CGFloat = 280
 
     var body: some View {
-        NavigationLink {
-            PlaylistDetailView(playlist: playlist)
-        } label: {
-            VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
+            NavigationLink {
+                PlaylistDetailView(playlist: playlist)
+            } label: {
                 CoverArtView(url: playlist.coverURL(500), size: size, cornerRadius: 8)
-                Text(playlist.name).lineLimit(1).font(.callout)
-                if let count = playlist.songCount {
-                    Text("\(count) \(String(localized: "songs"))")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
             }
-            .frame(width: size)
+            .buttonStyle(.card)
+
+            Text(playlist.name).lineLimit(1).font(.callout)
+            if let count = playlist.songCount {
+                Text("\(count) \(String(localized: "songs"))")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
         }
-        .buttonStyle(.card)
+        .frame(width: size)
     }
 }
 

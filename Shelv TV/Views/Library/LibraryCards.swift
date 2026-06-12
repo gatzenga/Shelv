@@ -1,44 +1,54 @@
 import SwiftUI
 
-/// Fokussierbare Album-Karte (Cover + Titel + Künstler). `.card`-Style gibt den nativen
-/// tvOS-Fokus-Lift.
+/// Album-Karte: nur das Cover ist fokussierbar (`.card`-Lift), Titel/Künstler stehen
+/// darunter — keine umschließende Box.
 struct AlbumCard: View {
     let album: Album
     var size: CGFloat = 260
 
     var body: some View {
-        NavigationLink {
-            AlbumDetailView(album: album)
-        } label: {
-            VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
+            NavigationLink {
+                AlbumDetailView(album: album)
+            } label: {
                 CoverArtView(url: album.coverURL(500), size: size, cornerRadius: 8)
-                Text(album.name).lineLimit(1).font(.callout)
-                if let artist = album.artist {
-                    Text(artist).lineLimit(1).font(.caption).foregroundStyle(.secondary)
-                }
             }
-            .frame(width: size)
+            .buttonStyle(.card)
+
+            Text(album.name).lineLimit(1).font(.callout)
+            if let artist = album.artist {
+                Text(artist).lineLimit(1).font(.caption).foregroundStyle(.secondary)
+            }
         }
-        .buttonStyle(.card)
+        .frame(width: size)
     }
 }
 
-/// Fokussierbare Künstler-Karte (rundes Cover).
+/// Künstler-Karte: rundes Bild + Name, keine Box. Eigener Fokus-Lift (Skalierung +
+/// Schatten), damit nichts Rechteckiges um das runde Bild erscheint.
 struct ArtistCard: View {
     let artist: Artist
     var size: CGFloat = 260
 
+    @FocusState private var focused: Bool
+
     var body: some View {
-        NavigationLink {
-            ArtistDetailView(artist: artist)
-        } label: {
-            VStack(spacing: 8) {
+        VStack(spacing: 12) {
+            NavigationLink {
+                ArtistDetailView(artist: artist)
+            } label: {
                 CoverArtView(url: artist.coverURL(500), size: size, isCircle: true)
-                Text(artist.name).lineLimit(1).font(.callout)
+                    .scaleEffect(focused ? 1.08 : 1.0)
+                    .shadow(color: .black.opacity(focused ? 0.4 : 0), radius: 18, y: 8)
+                    .animation(.easeOut(duration: 0.18), value: focused)
             }
-            .frame(width: size)
+            .buttonStyle(.borderless)
+            .focused($focused)
+
+            Text(artist.name).lineLimit(1).font(.callout)
+                .foregroundStyle(focused ? .primary : .secondary)
         }
-        .buttonStyle(.card)
+        .frame(width: size)
     }
 }
 

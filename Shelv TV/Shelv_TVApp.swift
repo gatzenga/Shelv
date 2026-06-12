@@ -5,7 +5,6 @@ struct Shelv_TVApp: App {
     @StateObject private var serverStore = ServerStore()
     @Environment(\.scenePhase) private var scenePhase
 
-    @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage("appAppearance") private var appAppearance = "system"
 
     private var preferredScheme: ColorScheme? {
@@ -23,7 +22,6 @@ struct Shelv_TVApp: App {
                 .environmentObject(AudioPlayerService.shared)
                 .environmentObject(RecapStore.shared)
                 .environmentObject(CloudKitSyncService.shared.status)
-                .tint(AppTheme.color(for: themeColorName))
                 .preferredColorScheme(preferredScheme)
                 // Pro aktivem Server: Tracking-DB + Recap-Registry (NUR laden, nie generieren) + Pins.
                 .task(id: serverStore.activeServerID) {
