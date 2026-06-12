@@ -1,24 +1,22 @@
-//
-//  ContentView.swift
-//  Shelv TV
-//
-//  Created by Vasco Kugler on 12.06.2026.
-//
-
 import SwiftUI
 
 struct ContentView: View {
-    var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Shelv TV")
-        }
-        .padding()
-    }
-}
+    @EnvironmentObject var serverStore: ServerStore
 
-#Preview {
-    ContentView()
+    var body: some View {
+        if serverStore.activeServer != nil {
+            MainTabView()
+        } else {
+            // Platzhalter bis zum echten Login-Flow (Task 4).
+            VStack(spacing: 20) {
+                Image(systemName: "music.note")
+                    .font(.system(size: 80))
+                    .foregroundStyle(.tint)
+                Text("Shelv TV")
+                    .font(.largeTitle).bold()
+                Text(String(localized: "no_server_yet"))
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
 }

@@ -1,17 +1,62 @@
-//
-//  Shelv_TVApp.swift
-//  Shelv TV
-//
-//  Created by Vasco Kugler on 12.06.2026.
-//
-
 import SwiftUI
 
 @main
 struct Shelv_TVApp: App {
+    @StateObject private var serverStore = ServerStore()
+    @Environment(\.scenePhase) private var scenePhase
+
+    @AppStorage("themeColor") private var themeColorName = "violet"
+    @AppStorage("appAppearance") private var appAppearance = "system"
+
+    private var preferredScheme: ColorScheme? {
+        switch appAppearance {
+        case "light": return .light
+        case "dark":  return .dark
+        default:      return nil
+        }
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environmentObject(serverStore)
+                .environmentObject(AudioPlayerService.shared)
+                .environmentObject(RecapStore.shared)
+                .environmentObject(CloudKitSyncService.shared.status)
+                .tint(AppTheme.color(for: themeColorName))
+                .preferredColorScheme(preferredScheme)
+                // Pro aktivem Server: Tracking-DB + Recap-Registry (NUR laden, nie generieren) + Pins.
+                .task(id: serverStore.activeServerID) {
+                    guard let server = serverStore.activeServer else { return }
+                    await PlayLogService.shared.setup()
+                    await RecapStore.shared.loadEntries(serverId: server.stableId)
+                    PinnedPlaylistStore.shared.setActiveServer(server.stableId)
+                }
+                // Einmaliges App-Setup: Tracking starten, remoteUserId-Backfill, iCloud-Sync.
+                .task {
+                    await PlayLogService.shared.setup()
+                    _ = PlayTracker.shared   // startet Play-Erfassung (Combine-Observer)
+                    for server in serverStore.servers where server.remoteUserId == nil {
+                        guard let pw = serverStore.password(for: server) else { continue }
+                        do {
+                            let uid = try await SubsonicAPIService.shared.authLogin(server: server, password: pw)
+                            var updated = server
+                            updated.remoteUserId = uid
+                            serverStore.update(server: updated, password: nil)
+                        } catch {
+                            print("[ServerID] Backfill FAILED \(server.displayName): \(error)")
+                        }
+                    }
+                    await CloudKitSyncService.shared.setup()
+                }
+                .onChange(of: scenePhase) { _, phase in
+                    guard phase == .active else { return }
+                    Task { await CloudKitSyncService.shared.syncNow() }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .recapRegistryUpdated)) { _ in
+                    guard let server = serverStore.activeServer else { return }
+                    Task { await RecapStore.shared.loadEntries(serverId: server.stableId) }
+                }
         }
     }
 }
