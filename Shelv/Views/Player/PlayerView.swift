@@ -62,6 +62,45 @@ struct PlayerView: View {
 
     private var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
 
+    // Track-Infos (Titel/Artist/Album) als eigene View — entlastet den Type-Checker
+    // des großen body und hält die Marquee-Logik beisammen. Auf Slider-Breite begrenzt.
+    @ViewBuilder
+    private var trackInfo: some View {
+        VStack(spacing: isPad ? 6 : 8) {
+            MarqueeText(text: player.displayTitle,
+                        uiFont: .preferred(isPad ? .title1 : .title2, bold: true))
+
+            if let artistName = player.currentSong?.artist {
+                Button { resolveArtist(artistName) } label: {
+                    MarqueeText(text: artistName,
+                                uiFont: .preferred(isPad ? .title2 : .title3),
+                                color: Color(.secondaryLabel))
+                }
+                .buttonStyle(.plain)
+                .navigationDestination(item: $artistDestination) { artist in
+                    ArtistDetailView(artist: artist)
+                        .toolbarBackground(.visible, for: .navigationBar)
+                }
+            }
+
+            if let album = currentAlbum {
+                NavigationLink(destination: AlbumDetailView(album: album)
+                    .toolbarBackground(.visible, for: .navigationBar)
+                ) {
+                    MarqueeText(text: album.name,
+                                uiFont: .preferred(.callout),
+                                color: Color(.tertiaryLabel))
+                }
+                .buttonStyle(.plain)
+            } else if let albumName = player.currentSong?.album {
+                MarqueeText(text: albumName,
+                            uiFont: .preferred(.callout),
+                            color: Color(.tertiaryLabel))
+            }
+        }
+        .padding(.horizontal, isPad ? 48 : 32)
+    }
+
     private func artSize(_ h: CGFloat) -> CGFloat {
         isPad ? min(480, max(300, h * 0.50)) : min(280, h * 0.44)
     }
@@ -88,44 +127,7 @@ struct PlayerView: View {
                         .shadow(color: .black.opacity(0.4), radius: 30, y: 15)
                         .padding(.bottom, vPad(h, large: 20, small: 28))
 
-                    VStack(spacing: isPad ? 6 : 8) {
-                        Text(player.displayTitle)
-                            .font(isPad ? .title : .title2).bold()
-                            .multilineTextAlignment(.center)
-                            .lineLimit(2)
-                            .padding(.horizontal, 24)
-
-                        if let artistName = player.currentSong?.artist {
-                            Button { resolveArtist(artistName) } label: {
-                                Text(artistName)
-                                    .font(isPad ? .title2 : .title3)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
-                            .buttonStyle(.plain)
-                            .navigationDestination(item: $artistDestination) { artist in
-                                ArtistDetailView(artist: artist)
-                                    .toolbarBackground(.visible, for: .navigationBar)
-                            }
-                        }
-
-                        if let album = currentAlbum {
-                            NavigationLink(destination: AlbumDetailView(album: album)
-                                .toolbarBackground(.visible, for: .navigationBar)
-                            ) {
-                                Text(album.name)
-                                    .font(.callout)
-                                    .foregroundStyle(.tertiary)
-                                    .lineLimit(1)
-                            }
-                            .buttonStyle(.plain)
-                        } else if let albumName = player.currentSong?.album {
-                            Text(albumName)
-                                .font(.callout)
-                                .foregroundStyle(.tertiary)
-                                .lineLimit(1)
-                        }
-                    }
+                    trackInfo
 
                     Spacer(minLength: 0)
 
