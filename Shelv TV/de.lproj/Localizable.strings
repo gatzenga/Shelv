@@ -402,3 +402,5 @@
 "queue_empty" = "Warteschlange ist leer";
 
 "no_recaps_yet" = "Noch keine Rückblicke";
+
+"remove_server" = "Server entfernen";

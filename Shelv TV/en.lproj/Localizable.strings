@@ -401,3 +401,5 @@
 "queue_empty" = "Queue is empty";
 
 "no_recaps_yet" = "No recaps yet";
+
+"remove_server" = "Remove Server";

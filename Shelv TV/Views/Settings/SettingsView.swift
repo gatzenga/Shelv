@@ -1,10 +1,12 @@
 import SwiftUI
 
 struct SettingsView: View {
+    @EnvironmentObject var serverStore: ServerStore
     @AppStorage("appAppearance") private var appAppearance = "system"
     @AppStorage("themeColor") private var themeColor = "violet"
     @AppStorage("enablePlaylists") private var enablePlaylists = true
     @AppStorage("enableFavorites") private var enableFavorites = true
+    @AppStorage("recapEnabled") private var recapEnabled = false
     @AppStorage("autoFetchLyrics") private var autoFetchLyrics = true
 
     private var isGerman: Bool { Locale.preferredLanguages.first?.hasPrefix("de") == true }
@@ -12,6 +14,19 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section(String(localized: "servers")) {
+                    NavigationLink {
+                        ServerSettingsView()
+                    } label: {
+                        HStack {
+                            Text(String(localized: "server"))
+                            Spacer()
+                            Text(serverStore.activeServer?.displayName ?? "—")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
                 Section(String(localized: "appearance")) {
                     Picker(String(localized: "appearance"), selection: $appAppearance) {
                         Text(String(localized: "system")).tag("system")
@@ -28,6 +43,7 @@ struct SettingsView: View {
                 Section(String(localized: "library")) {
                     Toggle(String(localized: "playlists"), isOn: $enablePlaylists)
                     Toggle(String(localized: "favorites"), isOn: $enableFavorites)
+                    Toggle(String(localized: "recaps"), isOn: $recapEnabled)
                 }
 
                 Section {
