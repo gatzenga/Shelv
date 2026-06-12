@@ -10,7 +10,7 @@ struct MainTabView: View {
             NowPlayingView()
                 .tabItem { Label(String(localized: "now_playing"), systemImage: "play.circle") }
 
-            Placeholder("Discover")
+            DiscoverView()
                 .tabItem { Label(String(localized: "discover"), systemImage: "sparkles") }
 
             LibraryView()
