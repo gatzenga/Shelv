@@ -28,6 +28,10 @@ struct SettingsView: View {
                     Toggle(String(localized: "playlists"), isOn: $enablePlaylists)
                     Toggle(String(localized: "favorites"), isOn: $enableFavorites)
                 }
+
+                Section {
+                    NavigationLink(String(localized: "playback")) { PlaybackSettingsView() }
+                }
             }
             .navigationTitle(String(localized: "settings"))
         }
