@@ -382,3 +382,7 @@
 
 "now_playing" = "Aktuelle Wiedergabe";
 "no_server_yet" = "Noch kein Server verbunden";
+
+"server_url" = "Server-URL";
+"connect" = "Verbinden";
+"try_demo" = "Demo ausprobieren";

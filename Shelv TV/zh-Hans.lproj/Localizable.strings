@@ -380,3 +380,7 @@
 
 "now_playing" = "正在播放";
 "no_server_yet" = "尚未连接服务器";
+
+"server_url" = "服务器地址";
+"connect" = "连接";
+"try_demo" = "试用演示";

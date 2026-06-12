@@ -381,3 +381,7 @@
 
 "now_playing" = "Now Playing";
 "no_server_yet" = "No server connected yet";
+
+"server_url" = "Server URL";
+"connect" = "Connect";
+"try_demo" = "Try the demo";
