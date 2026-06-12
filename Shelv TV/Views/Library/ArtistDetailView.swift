@@ -7,7 +7,7 @@ struct ArtistDetailView: View {
     @State private var albums: [Album] = []
     @State private var isLoading = true
 
-    private let columns = [GridItem(.adaptive(minimum: 300), spacing: 60)]
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 40), count: 6)
 
     var body: some View {
         ScrollView {
@@ -20,9 +20,9 @@ struct ArtistDetailView: View {
                 .padding(.top, 40)
                 .padding(.bottom, 20)
 
-                LazyVGrid(columns: columns, spacing: 60) {
+                LazyVGrid(columns: columns, spacing: 40) {
                     ForEach(albums) { album in
-                        AlbumCard(album: album, size: 280)
+                        AlbumCard(album: album)
                     }
                 }
             }

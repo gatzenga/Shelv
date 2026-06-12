@@ -5,7 +5,7 @@ import SwiftUI
 struct RecapView: View {
     @ObservedObject var library = LibraryStore.shared
     @ObservedObject var recap = RecapStore.shared
-    private let columns = [GridItem(.adaptive(minimum: 300), spacing: 60)]
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 40), count: 6)
 
     /// Recap-Playlists nach Periodenstart absteigend (über die Registry).
     private var recapPlaylists: [Playlist] {
@@ -26,7 +26,7 @@ struct RecapView: View {
                         )
                         .frame(maxWidth: .infinity, minHeight: 300)
                     } else {
-                        LazyVGrid(columns: columns, spacing: 60) {
+                        LazyVGrid(columns: columns, spacing: 40) {
                             ForEach(recapPlaylists) { PlaylistCard(playlist: $0) }
                         }
                     }

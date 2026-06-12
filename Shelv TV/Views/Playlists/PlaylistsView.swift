@@ -3,7 +3,7 @@ import SwiftUI
 struct PlaylistsView: View {
     @ObservedObject var store = LibraryStore.shared
     @ObservedObject var recap = RecapStore.shared
-    private let columns = [GridItem(.adaptive(minimum: 300), spacing: 60)]
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 40), count: 6)
 
     /// Recap-Playlists raus — die haben ihren eigenen Tab.
     private var playlists: [Playlist] {
@@ -23,7 +23,7 @@ struct PlaylistsView: View {
                         )
                         .frame(maxWidth: .infinity, minHeight: 300)
                     } else {
-                        LazyVGrid(columns: columns, spacing: 60) {
+                        LazyVGrid(columns: columns, spacing: 40) {
                             ForEach(playlists) { playlist in
                                 PlaylistCard(playlist: playlist)
                             }
@@ -41,16 +41,22 @@ struct PlaylistsView: View {
 
 struct PlaylistCard: View {
     let playlist: Playlist
-    var size: CGFloat = 280
+    var size: CGFloat = 270
+
+    @FocusState private var focused: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 12) {
             NavigationLink {
                 PlaylistDetailView(playlist: playlist)
             } label: {
                 CoverArtView(url: playlist.coverURL(500), size: size, cornerRadius: 8)
+                    .scaleEffect(focused ? 1.05 : 1.0)
+                    .shadow(color: .black.opacity(focused ? 0.4 : 0), radius: 18, y: 10)
+                    .animation(.easeOut(duration: 0.18), value: focused)
             }
-            .buttonStyle(.card)
+            .buttonStyle(.borderless)
+            .focused($focused)
 
             Text(playlist.name).lineLimit(1).font(.callout)
             if let count = playlist.songCount {

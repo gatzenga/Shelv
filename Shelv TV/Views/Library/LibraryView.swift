@@ -5,12 +5,12 @@ struct LibraryView: View {
     @AppStorage("enableFavorites") private var enableFavorites = true
 
     @State private var segment = 0   // 0 = Albums, 1 = Artists, 2 = Favorites
-    private let columns = [GridItem(.adaptive(minimum: 300), spacing: 60)]
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 40), count: 6)
     private let player = AudioPlayerService.shared
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
+            VStack(spacing: 0) {
                 Picker("", selection: $segment) {
                     Text(String(localized: "albums")).tag(0)
                     Text(String(localized: "artists")).tag(1)
@@ -18,7 +18,11 @@ struct LibraryView: View {
                 }
                 .pickerStyle(.segmented)
                 .frame(maxWidth: 700)
-                .padding(.top, 50)
+                .padding(.top, 40)
+                .padding(.bottom, 24)
+                .frame(maxWidth: .infinity)
+                .background(.regularMaterial)   // verdeckt die durchscrollenden Karten
+                .zIndex(1)
 
                 ScrollView {
                     Group {
@@ -31,10 +35,9 @@ struct LibraryView: View {
                             favorites
                         }
                     }
-                    // Lift-Puffer innerhalb des Scrollbereichs — sonst clippt der
-                    // .card-Lift der Randkarten an den ScrollView-Kanten.
                     .padding(.horizontal, 50)
-                    .padding(.vertical, 30)
+                    .padding(.top, 36)    // Abstand zur Tab-Leiste, damit der Fokus-Zoom nicht anstößt
+                    .padding(.bottom, 40)
                 }
                 .scrollClipDisabled()
             }
@@ -45,7 +48,7 @@ struct LibraryView: View {
     }
 
     private func grid<T: Identifiable, Card: View>(_ items: [T], @ViewBuilder card: @escaping (T) -> Card) -> some View {
-        LazyVGrid(columns: columns, spacing: 60) {
+        LazyVGrid(columns: columns, spacing: 40) {
             ForEach(items) { card($0) }
         }
     }
