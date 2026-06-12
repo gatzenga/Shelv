@@ -104,6 +104,8 @@
 "download_remaining" = "Download Remaining";
 "download_artist" = "Download Artist";
 "direction" = "Direction";
+"last_modified" = "Last Modified";
+"date_created" = "Date Created";
 "lyrics" = "Lyrics";
 "instrumental" = "Instrumental";
 "no_lyrics_available" = "No lyrics available";

@@ -80,6 +80,9 @@
 "download" = "Herunterladen";
 "filter" = "Filtern…";
 "sort" = "Sortieren";
+"direction" = "Richtung";
+"last_modified" = "Zuletzt geändert";
+"date_created" = "Erstellungsdatum";
 "list_view" = "Listenansicht";
 "grid_view" = "Rasteransicht";
 "loading_albums" = "Alben laden…";

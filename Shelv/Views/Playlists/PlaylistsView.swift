@@ -9,14 +9,34 @@ struct PlaylistsView: View {
     @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage("enableDownloads") private var enableDownloads = false
     @AppStorage("enablePlaylists") private var enablePlaylists = true
+    @AppStorage("playlistSortOption") private var sortOptionRaw: String = PlaylistSortOption.alphabetical.rawValue
+    private var sortOption: PlaylistSortOption { PlaylistSortOption(rawValue: sortOptionRaw) ?? .alphabetical }
+    @AppStorage("playlistSortDirection") private var sortDirectionRaw: String = SortDirection.ascending.rawValue
+    private var sortDirection: SortDirection { SortDirection(rawValue: sortDirectionRaw) ?? .ascending }
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
     private var visiblePlaylists: [Playlist] {
-        let noRecap = libraryStore.playlists.filter { !recapStore.recapPlaylistIds.contains($0.id) }
+        var noRecap = libraryStore.playlists.filter { !recapStore.recapPlaylistIds.contains($0.id) }
         if offlineMode.isOffline {
-            return noRecap.filter { downloadStore.offlinePlaylistIds.contains($0.id) }
+            noRecap = noRecap.filter { downloadStore.offlinePlaylistIds.contains($0.id) }
         }
-        return noRecap
+        return sortedPlaylists(noRecap)
+    }
+
+    private func sortedPlaylists(_ playlists: [Playlist]) -> [Playlist] {
+        switch sortOption {
+        case .alphabetical:
+            // Fix A–Z, kein Richtungs-Toggle (analog Alben).
+            return playlists.sorted {
+                $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
+        case .lastModified:
+            let asc = playlists.sorted { ($0.changed ?? .distantPast) < ($1.changed ?? .distantPast) }
+            return sortDirection == .descending ? asc.reversed() : asc
+        case .dateCreated:
+            let asc = playlists.sorted { ($0.created ?? .distantPast) < ($1.created ?? .distantPast) }
+            return sortDirection == .descending ? asc.reversed() : asc
+        }
     }
 
     @State private var showCreateSheet = false
@@ -116,6 +136,9 @@ struct PlaylistsView: View {
             }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
+                    playlistSortMenu
+                }
+                ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         newPlaylistName = ""
                         showCreateSheet = true
@@ -184,6 +207,30 @@ struct PlaylistsView: View {
             .sheet(isPresented: $showCreateSheet) {
                 createPlaylistSheet
             }
+        }
+    }
+
+    private var playlistSortMenu: some View {
+        Menu {
+            Picker(selection: $sortOptionRaw) {
+                ForEach(PlaylistSortOption.allCases, id: \.rawValue) { option in
+                    Text(option.label).tag(option.rawValue)
+                }
+            } label: {
+                Label(String(localized: "sort"), systemImage: "arrow.up.arrow.down")
+            }
+
+            if sortOption != .alphabetical {
+                Picker(selection: $sortDirectionRaw) {
+                    ForEach(SortDirection.allCases, id: \.rawValue) { dir in
+                        Text(dir.label).tag(dir.rawValue)
+                    }
+                } label: {
+                    Label(String(localized: "direction"), systemImage: "arrow.up.and.down")
+                }
+            }
+        } label: {
+            Image(systemName: "arrow.up.arrow.down")
         }
     }
 

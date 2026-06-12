@@ -104,6 +104,8 @@
 "download_remaining" = "下载剩余曲目";
 "download_artist" = "下载艺术家";
 "direction" = "方向";
+"last_modified" = "最近修改";
+"date_created" = "创建日期";
 "lyrics" = "歌词";
 "instrumental" = "纯音乐";
 "no_lyrics_available" = "无可用歌词";

@@ -80,6 +80,9 @@
 "download" = "Download";
 "filter" = "Filter…";
 "sort" = "Sort";
+"direction" = "Direction";
+"last_modified" = "Last Modified";
+"date_created" = "Date Created";
 "list_view" = "List view";
 "grid_view" = "Grid view";
 "loading_albums" = "Loading albums…";
