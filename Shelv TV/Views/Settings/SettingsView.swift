@@ -37,6 +37,10 @@ struct SettingsView: View {
                 Section(String(localized: "lyrics")) {
                     Toggle(String(localized: "auto_fetch_lyrics"), isOn: $autoFetchLyrics)
                 }
+
+                Section {
+                    NavigationLink(String(localized: "cache")) { CacheSettingsView() }
+                }
             }
             .navigationTitle(String(localized: "settings"))
         }

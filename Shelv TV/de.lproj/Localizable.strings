@@ -394,3 +394,7 @@
 "recaps" = "Recaps";
 
 "auto_fetch_lyrics" = "Lyrics automatisch laden";
+
+"cover_cache" = "Cover-Cache";
+"size" = "Größe";
+"no_entries" = "Keine Einträge";

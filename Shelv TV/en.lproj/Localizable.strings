@@ -393,3 +393,7 @@
 "recaps" = "Recaps";
 
 "auto_fetch_lyrics" = "Auto-fetch lyrics";
+
+"cover_cache" = "Cover Cache";
+"size" = "Size";
+"no_entries" = "No entries";

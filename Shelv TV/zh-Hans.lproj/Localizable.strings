@@ -392,3 +392,7 @@
 "recaps" = "回顾";
 
 "auto_fetch_lyrics" = "自动获取歌词";
+
+"cover_cache" = "封面缓存";
+"size" = "大小";
+"no_entries" = "无条目";
