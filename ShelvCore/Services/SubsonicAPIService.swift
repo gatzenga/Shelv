@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import CryptoKit
+import Security
 
 enum SubsonicAPIError: LocalizedError {
     case noServer
@@ -377,8 +378,14 @@ class SubsonicAPIService: ObservableObject {
     }
 
     nonisolated private func makeSalt() -> String {
+        // Kryptographisch sicherer Zufall (CSPRNG) statt randomElement(); 16 Bytes → 32 Hex-Zeichen.
+        var bytes = [UInt8](repeating: 0, count: 16)
+        if SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess {
+            return bytes.map { String(format: "%02x", $0) }.joined()
+        }
+        // Fallback (sollte praktisch nie greifen): SystemRandomNumberGenerator ist auf Apple ebenfalls CSPRNG.
         let chars = "abcdefghijklmnopqrstuvwxyz0123456789"
-        return String((0..<8).map { _ in chars.randomElement()! })
+        return String((0..<16).map { _ in chars.randomElement()! })
     }
 
     nonisolated private func makeToken(password: String, salt: String) -> String {

@@ -633,7 +633,7 @@ actor DownloadService {
         let serverDir = Self.serverDirectory(serverId: job.serverId)
         // Wenn der Server nicht das angeforderte Format liefert, mit korrekter Extension speichern.
         let actualExt = await TranscodingPolicy.extensionFor(mimeType: mimeType) ?? job.fileExtension
-        let finalURL = serverDir.appendingPathComponent("\(job.song.id).\(actualExt)")
+        let finalURL = serverDir.appendingPathComponent("\(job.song.id.pathSafeComponent).\(actualExt)")
 
         // Race-Window 1: User cancel-te zwischen erstem `await` und jetzt.
         if cancelledKeys.contains(key) {
@@ -883,7 +883,7 @@ actor DownloadService {
     }
 
     static func serverDirectory(serverId: String) -> URL {
-        let safe = serverId.isEmpty ? "_default" : serverId
+        let safe = serverId.isEmpty ? "_default" : serverId.pathSafeComponent
         return rootDirectory().appendingPathComponent(safe, isDirectory: true)
     }
 
@@ -898,7 +898,7 @@ actor DownloadService {
     }
 
     static func artistCoverPath(serverId: String, artId: String) -> String {
-        artworkDirectory(serverId: serverId).appendingPathComponent("\(artId).jpg").path
+        artworkDirectory(serverId: serverId).appendingPathComponent("\(artId.pathSafeComponent).jpg").path
     }
 }
 
