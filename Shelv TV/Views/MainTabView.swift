@@ -13,7 +13,7 @@ struct MainTabView: View {
             Placeholder("Discover")
                 .tabItem { Label(String(localized: "discover"), systemImage: "sparkles") }
 
-            Placeholder("Library")
+            LibraryView()
                 .tabItem { Label(String(localized: "library"), systemImage: "square.stack") }
 
             if enablePlaylists {
