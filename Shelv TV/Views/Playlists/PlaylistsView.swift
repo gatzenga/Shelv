@@ -59,40 +59,41 @@ struct PlaylistDetailView: View {
     @State private var songs: [Song] = []
 
     var body: some View {
-        ScrollView {
-            HStack(alignment: .top, spacing: 40) {
-                CoverArtView(url: playlist.coverURL(600), size: 360, cornerRadius: 12)
-                VStack(alignment: .leading, spacing: 16) {
-                    Text(playlist.name).font(.title).bold().lineLimit(2)
-                    if let count = playlist.songCount {
-                        Text("\(count) \(String(localized: "songs"))")
-                            .font(.title3).foregroundStyle(.secondary)
-                    }
-                    HStack(spacing: 20) {
-                        Button { player.play(songs: songs, startIndex: 0) } label: {
-                            Label(String(localized: "play"), systemImage: "play.fill")
+        List {
+            Section {
+                HStack(alignment: .top, spacing: 40) {
+                    CoverArtView(url: playlist.coverURL(600), size: 360, cornerRadius: 12)
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text(playlist.name).font(.title).bold().lineLimit(2)
+                        if let count = playlist.songCount {
+                            Text("\(count) \(String(localized: "songs"))")
+                                .font(.title3).foregroundStyle(.secondary)
                         }
-                        Button { player.playShuffled(songs: songs) } label: {
-                            Label(String(localized: "shuffle"), systemImage: "shuffle")
+                        HStack(spacing: 20) {
+                            Button { player.play(songs: songs, startIndex: 0) } label: {
+                                Label(String(localized: "play"), systemImage: "play.fill")
+                            }
+                            Button { player.playShuffled(songs: songs) } label: {
+                                Label(String(localized: "shuffle"), systemImage: "shuffle")
+                            }
                         }
+                        .disabled(songs.isEmpty)
+                        .padding(.top, 8)
                     }
-                    .disabled(songs.isEmpty)
-                    .padding(.top, 8)
+                    Spacer()
                 }
-                Spacer()
+                .padding(.vertical, 20)
+                .listRowBackground(Color.clear)
             }
-            .padding(.bottom, 30)
 
-            LazyVStack(spacing: 0) {
+            Section {
                 ForEach(Array(songs.enumerated()), id: \.element.id) { index, song in
                     SongRow(song: song, index: index) {
                         player.play(songs: songs, startIndex: index)
                     }
-                    if index < songs.count - 1 { Divider() }
                 }
             }
         }
-        .padding(50)
         .task { songs = await LibraryStore.shared.playlistSongs(playlist) }
     }
 }

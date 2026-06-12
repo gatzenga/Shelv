@@ -42,7 +42,8 @@ struct ArtistCard: View {
     }
 }
 
-/// Song-Zeile (Track-Nummer/Titel/Künstler), tippen spielt ab dieser Position.
+/// Native Song-Zeile für `List` — Cover-Thumbnail + Titel/Künstler + Dauer.
+/// In einer `List` liefert tvOS den Fokus-Highlight automatisch.
 struct SongRow: View {
     let song: Song
     let index: Int
@@ -50,11 +51,8 @@ struct SongRow: View {
 
     var body: some View {
         Button(action: onPlay) {
-            HStack(spacing: 16) {
-                Text("\(song.track ?? index + 1)")
-                    .font(.body.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                    .frame(width: 50, alignment: .trailing)
+            HStack(spacing: 20) {
+                CoverArtView(url: song.coverURL(200), size: 72, cornerRadius: 6)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(song.title).lineLimit(1)
                     if let artist = song.artist {
@@ -66,7 +64,6 @@ struct SongRow: View {
                     Text(formatDuration(d)).font(.caption).foregroundStyle(.secondary).monospacedDigit()
                 }
             }
-            .padding(.vertical, 6)
         }
     }
 }
