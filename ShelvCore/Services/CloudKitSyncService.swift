@@ -426,6 +426,9 @@ actor CloudKitSyncService {
                 let periodEnd   = record["periodEnd"]    as? Double
             else { return }
             let name = record.recordID.recordName
+            // Wiederauferstehungs-Schutz: Marker, der lokal zur Löschung vorgemerkt ist,
+            // darf nicht über den Change-Feed wieder eingefügt werden.
+            if isMarkerPendingDeletion(name) { return }
             if let existing = await PlayLogService.shared.registryEntry(byCKRecordName: name) {
                 guard existing.playlistId != playlistId else { return }
                 // Same ckRecordName, different playlistId → Delete+Recreate-Flow auf anderem Gerät.
@@ -549,6 +552,66 @@ actor CloudKitSyncService {
         }
     }
 
+    // MARK: - Lösch-Warteliste für Recap-Marker
+
+    // Garantiert, dass eine lokale Registry-Löschung den iCloud-Marker irgendwann
+    // sicher mitnimmt: lokal wird sofort gelöscht (auch offline), der Marker landet
+    // auf einer persistenten Warteliste und wird bei jedem Sync erneut versucht.
+    // handleIncomingRecord ignoriert wartende Marker (Wiederauferstehungs-Schutz).
+
+    private static let pendingMarkerDeletionsKey = "shelv_ck_pending_marker_deletions"
+
+    private var pendingMarkerDeletions: [String] {
+        get { UserDefaults.standard.stringArray(forKey: Self.pendingMarkerDeletionsKey) ?? [] }
+        set { UserDefaults.standard.set(newValue, forKey: Self.pendingMarkerDeletionsKey) }
+    }
+
+    func isMarkerPendingDeletion(_ ckRecordName: String) -> Bool {
+        pendingMarkerDeletions.contains(ckRecordName)
+    }
+
+    func clearPendingMarkerDeletions() {
+        UserDefaults.standard.removeObject(forKey: Self.pendingMarkerDeletionsKey)
+    }
+
+    /// Marker zur Löschung vormerken und sofort einen Versuch starten.
+    func queueRecapMarkerDeletion(ckRecordName: String) async {
+        if !pendingMarkerDeletions.contains(ckRecordName) {
+            pendingMarkerDeletions.append(ckRecordName)
+        }
+        await flushPendingMarkerDeletions()
+    }
+
+    func flushPendingMarkerDeletions() async {
+        guard syncEnabled else { return }
+        let queue = pendingMarkerDeletions
+        guard !queue.isEmpty else { return }
+        for name in queue {
+            let rid = CKRecord.ID(recordName: name, zoneID: zoneID)
+            do {
+                let (_, deleteResults) = try await db.modifyRecords(saving: [], deleting: [rid])
+                if case .failure(let err) = deleteResults[rid] ?? .success(()), !Self.isGoneError(err) {
+                    log("Marker deletion failed — will retry on next sync: \(err.localizedDescription)", isError: true)
+                    continue
+                }
+                pendingMarkerDeletions.removeAll { $0 == name }
+                log("Recap marker deleted (queued)")
+            } catch {
+                if Self.isGoneError(error) {
+                    // Zone/Record existiert nicht mehr — Ziel erreicht.
+                    pendingMarkerDeletions.removeAll { $0 == name }
+                } else {
+                    log("Marker deletion failed — will retry on next sync: \(error.localizedDescription)", isError: true)
+                }
+            }
+        }
+    }
+
+    private static func isGoneError(_ error: Error) -> Bool {
+        guard let ck = error as? CKError else { return false }
+        return ck.code == .unknownItem || ck.code == .zoneNotFound
+    }
+
     func deletePlayEvent(uuid: String, force: Bool = false) async {
         guard syncEnabled || force else { return }
         await MainActor.run { status.isSyncing = true }
@@ -601,6 +664,7 @@ actor CloudKitSyncService {
             _ = try await db.deleteRecordZone(withID: zoneID)
             isZoneReady = false
             changeToken = nil
+            clearPendingMarkerDeletions()   // Zone weg = wartende Marker-Löschungen erledigt
             await MainActor.run {
                 status.lastSyncDate = Date()
                 status.isSyncing = false
@@ -611,6 +675,7 @@ actor CloudKitSyncService {
             if let ck = error as? CKError, ck.code == .zoneNotFound {
                 isZoneReady = false
                 changeToken = nil
+                clearPendingMarkerDeletions()
                 log("iCloud zone already gone")
             } else {
                 log("Zone deletion failed: \(error.localizedDescription)", isError: true)
@@ -679,6 +744,7 @@ actor CloudKitSyncService {
     func syncNow() async {
         guard canSync else { return }
         log("Syncing…")
+        await flushPendingMarkerDeletions()
         await uploadPendingEvents()
         await downloadChanges()
         await uploadPendingEvents()

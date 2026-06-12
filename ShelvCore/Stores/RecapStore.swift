@@ -134,11 +134,13 @@ class RecapStore: ObservableObject {
         if let entry, entry.periodType == RecapPeriod.PeriodType.week.rawValue, !entry.isTest {
             RecapProcessedWeeks.insert(entry.periodStart)
         }
-        if let ckName = entry?.ckRecordName {
-            await CloudKitSyncService.shared.deleteRecapMarker(ckRecordName: ckName)
-        }
+        // Lokal zuerst — die Row verschwindet sofort (auch offline); der iCloud-Marker
+        // geht über die Lösch-Warteliste und wird bei jedem Sync erneut versucht.
         await PlayLogService.shared.deleteRegistryEntry(playlistId: playlistId)
         await loadEntries(serverId: serverId)
+        if let ckName = entry?.ckRecordName {
+            await CloudKitSyncService.shared.queueRecapMarkerDeletion(ckRecordName: ckName)
+        }
     }
 
     // MARK: - Recap Playlist Check
@@ -660,15 +662,23 @@ class RecapStore: ObservableObject {
     func deleteEntry(playlistId: String, serverId: String) async throws {
         let entry = await PlayLogService.shared.registryEntry(playlistId: playlistId)
         CloudKitSyncService.debugLog("[UserAction:deleteEntry] playlistId=\(playlistId) marker=\(entry?.ckRecordName ?? "nil")")
-        try await SubsonicAPIService.shared.deletePlaylist(id: playlistId)
+        do {
+            try await SubsonicAPIService.shared.deletePlaylist(id: playlistId)
+        } catch SubsonicAPIError.apiError(let code, let message)
+            where code == 70 || (message ?? "").localizedCaseInsensitiveContains("not found") {
+            // Orphan: Playlist existiert auf Navidrome nicht mehr (Warndreieck) —
+            // Registry + Marker trotzdem aufräumen. Echte Fehler (Netz etc.) werfen weiter.
+            CloudKitSyncService.debugLog("[UserAction:deleteEntry] playlist already gone on server — cleaning up registry anyway")
+        }
         if let entry, entry.periodType == RecapPeriod.PeriodType.week.rawValue, !entry.isTest {
             RecapProcessedWeeks.insert(entry.periodStart)
         }
+        // Lokal zuerst — Eintrag verschwindet sofort; iCloud über die Lösch-Warteliste.
         await PlayLogService.shared.deleteRegistryEntry(playlistId: playlistId)
-        if let ckName = entry?.ckRecordName {
-            await CloudKitSyncService.shared.deleteRecapMarker(ckRecordName: ckName)
-        }
         await loadEntries(serverId: serverId)
+        if let ckName = entry?.ckRecordName {
+            await CloudKitSyncService.shared.queueRecapMarkerDeletion(ckRecordName: ckName)
+        }
     }
 
     /// Löscht den neuesten non-test Week-Recap für den Server vollständig (Navidrome + iCloud + DB)
@@ -744,14 +754,15 @@ class RecapStore: ObservableObject {
     }
 
     func excessRetentionCount(periodType: RecapPeriod.PeriodType, limit: Int, serverId: String) async -> Int {
+        // Test-Recaps zählen nicht zur Retention (analog enforceRetention im Generator).
         let all = await PlayLogService.shared.allRegistryEntries(serverId: serverId)
-            .filter { $0.periodType == periodType.rawValue }
+            .filter { $0.periodType == periodType.rawValue && !$0.isTest }
         return max(0, all.count - limit)
     }
 
     func applyRetention(periodType: RecapPeriod.PeriodType, limit: Int, serverId: String) async {
         let all = await PlayLogService.shared.allRegistryEntries(serverId: serverId)
-            .filter { $0.periodType == periodType.rawValue }
+            .filter { $0.periodType == periodType.rawValue && !$0.isTest }
         guard all.count > limit else { return }
         let toDelete = all.suffix(all.count - limit)
         for entry in toDelete {
