@@ -2,14 +2,20 @@ import SwiftUI
 
 struct PlaylistsView: View {
     @ObservedObject var store = LibraryStore.shared
+    @ObservedObject var recap = RecapStore.shared
     private let columns = [GridItem(.adaptive(minimum: 300), spacing: 60)]
+
+    /// Recap-Playlists raus — die haben ihren eigenen Tab.
+    private var playlists: [Playlist] {
+        store.playlists.filter { !recap.recapPlaylistIds.contains($0.id) }
+    }
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                if store.playlists.isEmpty && store.isLoadingPlaylists {
+                if playlists.isEmpty && store.isLoadingPlaylists {
                     ProgressView().frame(maxWidth: .infinity, minHeight: 300)
-                } else if store.playlists.isEmpty {
+                } else if playlists.isEmpty {
                     ContentUnavailableView(
                         String(localized: "no_playlists_2"),
                         systemImage: "music.note.list"
@@ -17,7 +23,7 @@ struct PlaylistsView: View {
                     .frame(maxWidth: .infinity, minHeight: 300)
                 } else {
                     LazyVGrid(columns: columns, spacing: 60) {
-                        ForEach(store.playlists) { playlist in
+                        ForEach(playlists) { playlist in
                             PlaylistCard(playlist: playlist)
                         }
                     }

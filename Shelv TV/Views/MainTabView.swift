@@ -3,6 +3,7 @@ import SwiftUI
 /// Tab-Gerüst der tvOS-App: Now Playing · Discover · Library · Playlists · Suche · Settings.
 struct MainTabView: View {
     @AppStorage("enablePlaylists") private var enablePlaylists = true
+    @AppStorage("recapEnabled") private var recapEnabled = false
     // Stabile Tags: Ein- oder Ausblenden eines Tabs verschiebt sonst die Indizes
     // und die Auswahl springt ins Leere.
     @State private var selection = "discover"
@@ -25,6 +26,12 @@ struct MainTabView: View {
                 PlaylistsView()
                     .tag("playlists")
                     .tabItem { Label(String(localized: "playlists"), systemImage: "music.note.list") }
+            }
+
+            if recapEnabled {
+                RecapView()
+                    .tag("recap")
+                    .tabItem { Label(String(localized: "recaps"), systemImage: "sparkles.rectangle.stack") }
             }
 
             SearchView()
