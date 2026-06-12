@@ -5,8 +5,6 @@ struct LibraryView: View {
     @AppStorage("enableFavorites") private var enableFavorites = true
 
     @State private var segment = 0   // 0 = Albums, 1 = Artists, 2 = Favorites
-    // Feste 240er-Cover (wie Discover) mit verteiltem Abstand — nicht aneinandergepappt.
-    private let columns = [GridItem(.adaptive(minimum: 240, maximum: 240), spacing: 50)]
     private let player = AudioPlayerService.shared
 
     var body: some View {
@@ -21,26 +19,15 @@ struct LibraryView: View {
                 .frame(maxWidth: 700)
                 .padding(.top, 40)
                 .padding(.bottom, 24)
-                .frame(maxWidth: .infinity)
-                .background(.regularMaterial)   // verdeckt die durchscrollenden Karten
-                .zIndex(1)
 
-                ScrollView {
-                    Group {
-                        switch segment {
-                        case 0:
-                            grid(store.albums) { AlbumCard(album: $0) }
-                        case 1:
-                            grid(store.artists) { ArtistCard(artist: $0) }
-                        default:
-                            favorites
-                        }
-                    }
-                    .padding(.horizontal, 50)
-                    .padding(.top, 36)    // Abstand zur Tab-Leiste, damit der Fokus-Zoom nicht anstößt
-                    .padding(.bottom, 40)
+                switch segment {
+                case 0:
+                    coverGrid(store.albums) { AlbumCard(album: $0) }
+                case 1:
+                    coverGrid(store.artists) { ArtistCard(artist: $0) }
+                default:
+                    favoritesList
                 }
-                .scrollClipDisabled()
             }
             .task { await store.loadAlbums() }
             .task { await store.loadArtists() }
@@ -48,42 +35,61 @@ struct LibraryView: View {
         }
     }
 
-    private func grid<T: Identifiable, Card: View>(_ items: [T], @ViewBuilder card: @escaping (T) -> Card) -> some View {
-        LazyVGrid(columns: columns, spacing: 50) {
-            ForEach(items) { card($0) }
+    // MARK: - Cover-Grid (Alben / Künstler) — gleicher Look wie Discover
+
+    private func coverGrid<T: Identifiable, Card: View>(_ items: [T], @ViewBuilder card: @escaping (T) -> Card) -> some View {
+        ScrollView {
+            LazyVGrid(columns: coverGridColumns, alignment: .leading, spacing: 50) {
+                ForEach(items) { card($0) }
+            }
+            .padding(.horizontal, 50)
+            .padding(.top, 30)
+            .padding(.bottom, 50)
         }
     }
 
+    // MARK: - Favoriten — native List wie die Suche
+
     @ViewBuilder
-    private var favorites: some View {
-        VStack(alignment: .leading, spacing: 40) {
+    private var favoritesList: some View {
+        List {
             if !store.favoriteSongs.isEmpty {
-                VStack(alignment: .leading, spacing: 16) {
+                Section {
+                    ForEach(Array(store.favoriteSongs.enumerated()), id: \.element.id) { i, song in
+                        SongRow(song: song, index: i) {
+                            player.play(songs: store.favoriteSongs, startIndex: i)
+                        }
+                    }
+                } header: {
                     HStack {
-                        Text(String(localized: "songs")).font(.title2).bold()
+                        Text(String(localized: "songs"))
                         Spacer()
                         Button {
                             player.play(songs: store.favoriteSongs, startIndex: 0)
                         } label: { Label(String(localized: "play"), systemImage: "play.fill") }
-                    }
-                    LazyVStack(spacing: 0) {
-                        ForEach(Array(store.favoriteSongs.enumerated()), id: \.element.id) { i, song in
-                            SongRow(song: song, index: i) {
-                                player.play(songs: store.favoriteSongs, startIndex: i)
-                            }
-                            if i < store.favoriteSongs.count - 1 { Divider() }
-                        }
+                        .buttonStyle(.bordered)
                     }
                 }
             }
             if !store.favoriteAlbums.isEmpty {
-                Text(String(localized: "albums")).font(.title2).bold()
-                grid(store.favoriteAlbums) { AlbumCard(album: $0) }
+                Section(String(localized: "albums")) {
+                    cardRow { ForEach(store.favoriteAlbums) { AlbumCard(album: $0) } }
+                }
             }
             if !store.favoriteArtists.isEmpty {
-                Text(String(localized: "artists")).font(.title2).bold()
-                grid(store.favoriteArtists) { ArtistCard(artist: $0) }
+                Section(String(localized: "artists")) {
+                    cardRow { ForEach(store.favoriteArtists) { ArtistCard(artist: $0) } }
+                }
             }
         }
+    }
+
+    private func cardRow<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            LazyHStack(spacing: 40) { content() }
+                .padding(.vertical, 20)
+        }
+        .scrollClipDisabled()
+        .listRowBackground(Color.clear)
     }
 }

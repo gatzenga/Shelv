@@ -109,14 +109,14 @@ struct DiscoverView: View {
     }
 }
 
-/// Smart-Mix-Zeile in Akzentfarbe (wie iOS/Mac) — fokussierbar mit dezentem Zoom.
+/// Smart-Mix-Zeile in Akzentfarbe (wie iOS/Mac). Nativer `.borderedProminent`-Stil:
+/// die ganze Pille hebt sich als Einheit beim Fokus — kein separates Icon-Parallax.
 private struct MixPill: View {
     let title: String
     let icon: String
     let accent: Color
     let action: () async -> Void
 
-    @FocusState private var focused: Bool
     @State private var loading = false
 
     var body: some View {
@@ -124,27 +124,20 @@ private struct MixPill: View {
             Task { loading = true; await action(); loading = false }
         } label: {
             HStack(spacing: 18) {
-                Image(systemName: icon).frame(width: 32)
+                Image(systemName: icon)
                 Text(title).font(.title3).bold()
                 Spacer()
                 if loading {
-                    ProgressView().tint(.white)
+                    ProgressView()
                 } else {
                     Image(systemName: "play.fill").font(.callout)
                 }
             }
-            .foregroundStyle(.white)
-            .padding(.horizontal, 30)
-            .padding(.vertical, 22)
             .frame(maxWidth: .infinity)
-            .background(accent)
-            .clipShape(Capsule())
-            .scaleEffect(focused ? 1.03 : 1.0)
-            .shadow(color: .black.opacity(focused ? 0.4 : 0), radius: 14, y: 6)
-            .animation(.easeOut(duration: 0.15), value: focused)
+            .padding(.vertical, 8)
         }
-        .buttonStyle(.borderless)
-        .focused($focused)
+        .buttonStyle(.borderedProminent)
+        .tint(accent)
         .disabled(loading)
     }
 }

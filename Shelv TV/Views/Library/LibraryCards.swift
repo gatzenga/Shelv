@@ -1,5 +1,9 @@
 import SwiftUI
 
+/// Einheitliche Spalten für alle Cover-Grids: feste 240er-Cover (wie Discover),
+/// linksbündig gepackt — nicht zentriert, nicht gestreckt. Auf 1920 pt → 6 Spalten.
+let coverGridColumns = Array(repeating: GridItem(.fixed(240), spacing: 40), count: 6)
+
 /// Album-Karte: das Cover hebt sich beim Fokus als Ganzes (nativer `.card`-Lift),
 /// Titel/Künstler stehen mit genug Abstand darunter — keine umschließende Box.
 struct AlbumCard: View {
@@ -52,17 +56,26 @@ struct ArtistCard: View {
     }
 }
 
-/// Native Song-Zeile für `List` — Cover-Thumbnail + Titel/Künstler + Dauer.
-/// In einer `List` liefert tvOS den Fokus-Highlight automatisch.
+/// Native Song-Zeile für `List` — in einer `List` liefert tvOS den Fokus-Highlight
+/// automatisch. `showArtwork`: Cover-Thumbnail (Suche/Favoriten/Playlist) oder
+/// Tracknummer (Albumansicht, wo alle Songs dasselbe Cover hätten).
 struct SongRow: View {
     let song: Song
     let index: Int
+    var showArtwork: Bool = true
     let onPlay: () -> Void
 
     var body: some View {
         Button(action: onPlay) {
             HStack(spacing: 20) {
-                CoverArtView(url: song.coverURL(200), size: 72, cornerRadius: 6)
+                if showArtwork {
+                    CoverArtView(url: song.coverURL(200), size: 64, cornerRadius: 6)
+                } else {
+                    Text("\(index + 1)")
+                        .font(.title3.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .frame(width: 50, alignment: .trailing)
+                }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(song.title).lineLimit(1)
                     if let artist = song.artist {

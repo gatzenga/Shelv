@@ -47,9 +47,6 @@ struct InsightsView: View {
             .frame(maxWidth: 700)
             .padding(.top, 40)
             .padding(.bottom, 24)
-            .frame(maxWidth: .infinity)
-            .background(.regularMaterial)
-            .zIndex(1)
 
             if isLoading && topArtists.isEmpty {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -58,15 +55,15 @@ struct InsightsView: View {
                     switch segment {
                     case .artists:
                         ForEach(Array(topArtists.enumerated()), id: \.element.id) { i, e in
-                            row(rank: i + 1, coverArt: e.coverArt, isCircle: true,
-                                title: e.name, subtitle: nil, plays: e.totalPlayCount)
+                            row(rank: i + 1, url: e.coverArt.flatMap { api.coverArtURL(for: $0, size: 200) },
+                                isCircle: true, title: e.name, subtitle: nil, plays: e.totalPlayCount)
                         }
                     case .albums:
                         ForEach(Array(topAlbums.enumerated()), id: \.element.id) { i, e in
                             NavigationLink {
                                 AlbumDetailView(album: e.album)
                             } label: {
-                                row(rank: i + 1, coverArt: e.album.coverArt, isCircle: false,
+                                row(rank: i + 1, url: e.album.coverURL(200), isCircle: false,
                                     title: e.album.name, subtitle: e.album.artist, plays: e.playCount)
                             }
                         }
@@ -75,7 +72,7 @@ struct InsightsView: View {
                             Button {
                                 player.play(songs: topSongs, startIndex: i)
                             } label: {
-                                row(rank: i + 1, coverArt: song.coverArt, isCircle: false,
+                                row(rank: i + 1, url: song.coverURL(200), isCircle: false,
                                     title: song.title, subtitle: song.artist, plays: song.playCount ?? 0)
                             }
                         }
@@ -89,7 +86,7 @@ struct InsightsView: View {
     // MARK: - Row
 
     @ViewBuilder
-    private func row(rank: Int, coverArt: String?, isCircle: Bool, title: String, subtitle: String?, plays: Int) -> some View {
+    private func row(rank: Int, url: URL?, isCircle: Bool, title: String, subtitle: String?, plays: Int) -> some View {
         let isTop3 = rank <= 3
         HStack(spacing: 20) {
             Text("\(rank)")
@@ -97,7 +94,7 @@ struct InsightsView: View {
                 .foregroundStyle(isTop3 ? AnyShapeStyle(accent) : AnyShapeStyle(.secondary))
                 .monospacedDigit()
                 .frame(width: 52, alignment: .trailing)
-            CoverArtView(url: coverArt.flatMap { api.coverArtURL(for: $0, size: 200) }, size: 80,
+            CoverArtView(url: url, size: 80,
                          cornerRadius: isCircle ? 40 : 8, isCircle: isCircle)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(isTop3 ? .title3.bold() : .title3).lineLimit(1)
