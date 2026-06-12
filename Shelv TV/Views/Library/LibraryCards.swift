@@ -25,7 +25,8 @@ struct AlbumCard: View {
 }
 
 /// Künstler-Karte: rundes Bild + Name, keine Box. Eigener Fokus-Lift (Skalierung +
-/// Schatten), damit nichts Rechteckiges um das runde Bild erscheint.
+/// Schatten). Der Button-Frame reserviert den Lift-Raum, damit das Bild weder den
+/// Text überdeckt noch am Rand abgeschnitten wird.
 struct ArtistCard: View {
     let artist: Artist
     var size: CGFloat = 260
@@ -33,22 +34,23 @@ struct ArtistCard: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 18) {
             NavigationLink {
                 ArtistDetailView(artist: artist)
             } label: {
                 CoverArtView(url: artist.coverURL(500), size: size, isCircle: true)
-                    .scaleEffect(focused ? 1.08 : 1.0)
-                    .shadow(color: .black.opacity(focused ? 0.4 : 0), radius: 18, y: 8)
+                    .scaleEffect(focused ? 1.06 : 1.0)
+                    .shadow(color: .black.opacity(focused ? 0.45 : 0), radius: 20, y: 10)
                     .animation(.easeOut(duration: 0.18), value: focused)
             }
             .buttonStyle(.borderless)
             .focused($focused)
+            .frame(width: size * 1.1, height: size * 1.1)   // reservierter Lift-Raum
 
             Text(artist.name).lineLimit(1).font(.callout)
                 .foregroundStyle(focused ? .primary : .secondary)
         }
-        .frame(width: size)
+        .frame(width: size * 1.1)
     }
 }
 

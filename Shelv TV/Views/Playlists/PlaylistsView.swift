@@ -2,7 +2,7 @@ import SwiftUI
 
 struct PlaylistsView: View {
     @ObservedObject var store = LibraryStore.shared
-    private let columns = [GridItem(.adaptive(minimum: 280), spacing: 40)]
+    private let columns = [GridItem(.adaptive(minimum: 300), spacing: 60)]
 
     var body: some View {
         NavigationStack {
@@ -16,15 +16,15 @@ struct PlaylistsView: View {
                     )
                     .frame(maxWidth: .infinity, minHeight: 300)
                 } else {
-                    LazyVGrid(columns: columns, spacing: 40) {
+                    LazyVGrid(columns: columns, spacing: 60) {
                         ForEach(store.playlists) { playlist in
                             PlaylistCard(playlist: playlist)
                         }
                     }
                 }
             }
+            .scrollClipDisabled()
             .padding(50)
-            .navigationTitle(String(localized: "playlists"))
             .task { await store.loadPlaylists() }
         }
     }

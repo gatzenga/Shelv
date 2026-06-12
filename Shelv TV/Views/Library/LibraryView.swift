@@ -5,7 +5,7 @@ struct LibraryView: View {
     @AppStorage("enableFavorites") private var enableFavorites = true
 
     @State private var segment = 0   // 0 = Albums, 1 = Artists, 2 = Favorites
-    private let columns = [GridItem(.adaptive(minimum: 280), spacing: 40)]
+    private let columns = [GridItem(.adaptive(minimum: 300), spacing: 60)]
     private let player = AudioPlayerService.shared
 
     var body: some View {
@@ -29,9 +29,9 @@ struct LibraryView: View {
                         favorites
                     }
                 }
+                .scrollClipDisabled()
             }
             .padding(50)
-            .navigationTitle(String(localized: "library"))
             .task { await store.loadAlbums() }
             .task { await store.loadArtists() }
             .task(id: enableFavorites) { if enableFavorites { await store.loadStarred() } }
@@ -39,7 +39,7 @@ struct LibraryView: View {
     }
 
     private func grid<T: Identifiable, Card: View>(_ items: [T], @ViewBuilder card: @escaping (T) -> Card) -> some View {
-        LazyVGrid(columns: columns, spacing: 40) {
+        LazyVGrid(columns: columns, spacing: 60) {
             ForEach(items) { card($0) }
         }
     }

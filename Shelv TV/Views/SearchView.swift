@@ -30,7 +30,6 @@ struct SearchView: View {
                     }
                 }
             }
-            .navigationTitle(String(localized: "search"))
             .searchable(text: $query, placement: .automatic)
             .onChange(of: query) { _, q in
                 searchTask?.cancel()
@@ -46,9 +45,10 @@ struct SearchView: View {
 
     private func cardRow<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            LazyHStack(spacing: 30) { content() }
-                .padding(.vertical, 8)
+            LazyHStack(spacing: 40) { content() }
+                .padding(.vertical, 20)
         }
+        .scrollClipDisabled()
         .listRowBackground(Color.clear)
     }
 }
