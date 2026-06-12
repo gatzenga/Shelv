@@ -7,7 +7,7 @@ struct MainTabView: View {
 
     var body: some View {
         TabView {
-            Placeholder("Now Playing")
+            NowPlayingView()
                 .tabItem { Label(String(localized: "now_playing"), systemImage: "play.circle") }
 
             Placeholder("Discover")

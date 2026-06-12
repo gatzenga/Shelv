@@ -386,3 +386,5 @@
 "server_url" = "Server-URL";
 "connect" = "Verbinden";
 "try_demo" = "Demo ausprobieren";
+
+"nothing_playing" = "Keine Wiedergabe";

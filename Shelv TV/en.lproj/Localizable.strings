@@ -385,3 +385,5 @@
 "server_url" = "Server URL";
 "connect" = "Connect";
 "try_demo" = "Try the demo";
+
+"nothing_playing" = "Nothing playing";

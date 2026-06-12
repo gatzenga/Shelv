@@ -384,3 +384,5 @@
 "server_url" = "服务器地址";
 "connect" = "连接";
 "try_demo" = "试用演示";
+
+"nothing_playing" = "没有播放";
