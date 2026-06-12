@@ -21,7 +21,7 @@ struct MainTabView: View {
                     .tabItem { Label(String(localized: "playlists"), systemImage: "music.note.list") }
             }
 
-            Placeholder("Search")
+            SearchView()
                 .tabItem { Label(String(localized: "search"), systemImage: "magnifyingglass") }
 
             Placeholder("Settings")
