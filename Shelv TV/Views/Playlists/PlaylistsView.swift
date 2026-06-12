@@ -76,6 +76,7 @@ struct PlaylistDetailView: View {
                 CoverArtView(url: playlist.coverURL(600), size: 380, cornerRadius: 12)
                 VStack(alignment: .leading, spacing: 6) {
                     Text(playlist.name).font(.title2).bold().lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                     if let count = playlist.songCount {
                         Text("\(count) \(String(localized: "songs"))")
                             .font(.body).foregroundStyle(.secondary)

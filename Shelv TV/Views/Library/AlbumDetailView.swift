@@ -18,6 +18,7 @@ struct AlbumDetailView: View {
                 CoverArtView(url: album.coverURL(600), size: 380, cornerRadius: 12)
                 VStack(alignment: .leading, spacing: 6) {
                     Text(album.name).font(.title2).bold().lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                     if let artist = album.artist {
                         Text(artist).font(.body).foregroundStyle(.secondary).lineLimit(1)
                     }

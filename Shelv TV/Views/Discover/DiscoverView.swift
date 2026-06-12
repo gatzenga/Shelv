@@ -25,6 +25,7 @@ struct DiscoverView: View {
                         }
                         .buttonStyle(.bordered)
                     }
+                    .padding(.horizontal, 50)
 
                     // Smart-Mixe als saubere Akzent-Liste über die volle Breite (wie iOS/Mac)
                     VStack(spacing: 16) {
@@ -33,14 +34,14 @@ struct DiscoverView: View {
                         MixPill(title: String(localized: "mix_recently_played"), icon: "clock.fill", accent: accent) { await play(.recent) }
                         MixPill(title: String(localized: "mix_shuffle_all"), icon: "shuffle", accent: accent) { await play(.random) }
                     }
+                    .padding(.horizontal, 50)
 
                     albumRow(String(localized: "recently_added"), newest)
                     albumRow(String(localized: "recently_played"), recent)
                     albumRow(String(localized: "frequently_played"), frequent)
                 }
-                .padding(50)
+                .padding(.vertical, 50)
             }
-            .scrollClipDisabled()
             .task { await load() }
         }
     }
@@ -92,18 +93,21 @@ struct DiscoverView: View {
 
     // MARK: - UI
 
+    /// Album-Karussell: scrollt über die volle Bildschirmbreite (edge-to-edge),
+    /// der Inhalt startet aber bündig mit Titel/Pillen (50er-Padding im Inneren).
     @ViewBuilder
     private func albumRow(_ title: String, _ albums: [Album]) -> some View {
         if !albums.isEmpty {
             VStack(alignment: .leading, spacing: 16) {
                 Text(title).font(.title2).bold()
+                    .padding(.horizontal, 50)
                 ScrollView(.horizontal, showsIndicators: false) {
                     LazyHStack(spacing: 40) {
                         ForEach(albums) { AlbumCard(album: $0, size: 240) }
                     }
+                    .padding(.horizontal, 50)
                     .padding(.vertical, 20)
                 }
-                .scrollClipDisabled()
             }
         }
     }

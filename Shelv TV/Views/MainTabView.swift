@@ -1,46 +1,53 @@
 import SwiftUI
 
-/// Tab-Gerüst der tvOS-App: Now Playing · Discover · Library · Playlists · Suche · Settings.
+/// Tab-Gerüst der tvOS-App: Now Playing · Discover · Library · Playlists · Recap · Suche · Settings.
+/// Nutzt die neue `Tab`-API (tvOS 18+) mit value-basierter Selection — die Legacy-
+/// tabItem-API hatte auf tvOS kaputtes Menü-/Fokus-Verhalten (Tab-Bar unerreichbar,
+/// leerer Tab nach Feature-Toggle).
 struct MainTabView: View {
     @AppStorage("enablePlaylists") private var enablePlaylists = true
     @AppStorage("recapEnabled") private var recapEnabled = false
-    // Stabile Tags: Ein- oder Ausblenden eines Tabs verschiebt sonst die Indizes
-    // und die Auswahl springt ins Leere.
     @State private var selection = "discover"
 
     var body: some View {
         TabView(selection: $selection) {
-            NowPlayingView()
-                .tag("nowplaying")
-                .tabItem { Label(String(localized: "now_playing"), systemImage: "play.circle") }
+            Tab(String(localized: "now_playing"), systemImage: "play.circle", value: "nowplaying") {
+                NowPlayingView()
+            }
 
-            DiscoverView()
-                .tag("discover")
-                .tabItem { Label(String(localized: "discover"), systemImage: "sparkles") }
+            Tab(String(localized: "discover"), systemImage: "sparkles", value: "discover") {
+                DiscoverView()
+            }
 
-            LibraryView()
-                .tag("library")
-                .tabItem { Label(String(localized: "library"), systemImage: "square.stack") }
+            Tab(String(localized: "library"), systemImage: "square.stack", value: "library") {
+                LibraryView()
+            }
 
             if enablePlaylists {
-                PlaylistsView()
-                    .tag("playlists")
-                    .tabItem { Label(String(localized: "playlists"), systemImage: "music.note.list") }
+                Tab(String(localized: "playlists"), systemImage: "music.note.list", value: "playlists") {
+                    PlaylistsView()
+                }
             }
 
             if recapEnabled {
-                RecapView()
-                    .tag("recap")
-                    .tabItem { Label(String(localized: "recaps"), systemImage: "sparkles.rectangle.stack") }
+                Tab(String(localized: "recaps"), systemImage: "sparkles.rectangle.stack", value: "recap") {
+                    RecapView()
+                }
             }
 
-            SearchView()
-                .tag("search")
-                .tabItem { Label(String(localized: "search"), systemImage: "magnifyingglass") }
+            Tab(String(localized: "search"), systemImage: "magnifyingglass", value: "search") {
+                SearchView()
+            }
 
-            SettingsView()
-                .tag("settings")
-                .tabItem { Label(String(localized: "settings"), systemImage: "gearshape") }
+            Tab(String(localized: "settings"), systemImage: "gearshape", value: "settings") {
+                SettingsView()
+            }
+        }
+        .onChange(of: enablePlaylists) { _, on in
+            if !on && selection == "playlists" { selection = "settings" }
+        }
+        .onChange(of: recapEnabled) { _, on in
+            if !on && selection == "recap" { selection = "settings" }
         }
     }
 }
