@@ -5,11 +5,33 @@ struct PlaybackSettingsView: View {
     @AppStorage("replayGainEnabled") private var replayGainEnabled = false
     @AppStorage("replayGainMode") private var replayGainMode = "track"
     @AppStorage("recapThreshold") private var recapThreshold = 30
+    // Apple TV kennt kein Mobilfunk → ein einziges (WLAN/Ethernet-)Profil reicht.
+    @AppStorage("transcodingEnabled") private var transcodingEnabled = false
+    @AppStorage("transcodingWifiCodec") private var streamCodec = "raw"
+    @AppStorage("transcodingWifiBitrate") private var streamBitrate = 256
 
     var body: some View {
         Form {
             Section(String(localized: "gapless")) {
                 Toggle(String(localized: "gapless"), isOn: $gaplessEnabled)
+            }
+
+            Section(String(localized: "transcoding")) {
+                Toggle(String(localized: "transcoding"), isOn: $transcodingEnabled)
+                if transcodingEnabled {
+                    Picker(String(localized: "format"), selection: $streamCodec) {
+                        ForEach(TranscodingCodec.streamingOptions) { codec in
+                            Text(codec.label).tag(codec.rawValue)
+                        }
+                    }
+                    if streamCodec != "raw" {
+                        Picker(String(localized: "bitrate"), selection: $streamBitrate) {
+                            ForEach(TranscodingBitrate.allCases) { rate in
+                                Text(rate.label).tag(rate.rawValue)
+                            }
+                        }
+                    }
+                }
             }
 
             Section(String(localized: "replay_gain")) {
