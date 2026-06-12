@@ -35,8 +35,8 @@ struct LyricsView: View {
                 }
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 60)
-            .padding(.horizontal, 120)
+            .padding(.vertical, 30)
+            .padding(.horizontal, 40)
         }
         .task(id: player.currentSong?.id) { await load() }
     }
