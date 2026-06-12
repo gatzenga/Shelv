@@ -2,9 +2,8 @@ import SwiftUI
 
 let appLang: String = Locale.preferredLanguages.first?.hasPrefix("de") == true ? "de" : "en"
 
-extension Notification.Name {
-    nonisolated static let recapRegistryUpdated = Notification.Name("shelv.recapRegistryUpdated")
-}
+// .recapRegistryUpdated ist nach ShelvCore (DownloadService.swift) gewandert —
+// der Name wird von allen drei Plattformen gebraucht.
 
 final class BackgroundDownloadHandler {
     static let shared = BackgroundDownloadHandler()

@@ -5,7 +5,7 @@ let appLang: String = Locale.preferredLanguages.first?.hasPrefix("de") == true ?
 extension Notification.Name {
     static let addSongsToPlaylist = Notification.Name("shelv.addSongsToPlaylist")
     static let showToast = Notification.Name("shelv.showToast")
-    static let recapRegistryUpdated = Notification.Name("shelv.recapRegistryUpdated")
+    // .recapRegistryUpdated liegt jetzt geteilt in ShelvCore (DownloadService.swift).
 }
 
 @main

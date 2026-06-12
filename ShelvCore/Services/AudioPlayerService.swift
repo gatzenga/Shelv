@@ -1,10 +1,10 @@
 import AVFoundation
 import MediaPlayer
 import Combine
-#if os(iOS)
-import UIKit
+#if canImport(UIKit)
+import UIKit      // iOS + tvOS
 #else
-import AppKit
+import AppKit     // macOS
 #endif
 import SwiftUI
 import Network
@@ -159,23 +159,23 @@ class AudioPlayerService: ObservableObject {
 
     private init() {
         _ = NetworkStatus.shared
-        #if os(iOS)
+        #if os(iOS) || os(tvOS)
         setupAudioSession()
         #endif
         setupEngine()
         setupRemoteControls()
-        #if os(iOS)
+        #if os(iOS) || os(tvOS)
         setupInterruptionObserver()
         #endif
         setupNetworkMonitor()
-        #if os(iOS)
+        #if os(iOS) || os(tvOS)
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(appDidEnterBackground),
             name: UIApplication.didEnterBackgroundNotification,
             object: nil
         )
-        #else
+        #elseif os(macOS)
         willTerminateObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification,
             object: nil,
@@ -304,7 +304,7 @@ class AudioPlayerService: ObservableObject {
         if let song = currentSong { updateNowPlayingInfo(song: song) }
     }
 
-    #if os(iOS)
+    #if os(iOS) || os(tvOS)
     private func setupAudioSession() {
         do {
             try AVAudioSession.sharedInstance().setCategory(
@@ -572,9 +572,10 @@ class AudioPlayerService: ObservableObject {
                 if OfflineModeService.shared.isOffline {
                     #if os(iOS)
                     NotificationCenter.default.post(name: .offlinePlaybackBlocked, object: nil)
-                    #else
+                    #elseif os(macOS)
                     NotificationCenter.default.post(name: .showToast, object: String(localized: "not_available_offline"))
                     #endif
+                    // tvOS: kein Offline-Modus (keine Downloads) — Pfad unerreichbar.
                 }
                 return
             }
@@ -1371,13 +1372,28 @@ class AudioPlayerService: ObservableObject {
                     MPNowPlayingInfoCenter.default().nowPlayingInfo = updated
                 }
             }
-            #else
+            #elseif os(macOS)
             // macOS: schlanker NSImage-Load wie in der bisherigen Desktop-App.
             artworkTask = Task.detached(priority: .utility) { [weak self] in
                 guard let (data, _) = try? await URLSession.shared.data(from: artURL),
                       !Task.isCancelled,
                       let nsImage = NSImage(data: data) else { return }
                 let artwork = MPMediaItemArtwork(boundsSize: CGSize(width: 600, height: 600)) { _ in nsImage }
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    self.currentArtwork = artwork
+                    var updated = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
+                    updated[MPMediaItemPropertyArtwork] = artwork
+                    MPNowPlayingInfoCenter.default().nowPlayingInfo = updated
+                }
+            }
+            #else
+            // tvOS: schlanker UIImage-Load (kein plattformeigener Bild-Cache wie iOS/macOS).
+            artworkTask = Task.detached(priority: .utility) { [weak self] in
+                guard let (data, _) = try? await URLSession.shared.data(from: artURL),
+                      !Task.isCancelled,
+                      let uiImage = UIImage(data: data) else { return }
+                let artwork = MPMediaItemArtwork(boundsSize: CGSize(width: 600, height: 600)) { _ in uiImage }
                 await MainActor.run { [weak self] in
                     guard let self else { return }
                     self.currentArtwork = artwork

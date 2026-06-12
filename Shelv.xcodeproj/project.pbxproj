@@ -8,15 +8,22 @@
 
 /* Begin PBXBuildFile section */
 		BC1867E52F91A088006D96E2 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC1867E42F91A088006D96E2 /* GRDB */; };
+		BC51161D2FDC8A850011CDE9 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC51161C2FDC8A850011CDE9 /* GRDB */; };
 		BC7B84A72FDB17F90058CB78 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC7B84A62FDB17F90058CB78 /* GRDB */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		BC5116112FDC8A690011CDE9 /* Shelv TV.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Shelv TV.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC7B83F52FDB17700058CB78 /* Shelv.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Shelv.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC9C59382F8E9FB000FF4D25 /* Shelv.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Shelv.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		BC5116122FDC8A690011CDE9 /* Shelv TV */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "Shelv TV";
+			sourceTree = "<group>";
+		};
 		BC7B83F62FDB17700058CB78 /* Shelv Mac */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = "Shelv Mac";
@@ -35,6 +42,14 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		BC51160E2FDC8A690011CDE9 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BC51161D2FDC8A850011CDE9 /* GRDB in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		BC7B83F22FDB17700058CB78 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -67,6 +82,7 @@
 				BC9C593A2F8E9FB000FF4D25 /* Shelv */,
 				BC7B83F62FDB17700058CB78 /* Shelv Mac */,
 				BCC0DE0000000000000000C0 /* ShelvCore */,
+				BC5116122FDC8A690011CDE9 /* Shelv TV */,
 				BC7B84A52FDB17F90058CB78 /* Frameworks */,
 				BC9C59392F8E9FB000FF4D25 /* Products */,
 			);
@@ -77,6 +93,7 @@
 			children = (
 				BC9C59382F8E9FB000FF4D25 /* Shelv.app */,
 				BC7B83F52FDB17700058CB78 /* Shelv.app */,
+				BC5116112FDC8A690011CDE9 /* Shelv TV.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -84,6 +101,30 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		BC5116102FDC8A690011CDE9 /* Shelv TV */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BC51161B2FDC8A6A0011CDE9 /* Build configuration list for PBXNativeTarget "Shelv TV" */;
+			buildPhases = (
+				BC51160D2FDC8A690011CDE9 /* Sources */,
+				BC51160E2FDC8A690011CDE9 /* Frameworks */,
+				BC51160F2FDC8A690011CDE9 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				BC5116122FDC8A690011CDE9 /* Shelv TV */,
+				BCC0DE0000000000000000C0 /* ShelvCore */,
+			);
+			name = "Shelv TV";
+			packageProductDependencies = (
+				BC51161C2FDC8A850011CDE9 /* GRDB */,
+			);
+			productName = "Shelv TV";
+			productReference = BC5116112FDC8A690011CDE9 /* Shelv TV.app */;
+			productType = "com.apple.product-type.application";
+		};
 		BC7B83F42FDB17700058CB78 /* Shelv Mac */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = BC7B83FF2FDB17700058CB78 /* Build configuration list for PBXNativeTarget "Shelv Mac" */;
@@ -142,6 +183,9 @@
 				LastSwiftUpdateCheck = 2650;
 				LastUpgradeCheck = 2640;
 				TargetAttributes = {
+					BC5116102FDC8A690011CDE9 = {
+						CreatedOnToolsVersion = 26.5;
+					};
 					BC7B83F42FDB17700058CB78 = {
 						CreatedOnToolsVersion = 26.5;
 					};
@@ -171,11 +215,19 @@
 			targets = (
 				BC9C59372F8E9FB000FF4D25 /* Shelv */,
 				BC7B83F42FDB17700058CB78 /* Shelv Mac */,
+				BC5116102FDC8A690011CDE9 /* Shelv TV */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		BC51160F2FDC8A690011CDE9 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		BC7B83F32FDB17700058CB78 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -193,6 +245,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		BC51160D2FDC8A690011CDE9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		BC7B83F12FDB17700058CB78 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -210,6 +269,71 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
+		BC5116192FDC8A6A0011CDE9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "App Icon & Top Shelf Image";
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 7CZP946PWR;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Shelv;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UIUserInterfaceStyle = Automatic;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ch.vkugler.Shelv;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = 26.5;
+			};
+			name = Debug;
+		};
+		BC51161A2FDC8A6A0011CDE9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = "App Icon & Top Shelf Image";
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 7CZP946PWR;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Shelv;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UIUserInterfaceStyle = Automatic;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ch.vkugler.Shelv;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = 26.5;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 		BC7B83FD2FDB17700058CB78 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -523,6 +647,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		BC51161B2FDC8A6A0011CDE9 /* Build configuration list for PBXNativeTarget "Shelv TV" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BC5116192FDC8A6A0011CDE9 /* Debug */,
+				BC51161A2FDC8A6A0011CDE9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		BC7B83FF2FDB17700058CB78 /* Build configuration list for PBXNativeTarget "Shelv Mac" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -565,6 +698,11 @@
 
 /* Begin XCSwiftPackageProductDependency section */
 		BC1867E42F91A088006D96E2 /* GRDB */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BC1867E32F91A088006D96E2 /* XCRemoteSwiftPackageReference "GRDB" */;
+			productName = GRDB;
+		};
+		BC51161C2FDC8A850011CDE9 /* GRDB */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = BC1867E32F91A088006D96E2 /* XCRemoteSwiftPackageReference "GRDB" */;
 			productName = GRDB;

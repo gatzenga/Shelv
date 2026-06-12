@@ -8,6 +8,8 @@ extension Notification.Name {
     nonisolated static let downloadsLibraryChanged = Notification.Name("shelv.downloadsLibraryChanged")
     nonisolated static let libraryArtistsLoaded = Notification.Name("shelv.libraryArtistsLoaded")
     nonisolated static let artworkIndexReady = Notification.Name("shelv.artworkIndexReady")
+    // Geteilt statt pro Plattform definiert (tvOS braucht den Namen ebenfalls).
+    nonisolated static let recapRegistryUpdated = Notification.Name("shelv.recapRegistryUpdated")
 }
 
 // MARK: - DownloadJob
@@ -157,8 +159,10 @@ actor DownloadService {
         let artistCoverById: [String: String] = await MainActor.run {
             #if os(macOS)
             let artists = LibraryViewModel.shared.artists
-            #else
+            #elseif os(iOS)
             let artists = LibraryStore.shared.artists
+            #else
+            let artists: [Artist] = []   // tvOS: keine Downloads, kein Library-Store-Zugriff
             #endif
             return Dictionary(artists.compactMap { a in
                 a.coverArt.map { (a.name, $0) }
