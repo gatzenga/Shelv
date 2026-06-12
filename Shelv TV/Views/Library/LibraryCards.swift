@@ -1,29 +1,19 @@
 import SwiftUI
 
-/// Dezenter, einheitlicher Fokus-Zoom für alle Cover-Karten — bewusst klein (1.05),
-/// damit der gehobene Inhalt den darunterliegenden Titel nicht überdeckt.
-private let coverFocusScale: CGFloat = 1.05
-
-/// Album-Karte: nur das Cover ist fokussierbar, Titel/Künstler stehen darunter —
-/// keine umschließende Box.
+/// Album-Karte: das Cover hebt sich beim Fokus als Ganzes (nativer `.card`-Lift),
+/// Titel/Künstler stehen mit genug Abstand darunter — keine umschließende Box.
 struct AlbumCard: View {
     let album: Album
-    var size: CGFloat = 270
-
-    @FocusState private var focused: Bool
+    var size: CGFloat = 240
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 20) {
             NavigationLink {
                 AlbumDetailView(album: album)
             } label: {
                 CoverArtView(url: album.coverURL(500), size: size, cornerRadius: 8)
-                    .scaleEffect(focused ? coverFocusScale : 1.0)
-                    .shadow(color: .black.opacity(focused ? 0.4 : 0), radius: 18, y: 10)
-                    .animation(.easeOut(duration: 0.18), value: focused)
             }
-            .buttonStyle(.borderless)
-            .focused($focused)
+            .buttonStyle(.card)
 
             Text(album.name).lineLimit(1).font(.callout)
             if let artist = album.artist {
@@ -34,21 +24,22 @@ struct AlbumCard: View {
     }
 }
 
-/// Künstler-Karte: rundes Bild + Name, keine Box. Gleicher dezenter Fokus-Zoom.
+/// Künstler-Karte: rundes Bild + Name. Das runde Bild zoomt als Ganzes beim Fokus
+/// (deutlich, mit Schatten) — ein `.card`-Rechteck würde hier eine Box um den Kreis legen.
 struct ArtistCard: View {
     let artist: Artist
-    var size: CGFloat = 270
+    var size: CGFloat = 240
 
     @FocusState private var focused: Bool
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 20) {
             NavigationLink {
                 ArtistDetailView(artist: artist)
             } label: {
                 CoverArtView(url: artist.coverURL(500), size: size, isCircle: true)
-                    .scaleEffect(focused ? coverFocusScale : 1.0)
-                    .shadow(color: .black.opacity(focused ? 0.4 : 0), radius: 18, y: 10)
+                    .scaleEffect(focused ? 1.12 : 1.0)
+                    .shadow(color: .black.opacity(focused ? 0.5 : 0), radius: 24, y: 12)
                     .animation(.easeOut(duration: 0.18), value: focused)
             }
             .buttonStyle(.borderless)

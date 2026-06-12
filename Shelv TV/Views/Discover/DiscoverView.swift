@@ -17,23 +17,22 @@ struct DiscoverView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 40) {
-                    // Insights als kleiner Button in der Ecke
+                    // Insights als sauberer Button in der Ecke (mit Hintergrund, nicht nacktes Icon)
                     HStack {
                         Spacer()
                         NavigationLink { InsightsView() } label: {
-                            Image(systemName: "chart.bar.xaxis").font(.title2)
+                            Label(String(localized: "insights"), systemImage: "chart.bar.xaxis")
                         }
-                        .buttonStyle(.borderless)
+                        .buttonStyle(.bordered)
                     }
 
-                    // Smart-Mixe als Akzent-Pillen (wie iOS/Mac)
+                    // Smart-Mixe als saubere Akzent-Liste über die volle Breite (wie iOS/Mac)
                     VStack(spacing: 16) {
                         MixPill(title: String(localized: "mix_newest_tracks"), icon: "sparkles", accent: accent) { await play(.newest) }
                         MixPill(title: String(localized: "mix_frequently_played"), icon: "chart.bar.fill", accent: accent) { await play(.frequent) }
                         MixPill(title: String(localized: "mix_recently_played"), icon: "clock.fill", accent: accent) { await play(.recent) }
                         MixPill(title: String(localized: "mix_shuffle_all"), icon: "shuffle", accent: accent) { await play(.random) }
                     }
-                    .frame(maxWidth: 820)
 
                     albumRow(String(localized: "recently_added"), newest)
                     albumRow(String(localized: "recently_played"), recent)

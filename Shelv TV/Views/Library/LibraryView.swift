@@ -5,7 +5,8 @@ struct LibraryView: View {
     @AppStorage("enableFavorites") private var enableFavorites = true
 
     @State private var segment = 0   // 0 = Albums, 1 = Artists, 2 = Favorites
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 40), count: 6)
+    // Feste 240er-Cover (wie Discover) mit verteiltem Abstand — nicht aneinandergepappt.
+    private let columns = [GridItem(.adaptive(minimum: 240, maximum: 240), spacing: 50)]
     private let player = AudioPlayerService.shared
 
     var body: some View {
@@ -48,7 +49,7 @@ struct LibraryView: View {
     }
 
     private func grid<T: Identifiable, Card: View>(_ items: [T], @ViewBuilder card: @escaping (T) -> Card) -> some View {
-        LazyVGrid(columns: columns, spacing: 40) {
+        LazyVGrid(columns: columns, spacing: 50) {
             ForEach(items) { card($0) }
         }
     }
