@@ -6,6 +6,7 @@ struct PlaylistDetailView: View {
     @EnvironmentObject var appState: AppState
     @ObservedObject var downloadStore = DownloadStore.shared
     @ObservedObject var offlineMode = OfflineModeService.shared
+    @ObservedObject var pinStore = PinnedPlaylistStore.shared
     @AppStorage("enableFavorites") private var enableFavorites = true
     @AppStorage("enablePlaylists") private var enablePlaylists = true
     @AppStorage("enableDownloads") private var enableDownloads = false
@@ -216,6 +217,17 @@ struct PlaylistDetailView: View {
 
     @ToolbarContentBuilder
     private func toolbarContent() -> some ToolbarContent {
+        ToolbarItem(placement: .primaryAction) {
+            Button {
+                pinStore.togglePin(playlist.id)
+            } label: {
+                Label(
+                    pinStore.isPinned(playlist.id) ? String(localized: "unpin") : String(localized: "pin"),
+                    systemImage: pinStore.isPinned(playlist.id) ? "pin.slash" : "pin"
+                )
+            }
+            .help(pinStore.isPinned(playlist.id) ? String(localized: "unpin") : String(localized: "pin"))
+        }
         ToolbarItem(placement: .primaryAction) {
             Button {
                 if isEditMode {

@@ -5,6 +5,7 @@ struct PlaylistsView: View {
     @EnvironmentObject var recapStore: RecapStore
     @ObservedObject var downloadStore = DownloadStore.shared
     @ObservedObject var offlineMode = OfflineModeService.shared
+    @ObservedObject var pinStore = PinnedPlaylistStore.shared
     private let player = AudioPlayerService.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage("enableDownloads") private var enableDownloads = false
@@ -24,6 +25,15 @@ struct PlaylistsView: View {
     }
 
     private func sortedPlaylists(_ playlists: [Playlist]) -> [Playlist] {
+        let sorted = applySortOption(playlists)
+        // Angepinnte oben, zuletzt angepinnt zuoberst (pinRank 0). Rest behält Sortierung.
+        let pinned = sorted.filter { pinStore.isPinned($0.id) }
+            .sorted { (pinStore.pinRank($0.id) ?? 0) < (pinStore.pinRank($1.id) ?? 0) }
+        let rest = sorted.filter { !pinStore.isPinned($0.id) }
+        return pinned + rest
+    }
+
+    private func applySortOption(_ playlists: [Playlist]) -> [Playlist] {
         switch sortOption {
         case .alphabetical:
             // Fix A–Z, kein Richtungs-Toggle (analog Alben).
@@ -106,6 +116,13 @@ struct PlaylistsView: View {
                                     }
                                 }
                                 .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                                    Button {
+                                        haptic()
+                                        pinStore.togglePin(playlist.id)
+                                    } label: {
+                                        Image(systemName: pinStore.isPinned(playlist.id) ? "pin.slash.fill" : "pin.fill")
+                                    }
+                                    .tint(accentColor)
                                     if !offlineMode.isOffline {
                                         Button {
                                             playlistToDelete = playlist
@@ -127,6 +144,9 @@ struct PlaylistsView: View {
                     }
                     .listStyle(.plain)
                     .scrollIndicators(.hidden)
+                    // Deklaratives Move statt Fade: animiert das Diff sobald sich die
+                    // Reihenfolge (ID-Sequenz) ändert — z.B. beim An-/Abpinnen.
+                    .animation(.snappy, value: visiblePlaylists.map(\.id))
                 }
             }
             .navigationTitle(String(localized: "playlists"))
@@ -384,6 +404,11 @@ struct PlaylistsView: View {
                 }
             }
             Spacer()
+            if pinStore.isPinned(playlist.id) {
+                Image(systemName: "pin.fill")
+                    .font(.caption)
+                    .foregroundStyle(accentColor)
+            }
             PlaylistDownloadBadge(playlistId: playlist.id)
         }
         .padding(.vertical, 4)

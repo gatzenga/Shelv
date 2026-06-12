@@ -184,6 +184,8 @@
 "delete_playlist" = "Playlist löschen?";
 "this_action_cannot_be_undone" = "Diese Aktion kann nicht rückgängig gemacht werden.";
 "edit" = "Bearbeiten";
+"pin" = "Anpinnen";
+"unpin" = "Lösen";
 "finish_editing" = "Bearbeiten beenden";
 "edit_playlist" = "Playlist bearbeiten";
 "delete_playlist_2" = "Playlist löschen";
