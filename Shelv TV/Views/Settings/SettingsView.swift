@@ -3,6 +3,8 @@ import SwiftUI
 struct SettingsView: View {
     @AppStorage("appAppearance") private var appAppearance = "system"
     @AppStorage("themeColor") private var themeColor = "violet"
+    @AppStorage("enablePlaylists") private var enablePlaylists = true
+    @AppStorage("enableFavorites") private var enableFavorites = true
 
     private var isGerman: Bool { Locale.preferredLanguages.first?.hasPrefix("de") == true }
 
@@ -20,6 +22,11 @@ struct SettingsView: View {
                             Text(isGerman ? opt.nameDE : opt.nameEN).tag(opt.name)
                         }
                     }
+                }
+
+                Section(String(localized: "library")) {
+                    Toggle(String(localized: "playlists"), isOn: $enablePlaylists)
+                    Toggle(String(localized: "favorites"), isOn: $enableFavorites)
                 }
             }
             .navigationTitle(String(localized: "settings"))
