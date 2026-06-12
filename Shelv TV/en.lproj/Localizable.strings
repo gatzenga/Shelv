@@ -397,3 +397,5 @@
 "cover_cache" = "Cover Cache";
 "size" = "Size";
 "no_entries" = "No entries";
+
+"queue_empty" = "Queue is empty";

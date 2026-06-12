@@ -398,3 +398,5 @@
 "cover_cache" = "Cover-Cache";
 "size" = "Größe";
 "no_entries" = "Keine Einträge";
+
+"queue_empty" = "Warteschlange ist leer";

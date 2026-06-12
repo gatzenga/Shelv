@@ -6,6 +6,7 @@ struct NowPlayingView: View {
     @State private var displayTime: Double = 0
     @State private var displayDuration: Double = 0
     @State private var showLyrics = false
+    @State private var showQueue = false
 
     var body: some View {
         NavigationStack {
@@ -55,8 +56,13 @@ struct NowPlayingView: View {
                     }
                     .font(.title3)
 
-                    Button { showLyrics = true } label: {
-                        Label(String(localized: "lyrics"), systemImage: "text.quote")
+                    HStack(spacing: 30) {
+                        Button { showLyrics = true } label: {
+                            Label(String(localized: "lyrics"), systemImage: "text.quote")
+                        }
+                        Button { showQueue = true } label: {
+                            Label(String(localized: "queue"), systemImage: "list.bullet")
+                        }
                     }
                 }
                 .padding(50)
@@ -66,6 +72,9 @@ struct NowPlayingView: View {
                 }
                 .fullScreenCover(isPresented: $showLyrics) {
                     LyricsView()
+                }
+                .fullScreenCover(isPresented: $showQueue) {
+                    NavigationStack { QueueView() }
                 }
             } else {
                 ContentUnavailableView(

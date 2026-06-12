@@ -396,3 +396,5 @@
 "cover_cache" = "封面缓存";
 "size" = "大小";
 "no_entries" = "无条目";
+
+"queue_empty" = "队列为空";
