@@ -6,6 +6,7 @@ struct SidebarView: View {
     @ObservedObject var offlineMode = OfflineModeService.shared
     @StateObject private var recapStore = RecapStore.shared
     @ObservedObject private var downloadStore = DownloadStore.shared
+    @ObservedObject private var pinStore = PinnedPlaylistStore.shared
     @Binding var selection: SidebarItem?
     @Binding var selectedPlaylist: Playlist?
     @Environment(\.themeColor) private var themeColor
@@ -34,6 +35,15 @@ struct SidebarView: View {
     }
 
     private func sortedPlaylists(_ playlists: [Playlist]) -> [Playlist] {
+        let sorted = applySortOption(playlists)
+        // Angepinnte oben, zuletzt angepinnt zuoberst (pinRank 0). Rest behält Sortierung.
+        let pinned = sorted.filter { pinStore.isPinned($0.id) }
+            .sorted { (pinStore.pinRank($0.id) ?? 0) < (pinStore.pinRank($1.id) ?? 0) }
+        let rest = sorted.filter { !pinStore.isPinned($0.id) }
+        return pinned + rest
+    }
+
+    private func applySortOption(_ playlists: [Playlist]) -> [Playlist] {
         switch sortOption {
         case .alphabetical:
             // Fix A–Z, kein Richtungs-Toggle (analog Alben).
@@ -117,7 +127,8 @@ struct SidebarView: View {
                         PlaylistSidebarRow(
                             playlist: playlist,
                             isSelected: selectedPlaylist?.id == playlist.id,
-                            themeColor: themeColor
+                            themeColor: themeColor,
+                            isPinned: pinStore.isPinned(playlist.id)
                         ) {
                             selectedPlaylist = playlist
                             selection = nil
@@ -304,17 +315,25 @@ struct PlaylistSidebarRow: View {
     let playlist: Playlist
     let isSelected: Bool
     let themeColor: Color
+    var isPinned: Bool = false
     let action: () -> Void
 
     @State private var isHovered = false
 
     var body: some View {
         Button(action: action) {
-            Label(playlist.name, systemImage: "music.note.list")
-                .font(.body)
-                .fontWeight(isSelected ? .semibold : .regular)
-                .foregroundStyle(isSelected ? themeColor : .primary)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 6) {
+                Label(playlist.name, systemImage: "music.note.list")
+                    .font(.body)
+                    .fontWeight(isSelected ? .semibold : .regular)
+                    .foregroundStyle(isSelected ? themeColor : .primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if isPinned {
+                    Image(systemName: "pin.fill")
+                        .font(.caption2)
+                        .foregroundStyle(themeColor)
+                }
+            }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 7)
                 .background {

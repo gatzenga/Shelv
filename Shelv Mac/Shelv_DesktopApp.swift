@@ -91,6 +91,7 @@ struct Shelv_DesktopApp: App {
                     guard let server = appState.serverStore.activeServer else { return }
                     await RecapStore.shared.setup(serverId: server.stableId)
                     await DownloadStore.shared.setActiveServer(server.stableId)
+                    PinnedPlaylistStore.shared.setActiveServer(server.stableId)
                 }
                 .onChange(of: scenePhase) { _, phase in
                     guard phase == .active else { return }

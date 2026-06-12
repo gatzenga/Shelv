@@ -96,6 +96,7 @@ struct ShelvApp: App {
                     // in DownloadStore befüllt, bevor reload() DownloadedArtist-Objekte baut.
                     await LibraryStore.shared.loadArtists()
                     await DownloadStore.shared.setActiveServer(server.stableId)
+                    PinnedPlaylistStore.shared.setActiveServer(server.stableId)
                     await LibraryStore.shared.loadStarred()
                 }
                 .task {

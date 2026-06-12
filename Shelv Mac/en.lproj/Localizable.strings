@@ -184,6 +184,8 @@
 "delete_playlist" = "Delete Playlist?";
 "this_action_cannot_be_undone" = "This action cannot be undone.";
 "edit" = "Edit";
+"pin" = "Pin";
+"unpin" = "Unpin";
 "finish_editing" = "Finish Editing";
 "edit_playlist" = "Edit Playlist";
 "delete_playlist_2" = "Delete Playlist";
