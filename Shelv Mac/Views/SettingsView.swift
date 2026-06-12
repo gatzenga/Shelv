@@ -627,6 +627,8 @@ struct RecapTab: View {
         case .month: recapMonthlyRetention = value
         case .year:  recapYearlyRetention = value
         }
+        // Geteilte Wahrheit: Änderung in iCloud spiegeln (siehe iOS-Pendant).
+        Task { await CloudKitSyncService.shared.recordRetentionChange() }
     }
 
     private func setDraft(_ type: RecapPeriod.PeriodType, _ value: Int) {

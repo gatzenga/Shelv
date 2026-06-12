@@ -68,6 +68,15 @@ actor CloudKitSyncService {
     private let deviceIdKey = "shelv_device_id"
     private let syncEnabledKey = "iCloudSyncEnabled"
 
+    // Geteilte Recap-Retention (eine Wahrheit über alle Geräte, statt lokalem @AppStorage).
+    // Singleton-Record in der Zone; Last-write-wins per updatedAt-Zeitstempel.
+    private static let retentionRecordName = "recap_settings"
+    private static let weeklyKey  = "recapWeeklyRetention"
+    private static let monthlyKey = "recapMonthlyRetention"
+    private static let yearlyKey  = "recapYearlyRetention"
+    private let retentionUpdatedAtKey = "recap_retention_updated_at"
+    private let retentionSyncedAtKey  = "recap_retention_synced_at"
+
     private var isZoneReady = false
 
     private var syncEnabled: Bool {
@@ -317,6 +326,8 @@ actor CloudKitSyncService {
                 }
                 await handleIncomingRecord(record)
             }
+            // Retention-Settings: nach dem Einlesen lokalen Stand ggf. nachschieben.
+            await pushRetentionIfNeeded()
             if let token = newToken { changeToken = token }
             if playsIn + recapsIn > 0 {
                 log("Downloaded \(playsIn) plays, \(recapsIn) recaps")
@@ -445,6 +456,9 @@ actor CloudKitSyncService {
             DispatchQueue.main.async {
                 NotificationCenter.default.post(name: .recapRegistryUpdated, object: nil)
             }
+
+        case "RecapSettings":
+            applyIncomingRetention(record)
 
         default:
             break
@@ -612,6 +626,61 @@ actor CloudKitSyncService {
         return ck.code == .unknownItem || ck.code == .zoneNotFound
     }
 
+    // MARK: - Geteilte Retention-Settings
+
+    /// Von der Settings-UI nach einer Retention-Änderung aufgerufen: lokalen Zeitstempel
+    /// setzen und sofort hochzuladen versuchen. Schlägt der Upload fehl (offline/Sync aus),
+    /// holt ihn der nächste `syncNow` über `pushRetentionIfNeeded` nach.
+    func recordRetentionChange() async {
+        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: retentionUpdatedAtKey)
+        await pushRetentionIfNeeded()
+    }
+
+    /// Lädt den lokalen Retention-Stand hoch, falls er neuer ist als der zuletzt gesyncte.
+    func pushRetentionIfNeeded() async {
+        guard canSync else { return }
+        let updatedAt = UserDefaults.standard.double(forKey: retentionUpdatedAtKey)
+        let syncedAt  = UserDefaults.standard.double(forKey: retentionSyncedAtKey)
+        guard updatedAt > syncedAt else { return }
+
+        let w = retentionValue(Self.weeklyKey, default: 1)
+        let m = retentionValue(Self.monthlyKey, default: 12)
+        let y = retentionValue(Self.yearlyKey, default: 3)
+        do {
+            try await ensureZoneExists()
+            let rid = CKRecord.ID(recordName: Self.retentionRecordName, zoneID: zoneID)
+            let rec = CKRecord(recordType: "RecapSettings", recordID: rid)
+            rec["weeklyRetention"]  = Int64(w)
+            rec["monthlyRetention"] = Int64(m)
+            rec["yearlyRetention"]  = Int64(y)
+            rec["updatedAt"]        = updatedAt
+            // Singleton, Last-write-wins → Server-Konflikt bewusst überschreiben.
+            _ = try await db.modifyRecords(saving: [rec], deleting: [], savePolicy: .allKeys, atomically: true)
+            UserDefaults.standard.set(updatedAt, forKey: retentionSyncedAtKey)
+            log("Retention settings uploaded")
+        } catch {
+            log("Retention upload failed — will retry on next sync: \(error.localizedDescription)", isError: true)
+        }
+    }
+
+    /// Übernimmt einen eingehenden Retention-Record, wenn er neuer ist als der lokale Stand.
+    private func applyIncomingRetention(_ record: CKRecord) {
+        guard let updatedAt = record["updatedAt"] as? Double else { return }
+        let localUpdated = UserDefaults.standard.double(forKey: retentionUpdatedAtKey)
+        guard updatedAt > localUpdated else { return }   // lokaler Wert ist neuer → behalten
+        if let w = record["weeklyRetention"]  as? Int64 { UserDefaults.standard.set(Int(w), forKey: Self.weeklyKey) }
+        if let m = record["monthlyRetention"] as? Int64 { UserDefaults.standard.set(Int(m), forKey: Self.monthlyKey) }
+        if let y = record["yearlyRetention"]  as? Int64 { UserDefaults.standard.set(Int(y), forKey: Self.yearlyKey) }
+        UserDefaults.standard.set(updatedAt, forKey: retentionUpdatedAtKey)
+        UserDefaults.standard.set(updatedAt, forKey: retentionSyncedAtKey)   // kommt vom Server → kein Re-Upload
+        log("Retention settings updated from iCloud")
+    }
+
+    private func retentionValue(_ key: String, default def: Int) -> Int {
+        let raw = UserDefaults.standard.integer(forKey: key)
+        return raw > 0 ? raw : def
+    }
+
     func deletePlayEvent(uuid: String, force: Bool = false) async {
         guard syncEnabled || force else { return }
         await MainActor.run { status.isSyncing = true }
@@ -684,6 +753,11 @@ actor CloudKitSyncService {
     }
 
     private func markLocalAsUnsyncedForActiveServer() async {
+        // Retention-Settings sind serverunabhängig: nach einem Zone-Wipe den lokalen
+        // Stand neu hochladbar machen, damit er nicht aus iCloud verschwindet.
+        if UserDefaults.standard.double(forKey: retentionUpdatedAtKey) > 0 {
+            UserDefaults.standard.set(0, forKey: retentionSyncedAtKey)
+        }
         let sid: String = await MainActor.run {
             SubsonicAPIService.shared.activeServer?.stableId ?? ""
         }
