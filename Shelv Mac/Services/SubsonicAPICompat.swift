@@ -33,7 +33,13 @@ extension SubsonicAPIService {
         activePassword = nil
     }
 
-    var hasConfig: Bool { activeServer != nil && activePassword?.isEmpty == false }
+    var hasConfig: Bool {
+        guard activeServer != nil else { return false }
+        #if DEBUG
+        if isDemoActive { return true }   // Demo-Server ist bewusst passwortlos
+        #endif
+        return activePassword?.isEmpty == false
+    }
 
     var currentConfig: ServerConfig? {
         guard let server = activeServer, let password = activePassword else { return nil }

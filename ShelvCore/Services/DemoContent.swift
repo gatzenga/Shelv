@@ -147,13 +147,13 @@ enum DemoContent {
         switch type {
         case "newest":
             return byKeys(["recovery", "hollow_season", "after_last_light", "ruins_of_quiet",
-                           "no_signal_left", "drift", "peripheral"])
+                           "no_signal_left", "drift", "peripheral", "depth_unknown", "relapse"])
         case "recent":
             return byKeys(["depth_unknown", "ruins_of_quiet", "peripheral", "no_signal_left",
-                           "hollow_season", "drift", "recovery"])
+                           "hollow_season", "drift", "recovery", "after_last_light", "relapse"])
         case "frequent":
             return byKeys(["depth_unknown", "recovery", "hollow_season", "drift", "peripheral",
-                           "no_signal_left", "ruins_of_quiet"])
+                           "no_signal_left", "ruins_of_quiet", "after_last_light", "relapse"])
         case "random":
             return albums.shuffled()   // echte Variation bei jedem Laden der "Random Albums"
         default:
