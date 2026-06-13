@@ -58,6 +58,7 @@ struct AlbumDetailView: View {
                     SongRow(song: song, index: index, showArtwork: false) {
                         player.play(songs: songs, startIndex: index)
                     }
+                    .listRowInsets(EdgeInsets(top: 6, leading: 24, bottom: 6, trailing: 24))
                     .contextMenu {
                         Button { player.addPlayNext(song) } label: {
                             Label(String(localized: "play_next"), systemImage: "text.line.first.and.arrowtriangle.forward")
@@ -73,7 +74,10 @@ struct AlbumDetailView: View {
                     }
                 }
             }
+            .listStyle(.plain)
+            .frame(maxHeight: .infinity)
         }
+        .frame(maxHeight: .infinity, alignment: .top)
         .padding(.horizontal, 60)
         .padding(.top, 40)
         .task {
