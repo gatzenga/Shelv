@@ -9,6 +9,7 @@ struct PlaylistsView: View {
     @AppStorage("playlistViewIsGrid") private var isGrid = true
 
     @State private var showCreate = false
+    @State private var path = NavigationPath()
 
     private var sort: PlaylistSortOption { PlaylistSortOption(rawValue: sortRaw) ?? .alphabetical }
     private var dir: SortDirection { SortDirection(rawValue: dirRaw) ?? .ascending }
@@ -29,7 +30,7 @@ struct PlaylistsView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             VStack(spacing: 0) {
                 HStack(spacing: 24) {
                     Menu {
@@ -68,6 +69,7 @@ struct PlaylistsView: View {
                     listBody
                 }
             }
+            .navigationDestination(for: Playlist.self) { PlaylistDetailView(playlist: $0) }
             .task { await store.loadPlaylists() }
             .sheet(isPresented: $showCreate) {
                 PlaylistEditSheet(title: String(localized: "new_playlist_2"),
@@ -90,29 +92,15 @@ struct PlaylistsView: View {
     }
 
     private var listBody: some View {
-        List {
-            ForEach(displayPlaylists) { playlist in
-                NavigationLink { PlaylistDetailView(playlist: playlist) } label: {
-                    HStack(spacing: 20) {
-                        CoverArtView(url: playlist.coverURL(200), size: 80, cornerRadius: 6)
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack(spacing: 8) {
-                                if pins.isPinned(playlist.id) {
-                                    Image(systemName: "pin.fill").font(.caption).foregroundStyle(.secondary)
-                                }
-                                Text(playlist.name).lineLimit(1)
-                            }
-                            if let count = playlist.songCount {
-                                Text("\(count) \(String(localized: "songs"))")
-                                    .font(.caption).foregroundStyle(.secondary)
-                            }
-                        }
-                    }
+        ScrollView {
+            LazyVStack(spacing: 4) {
+                ForEach(displayPlaylists) { playlist in
+                    PlaylistListRow(playlist: playlist) { path.append(playlist) }
                 }
-                .playlistContextMenu(playlist)
             }
+            .padding(.vertical, 24)
         }
-        .listStyle(.plain)
+        .scrollIndicators(.hidden)
     }
 }
 

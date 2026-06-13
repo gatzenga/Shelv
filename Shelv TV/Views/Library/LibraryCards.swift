@@ -420,6 +420,45 @@ struct ArtistListRow: View {
     }
 }
 
+/// Playlist-Zeile (Listenansicht) im einheitlichen borderless-Akzent-Fokus-Stil.
+struct PlaylistListRow: View {
+    let playlist: Playlist
+    let onSelect: () -> Void
+    @ObservedObject private var pins = PinnedPlaylistStore.shared
+    @FocusState private var focused: Bool
+    @AppStorage("themeColor") private var themeColor = "violet"
+
+    var body: some View {
+        HStack(spacing: 20) {
+            CoverArtView(url: playlist.coverURL(200), size: 80, cornerRadius: 6)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    if pins.isPinned(playlist.id) {
+                        Image(systemName: "pin.fill").font(.caption).foregroundStyle(.secondary)
+                    }
+                    Text(playlist.name).lineLimit(1)
+                }
+                if let count = playlist.songCount {
+                    Text("\(count) \(String(localized: "songs"))")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Spacer()
+        }
+        .padding(.vertical, 10)
+        .padding(.horizontal, 24)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 14).fill(focused ? AppTheme.color(for: themeColor).opacity(0.4) : Color.clear))
+        .padding(.horizontal, 12)
+        .contentShape(Rectangle())
+        .focusable()
+        .focused($focused)
+        .onTapGesture { onSelect() }
+        .animation(.easeOut(duration: 0.14), value: focused)
+        .playlistContextMenu(playlist)
+    }
+}
+
 /// Text-Link (z. B. Künstler/Album): keine Box, der Text färbt sich bei Fokus in die Akzentfarbe.
 struct AccentTextLink<Destination: View>: View {
     let text: String
