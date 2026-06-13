@@ -102,6 +102,10 @@ class AudioPlayerService: ObservableObject {
     private let engine = PlayerEngine()
     private var engineSubscriptions = Set<AnyCancellable>()
     private var bufferingShowTask: Task<Void, Never>?
+    #if os(tvOS)
+    // tvOS: Watchdog der prüft, ob ein Resume wirklich losläuft (sonst Stream neu laden).
+    private var resumeWatchdog: Task<Void, Never>?
+    #endif
     private var lastArtworkCoverArt: String? = nil
     @AppStorage("gaplessEnabled") private var gaplessEnabled = false
     @AppStorage("streamPreCacheEnabled") private var streamPreCacheEnabled = false
@@ -563,6 +567,9 @@ class AudioPlayerService: ObservableObject {
     private func startPlayback(song: Song, seekTo: Double = 0) {
         playbackGeneration += 1
         let gen = playbackGeneration
+        #if os(tvOS)
+        resumeWatchdog?.cancel()
+        #endif
         Task { @MainActor [weak self] in
             guard let self else { return }
             #if os(iOS) || os(tvOS)
@@ -735,6 +742,9 @@ class AudioPlayerService: ObservableObject {
 
     private func clearPlaybackState() {
         teardownPlayer()
+        #if os(tvOS)
+        resumeWatchdog?.cancel()
+        #endif
         isPlaying = false
         isBuffering = false
         currentSong = nil
@@ -758,6 +768,9 @@ class AudioPlayerService: ObservableObject {
 
     func pause() {
         networkResumeSong = nil
+        #if os(tvOS)
+        resumeWatchdog?.cancel()
+        #endif
         MPNowPlayingInfoCenter.default().playbackState = .paused
         engine.pause()
         isPlaying = false
@@ -774,8 +787,7 @@ class AudioPlayerService: ObservableObject {
             startPlayback(song: song, seekTo: seek)
         } else {
             #if os(tvOS)
-            // tvOS deaktiviert die Audio-Session bei Pause — vor dem Resume reaktivieren, sonst
-            // bleibt player.play() stumm. Kein Stream-Neustart mehr (Position bleibt erhalten).
+            // tvOS deaktiviert die Audio-Session bei Pause — vor dem Resume reaktivieren.
             activateSession()
             #endif
             #if os(iOS)
@@ -790,6 +802,22 @@ class AudioPlayerService: ObservableObject {
             isPlaying = true
             updateNowPlayingPlaybackRate(1)
             MPNowPlayingInfoCenter.default().playbackState = .playing
+
+            #if os(tvOS)
+            // tvOS verwirft den Puffer eines pausierten HTTP-Streams; play() am alten Item läuft
+            // dann nicht mehr los. Watchdog: schreitet die Zeit nach ~1,2 s nicht fort, den Stream
+            // an der aktuellen Position neu laden — das funktioniert zuverlässig (wie ein Neustart).
+            let resumePosition = currentTime
+            let expectedId = song.id
+            resumeWatchdog?.cancel()
+            resumeWatchdog = Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .milliseconds(1200))
+                guard let self, !Task.isCancelled, self.isPlaying,
+                      self.currentSong?.id == expectedId,
+                      self.currentTime <= resumePosition + 0.3 else { return }
+                self.startPlayback(song: song, seekTo: resumePosition)
+            }
+            #endif
         }
     }
 
