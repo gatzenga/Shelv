@@ -774,10 +774,10 @@ class AudioPlayerService: ObservableObject {
             startPlayback(song: song, seekTo: seek)
         } else {
             #if os(tvOS)
-            // tvOS: engine.resume() (player.play()) bleibt nach einer Pause oft stumm — daher den
-            // Player an der aktuellen Position neu starten (startPlayback reaktiviert die Session).
-            startPlayback(song: song, seekTo: currentTime)
-            #else
+            // tvOS deaktiviert die Audio-Session bei Pause — vor dem Resume reaktivieren, sonst
+            // bleibt player.play() stumm. Kein Stream-Neustart mehr (Position bleibt erhalten).
+            activateSession()
+            #endif
             #if os(iOS)
             // iOS deaktiviert die Session bei Interruption — vor Resume reaktivieren.
             do {
@@ -790,7 +790,6 @@ class AudioPlayerService: ObservableObject {
             isPlaying = true
             updateNowPlayingPlaybackRate(1)
             MPNowPlayingInfoCenter.default().playbackState = .playing
-            #endif
         }
     }
 
