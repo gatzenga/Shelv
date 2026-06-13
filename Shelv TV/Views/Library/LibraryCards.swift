@@ -94,7 +94,7 @@ struct SongRow: View {
 
 /// Tracknummer, die zum Waveform-Symbol (Akzentfarbe) wird, wenn der Song gerade läuft.
 /// Isoliert, beobachtet nur den Player-Songwechsel.
-private struct NowPlayingNumber: View {
+struct NowPlayingNumber: View {
     let songId: String
     let index: Int
     @ObservedObject private var player = AudioPlayerService.shared
@@ -302,4 +302,48 @@ extension View {
     func albumContextMenu(_ album: Album) -> some View { modifier(AlbumContextMenuModifier(album: album)) }
     func artistContextMenu(_ artist: Artist) -> some View { modifier(ArtistContextMenuModifier(artist: artist)) }
     func playlistContextMenu(_ playlist: Playlist) -> some View { modifier(PlaylistContextMenuModifier(playlist: playlist)) }
+}
+
+/// Song-Zeile für die Zwei-Spalten-Detailansichten (Album/Playlist) im LazyVStack.
+/// Eigener abgerundeter Fokus-Highlight in Akzentfarbe — das System-List-Highlight
+/// würde an der schmalen Spaltenkante sonst hart abgeschnitten.
+struct DetailSongRow: View {
+    let song: Song
+    let number: Int
+    var showArtwork: Bool = false
+    let onPlay: () -> Void
+    @FocusState private var focused: Bool
+    @AppStorage("themeColor") private var themeColor = "violet"
+
+    var body: some View {
+        Button(action: onPlay) {
+            HStack(spacing: 20) {
+                if showArtwork {
+                    CoverArtView(url: song.coverURL(200), size: 56, cornerRadius: 6)
+                } else {
+                    NowPlayingNumber(songId: song.id, index: number)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(song.title).lineLimit(1)
+                    if let artist = song.artist {
+                        Text(artist).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                }
+                Spacer()
+                if let d = song.duration {
+                    Text(formatDuration(d)).font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                }
+            }
+            .padding(.vertical, 10)
+            .padding(.horizontal, 24)
+        }
+        .buttonStyle(.plain)
+        .focused($focused)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(focused ? AppTheme.color(for: themeColor).opacity(0.3) : Color.clear)
+        )
+        .animation(.easeOut(duration: 0.12), value: focused)
+        .songContextMenu(song)
+    }
 }

@@ -6,6 +6,7 @@ struct PlaylistsView: View {
     @ObservedObject var pins = PinnedPlaylistStore.shared
     @AppStorage("playlistSortOption") private var sortRaw = "alphabetical"
     @AppStorage("playlistSortDirection") private var dirRaw = "ascending"
+    @AppStorage("playlistViewIsGrid") private var isGrid = true
 
     @State private var showCreate = false
 
@@ -43,6 +44,9 @@ struct PlaylistsView: View {
                     Button { dirRaw = dir == .ascending ? "descending" : "ascending" } label: {
                         Image(systemName: dir.icon)
                     }
+                    Button { isGrid.toggle() } label: {
+                        Image(systemName: isGrid ? "list.bullet" : "square.grid.2x2")
+                    }
                     Spacer()
                     Button { showCreate = true } label: {
                         Label(String(localized: "new_playlist_2"), systemImage: "plus")
@@ -53,22 +57,15 @@ struct PlaylistsView: View {
                 .padding(.top, 40)
                 .padding(.bottom, 16)
 
-                ScrollView {
-                    if displayPlaylists.isEmpty && store.isLoadingPlaylists {
-                        ProgressView().frame(maxWidth: .infinity, minHeight: 300)
-                    } else if displayPlaylists.isEmpty {
-                        ContentUnavailableView(String(localized: "no_playlists_2"), systemImage: "music.note.list")
-                            .frame(maxWidth: .infinity, minHeight: 300)
-                    } else {
-                        LazyVGrid(columns: coverGridColumns, alignment: .leading, spacing: 50) {
-                            ForEach(displayPlaylists) { playlist in
-                                PlaylistCard(playlist: playlist)
-                            }
-                        }
-                        .padding(.horizontal, 50)
-                        .padding(.top, 30)
-                        .padding(.bottom, 50)
-                    }
+                if displayPlaylists.isEmpty && store.isLoadingPlaylists {
+                    ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if displayPlaylists.isEmpty {
+                    ContentUnavailableView(String(localized: "no_playlists_2"), systemImage: "music.note.list")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if isGrid {
+                    gridBody
+                } else {
+                    listBody
                 }
             }
             .task { await store.loadPlaylists() }
@@ -79,6 +76,43 @@ struct PlaylistsView: View {
                 }
             }
         }
+    }
+
+    private var gridBody: some View {
+        ScrollView {
+            LazyVGrid(columns: coverGridColumns, alignment: .leading, spacing: 50) {
+                ForEach(displayPlaylists) { PlaylistCard(playlist: $0) }
+            }
+            .padding(.horizontal, 50)
+            .padding(.top, 30)
+            .padding(.bottom, 50)
+        }
+    }
+
+    private var listBody: some View {
+        List {
+            ForEach(displayPlaylists) { playlist in
+                NavigationLink { PlaylistDetailView(playlist: playlist) } label: {
+                    HStack(spacing: 20) {
+                        CoverArtView(url: playlist.coverURL(200), size: 80, cornerRadius: 6)
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(spacing: 8) {
+                                if pins.isPinned(playlist.id) {
+                                    Image(systemName: "pin.fill").font(.caption).foregroundStyle(.secondary)
+                                }
+                                Text(playlist.name).lineLimit(1)
+                            }
+                            if let count = playlist.songCount {
+                                Text("\(count) \(String(localized: "songs"))")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+                .playlistContextMenu(playlist)
+            }
+        }
+        .listStyle(.plain)
     }
 }
 
@@ -112,8 +146,8 @@ struct PlaylistCard: View {
     }
 }
 
-/// Playlist-Seite im selben Zweispalter wie das Album: links Cover + Aktionen
-/// (immer sichtbar), rechts die scrollende Songliste (mit Covern, gemischte Alben).
+/// Playlist-Seite im Zweispalter (wie das Album): links Cover + Aktionen (zentriert),
+/// rechts die scrollende Songliste mit eigenem Fokus-Highlight.
 struct PlaylistDetailView: View {
     let playlist: Playlist
     private let player = AudioPlayerService.shared
@@ -128,59 +162,14 @@ struct PlaylistDetailView: View {
     private var current: Playlist { store.playlists.first { $0.id == playlist.id } ?? playlist }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 60) {
-            VStack(alignment: .leading, spacing: 24) {
-                CoverArtView(url: current.coverURL(600), size: 380, cornerRadius: 12)
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(current.name).font(.title2).bold().lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                    if let comment = current.comment, !comment.isEmpty {
-                        Text(comment).font(.callout).foregroundStyle(.secondary).lineLimit(3)
-                    }
-                    if let count = current.songCount {
-                        Text("\(count) \(String(localized: "songs"))")
-                            .font(.body).foregroundStyle(.secondary)
-                    }
-                }
-
-                VStack(spacing: 14) {
-                    actionButton(String(localized: "play"), "play.fill") { player.play(songs: songs, startIndex: 0) }
-                    actionButton(String(localized: "shuffle"), "shuffle") { player.playShuffled(songs: songs) }
-                    actionButton(String(localized: "play_next"), "text.line.first.and.arrowtriangle.forward") { player.addPlayNext(songs) }
-                    actionButton(String(localized: "add_to_queue"), "text.append") { player.addToQueue(songs) }
-                }
-                .disabled(songs.isEmpty)
-
-                Menu {
-                    Button { showRename = true } label: { Label(String(localized: "rename"), systemImage: "pencil") }
-                    Button(role: .destructive) { showDeleteConfirm = true } label: {
-                        Label(String(localized: "delete_playlist"), systemImage: "trash")
-                    }
-                } label: {
-                    Label(String(localized: "edit"), systemImage: "ellipsis.circle").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-
-                Spacer()
-            }
-            .frame(width: 380)
-
-            List {
-                ForEach(Array(songs.enumerated()), id: \.element.id) { index, song in
-                    SongRow(song: song, index: index) {
-                        player.play(songs: songs, startIndex: index)
-                    }
-                    .listRowInsets(EdgeInsets(top: 6, leading: 24, bottom: 6, trailing: 24))
-                }
-            }
-            .listStyle(.plain)
-            .scrollIndicators(.hidden)
-            .frame(maxHeight: .infinity)
+        HStack(alignment: .center, spacing: 60) {
+            leftColumn.frame(width: 360)
+            trackList.frame(maxHeight: .infinity)
         }
-        .frame(maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, 60)
-        .padding(.top, 40)
         .toolbar(.hidden, for: .tabBar)
+        .onDisappear { NotificationCenter.default.post(name: .libraryScrollTop, object: nil) }
         .task { songs = await LibraryStore.shared.playlistSongs(playlist) }
         .sheet(isPresented: $showRename) {
             PlaylistEditSheet(title: String(localized: "rename"),
@@ -196,11 +185,61 @@ struct PlaylistDetailView: View {
         }
     }
 
-    private func actionButton(_ title: String, _ icon: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Label(title, systemImage: icon).frame(maxWidth: .infinity)
+    private var leftColumn: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            CoverArtView(url: current.coverURL(600), size: 300, cornerRadius: 12)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(current.name).font(.title3).bold().lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let comment = current.comment, !comment.isEmpty {
+                    Text(comment).font(.callout).foregroundStyle(.secondary).lineLimit(2)
+                }
+                if let count = current.songCount {
+                    Text("\(count) \(String(localized: "songs"))")
+                        .font(.body).foregroundStyle(.secondary)
+                }
+            }
+            HStack(spacing: 14) {
+                Button { player.play(songs: songs, startIndex: 0) } label: {
+                    Label(String(localized: "play"), systemImage: "play.fill").frame(maxWidth: .infinity)
+                }
+                Button { player.playShuffled(songs: songs) } label: {
+                    Image(systemName: "shuffle")
+                }
+                Menu {
+                    Button { player.addPlayNext(songs) } label: {
+                        Label(String(localized: "play_next"), systemImage: "text.line.first.and.arrowtriangle.forward")
+                    }
+                    Button { player.addToQueue(songs) } label: {
+                        Label(String(localized: "add_to_queue"), systemImage: "text.append")
+                    }
+                    Button { showRename = true } label: {
+                        Label(String(localized: "rename"), systemImage: "pencil")
+                    }
+                    Button(role: .destructive) { showDeleteConfirm = true } label: {
+                        Label(String(localized: "delete_playlist"), systemImage: "trash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                }
+            }
+            .buttonStyle(.bordered)
+            .disabled(songs.isEmpty)
         }
-        .buttonStyle(.bordered)
+    }
+
+    private var trackList: some View {
+        ScrollView {
+            LazyVStack(spacing: 4) {
+                ForEach(Array(songs.enumerated()), id: \.element.id) { index, song in
+                    DetailSongRow(song: song, number: index, showArtwork: true) {
+                        player.play(songs: songs, startIndex: index)
+                    }
+                }
+            }
+            .padding(.vertical, 30)
+        }
+        .scrollIndicators(.hidden)
     }
 }
 
