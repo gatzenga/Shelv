@@ -172,6 +172,7 @@ struct LibraryView: View {
             }
         }
         .listStyle(.plain)
+        .contentMargins(.vertical, 20, for: .scrollContent)
     }
 
     private var artistList: some View {
@@ -194,6 +195,7 @@ struct LibraryView: View {
             }
         }
         .listStyle(.plain)
+        .contentMargins(.vertical, 20, for: .scrollContent)
     }
 
     // MARK: - Favoriten — native List wie die Suche

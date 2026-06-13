@@ -186,7 +186,7 @@ struct PlaylistDetailView: View {
     }
 
     private var leftColumn: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: 16) {
             CoverArtView(url: current.coverURL(600), size: 300, cornerRadius: 12)
             VStack(alignment: .leading, spacing: 6) {
                 Text(current.name).font(.title3).bold().lineLimit(2)
@@ -199,33 +199,31 @@ struct PlaylistDetailView: View {
                         .font(.body).foregroundStyle(.secondary)
                 }
             }
-            HStack(spacing: 14) {
-                Button { player.play(songs: songs, startIndex: 0) } label: {
-                    Label(String(localized: "play"), systemImage: "play.fill").frame(maxWidth: .infinity)
+            VStack(spacing: 12) {
+                actionButton(String(localized: "play"), "play.fill") { player.play(songs: songs, startIndex: 0) }
+                actionButton(String(localized: "shuffle"), "shuffle") { player.playShuffled(songs: songs) }
+                actionButton(String(localized: "play_next"), "text.line.first.and.arrowtriangle.forward") { player.addPlayNext(songs) }
+                actionButton(String(localized: "add_to_queue"), "text.append") { player.addToQueue(songs) }
+            }
+            .disabled(songs.isEmpty)
+
+            Menu {
+                Button { showRename = true } label: { Label(String(localized: "rename"), systemImage: "pencil") }
+                Button(role: .destructive) { showDeleteConfirm = true } label: {
+                    Label(String(localized: "delete_playlist"), systemImage: "trash")
                 }
-                Button { player.playShuffled(songs: songs) } label: {
-                    Image(systemName: "shuffle")
-                }
-                Menu {
-                    Button { player.addPlayNext(songs) } label: {
-                        Label(String(localized: "play_next"), systemImage: "text.line.first.and.arrowtriangle.forward")
-                    }
-                    Button { player.addToQueue(songs) } label: {
-                        Label(String(localized: "add_to_queue"), systemImage: "text.append")
-                    }
-                    Button { showRename = true } label: {
-                        Label(String(localized: "rename"), systemImage: "pencil")
-                    }
-                    Button(role: .destructive) { showDeleteConfirm = true } label: {
-                        Label(String(localized: "delete_playlist"), systemImage: "trash")
-                    }
-                } label: {
-                    Image(systemName: "ellipsis")
-                }
+            } label: {
+                Label(String(localized: "edit"), systemImage: "ellipsis.circle").frame(maxWidth: .infinity)
             }
             .buttonStyle(.bordered)
-            .disabled(songs.isEmpty)
         }
+    }
+
+    private func actionButton(_ title: String, _ icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: icon).frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
     }
 
     private var trackList: some View {

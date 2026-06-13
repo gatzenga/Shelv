@@ -5,13 +5,11 @@ import SwiftUI
 struct AlbumDetailView: View {
     let album: Album
     @AppStorage("enableFavorites") private var enableFavorites = true
-    @AppStorage("enablePlaylists") private var enablePlaylists = true
     private let api = SubsonicAPIService.shared
     private let player = AudioPlayerService.shared
 
     @State private var songs: [Song] = []
     @State private var albumStarred = false
-    @State private var showAddToPlaylist = false
 
     private var discNumbers: [Int] { Array(Set(songs.map { $0.discNumber ?? 1 })).sorted() }
     private var hasMultipleDiscs: Bool { discNumbers.count > 1 }
@@ -29,13 +27,12 @@ struct AlbumDetailView: View {
             songs = await LibraryStore.shared.albumSongs(album)
             albumStarred = album.starred != nil
         }
-        .sheet(isPresented: $showAddToPlaylist) { AddToPlaylistView(songIds: songs.map(\.id)) }
     }
 
-    // MARK: - Linke Spalte (vertikal zentriert)
+    // MARK: - Linke Spalte (vertikal zentriert, einzelne Aktionsbuttons)
 
     private var leftColumn: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: 16) {
             CoverArtView(url: album.coverURL(600), size: 300, cornerRadius: 12)
             VStack(alignment: .leading, spacing: 6) {
                 Text(album.name).font(.title3).bold().lineLimit(2)
@@ -45,38 +42,25 @@ struct AlbumDetailView: View {
                     Text(String(year)).font(.callout).foregroundStyle(.secondary)
                 }
             }
-            HStack(spacing: 14) {
-                Button { player.play(songs: songs, startIndex: 0) } label: {
-                    Label(String(localized: "play"), systemImage: "play.fill").frame(maxWidth: .infinity)
-                }
-                Button { player.playShuffled(songs: songs) } label: {
-                    Image(systemName: "shuffle")
-                }
-                Menu {
-                    Button { player.addPlayNext(songs) } label: {
-                        Label(String(localized: "play_next"), systemImage: "text.line.first.and.arrowtriangle.forward")
-                    }
-                    Button { player.addToQueue(songs) } label: {
-                        Label(String(localized: "add_to_queue"), systemImage: "text.append")
-                    }
-                    if enablePlaylists {
-                        Button { showAddToPlaylist = true } label: {
-                            Label(String(localized: "add_to_playlist"), systemImage: "text.badge.plus")
-                        }
-                    }
-                    if enableFavorites {
-                        Button { toggleAlbumStar() } label: {
-                            Label(albumStarred ? String(localized: "unfavorite") : String(localized: "favorite"),
-                                  systemImage: albumStarred ? "heart.fill" : "heart")
-                        }
-                    }
-                } label: {
-                    Image(systemName: "ellipsis")
+            VStack(spacing: 12) {
+                actionButton(String(localized: "play"), "play.fill") { player.play(songs: songs, startIndex: 0) }
+                actionButton(String(localized: "shuffle"), "shuffle") { player.playShuffled(songs: songs) }
+                actionButton(String(localized: "play_next"), "text.line.first.and.arrowtriangle.forward") { player.addPlayNext(songs) }
+                actionButton(String(localized: "add_to_queue"), "text.append") { player.addToQueue(songs) }
+                if enableFavorites {
+                    actionButton(albumStarred ? String(localized: "unfavorite") : String(localized: "favorite"),
+                                 albumStarred ? "heart.fill" : "heart") { toggleAlbumStar() }
                 }
             }
-            .buttonStyle(.bordered)
             .disabled(songs.isEmpty)
         }
+    }
+
+    private func actionButton(_ title: String, _ icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: icon).frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
     }
 
     @ViewBuilder
