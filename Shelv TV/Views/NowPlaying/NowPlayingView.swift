@@ -95,11 +95,8 @@ struct NowPlayingView: View {
                 }
                 Button { player.previous() } label: { Image(systemName: "backward.fill") }
                 Button { player.togglePlayPause() } label: {
-                    if player.showBufferingIndicator {
-                        ProgressView().tint(accent)
-                    } else {
-                        Image(systemName: player.isPlaying ? "pause.fill" : "play.fill").font(.body)
-                    }
+                    // Kein Spinner mehr — der Ladezustand steht bereits als „Loading" beim Codec-Badge.
+                    Image(systemName: player.isPlaying ? "pause.fill" : "play.fill").font(.body)
                 }
                 Button { player.next(triggeredByUser: true) } label: { Image(systemName: "forward.fill") }
                 Button { player.repeatMode = player.repeatMode.toggled } label: {

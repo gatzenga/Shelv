@@ -2,7 +2,6 @@ import SwiftUI
 
 struct DatabaseSettingsView: View {
     @ObservedObject private var syncStatus = CloudKitSyncService.shared.status
-    @ObservedObject private var dbErrors = DBErrorLog.shared
     @AppStorage("mixUseDatabase") private var mixUseDatabase = false
     @AppStorage("iCloudSyncEnabled") private var iCloudSyncEnabled = true
 
@@ -39,10 +38,10 @@ struct DatabaseSettingsView: View {
 
             Section(String(localized: "logs")) {
                 NavigationLink(String(localized: "sync_log")) {
-                    LogListView(title: String(localized: "sync_log"), entries: syncStatus.logEntries)
+                    SyncLogView()
                 }
                 NavigationLink(String(localized: "database_errors")) {
-                    LogListView(title: String(localized: "database_errors"), entries: dbErrors.playLogEntries)
+                    DatabaseErrorLogView()
                 }
             }
         }
@@ -60,5 +59,23 @@ struct DatabaseSettingsView: View {
         if let sid = SubsonicAPIService.shared.activeServer?.stableId, !sid.isEmpty {
             totalPlays = await PlayLogService.shared.logCount(serverId: sid)
         }
+    }
+}
+
+/// Live Sync-Log — beobachtet den CloudKit-Status, neue Sync-Zeilen erscheinen sofort.
+private struct SyncLogView: View {
+    @ObservedObject private var status = CloudKitSyncService.shared.status
+
+    var body: some View {
+        LogListView(title: String(localized: "sync_log"), entries: status.logEntries)
+    }
+}
+
+/// Live Datenbank-Fehler-Log — beobachtet DBErrorLog, neue Fehler erscheinen sofort.
+private struct DatabaseErrorLogView: View {
+    @ObservedObject private var dbErrors = DBErrorLog.shared
+
+    var body: some View {
+        LogListView(title: String(localized: "database_errors"), entries: dbErrors.playLogEntries)
     }
 }

@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct CacheSettingsView: View {
+    @AppStorage("streamPreCacheEnabled") private var streamPreCacheEnabled = false
     @State private var coverCacheBytes = 0
 
     var body: some View {
@@ -8,16 +9,42 @@ struct CacheSettingsView: View {
             Text(String(localized: "cache"))
                 .font(.largeTitle).bold()
                 .listRowBackground(Color.clear)
+
+            // Precache wie iOS/macOS — Logik liegt im geteilten AudioPlayerService/StreamCacheService.
+            Section(String(localized: "precache")) {
+                Toggle(String(localized: "precache_original_file"), isOn: $streamPreCacheEnabled)
+                NavigationLink {
+                    ScrollView {
+                        Text(String(localized: "stable_networkindependent_playback_with_seamless_g"))
+                            .font(.title3)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(60)
+                            .focusable()
+                    }
+                    .navigationTitle(String(localized: "precache"))
+                    .toolbar(.hidden, for: .tabBar)
+                } label: {
+                    Text(String(localized: "about_precache"))
+                }
+                NavigationLink {
+                    CacheLogView()
+                } label: {
+                    Text(String(localized: "logs"))
+                }
+            }
+
             Section(String(localized: "cover_cache")) {
                 LabeledContent(String(localized: "size"),
                                value: ByteCountFormatter.string(fromByteCount: Int64(coverCacheBytes), countStyle: .file))
-                Button(role: .destructive) {
+                Button {
                     Task {
                         await ImageCacheService.shared.clearAll()
                         await refresh()
                     }
                 } label: {
-                    Text(String(localized: "clear_cache"))
+                    // Explizites Rot: role(.destructive) wird auf tvOS im Fokus (heller Hintergrund)
+                    // blass — feste rote Schrift bleibt satt.
+                    Text(String(localized: "clear_cache")).foregroundStyle(.red)
                 }
             }
         }
@@ -27,6 +54,16 @@ struct CacheSettingsView: View {
 
     private func refresh() async {
         coverCacheBytes = await ImageCacheService.shared.diskUsageBytes()
+    }
+}
+
+/// Live Cache-Log — beobachtet StreamCacheLog und reicht die aktuellen Einträge an die
+/// generische LogListView weiter, sodass neue Precache-Events sofort erscheinen (kein Snapshot).
+struct CacheLogView: View {
+    @ObservedObject private var log = StreamCacheLog.shared
+
+    var body: some View {
+        LogListView(title: String(localized: "cache_log"), entries: log.entries)
     }
 }
 
