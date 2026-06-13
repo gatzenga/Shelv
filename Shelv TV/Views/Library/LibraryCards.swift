@@ -106,53 +106,116 @@ func formatDuration(_ seconds: Int) -> String {
 private struct SongContextMenuModifier: ViewModifier {
     let song: Song
     @AppStorage("enableFavorites") private var enableFavorites = true
+    @AppStorage("enablePlaylists") private var enablePlaylists = true
     @ObservedObject private var library = LibraryStore.shared
+    @State private var showAddToPlaylist = false
 
     func body(content: Content) -> some View {
-        content.contextMenu {
-            let player = AudioPlayerService.shared
-            Button { player.addPlayNext(song) } label: {
-                Label(String(localized: "play_next"), systemImage: "text.line.first.and.arrowtriangle.forward")
-            }
-            Button { player.addToQueue(song) } label: {
-                Label(String(localized: "add_to_queue"), systemImage: "text.append")
-            }
-            if enableFavorites {
-                let starred = library.isSongStarred(song)
-                Button { Task { await library.toggleStarSong(song) } } label: {
-                    Label(starred ? String(localized: "unfavorite") : String(localized: "favorite"),
-                          systemImage: starred ? "heart.fill" : "heart")
+        content
+            .contextMenu {
+                let player = AudioPlayerService.shared
+                Button { player.addPlayNext(song) } label: {
+                    Label(String(localized: "play_next"), systemImage: "text.line.first.and.arrowtriangle.forward")
+                }
+                Button { player.addToQueue(song) } label: {
+                    Label(String(localized: "add_to_queue"), systemImage: "text.append")
+                }
+                if enableFavorites {
+                    let starred = library.isSongStarred(song)
+                    Button { Task { await library.toggleStarSong(song) } } label: {
+                        Label(starred ? String(localized: "unfavorite") : String(localized: "favorite"),
+                              systemImage: starred ? "heart.fill" : "heart")
+                    }
+                }
+                if enablePlaylists {
+                    Button { showAddToPlaylist = true } label: {
+                        Label(String(localized: "add_to_playlist"), systemImage: "text.badge.plus")
+                    }
                 }
             }
-        }
+            .sheet(isPresented: $showAddToPlaylist) { AddToPlaylistView(songIds: [song.id]) }
     }
 }
 
 private struct AlbumContextMenuModifier: ViewModifier {
     let album: Album
     @AppStorage("enableFavorites") private var enableFavorites = true
+    @AppStorage("enablePlaylists") private var enablePlaylists = true
     @ObservedObject private var library = LibraryStore.shared
+    @State private var addSongIds: [String] = []
+    @State private var showAddToPlaylist = false
 
     func body(content: Content) -> some View {
-        content.contextMenu {
-            let player = AudioPlayerService.shared
-            Button { Task { let s = await library.albumSongs(album); player.play(songs: s, startIndex: 0) } } label: {
-                Label(String(localized: "play"), systemImage: "play.fill")
+        content
+            .contextMenu {
+                let player = AudioPlayerService.shared
+                Button { Task { let s = await library.albumSongs(album); player.play(songs: s, startIndex: 0) } } label: {
+                    Label(String(localized: "play"), systemImage: "play.fill")
+                }
+                Button { Task { let s = await library.albumSongs(album); player.playShuffled(songs: s) } } label: {
+                    Label(String(localized: "shuffle"), systemImage: "shuffle")
+                }
+                Button { Task { let s = await library.albumSongs(album); player.addPlayNext(s) } } label: {
+                    Label(String(localized: "play_next"), systemImage: "text.line.first.and.arrowtriangle.forward")
+                }
+                Button { Task { let s = await library.albumSongs(album); player.addToQueue(s) } } label: {
+                    Label(String(localized: "add_to_queue"), systemImage: "text.append")
+                }
+                if enableFavorites {
+                    let starred = library.isAlbumStarred(album)
+                    Button { Task { await library.toggleStarAlbum(album) } } label: {
+                        Label(starred ? String(localized: "unfavorite") : String(localized: "favorite"),
+                              systemImage: starred ? "heart.fill" : "heart")
+                    }
+                }
+                if enablePlaylists {
+                    Button {
+                        Task { addSongIds = (await library.albumSongs(album)).map(\.id); showAddToPlaylist = true }
+                    } label: {
+                        Label(String(localized: "add_to_playlist"), systemImage: "text.badge.plus")
+                    }
+                }
             }
-            Button { Task { let s = await library.albumSongs(album); player.playShuffled(songs: s) } } label: {
-                Label(String(localized: "shuffle"), systemImage: "shuffle")
+            .sheet(isPresented: $showAddToPlaylist) { AddToPlaylistView(songIds: addSongIds) }
+    }
+}
+
+/// Sheet zum Hinzufügen von Songs zu einer bestehenden oder neuen Playlist.
+struct AddToPlaylistView: View {
+    let songIds: [String]
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var store = LibraryStore.shared
+    @ObservedObject private var recap = RecapStore.shared
+    @State private var showCreate = false
+
+    private var playlists: [Playlist] {
+        store.playlists.filter { !recap.recapPlaylistIds.contains($0.id) }
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Button { showCreate = true } label: {
+                    Label(String(localized: "new_playlist_2"), systemImage: "plus")
+                }
+                ForEach(playlists) { pl in
+                    Button {
+                        Task { await store.addSongs(songIds, toPlaylist: pl.id); dismiss() }
+                    } label: {
+                        HStack(spacing: 20) {
+                            CoverArtView(url: pl.coverURL(200), size: 60, cornerRadius: 6)
+                            Text(pl.name).lineLimit(1)
+                        }
+                    }
+                }
             }
-            Button { Task { let s = await library.albumSongs(album); player.addPlayNext(s) } } label: {
-                Label(String(localized: "play_next"), systemImage: "text.line.first.and.arrowtriangle.forward")
-            }
-            Button { Task { let s = await library.albumSongs(album); player.addToQueue(s) } } label: {
-                Label(String(localized: "add_to_queue"), systemImage: "text.append")
-            }
-            if enableFavorites {
-                let starred = library.isAlbumStarred(album)
-                Button { Task { await library.toggleStarAlbum(album) } } label: {
-                    Label(starred ? String(localized: "unfavorite") : String(localized: "favorite"),
-                          systemImage: starred ? "heart.fill" : "heart")
+            .listStyle(.plain)
+            .navigationTitle(String(localized: "add_to_playlist_2"))
+            .task { await store.loadPlaylists() }
+            .sheet(isPresented: $showCreate) {
+                PlaylistEditSheet(title: String(localized: "new_playlist_2"),
+                                  initialName: "", initialComment: nil, showComment: false) { name, _ in
+                    Task { await store.createPlaylist(name: name, songIds: songIds); dismiss() }
                 }
             }
         }
@@ -187,6 +250,7 @@ private struct ArtistContextMenuModifier: ViewModifier {
 private struct PlaylistContextMenuModifier: ViewModifier {
     let playlist: Playlist
     @ObservedObject private var library = LibraryStore.shared
+    @ObservedObject private var pins = PinnedPlaylistStore.shared
 
     func body(content: Content) -> some View {
         content.contextMenu {
@@ -202,6 +266,11 @@ private struct PlaylistContextMenuModifier: ViewModifier {
             }
             Button { Task { let s = await library.playlistSongs(playlist); player.addToQueue(s) } } label: {
                 Label(String(localized: "add_to_queue"), systemImage: "text.append")
+            }
+            let pinned = pins.isPinned(playlist.id)
+            Button { pins.togglePin(playlist.id) } label: {
+                Label(pinned ? String(localized: "unpin") : String(localized: "pin"),
+                      systemImage: pinned ? "pin.slash" : "pin")
             }
         }
     }

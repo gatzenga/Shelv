@@ -138,4 +138,35 @@ final class LibraryStore: ObservableObject {
             if !(error is CancellationError) { errorMessage = error.localizedDescription }
         }
     }
+
+    // MARK: - Playlist-Verwaltung
+
+    func createPlaylist(name: String, songIds: [String] = []) async {
+        do {
+            _ = try await api.createPlaylist(name: name, songIds: songIds)
+            await loadPlaylists()
+        } catch { if !(error is CancellationError) { errorMessage = error.localizedDescription } }
+    }
+
+    func renamePlaylist(_ playlist: Playlist, name: String, comment: String?) async {
+        do {
+            try await api.updatePlaylist(id: playlist.id, name: name, comment: comment)
+            await loadPlaylists()
+        } catch { if !(error is CancellationError) { errorMessage = error.localizedDescription } }
+    }
+
+    func deletePlaylist(_ playlist: Playlist) async {
+        do {
+            try await api.deletePlaylist(id: playlist.id)
+            playlists.removeAll { $0.id == playlist.id }
+            if PinnedPlaylistStore.shared.isPinned(playlist.id) {
+                PinnedPlaylistStore.shared.togglePin(playlist.id)
+            }
+        } catch { if !(error is CancellationError) { errorMessage = error.localizedDescription } }
+    }
+
+    func addSongs(_ songIds: [String], toPlaylist id: String) async {
+        do { try await api.updatePlaylist(id: id, songIdsToAdd: songIds) }
+        catch { if !(error is CancellationError) { errorMessage = error.localizedDescription } }
+    }
 }

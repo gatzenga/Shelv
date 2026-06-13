@@ -116,6 +116,9 @@
 "clear_queue" = "Clear Queue?";
 "clear" = "Clear";
 "new_playlist" = "New Playlist…";
+"pin" = "Pin";
+"unpin" = "Unpin";
+"playlist_name" = "Playlist Name";
 "add_to_playlist_2" = "Add to Playlist";
 "my_playlist" = "My Playlist";
 "new_playlist_2" = "New Playlist";

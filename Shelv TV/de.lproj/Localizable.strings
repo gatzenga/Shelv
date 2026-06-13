@@ -116,6 +116,9 @@
 "clear_queue" = "Warteschlange leeren?";
 "clear" = "Leeren";
 "new_playlist" = "Neue Playlist…";
+"pin" = "Anheften";
+"unpin" = "Lösen";
+"playlist_name" = "Playlist-Name";
 "add_to_playlist_2" = "Zu Playlist hinzufügen";
 "my_playlist" = "Meine Playlist";
 "new_playlist_2" = "Neue Playlist";
