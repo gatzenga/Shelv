@@ -13,38 +13,49 @@ struct QueueView: View {
     }
 
     var body: some View {
-        Group {
-            if isEmpty {
-                ContentUnavailableView(String(localized: "queue_empty"), systemImage: "music.note.list")
-            } else {
-                List {
+        if isEmpty {
+            ContentUnavailableView(String(localized: "queue_empty"), systemImage: "music.note.list")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 4) {
                     if !player.playNextQueue.isEmpty {
-                        Section(String(localized: "play_next")) {
-                            ForEach(Array(player.playNextQueue.enumerated()), id: \.element.id) { i, song in
-                                SongRow(song: song, index: i) { player.jumpToPlayNext(at: i) }
+                        sectionHeader(String(localized: "play_next"))
+                        ForEach(Array(player.playNextQueue.enumerated()), id: \.element.id) { i, song in
+                            DetailSongRow(song: song, number: i, showArtwork: true) {
+                                player.jumpToPlayNext(at: i)
                             }
                         }
                     }
                     if !upcomingAlbum.isEmpty {
-                        // Kein eigener Header — der Panel-Titel sagt bereits "Warteschlange".
-                        Section {
-                            ForEach(Array(upcomingAlbum.enumerated()), id: \.element.id) { i, song in
-                                SongRow(song: song, index: i) {
-                                    player.jumpToQueueTrack(at: player.currentIndex + 1 + i)
-                                }
+                        sectionHeader(String(localized: "up_next"))
+                        ForEach(Array(upcomingAlbum.enumerated()), id: \.element.id) { i, song in
+                            DetailSongRow(song: song, number: i, showArtwork: true) {
+                                player.jumpToQueueTrack(at: player.currentIndex + 1 + i)
                             }
                         }
                     }
                     if !player.userQueue.isEmpty {
-                        Section(String(localized: "added_to_queue")) {
-                            ForEach(Array(player.userQueue.enumerated()), id: \.element.id) { i, song in
-                                SongRow(song: song, index: i) { player.jumpToUserQueue(at: i) }
+                        sectionHeader(String(localized: "your_queue"))
+                        ForEach(Array(player.userQueue.enumerated()), id: \.element.id) { i, song in
+                            DetailSongRow(song: song, number: i, showArtwork: true) {
+                                player.jumpToUserQueue(at: i)
                             }
                         }
                     }
                 }
-                .listStyle(.plain)
+                .padding(.vertical, 30)
             }
+            .scrollIndicators(.hidden)
         }
+    }
+
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.title3).bold()
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 36)
+            .padding(.top, 20)
+            .padding(.bottom, 4)
     }
 }

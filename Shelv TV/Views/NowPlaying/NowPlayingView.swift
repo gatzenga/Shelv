@@ -160,14 +160,8 @@ struct NowPlayingView: View {
             // Kein Kopf — Titel/Künstler stehen links in der Now-Playing-Spalte.
             LyricsView()
         case .queue:
-            VStack(alignment: .leading, spacing: 0) {
-                Text(String(localized: "queue"))
-                    .font(.title2).bold()
-                    .padding(.horizontal, 50)
-                    .padding(.top, 50)
-                    .padding(.bottom, 12)
-                QueueView()
-            }
+            // Kein Kopf — die Sektionen (Als Nächstes / Nächste Titel / Deine Warteschlange) sind selbsterklärend.
+            QueueView()
         }
     }
 }
@@ -181,17 +175,17 @@ private struct SeekBar: View {
     @FocusState private var focused: Bool
 
     var body: some View {
+        // Fokus wird über die Farbe gezeigt (Akzent statt Weiß) — nicht über Vergrößerung,
+        // die sonst den Text darunter überdecken würde. Sprung in sauberen 15-Sekunden-Schritten.
         ProgressView(value: duration > 0 ? min(time / duration, 1) : 0)
-            .tint(accent)
+            .tint(focused ? accent : .white)
             .frame(maxWidth: 620)
-            .scaleEffect(y: focused ? 2.2 : 1.0)
             .focusable()
             .focused($focused)
             .onMoveCommand { direction in
-                let step = max(duration / 20, 10)
                 switch direction {
-                case .left:  onSeek(max(0, time - step))
-                case .right: onSeek(min(duration, time + step))
+                case .left:  onSeek(max(0, time - 15))
+                case .right: onSeek(min(duration, time + 15))
                 default: break
                 }
             }

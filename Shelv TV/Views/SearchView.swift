@@ -9,27 +9,30 @@ struct SearchView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                if let artists = result?.artist, !artists.isEmpty {
-                    Section(String(localized: "artists")) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 28) {
+                    if let artists = result?.artist, !artists.isEmpty {
+                        sectionHeader(String(localized: "artists"))
                         cardRow { ForEach(artists) { ArtistCard(artist: $0, size: 220) } }
                     }
-                }
-                if let albums = result?.album, !albums.isEmpty {
-                    Section(String(localized: "albums")) {
+                    if let albums = result?.album, !albums.isEmpty {
+                        sectionHeader(String(localized: "albums"))
                         cardRow { ForEach(albums) { AlbumCard(album: $0, size: 220) } }
                     }
-                }
-                if let songs = result?.song, !songs.isEmpty {
-                    Section(String(localized: "songs")) {
-                        ForEach(Array(songs.enumerated()), id: \.element.id) { i, song in
-                            SongRow(song: song, index: i) {
-                                player.play(songs: songs, startIndex: i)
+                    if let songs = result?.song, !songs.isEmpty {
+                        sectionHeader(String(localized: "songs"))
+                        LazyVStack(spacing: 4) {
+                            ForEach(Array(songs.enumerated()), id: \.element.id) { i, song in
+                                DetailSongRow(song: song, number: i, showArtwork: true) {
+                                    player.play(songs: songs, startIndex: i)
+                                }
                             }
                         }
                     }
                 }
+                .padding(.vertical, 24)
             }
+            .scrollIndicators(.hidden)
             .searchable(text: $query, placement: .automatic)
             .onChange(of: query) { _, q in
                 searchTask?.cancel()
@@ -43,12 +46,16 @@ struct SearchView: View {
         }
     }
 
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title).font(.title3).bold().padding(.horizontal, 50)
+    }
+
     private func cardRow<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
             LazyHStack(spacing: 40) { content() }
+                .padding(.horizontal, 50)
                 .padding(.vertical, 20)
         }
         .scrollClipDisabled()
-        .listRowBackground(Color.clear)
     }
 }
