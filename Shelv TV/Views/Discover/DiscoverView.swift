@@ -26,6 +26,7 @@ struct DiscoverView: View {
                         .buttonStyle(.bordered)
                     }
                     .padding(.horizontal, 50)
+                    .focusSection()
 
                     // Smart-Mixe als saubere Akzent-Liste über die volle Breite (wie iOS/Mac)
                     VStack(spacing: 16) {
@@ -35,6 +36,7 @@ struct DiscoverView: View {
                         MixPill(title: String(localized: "mix_shuffle_all"), icon: "shuffle", accent: accent) { await play(.random) }
                     }
                     .padding(.horizontal, 50)
+                    .focusSection()
 
                     albumRow(String(localized: "recently_added"), newest)
                     albumRow(String(localized: "recently_played"), recent)

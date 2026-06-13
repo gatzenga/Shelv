@@ -57,6 +57,7 @@ struct PlaylistsView: View {
                 .padding(.horizontal, 50)
                 .padding(.top, 40)
                 .padding(.bottom, 16)
+                .focusSection()
 
                 Group {
                     if displayPlaylists.isEmpty && store.isLoadingPlaylists {

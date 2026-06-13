@@ -87,6 +87,7 @@ struct ArtistDetailView: View {
         .frame(maxWidth: .infinity)
         .padding(.top, 40)
         .padding(.bottom, 10)
+        .focusSection()
     }
 
     private var controls: some View {
@@ -106,6 +107,7 @@ struct ArtistDetailView: View {
             }
         }
         .buttonStyle(.bordered)
+        .focusSection()
     }
 
     private var albumList: some View {

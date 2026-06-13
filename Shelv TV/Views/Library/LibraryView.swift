@@ -64,6 +64,7 @@ struct LibraryView: View {
                 .frame(maxWidth: 700)
                 .padding(.top, 40)
                 .padding(.bottom, 16)
+                .focusSection()
 
                 if segment == 0 { albumControls }
                 else if segment == 1 { artistControls }
@@ -115,6 +116,7 @@ struct LibraryView: View {
         }
         .buttonStyle(.bordered)
         .padding(.bottom, 16)
+        .focusSection()
     }
 
     private var artistControls: some View {
@@ -128,6 +130,7 @@ struct LibraryView: View {
         }
         .buttonStyle(.bordered)
         .padding(.bottom, 16)
+        .focusSection()
     }
 
     // MARK: - Cover-Grid (Alben / Künstler)
