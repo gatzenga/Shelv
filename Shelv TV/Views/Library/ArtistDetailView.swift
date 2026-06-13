@@ -34,13 +34,16 @@ struct ArtistDetailView: View {
             VStack(alignment: .leading, spacing: 30) {
                 header
                 controls
-                if isGrid {
-                    LazyVGrid(columns: coverGridColumns, alignment: .leading, spacing: 50) {
-                        ForEach(displayAlbums) { AlbumCard(album: $0) }
+                Group {
+                    if isGrid {
+                        LazyVGrid(columns: coverGridColumns, alignment: .leading, spacing: 50) {
+                            ForEach(displayAlbums) { AlbumCard(album: $0) }
+                        }
+                    } else {
+                        albumList
                     }
-                } else {
-                    albumList
                 }
+                .focusSection()
             }
             .padding(.horizontal, 50)
             .padding(.top, 30)

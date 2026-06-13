@@ -58,16 +58,19 @@ struct PlaylistsView: View {
                 .padding(.top, 40)
                 .padding(.bottom, 16)
 
-                if displayPlaylists.isEmpty && store.isLoadingPlaylists {
-                    ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if displayPlaylists.isEmpty {
-                    ContentUnavailableView(String(localized: "no_playlists_2"), systemImage: "music.note.list")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if isGrid {
-                    gridBody
-                } else {
-                    listBody
+                Group {
+                    if displayPlaylists.isEmpty && store.isLoadingPlaylists {
+                        ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else if displayPlaylists.isEmpty {
+                        ContentUnavailableView(String(localized: "no_playlists_2"), systemImage: "music.note.list")
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else if isGrid {
+                        gridBody
+                    } else {
+                        listBody
+                    }
                 }
+                .focusSection()
             }
             .navigationDestination(for: Playlist.self) { PlaylistDetailView(playlist: $0) }
             .task { await store.loadPlaylists() }

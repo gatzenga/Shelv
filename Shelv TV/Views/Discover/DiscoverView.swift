@@ -109,6 +109,7 @@ struct DiscoverView: View {
                     .padding(.vertical, 20)
                 }
             }
+            .focusSection()
         }
     }
 }
