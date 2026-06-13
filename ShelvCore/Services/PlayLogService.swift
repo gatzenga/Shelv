@@ -157,9 +157,17 @@ actor PlayLogService {
     }
 
     static var dbURL: URL {
-        FileManager.default
+        #if os(tvOS)
+        // tvOS hat keinen beschreibbaren Application-Support-Ordner — nur Caches ist
+        // persistent beschreibbar. Application Support liefert „You don't have permission".
+        return FileManager.default
+            .urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("shelv_recap/recap.db")
+        #else
+        return FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("shelv_recap/recap.db")
+        #endif
     }
 
     private static var legacyDbURL: URL {

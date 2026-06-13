@@ -43,6 +43,12 @@ struct MainTabView: View {
                 SettingsView()
             }
         }
+        .onPlayPauseCommand {
+            // tvOS liefert die physische Play/Pause-Taste der Siri Remote im Vordergrund über
+            // diesen SwiftUI-Befehl. MPRemoteCommandCenter erreicht der Resume-Druck im
+            // Vordergrund nicht zuverlässig (Pause kommt an, Play nicht), daher hier abfangen.
+            AudioPlayerService.shared.togglePlayPause()
+        }
         .onChange(of: enablePlaylists) { _, on in
             if !on && selection == "playlists" { selection = "settings" }
         }
