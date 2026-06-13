@@ -7,6 +7,7 @@ struct NowPlayingView: View {
     @ObservedObject private var library = LibraryStore.shared
     @AppStorage("themeColor") private var themeColor = "violet"
     @AppStorage("enableFavorites") private var enableFavorites = true
+    @Environment(\.scenePhase) private var scenePhase
     private var accent: Color { AppTheme.color(for: themeColor) }
 
     @State private var displayTime: Double = 0
@@ -29,6 +30,10 @@ struct NowPlayingView: View {
                         }
                     }
                     .animation(.easeInOut(duration: 0.25), value: panel)
+                    .onAppear { syncDisplayFromPlayer() }
+                    .onChange(of: scenePhase) { _, phase in
+                        if phase == .active { syncDisplayFromPlayer() }
+                    }
                     .onReceive(player.timePublisher) { t in
                         displayTime = t.time
                         displayDuration = t.duration
@@ -141,6 +146,13 @@ struct NowPlayingView: View {
 
     private func toggle(_ p: SidePanel) {
         panel = (panel == p) ? nil : p
+    }
+
+    /// Anzeige-Zeit direkt aus dem (im Speicher gehaltenen) Player übernehmen — nötig wenn
+    /// pausiert: dann feuert der timePublisher nicht und die Anzeige bliebe sonst bei 0.
+    private func syncDisplayFromPlayer() {
+        displayTime = player.currentTime
+        displayDuration = player.duration
     }
 
     // MARK: - Seitenpanel (rechts)
