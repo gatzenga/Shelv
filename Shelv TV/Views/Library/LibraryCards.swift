@@ -334,16 +334,19 @@ struct DetailSongRow: View {
                     Text(formatDuration(d)).font(.caption).foregroundStyle(.secondary).monospacedDigit()
                 }
             }
-            .padding(.vertical, 10)
+            .padding(.vertical, 12)
             .padding(.horizontal, 24)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(focused ? AppTheme.color(for: themeColor).opacity(0.35) : Color.clear)
+            )
+            .scaleEffect(focused ? 1.01 : 1.0)
         }
         .buttonStyle(.plain)
         .focused($focused)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(focused ? AppTheme.color(for: themeColor).opacity(0.3) : Color.clear)
-        )
-        .animation(.easeOut(duration: 0.12), value: focused)
+        .focusEffectDisabled()
+        .animation(.easeOut(duration: 0.14), value: focused)
         .songContextMenu(song)
     }
 }
