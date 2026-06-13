@@ -73,10 +73,7 @@ struct SongRow: View {
                 if showArtwork {
                     CoverArtView(url: song.coverURL(200), size: 64, cornerRadius: 6)
                 } else {
-                    Text("\(index + 1)")
-                        .font(.body.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                        .frame(width: 44, alignment: .trailing)
+                    NowPlayingNumber(songId: song.id, index: index)
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(song.title).lineLimit(1)
@@ -87,10 +84,34 @@ struct SongRow: View {
                 Spacer()
                 if let d = song.duration {
                     Text(formatDuration(d)).font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                        .padding(.trailing, 16)
                 }
             }
         }
         .songContextMenu(song)
+    }
+}
+
+/// Tracknummer, die zum Waveform-Symbol (Akzentfarbe) wird, wenn der Song gerade läuft.
+/// Isoliert, beobachtet nur den Player-Songwechsel.
+private struct NowPlayingNumber: View {
+    let songId: String
+    let index: Int
+    @ObservedObject private var player = AudioPlayerService.shared
+    @AppStorage("themeColor") private var themeColor = "violet"
+
+    var body: some View {
+        Group {
+            if player.currentSong?.id == songId {
+                Image(systemName: "waveform")
+                    .foregroundStyle(AppTheme.color(for: themeColor))
+            } else {
+                Text("\(index + 1)")
+                    .font(.body.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(width: 44, alignment: .trailing)
     }
 }
 

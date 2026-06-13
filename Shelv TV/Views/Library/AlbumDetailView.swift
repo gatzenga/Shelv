@@ -19,8 +19,17 @@ struct AlbumDetailView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(album.name).font(.title2).bold().lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
-                    if let artist = album.artist {
-                        Text(artist).font(.body).foregroundStyle(.secondary).lineLimit(1)
+                    if let artistName = album.artist {
+                        if let aid = album.artistId, !aid.isEmpty {
+                            NavigationLink {
+                                ArtistDetailView(artist: Artist(id: aid, name: artistName))
+                            } label: {
+                                Text(artistName).font(.body).foregroundStyle(.secondary).lineLimit(1)
+                            }
+                            .buttonStyle(.plain)
+                        } else {
+                            Text(artistName).font(.body).foregroundStyle(.secondary).lineLimit(1)
+                        }
                     }
                     if let year = album.year {
                         Text(String(year)).font(.callout).foregroundStyle(.secondary)
@@ -52,13 +61,18 @@ struct AlbumDetailView: View {
             }
             .frame(width: 380)
 
-            // Rechte Spalte — Trackliste
+            // Rechte Spalte — Trackliste (bei ≥2 Discs nach Disc gruppiert)
             List {
-                ForEach(Array(songs.enumerated()), id: \.element.id) { index, song in
-                    SongRow(song: song, index: index, showArtwork: false) {
-                        player.play(songs: songs, startIndex: index)
+                if hasMultipleDiscs {
+                    ForEach(discNumbers, id: \.self) { disc in
+                        Section("Disc \(disc)") {
+                            ForEach(songs.filter { ($0.discNumber ?? 1) == disc }) { song in
+                                songRow(song)
+                            }
+                        }
                     }
-                    .listRowInsets(EdgeInsets(top: 6, leading: 24, bottom: 6, trailing: 24))
+                } else {
+                    ForEach(songs) { song in songRow(song) }
                 }
             }
             .listStyle(.plain)
@@ -73,6 +87,17 @@ struct AlbumDetailView: View {
             songs = await LibraryStore.shared.albumSongs(album)
             albumStarred = album.starred != nil
         }
+    }
+
+    private var discNumbers: [Int] { Array(Set(songs.map { $0.discNumber ?? 1 })).sorted() }
+    private var hasMultipleDiscs: Bool { discNumbers.count > 1 }
+
+    private func songRow(_ song: Song) -> some View {
+        let idx = songs.firstIndex { $0.id == song.id } ?? 0
+        return SongRow(song: song, index: (song.track.map { $0 - 1 }) ?? idx, showArtwork: false) {
+            player.play(songs: songs, startIndex: idx)
+        }
+        .listRowInsets(EdgeInsets(top: 6, leading: 24, bottom: 6, trailing: 24))
     }
 
     private func actionButton(_ title: String, _ icon: String, action: @escaping () -> Void) -> some View {
