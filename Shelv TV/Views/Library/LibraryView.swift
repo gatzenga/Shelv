@@ -21,6 +21,11 @@ enum SortDirection: String, CaseIterable {
     var icon: String { self == .ascending ? "arrow.up" : "arrow.down" }
 }
 
+extension Notification.Name {
+    /// Gepostet von Detail-Views beim Verschwinden → Library scrollt wieder nach oben.
+    static let libraryScrollTop = Notification.Name("libraryScrollTop")
+}
+
 struct LibraryView: View {
     @ObservedObject var store = LibraryStore.shared
     @AppStorage("enableFavorites") private var enableFavorites = true
@@ -136,6 +141,14 @@ struct LibraryView: View {
                 .padding(.bottom, 50)
             }
             .onAppear { proxy.scrollTo("top", anchor: .top) }
+            // Beim Zurück aus einem Detail (tvOS stellt sonst den Fokus aufs gewählte Cover):
+            // kurz verzögert nach oben, nachdem die Fokus-Wiederherstellung gelaufen ist.
+            .onReceive(NotificationCenter.default.publisher(for: .libraryScrollTop)) { _ in
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(80))
+                    withAnimation { proxy.scrollTo("top", anchor: .top) }
+                }
+            }
         }
     }
 

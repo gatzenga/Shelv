@@ -46,6 +46,7 @@ struct ArtistDetailView: View {
             .padding(.bottom, 50)
         }
         .toolbar(.hidden, for: .tabBar)
+        .onDisappear { NotificationCenter.default.post(name: .libraryScrollTop, object: nil) }
         .task {
             if let detail = await LibraryStore.shared.artistDetail(artist) {
                 albums = detail.album ?? []
