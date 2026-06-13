@@ -10,6 +10,10 @@ struct DatabaseSettingsView: View {
 
     var body: some View {
         Form {
+            Text(String(localized: "database"))
+                .font(.largeTitle).bold()
+                .listRowBackground(Color.clear)
+
             Section(String(localized: "overview")) {
                 LabeledContent(String(localized: "total_plays"), value: "\(totalPlays)")
                 Toggle(String(localized: "mixes_from_database"), isOn: $mixUseDatabase)
@@ -42,7 +46,6 @@ struct DatabaseSettingsView: View {
                 }
             }
         }
-        .navigationTitle(String(localized: "database"))
         .toolbar(.hidden, for: .tabBar)
         .task { await refresh() }
         .onChange(of: syncStatus.lastSyncDate) { _, _ in
