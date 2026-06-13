@@ -34,6 +34,12 @@ struct DatabaseSettingsView: View {
         }
         .navigationTitle(String(localized: "database"))
         .task { await refresh() }
+        .onChange(of: syncStatus.lastSyncDate) { _, _ in
+            Task { await refresh() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .recapRegistryUpdated)) { _ in
+            Task { await refresh() }
+        }
     }
 
     private func refresh() async {

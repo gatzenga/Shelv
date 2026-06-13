@@ -46,6 +46,9 @@ struct Shelv_TVApp: App {
                         }
                     }
                     await CloudKitSyncService.shared.setup()
+                    // Beim Kaltstart deterministisch einmal synchronisieren — setup() allein lädt
+                    // keine Remote-Plays; erst syncNow() ruft downloadChanges() und holt die Historie.
+                    await CloudKitSyncService.shared.syncNow()
                 }
                 .onChange(of: scenePhase) { _, phase in
                     guard phase == .active else { return }
