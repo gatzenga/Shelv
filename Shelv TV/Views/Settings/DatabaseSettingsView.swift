@@ -2,6 +2,7 @@ import SwiftUI
 
 struct DatabaseSettingsView: View {
     @ObservedObject private var syncStatus = CloudKitSyncService.shared.status
+    @ObservedObject private var dbErrors = DBErrorLog.shared
     @AppStorage("mixUseDatabase") private var mixUseDatabase = false
     @AppStorage("iCloudSyncEnabled") private var iCloudSyncEnabled = true
 
@@ -29,6 +30,15 @@ struct DatabaseSettingsView: View {
                         Task { await CloudKitSyncService.shared.syncNow() }
                     }
                     .disabled(syncStatus.isSyncing)
+                }
+            }
+
+            Section(String(localized: "logs")) {
+                NavigationLink(String(localized: "sync_log")) {
+                    LogListView(title: String(localized: "sync_log"), entries: syncStatus.logEntries)
+                }
+                NavigationLink(String(localized: "database_errors")) {
+                    LogListView(title: String(localized: "database_errors"), entries: dbErrors.playLogEntries)
                 }
             }
         }

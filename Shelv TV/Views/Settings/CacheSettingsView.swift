@@ -1,9 +1,6 @@
 import SwiftUI
 
 struct CacheSettingsView: View {
-    @ObservedObject private var syncStatus = CloudKitSyncService.shared.status
-    @ObservedObject private var dbErrors = DBErrorLog.shared
-
     @State private var coverCacheBytes = 0
 
     var body: some View {
@@ -20,15 +17,6 @@ struct CacheSettingsView: View {
                     Text(String(localized: "clear_cache"))
                 }
             }
-
-            Section(String(localized: "logs")) {
-                NavigationLink(String(localized: "sync_log")) {
-                    LogListView(title: String(localized: "sync_log"), entries: syncStatus.logEntries)
-                }
-                NavigationLink(String(localized: "database_errors")) {
-                    LogListView(title: String(localized: "database_errors"), entries: dbErrors.playLogEntries)
-                }
-            }
         }
         .navigationTitle(String(localized: "cache"))
         .task { await refresh() }
@@ -39,26 +27,43 @@ struct CacheSettingsView: View {
     }
 }
 
-/// Generische Log-Anzeige (Snapshot der Einträge).
+/// Generische Log-Anzeige (Snapshot der Einträge). Auf tvOS muss jede Zeile fokussierbar
+/// sein, sonst lässt sich die Liste weder scrollen noch mit der Menu-Taste verlassen.
 struct LogListView: View {
     let title: String
     let entries: [String]
 
     var body: some View {
-        Group {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(entries.enumerated()), id: \.offset) { _, line in
+                    LogRow(line: line)
+                }
+            }
+            .padding(.vertical, 24)
+        }
+        .overlay {
             if entries.isEmpty {
-                // .focusable() ist auf tvOS Pflicht: ohne fokussierbares Element fängt der
-                // NavigationStack die Menu-Taste nicht als Pop ab → man fliegt aus der App.
                 ContentUnavailableView(String(localized: "no_entries"), systemImage: "doc.text")
                     .focusable()
-            } else {
-                List(Array(entries.enumerated()), id: \.offset) { _, line in
-                    // Fokussierbar → Liste wird per Remote scrollbar und Zurück funktioniert.
-                    Text(line).font(.caption.monospaced())
-                        .focusable()
-                }
             }
         }
         .navigationTitle(title)
+    }
+}
+
+private struct LogRow: View {
+    let line: String
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        Text(line)
+            .font(.caption.monospaced())
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 8)
+            .padding(.horizontal, 50)
+            .background(focused ? Color.white.opacity(0.12) : Color.clear)
+            .focusable()
+            .focused($focused)
     }
 }
