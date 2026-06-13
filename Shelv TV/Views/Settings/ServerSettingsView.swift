@@ -7,6 +7,9 @@ struct ServerSettingsView: View {
 
     var body: some View {
         List {
+            Text(String(localized: "servers"))
+                .font(.largeTitle).bold()
+                .listRowBackground(Color.clear)
             Section(String(localized: "servers")) {
                 ForEach(serverStore.servers) { server in
                     NavigationLink {
@@ -34,7 +37,6 @@ struct ServerSettingsView: View {
                 }
             }
         }
-        .navigationTitle(String(localized: "servers"))
         .toolbar(.hidden, for: .tabBar)
     }
 }
@@ -47,6 +49,9 @@ struct ServerDetailView: View {
 
     var body: some View {
         List {
+            Text(server.displayName)
+                .font(.largeTitle).bold()
+                .listRowBackground(Color.clear)
             Section {
                 LabeledContent(String(localized: "username"), value: server.username)
                 LabeledContent(String(localized: "server_url"), value: server.baseURL)
@@ -70,7 +75,6 @@ struct ServerDetailView: View {
                 .tint(.red)
             }
         }
-        .navigationTitle(server.displayName)
         .toolbar(.hidden, for: .tabBar)
     }
 }
@@ -88,6 +92,9 @@ struct AddServerView: View {
 
     var body: some View {
         List {
+            Text(String(localized: "add_server"))
+                .font(.largeTitle).bold()
+                .listRowBackground(Color.clear)
             Section {
                 TextField(String(localized: "server_url"), text: $serverURL)
                     .textContentType(.URL)
@@ -114,7 +121,6 @@ struct AddServerView: View {
                 .disabled(isConnecting || serverURL.isEmpty || username.isEmpty)
             }
         }
-        .navigationTitle(String(localized: "add_server"))
         .toolbar(.hidden, for: .tabBar)
     }
 

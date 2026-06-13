@@ -5,6 +5,9 @@ struct CacheSettingsView: View {
 
     var body: some View {
         Form {
+            Text(String(localized: "cache"))
+                .font(.largeTitle).bold()
+                .listRowBackground(Color.clear)
             Section(String(localized: "cover_cache")) {
                 LabeledContent(String(localized: "size"),
                                value: ByteCountFormatter.string(fromByteCount: Int64(coverCacheBytes), countStyle: .file))
@@ -18,7 +21,6 @@ struct CacheSettingsView: View {
                 }
             }
         }
-        .navigationTitle(String(localized: "cache"))
         .toolbar(.hidden, for: .tabBar)
         .task { await refresh() }
     }

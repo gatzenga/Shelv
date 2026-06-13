@@ -12,6 +12,9 @@ struct PlaybackSettingsView: View {
 
     var body: some View {
         Form {
+            Text(String(localized: "playback"))
+                .font(.largeTitle).bold()
+                .listRowBackground(Color.clear)
             Section(String(localized: "gapless")) {
                 Toggle(String(localized: "gapless"), isOn: $gaplessEnabled)
             }
@@ -52,7 +55,6 @@ struct PlaybackSettingsView: View {
                 }
             }
         }
-        .navigationTitle(String(localized: "playback"))
         .toolbar(.hidden, for: .tabBar)
     }
 }
