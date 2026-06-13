@@ -306,12 +306,15 @@ class AudioPlayerService: ObservableObject {
 
     #if os(iOS) || os(tvOS)
     private func setupAudioSession() {
+        activateSession()
+    }
+
+    /// Kategorie setzen + Session aktivieren. Wird vor jeder Wiedergabe aufgerufen, weil tvOS
+    /// die Session nach Pause/Stop/App-Wechsel deaktiviert und ein folgendes play() sonst stumm bleibt.
+    func activateSession() {
         do {
             #if os(tvOS)
-            // tvOS: schlichtes .playback. Die iOS-Optionen (.allowAirPlay/.allowBluetoothHFP)
-            // sind hier ungültig und lassen setCategory werfen → Session bliebe unkonfiguriert,
-            // wodurch Resume nach Pause stumm bleibt.
-            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+            try AVAudioSession.sharedInstance().setCategory(.playback)
             #else
             try AVAudioSession.sharedInstance().setCategory(
                 .playback,
@@ -321,7 +324,7 @@ class AudioPlayerService: ObservableObject {
             #endif
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
-            print("[AudioSession] Failed to activate: \(error)")
+            print("[AudioSession] activate failed: \(error)")
         }
     }
 
@@ -562,6 +565,9 @@ class AudioPlayerService: ObservableObject {
         let gen = playbackGeneration
         Task { @MainActor [weak self] in
             guard let self else { return }
+            #if os(iOS) || os(tvOS)
+            self.activateSession()
+            #endif
             self.networkResumeSong = nil
             self.isEngineLoaded = false
             if let prev = self.currentSong, prev.id != song.id {
@@ -767,10 +773,13 @@ class AudioPlayerService: ObservableObject {
             resumeTime = 0
             startPlayback(song: song, seekTo: seek)
         } else {
-            #if os(iOS) || os(tvOS)
-            // Audio-Session vor Resume reaktivieren — nach einer Pause deaktiviert das System
-            // (insb. tvOS) die Session; ohne explizites setActive(true) bleibt der Player nach
-            // dem Fortsetzen lautlos bzw. springt gar nicht wieder an.
+            #if os(tvOS)
+            // tvOS: engine.resume() (player.play()) bleibt nach einer Pause oft stumm — daher den
+            // Player an der aktuellen Position neu starten (startPlayback reaktiviert die Session).
+            startPlayback(song: song, seekTo: currentTime)
+            #else
+            #if os(iOS)
+            // iOS deaktiviert die Session bei Interruption — vor Resume reaktivieren.
             do {
                 try AVAudioSession.sharedInstance().setActive(true)
             } catch {
@@ -781,6 +790,7 @@ class AudioPlayerService: ObservableObject {
             isPlaying = true
             updateNowPlayingPlaybackRate(1)
             MPNowPlayingInfoCenter.default().playbackState = .playing
+            #endif
         }
     }
 
