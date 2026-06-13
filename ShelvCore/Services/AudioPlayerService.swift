@@ -307,11 +307,18 @@ class AudioPlayerService: ObservableObject {
     #if os(iOS) || os(tvOS)
     private func setupAudioSession() {
         do {
+            #if os(tvOS)
+            // tvOS: schlichtes .playback. Die iOS-Optionen (.allowAirPlay/.allowBluetoothHFP)
+            // sind hier ungültig und lassen setCategory werfen → Session bliebe unkonfiguriert,
+            // wodurch Resume nach Pause stumm bleibt.
+            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+            #else
             try AVAudioSession.sharedInstance().setCategory(
                 .playback,
                 mode: .default,
                 options: [.allowAirPlay, .allowBluetoothHFP]
             )
+            #endif
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
             print("[AudioSession] Failed to activate: \(error)")
