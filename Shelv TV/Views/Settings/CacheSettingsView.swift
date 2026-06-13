@@ -38,7 +38,11 @@ struct LogListView: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
+            LazyVStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.largeTitle).bold()
+                    .padding(.horizontal, 50)
+                    .padding(.bottom, 16)
                 ForEach(Array(entries.enumerated()), id: \.offset) { _, line in
                     LogRow(line: line)
                 }
@@ -51,7 +55,6 @@ struct LogListView: View {
                     .focusable()
             }
         }
-        .navigationTitle(title)
         .toolbar(.hidden, for: .tabBar)
     }
 }
@@ -59,14 +62,17 @@ struct LogListView: View {
 private struct LogRow: View {
     let line: String
     @FocusState private var focused: Bool
+    @AppStorage("themeColor") private var themeColor = "violet"
 
     var body: some View {
         Text(line)
             .font(.caption.monospaced())
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 8)
-            .padding(.horizontal, 50)
-            .background(focused ? Color.white.opacity(0.12) : Color.clear)
+            .padding(.vertical, 10)
+            .padding(.horizontal, 24)
+            .background(RoundedRectangle(cornerRadius: 12)
+                .fill(focused ? AppTheme.color(for: themeColor).opacity(0.4) : .clear))
+            .padding(.horizontal, 38)
             .focusable()
             .focused($focused)
     }

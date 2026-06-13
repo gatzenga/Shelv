@@ -16,8 +16,8 @@ struct AlbumDetailView: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 60) {
-            leftColumn.frame(width: 300)
-            trackList.frame(maxHeight: .infinity)
+            leftColumn.frame(width: 300).focusSection()
+            trackList.frame(maxHeight: .infinity).focusSection()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, 60)
