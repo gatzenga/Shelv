@@ -123,25 +123,19 @@ struct NowPlayingView: View {
         if let song = player.currentSong {
             if let artist = song.artist {
                 if let aid = song.artistId, !aid.isEmpty {
-                    NavigationLink {
+                    TrackLink(text: artist, font: .body) {
                         ArtistDetailView(artist: Artist(id: aid, name: artist))
-                    } label: {
-                        Text(artist).font(.body).foregroundStyle(.secondary).lineLimit(1)
                     }
-                    .buttonStyle(.plain)
                 } else {
                     Text(artist).font(.body).foregroundStyle(.secondary).lineLimit(1)
                 }
             }
             if let album = song.album {
                 if let alid = song.albumId, !alid.isEmpty {
-                    NavigationLink {
+                    TrackLink(text: album, font: .callout) {
                         AlbumDetailView(album: Album(id: alid, name: album, artist: song.artist,
                                                      artistId: song.artistId, coverArt: song.coverArt))
-                    } label: {
-                        Text(album).font(.callout).foregroundStyle(.tertiary).lineLimit(1)
                     }
-                    .buttonStyle(.plain)
                 } else {
                     Text(album).font(.callout).foregroundStyle(.tertiary).lineLimit(1)
                 }
@@ -198,5 +192,28 @@ private struct SeekBar: View {
                 }
             }
             .animation(.easeOut(duration: 0.15), value: focused)
+    }
+}
+
+/// Künstler-/Album-Name als Link: keine Box, der Text färbt sich bei Fokus in der Akzentfarbe.
+private struct TrackLink<Destination: View>: View {
+    let text: String
+    let font: Font
+    @ViewBuilder let destination: () -> Destination
+    @FocusState private var focused: Bool
+    @AppStorage("themeColor") private var themeColor = "violet"
+
+    var body: some View {
+        NavigationLink {
+            destination()
+        } label: {
+            Text(text)
+                .font(font)
+                .lineLimit(1)
+                .foregroundStyle(focused ? AppTheme.color(for: themeColor) : Color.secondary)
+        }
+        .buttonStyle(.borderless)
+        .focused($focused)
+        .animation(.easeOut(duration: 0.12), value: focused)
     }
 }

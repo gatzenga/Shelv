@@ -155,91 +155,63 @@ struct LibraryView: View {
     // MARK: - Listen-Ansicht (Alben / Künstler)
 
     private var albumList: some View {
-        List {
-            ForEach(displayAlbums) { album in
-                NavigationLink { AlbumDetailView(album: album) } label: {
-                    HStack(spacing: 20) {
-                        CoverArtView(url: album.coverURL(200), size: 80, cornerRadius: 6)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(album.name).lineLimit(1)
-                            if let artist = album.artist {
-                                Text(artist).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                            }
-                        }
-                    }
-                }
-                .albumContextMenu(album)
+        ScrollView {
+            LazyVStack(spacing: 4) {
+                ForEach(displayAlbums) { AlbumListRow(album: $0) }
             }
+            .padding(.vertical, 24)
         }
-        .listStyle(.plain)
-        .contentMargins(.vertical, 20, for: .scrollContent)
+        .scrollIndicators(.hidden)
     }
 
     private var artistList: some View {
-        List {
-            ForEach(displayArtists) { artist in
-                NavigationLink { ArtistDetailView(artist: artist) } label: {
-                    HStack(spacing: 20) {
-                        CoverArtView(url: artist.coverURL(200), size: 80, isCircle: true)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(artist.name).lineLimit(1)
-                            let count = store.albums.filter { $0.artistId == artist.id }.count
-                            if count > 0 {
-                                Text("\(count) \(String(localized: "albums"))")
-                                    .font(.caption).foregroundStyle(.secondary)
-                            }
-                        }
-                    }
+        ScrollView {
+            LazyVStack(spacing: 4) {
+                ForEach(displayArtists) { artist in
+                    ArtistListRow(artist: artist,
+                                  albumCount: store.albums.filter { $0.artistId == artist.id }.count)
                 }
-                .artistContextMenu(artist)
             }
+            .padding(.vertical, 24)
         }
-        .listStyle(.plain)
-        .contentMargins(.vertical, 20, for: .scrollContent)
+        .scrollIndicators(.hidden)
     }
 
     // MARK: - Favoriten — native List wie die Suche
 
     @ViewBuilder
     private var favoritesList: some View {
-        List {
-            if !store.favoriteSongs.isEmpty {
-                Section {
-                    ForEach(Array(store.favoriteSongs.enumerated()), id: \.element.id) { i, song in
-                        SongRow(song: song, index: i) {
-                            player.play(songs: store.favoriteSongs, startIndex: i)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 28) {
+                if !store.favoriteSongs.isEmpty {
+                    Text(String(localized: "songs")).font(.title3).bold().padding(.horizontal, 50)
+                    LazyVStack(spacing: 4) {
+                        ForEach(Array(store.favoriteSongs.enumerated()), id: \.element.id) { i, song in
+                            DetailSongRow(song: song, number: i, showArtwork: true) {
+                                player.play(songs: store.favoriteSongs, startIndex: i)
+                            }
                         }
                     }
-                } header: {
-                    HStack {
-                        Text(String(localized: "songs"))
-                        Spacer()
-                        Button {
-                            player.play(songs: store.favoriteSongs, startIndex: 0)
-                        } label: { Label(String(localized: "play"), systemImage: "play.fill") }
-                        .buttonStyle(.bordered)
-                    }
                 }
-            }
-            if !store.favoriteAlbums.isEmpty {
-                Section(String(localized: "albums")) {
+                if !store.favoriteAlbums.isEmpty {
+                    Text(String(localized: "albums")).font(.title3).bold().padding(.horizontal, 50)
                     cardRow { ForEach(store.favoriteAlbums) { AlbumCard(album: $0) } }
                 }
-            }
-            if !store.favoriteArtists.isEmpty {
-                Section(String(localized: "artists")) {
+                if !store.favoriteArtists.isEmpty {
+                    Text(String(localized: "artists")).font(.title3).bold().padding(.horizontal, 50)
                     cardRow { ForEach(store.favoriteArtists) { ArtistCard(artist: $0) } }
                 }
             }
+            .padding(.vertical, 24)
         }
     }
 
     private func cardRow<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
             LazyHStack(spacing: 40) { content() }
+                .padding(.horizontal, 50)
                 .padding(.vertical, 20)
         }
         .scrollClipDisabled()
-        .listRowBackground(Color.clear)
     }
 }

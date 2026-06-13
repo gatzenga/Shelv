@@ -353,3 +353,71 @@ struct DetailSongRow: View {
         .songContextMenu(song)
     }
 }
+
+/// Album-Zeile (Listenansicht) im einheitlichen borderless-Akzent-Fokus-Stil.
+struct AlbumListRow: View {
+    let album: Album
+    @FocusState private var focused: Bool
+    @AppStorage("themeColor") private var themeColor = "violet"
+
+    var body: some View {
+        NavigationLink {
+            AlbumDetailView(album: album)
+        } label: {
+            HStack(spacing: 20) {
+                CoverArtView(url: album.coverURL(200), size: 80, cornerRadius: 6)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(album.name).lineLimit(1)
+                    if let artist = album.artist {
+                        Text(artist).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                }
+                Spacer()
+            }
+            .padding(.vertical, 10)
+            .padding(.horizontal, 24)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 14).fill(focused ? AppTheme.color(for: themeColor).opacity(0.4) : Color.clear))
+            .padding(.horizontal, 12)
+        }
+        .buttonStyle(.borderless)
+        .focused($focused)
+        .animation(.easeOut(duration: 0.14), value: focused)
+        .albumContextMenu(album)
+    }
+}
+
+/// Künstler-Zeile (Listenansicht) im einheitlichen borderless-Akzent-Fokus-Stil.
+struct ArtistListRow: View {
+    let artist: Artist
+    let albumCount: Int
+    @FocusState private var focused: Bool
+    @AppStorage("themeColor") private var themeColor = "violet"
+
+    var body: some View {
+        NavigationLink {
+            ArtistDetailView(artist: artist)
+        } label: {
+            HStack(spacing: 20) {
+                CoverArtView(url: artist.coverURL(200), size: 80, isCircle: true)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(artist.name).lineLimit(1)
+                    if albumCount > 0 {
+                        Text("\(albumCount) \(String(localized: "albums"))")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+            }
+            .padding(.vertical, 10)
+            .padding(.horizontal, 24)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 14).fill(focused ? AppTheme.color(for: themeColor).opacity(0.4) : Color.clear))
+            .padding(.horizontal, 12)
+        }
+        .buttonStyle(.borderless)
+        .focused($focused)
+        .animation(.easeOut(duration: 0.14), value: focused)
+        .artistContextMenu(artist)
+    }
+}
