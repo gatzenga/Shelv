@@ -127,18 +127,18 @@ private struct MixPill: View {
         Button {
             Task { loading = true; await action(); loading = false }
         } label: {
-            HStack(spacing: 18) {
+            HStack(spacing: 16) {
                 Image(systemName: icon)
-                Text(title).font(.title3).bold()
+                Text(title).font(.headline)
                 Spacer()
                 if loading {
                     ProgressView()
                 } else {
-                    Image(systemName: "play.fill").font(.callout)
+                    Image(systemName: "play.fill").font(.caption)
                 }
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
+            .padding(.vertical, 2)
         }
         .buttonStyle(.borderedProminent)
         .tint(accent)
