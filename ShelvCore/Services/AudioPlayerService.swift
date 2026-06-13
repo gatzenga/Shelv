@@ -760,6 +760,16 @@ class AudioPlayerService: ObservableObject {
             resumeTime = 0
             startPlayback(song: song, seekTo: seek)
         } else {
+            #if os(iOS) || os(tvOS)
+            // Audio-Session vor Resume reaktivieren — nach einer Pause deaktiviert das System
+            // (insb. tvOS) die Session; ohne explizites setActive(true) bleibt der Player nach
+            // dem Fortsetzen lautlos bzw. springt gar nicht wieder an.
+            do {
+                try AVAudioSession.sharedInstance().setActive(true)
+            } catch {
+                print("[AudioSession] Reaktivierung vor Resume fehlgeschlagen: \(error)")
+            }
+            #endif
             engine.resume()
             isPlaying = true
             updateNowPlayingPlaybackRate(1)
