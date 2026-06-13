@@ -74,15 +74,8 @@ struct AlbumDetailView: View {
     @ViewBuilder
     private var artistLink: some View {
         if let artistName = album.artist {
-            if let aid = album.artistId, !aid.isEmpty {
-                NavigationLink {
-                    ArtistDetailView(artist: Artist(id: aid, name: artistName))
-                } label: {
-                    Text(artistName).font(.body).foregroundStyle(.secondary).lineLimit(1)
-                }
-                .buttonStyle(.plain)
-            } else {
-                Text(artistName).font(.body).foregroundStyle(.secondary).lineLimit(1)
+            AccentTextLink(text: artistName, font: .body) {
+                ArtistDetailView(artist: resolvedLibraryArtist(name: artistName, id: album.artistId))
             }
         }
     }

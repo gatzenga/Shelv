@@ -419,3 +419,35 @@ struct ArtistListRow: View {
         .artistContextMenu(artist)
     }
 }
+
+/// Text-Link (z. B. Künstler/Album): keine Box, der Text färbt sich bei Fokus in die Akzentfarbe.
+struct AccentTextLink<Destination: View>: View {
+    let text: String
+    let font: Font
+    @ViewBuilder let destination: () -> Destination
+    @FocusState private var focused: Bool
+    @AppStorage("themeColor") private var themeColor = "violet"
+
+    var body: some View {
+        NavigationLink {
+            destination()
+        } label: {
+            Text(text)
+                .font(font)
+                .lineLimit(1)
+                .foregroundStyle(focused ? AppTheme.color(for: themeColor) : Color.secondary)
+        }
+        .buttonStyle(.borderless)
+        .focused($focused)
+        .animation(.easeOut(duration: 0.12), value: focused)
+    }
+}
+
+/// Echtes Künstler-Objekt aus der Library (per Name) — damit Cover/Navigation stimmen —,
+/// sonst aus den vorhandenen Metadaten konstruiert.
+func resolvedLibraryArtist(name: String, id: String?) -> Artist {
+    if let found = LibraryStore.shared.artists.first(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) {
+        return found
+    }
+    return Artist(id: id ?? "", name: name)
+}
