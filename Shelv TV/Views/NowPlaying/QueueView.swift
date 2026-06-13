@@ -26,7 +26,8 @@ struct QueueView: View {
                         }
                     }
                     if !upcomingAlbum.isEmpty {
-                        Section(String(localized: "queue")) {
+                        // Kein eigener Header — der Panel-Titel sagt bereits "Warteschlange".
+                        Section {
                             ForEach(Array(upcomingAlbum.enumerated()), id: \.element.id) { i, song in
                                 SongRow(song: song, index: i) {
                                     player.jumpToQueueTrack(at: player.currentIndex + 1 + i)
@@ -42,8 +43,8 @@ struct QueueView: View {
                         }
                     }
                 }
+                .listStyle(.plain)
             }
         }
-        .navigationTitle(String(localized: "queue"))
     }
 }

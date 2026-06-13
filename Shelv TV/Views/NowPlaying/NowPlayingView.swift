@@ -4,6 +4,8 @@ private enum SidePanel { case lyrics, queue }
 
 struct NowPlayingView: View {
     @ObservedObject var player = AudioPlayerService.shared
+    @AppStorage("themeColor") private var themeColor = "violet"
+    private var accent: Color { AppTheme.color(for: themeColor) }
 
     @State private var displayTime: Double = 0
     @State private var displayDuration: Double = 0
@@ -71,7 +73,7 @@ struct NowPlayingView: View {
             HStack(spacing: 30) {
                 Button { player.toggleShuffle() } label: {
                     Image(systemName: "shuffle")
-                        .foregroundStyle(player.isShuffled ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
+                        .foregroundStyle(player.isShuffled ? accent : Color.primary)
                 }
                 Button { player.previous() } label: { Image(systemName: "backward.fill") }
                 Button { player.togglePlayPause() } label: {
@@ -80,7 +82,7 @@ struct NowPlayingView: View {
                 Button { player.next(triggeredByUser: true) } label: { Image(systemName: "forward.fill") }
                 Button { player.repeatMode = player.repeatMode.toggled } label: {
                     Image(systemName: player.repeatMode.systemImage)
-                        .foregroundStyle(player.repeatMode == .off ? AnyShapeStyle(.primary) : AnyShapeStyle(.tint))
+                        .foregroundStyle(player.repeatMode == .off ? Color.primary : accent)
                 }
             }
             .font(.callout)
@@ -88,9 +90,11 @@ struct NowPlayingView: View {
             HStack(spacing: 30) {
                 Button { toggle(.lyrics) } label: {
                     Label(String(localized: "lyrics"), systemImage: "text.quote")
+                        .foregroundStyle(panel == .lyrics ? accent : Color.primary)
                 }
                 Button { toggle(.queue) } label: {
                     Label(String(localized: "queue"), systemImage: "list.bullet")
+                        .foregroundStyle(panel == .queue ? accent : Color.primary)
                 }
             }
         }
@@ -105,13 +109,18 @@ struct NowPlayingView: View {
 
     @ViewBuilder
     private func sidePanel(_ p: SidePanel) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text(p == .lyrics ? String(localized: "lyrics") : String(localized: "queue"))
-                .font(.title2).bold()
-                .padding([.top, .horizontal], 40)
-            switch p {
-            case .lyrics: LyricsView()
-            case .queue:  QueueView()
+        switch p {
+        case .lyrics:
+            // Kein Kopf — Titel/Künstler stehen links in der Now-Playing-Spalte.
+            LyricsView()
+        case .queue:
+            VStack(alignment: .leading, spacing: 0) {
+                Text(String(localized: "queue"))
+                    .font(.title2).bold()
+                    .padding(.horizontal, 50)
+                    .padding(.top, 50)
+                    .padding(.bottom, 12)
+                QueueView()
             }
         }
     }
