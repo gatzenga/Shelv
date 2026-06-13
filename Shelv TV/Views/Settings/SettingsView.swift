@@ -7,7 +7,6 @@ struct SettingsView: View {
     @AppStorage("enablePlaylists") private var enablePlaylists = true
     @AppStorage("enableFavorites") private var enableFavorites = true
     @AppStorage("recapEnabled") private var recapEnabled = false
-    @AppStorage("autoFetchLyrics") private var autoFetchLyrics = true
 
     private var isGerman: Bool { Locale.preferredLanguages.first?.hasPrefix("de") == true }
 
@@ -48,10 +47,6 @@ struct SettingsView: View {
 
                 Section {
                     NavigationLink(String(localized: "playback")) { PlaybackSettingsView() }
-                }
-
-                Section(String(localized: "lyrics")) {
-                    Toggle(String(localized: "auto_fetch_lyrics"), isOn: $autoFetchLyrics)
                 }
 
                 Section {
