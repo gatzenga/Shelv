@@ -75,7 +75,8 @@ struct InsightsView: View {
                             ForEach(Array(topSongs.enumerated()), id: \.element.id) { i, song in
                                 InsightsRow { player.play(songs: topSongs, startIndex: i) } content: {
                                     row(rank: i + 1, url: song.coverURL(200), isCircle: false,
-                                        title: song.title, subtitle: song.artist, plays: song.playCount ?? 0)
+                                        title: song.title, subtitle: song.artist, plays: song.playCount ?? 0,
+                                        nowPlayingSongId: song.id)
                                 }
                             }
                         }
@@ -119,9 +120,10 @@ struct InsightsView: View {
     // MARK: - Row
 
     @ViewBuilder
-    private func row(rank: Int, url: URL?, isCircle: Bool, title: String, subtitle: String?, plays: Int) -> some View {
+    private func row(rank: Int, url: URL?, isCircle: Bool, title: String, subtitle: String?, plays: Int,
+                     nowPlayingSongId: String? = nil) -> some View {
         let isTop3 = rank <= 3
-        HStack(spacing: 20) {
+        return HStack(spacing: 20) {
             Text("\(rank)")
                 .font(isTop3 ? .title3.bold() : .body)
                 .foregroundStyle(isTop3 ? AnyShapeStyle(accent) : AnyShapeStyle(.secondary))
@@ -129,6 +131,12 @@ struct InsightsView: View {
                 .frame(width: 44, alignment: .trailing)
             CoverArtView(url: url, size: 80,
                          cornerRadius: isCircle ? 40 : 8, isCircle: isCircle)
+                .overlay {
+                    if let nowPlayingSongId {
+                        NowPlayingOverlay(songId: nowPlayingSongId, size: 80,
+                                          cornerRadius: isCircle ? 40 : 8, isCircle: isCircle)
+                    }
+                }
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(isTop3 ? .title3.bold() : .title3).lineLimit(1)
                 if let subtitle {

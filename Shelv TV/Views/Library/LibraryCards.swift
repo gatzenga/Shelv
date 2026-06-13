@@ -170,6 +170,30 @@ struct NowPlayingNumber: View {
     }
 }
 
+/// Dimm-Overlay + animiertes Lautsprecher-Icon auf dem Cover, wenn dieser Song läuft
+/// (wie iOS NowPlayingOverlay). Als `.overlay { }` auf eine CoverArtView legen.
+struct NowPlayingOverlay: View {
+    let songId: String
+    let size: CGFloat
+    var cornerRadius: CGFloat = 8
+    var isCircle: Bool = false
+    @ObservedObject private var player = AudioPlayerService.shared
+
+    var body: some View {
+        if player.currentSong?.id == songId {
+            ZStack {
+                Color.black.opacity(0.4)
+                Image(systemName: "speaker.wave.2.fill")
+                    .font(.system(size: size * 0.3))
+                    .foregroundStyle(.white)
+                    .symbolEffect(.variableColor.iterative.reversing, isActive: player.isPlaying)
+            }
+            .frame(width: size, height: size)
+            .clipShape(isCircle ? AnyShape(Circle()) : AnyShape(RoundedRectangle(cornerRadius: cornerRadius)))
+        }
+    }
+}
+
 func formatDuration(_ seconds: Int) -> String {
     String(format: "%d:%02d", seconds / 60, seconds % 60)
 }
@@ -366,12 +390,29 @@ struct DetailSongRow: View {
     let song: Song
     let number: Int
     var showArtwork: Bool = false
+    /// Rang-Zahl links vom Cover (Playlists/Recap). nil = keine Zahl (z.B. Queue).
+    var rank: Int? = nil
+    /// Recap: erste drei Ränge fett in Akzentfarbe hervorheben.
+    var rankAccent: Bool = false
+    /// Recap: Playcount des Songs (Periodenwert) anzeigen. nil = kein Badge.
+    var playCount: Int? = nil
     let onPlay: () -> Void
+    @AppStorage("themeColor") private var themeColor = "violet"
 
     var body: some View {
         HStack(spacing: 20) {
+            if let rank {
+                let isTop3 = rankAccent && rank <= 3
+                Text("\(rank)")
+                    .font(isTop3 ? .body.bold() : .body)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .foregroundStyle(isTop3 ? AnyShapeStyle(AppTheme.color(for: themeColor)) : AnyShapeStyle(.secondary))
+                    .frame(width: 50, alignment: .trailing)
+            }
             if showArtwork {
                 CoverArtView(url: song.coverURL(200), size: 56, cornerRadius: 6)
+                    .overlay { NowPlayingOverlay(songId: song.id, size: 56, cornerRadius: 6) }
             } else {
                 NowPlayingNumber(songId: song.id, index: number)
             }
@@ -382,6 +423,13 @@ struct DetailSongRow: View {
                 }
             }
             Spacer()
+            if let playCount {
+                HStack(spacing: 6) {
+                    Image(systemName: "play.fill").font(.caption2)
+                    Text("\(playCount)").font(.caption.monospacedDigit())
+                }
+                .foregroundStyle(.secondary)
+            }
             if let d = song.duration {
                 Text(formatDuration(d)).font(.caption).foregroundStyle(.secondary).monospacedDigit()
             }

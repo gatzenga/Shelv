@@ -57,14 +57,19 @@ struct Shelv_TVApp: App {
                 // Server-Wechsel: alten Stream stoppen (VOR dem Reset, sonst spielt der alte
                 // Server weiter) und Library leeren → Views laden über reloadID neu. Wie iOS.
                 .onChange(of: serverStore.activeServerID) { _, _ in
-                    AudioPlayerService.shared.stop()
-                    LibraryStore.shared.resetInMemory()
                     #if DEBUG
                     if SubsonicAPIService.shared.isDemoActive {
+                        // Demo: kein stop() (kein echter alter Stream) — würde nur den festen
+                        // Standby-Eintrag wieder wegwischen. Nur Standby setzen + Views neu laden.
                         AudioPlayerService.shared.loadDemoStandby()
+                        LibraryStore.shared.resetInMemory()
                         UserDefaults.standard.set(true, forKey: "recapEnabled")
+                        return
                     }
                     #endif
+                    // Echter Server-Wechsel: alten Stream stoppen (VOR Reset) + Library leeren.
+                    AudioPlayerService.shared.stop()
+                    LibraryStore.shared.resetInMemory()
                 }
                 .onChange(of: scenePhase) { _, phase in
                     guard phase == .active else { return }

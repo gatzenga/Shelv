@@ -111,12 +111,16 @@ struct PlaylistsView: View {
 struct PlaylistCard: View {
     let playlist: Playlist
     var size: CGFloat = 240
+    /// Gesetzt bei Recap-Playlists → Periodentitel statt „Recap" + Periode-Detailansicht.
+    var recapPeriod: RecapPeriod? = nil
     @ObservedObject private var pins = PinnedPlaylistStore.shared
+
+    private var displayName: String { recapPeriod?.playlistName ?? playlist.name }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             NavigationLink {
-                PlaylistDetailView(playlist: playlist)
+                PlaylistDetailView(playlist: playlist, recapPeriod: recapPeriod)
             } label: {
                 CoverArtView(url: playlist.coverURL(500), size: size, cornerRadius: 8)
             }
@@ -127,7 +131,7 @@ struct PlaylistCard: View {
                 if pins.isPinned(playlist.id) {
                     Image(systemName: "pin.fill").font(.caption).foregroundStyle(.secondary)
                 }
-                Text(playlist.name).lineLimit(1).font(.callout)
+                Text(displayName).lineLimit(1).font(.callout)
             }
             if let count = playlist.songCount {
                 Text("\(count) \(String(localized: "songs"))")
@@ -142,16 +146,24 @@ struct PlaylistCard: View {
 /// rechts die scrollende Songliste mit eigenem Fokus-Highlight.
 struct PlaylistDetailView: View {
     let playlist: Playlist
+    /// Gesetzt für Recap-Playlists → Periodentitel + Periode-Playcounts + Top-3 in Akzentfarbe.
+    var recapPeriod: RecapPeriod? = nil
     private let player = AudioPlayerService.shared
     @ObservedObject private var store = LibraryStore.shared
     @Environment(\.dismiss) private var dismiss
 
     @State private var songs: [Song] = []
+    @State private var recapCounts: [String: Int] = [:]
     @State private var showRename = false
     @State private var showDeleteConfirm = false
 
+    private var isRecap: Bool { recapPeriod != nil }
+
     /// Aktueller Stand (Name/Comment nach Umbenennen) aus dem Store, sonst das übergebene Objekt.
     private var current: Playlist { store.playlists.first { $0.id == playlist.id } ?? playlist }
+
+    /// Recap zeigt den Periodentitel (wie iOS), normale Playlists ihren Namen.
+    private var displayName: String { recapPeriod?.playlistName ?? current.name }
 
     var body: some View {
         HStack(alignment: .center, spacing: 60) {
@@ -161,7 +173,16 @@ struct PlaylistDetailView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, 60)
         .toolbar(.hidden, for: .tabBar)
-        .task { songs = await LibraryStore.shared.playlistSongs(playlist) }
+        .task {
+            songs = await LibraryStore.shared.playlistSongs(playlist)
+            // Recap: Periode-Playcounts wie iOS (im Demo liefert topSongs die Recap-Counts).
+            if let p = recapPeriod {
+                let sid = SubsonicAPIService.shared.activeServer?.stableId ?? ""
+                let counts = await PlayLogService.shared.topSongs(
+                    serverId: sid, from: p.start, to: p.end, limit: p.type.songLimit)
+                recapCounts = Dictionary(counts.map { ($0.songId, $0.count) }, uniquingKeysWith: { a, _ in a })
+            }
+        }
         .sheet(isPresented: $showRename) {
             PlaylistEditSheet(title: String(localized: "rename"),
                               initialName: current.name, initialComment: current.comment, showComment: true) { name, comment in
@@ -180,7 +201,7 @@ struct PlaylistDetailView: View {
         VStack(alignment: .leading, spacing: 16) {
             CoverArtView(url: current.coverURL(600), size: 300, cornerRadius: 12)
             VStack(alignment: .leading, spacing: 6) {
-                Text(current.name).font(.title3).bold().lineLimit(2)
+                Text(displayName).font(.title3).bold().lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
                 if let comment = current.comment, !comment.isEmpty {
                     Text(comment).font(.callout).foregroundStyle(.secondary).lineLimit(2)
@@ -231,7 +252,9 @@ struct PlaylistDetailView: View {
         ScrollView {
             LazyVStack(spacing: 4) {
                 ForEach(Array(songs.enumerated()), id: \.element.id) { index, song in
-                    DetailSongRow(song: song, number: index, showArtwork: true) {
+                    DetailSongRow(song: song, number: index, showArtwork: true,
+                                  rank: index + 1, rankAccent: isRecap,
+                                  playCount: isRecap ? (recapCounts[song.id] ?? 0) : nil) {
                         player.play(songs: songs, startIndex: index)
                     }
                 }
