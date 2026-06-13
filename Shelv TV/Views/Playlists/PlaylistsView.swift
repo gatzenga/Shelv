@@ -163,7 +163,7 @@ struct PlaylistDetailView: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 60) {
-            leftColumn.frame(width: 360)
+            leftColumn.frame(width: 300)
             trackList.frame(maxHeight: .infinity)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -205,12 +205,17 @@ struct PlaylistDetailView: View {
                 HStack(spacing: 12) {
                     iconButton("text.line.first.and.arrowtriangle.forward") { player.addPlayNext(songs) }
                     iconButton("text.append") { player.addToQueue(songs) }
-                    iconButton("pencil") { showRename = true }
-                    Button { showDeleteConfirm = true } label: {
-                        Image(systemName: "trash").frame(maxWidth: .infinity)
+                    Menu {
+                        Button { showRename = true } label: {
+                            Label(String(localized: "rename"), systemImage: "pencil")
+                        }
+                        Button(role: .destructive) { showDeleteConfirm = true } label: {
+                            Label(String(localized: "delete_playlist"), systemImage: "trash")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis").frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
-                    .tint(.red)
                 }
             }
             .disabled(songs.isEmpty)

@@ -36,6 +36,7 @@ struct LibraryView: View {
     @AppStorage("artistViewIsGrid") private var artistIsGrid = false
 
     @State private var segment = 0   // 0 = Albums, 1 = Artists, 2 = Favorites
+    @State private var path = NavigationPath()
     private let player = AudioPlayerService.shared
 
     private var albumSort: AlbumSortOption { AlbumSortOption(rawValue: albumSortRaw) ?? .alphabetical }
@@ -57,7 +58,7 @@ struct LibraryView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             VStack(spacing: 0) {
                 Picker("", selection: $segment) {
                     Text(String(localized: "albums")).tag(0)
@@ -83,6 +84,8 @@ struct LibraryView: View {
                     favoritesList
                 }
             }
+            .navigationDestination(for: Album.self) { AlbumDetailView(album: $0) }
+            .navigationDestination(for: Artist.self) { ArtistDetailView(artist: $0) }
             .task(id: albumServerType) { await store.loadAlbums(sortBy: albumServerType) }
             .task { await store.loadArtists() }
             .task(id: enableFavorites) { if enableFavorites { await store.loadStarred() } }
@@ -157,7 +160,9 @@ struct LibraryView: View {
     private var albumList: some View {
         ScrollView {
             LazyVStack(spacing: 4) {
-                ForEach(displayAlbums) { AlbumListRow(album: $0) }
+                ForEach(displayAlbums) { album in
+                    AlbumListRow(album: album) { path.append(album) }
+                }
             }
             .padding(.vertical, 24)
         }
@@ -169,7 +174,9 @@ struct LibraryView: View {
             LazyVStack(spacing: 4) {
                 ForEach(displayArtists) { artist in
                     ArtistListRow(artist: artist,
-                                  albumCount: store.albums.filter { $0.artistId == artist.id }.count)
+                                  albumCount: store.albums.filter { $0.artistId == artist.id }.count) {
+                        path.append(artist)
+                    }
                 }
             }
             .padding(.vertical, 24)

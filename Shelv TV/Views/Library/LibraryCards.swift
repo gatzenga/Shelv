@@ -317,41 +317,37 @@ struct DetailSongRow: View {
     @AppStorage("themeColor") private var themeColor = "violet"
 
     var body: some View {
-        Button(action: onPlay) {
-            HStack(spacing: 20) {
-                if showArtwork {
-                    CoverArtView(url: song.coverURL(200), size: 56, cornerRadius: 6)
-                } else {
-                    NowPlayingNumber(songId: song.id, index: number)
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(song.title).lineLimit(1)
-                    if let artist = song.artist {
-                        Text(artist).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                    }
-                }
-                Spacer()
-                if let d = song.duration {
-                    Text(formatDuration(d)).font(.caption).foregroundStyle(.secondary).monospacedDigit()
+        HStack(spacing: 20) {
+            if showArtwork {
+                CoverArtView(url: song.coverURL(200), size: 56, cornerRadius: 6)
+            } else {
+                NowPlayingNumber(songId: song.id, index: number)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(song.title).lineLimit(1)
+                if let artist = song.artist {
+                    Text(artist).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
             }
-            .padding(.vertical, 12)
-            .padding(.horizontal, 24)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 14)
-                    .fill(focused ? AppTheme.color(for: themeColor).opacity(0.4) : Color.clear)
-            )
-            // Außenabstand: grenzt den Highlight ein, damit die Rundung links/rechts sichtbar
-            // ist und nichts über den Spaltenrand ragt.
-            .padding(.horizontal, 12)
+            Spacer()
+            if let d = song.duration {
+                Text(formatDuration(d)).font(.caption).foregroundStyle(.secondary).monospacedDigit()
+            }
         }
-        // .borderless zeigt auf tvOS KEIN weißes System-Highlight (wie ArtistCard) —
-        // der Fokus wird allein durch die Akzent-Box dargestellt.
-        .buttonStyle(.borderless)
+        .padding(.vertical, 12)
+        .padding(.horizontal, 24)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(focused ? AppTheme.color(for: themeColor).opacity(0.4) : Color.clear)
+        )
+        .padding(.horizontal, 12)
+        .contentShape(Rectangle())
+        // Reines fokussierbares Element (kein Button/NavigationLink) → tvOS legt KEINEN
+        // Bild-/Zeilen-Zoom drauf; Markierung allein über die Akzent-Box.
+        .focusable()
         .focused($focused)
-        // Kein System-Fokuseffekt → kein Cover-/Zeilen-Zoom; Markierung allein über die Akzent-Box.
-        .focusEffectDisabled()
+        .onTapGesture { onPlay() }
         .animation(.easeOut(duration: 0.14), value: focused)
         .songContextMenu(song)
     }
@@ -360,33 +356,30 @@ struct DetailSongRow: View {
 /// Album-Zeile (Listenansicht) im einheitlichen borderless-Akzent-Fokus-Stil.
 struct AlbumListRow: View {
     let album: Album
+    let onSelect: () -> Void
     @FocusState private var focused: Bool
     @AppStorage("themeColor") private var themeColor = "violet"
 
     var body: some View {
-        NavigationLink {
-            AlbumDetailView(album: album)
-        } label: {
-            HStack(spacing: 20) {
-                CoverArtView(url: album.coverURL(200), size: 80, cornerRadius: 6)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(album.name).lineLimit(1)
-                    if let artist = album.artist {
-                        Text(artist).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                    }
+        HStack(spacing: 20) {
+            CoverArtView(url: album.coverURL(200), size: 80, cornerRadius: 6)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(album.name).lineLimit(1)
+                if let artist = album.artist {
+                    Text(artist).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
-                Spacer()
             }
-            .padding(.vertical, 10)
-            .padding(.horizontal, 24)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 14).fill(focused ? AppTheme.color(for: themeColor).opacity(0.4) : Color.clear))
-            .padding(.horizontal, 12)
+            Spacer()
         }
-        .buttonStyle(.borderless)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 24)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 14).fill(focused ? AppTheme.color(for: themeColor).opacity(0.4) : Color.clear))
+        .padding(.horizontal, 12)
+        .contentShape(Rectangle())
+        .focusable()
         .focused($focused)
-        // Kein System-Fokuseffekt → kein Cover-/Zeilen-Zoom; Markierung allein über die Akzent-Box.
-        .focusEffectDisabled()
+        .onTapGesture { onSelect() }
         .animation(.easeOut(duration: 0.14), value: focused)
         .albumContextMenu(album)
     }
@@ -396,34 +389,31 @@ struct AlbumListRow: View {
 struct ArtistListRow: View {
     let artist: Artist
     let albumCount: Int
+    let onSelect: () -> Void
     @FocusState private var focused: Bool
     @AppStorage("themeColor") private var themeColor = "violet"
 
     var body: some View {
-        NavigationLink {
-            ArtistDetailView(artist: artist)
-        } label: {
-            HStack(spacing: 20) {
-                CoverArtView(url: artist.coverURL(200), size: 80, isCircle: true)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(artist.name).lineLimit(1)
-                    if albumCount > 0 {
-                        Text("\(albumCount) \(String(localized: "albums"))")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
+        HStack(spacing: 20) {
+            CoverArtView(url: artist.coverURL(200), size: 80, isCircle: true)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(artist.name).lineLimit(1)
+                if albumCount > 0 {
+                    Text("\(albumCount) \(String(localized: "albums"))")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
-                Spacer()
             }
-            .padding(.vertical, 10)
-            .padding(.horizontal, 24)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 14).fill(focused ? AppTheme.color(for: themeColor).opacity(0.4) : Color.clear))
-            .padding(.horizontal, 12)
+            Spacer()
         }
-        .buttonStyle(.borderless)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 24)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 14).fill(focused ? AppTheme.color(for: themeColor).opacity(0.4) : Color.clear))
+        .padding(.horizontal, 12)
+        .contentShape(Rectangle())
+        .focusable()
         .focused($focused)
-        // Kein System-Fokuseffekt → kein Cover-/Zeilen-Zoom; Markierung allein über die Akzent-Box.
-        .focusEffectDisabled()
+        .onTapGesture { onSelect() }
         .animation(.easeOut(duration: 0.14), value: focused)
         .artistContextMenu(artist)
     }
