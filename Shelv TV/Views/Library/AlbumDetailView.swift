@@ -45,11 +45,12 @@ struct AlbumDetailView: View {
             VStack(spacing: 12) {
                 actionButton(String(localized: "play"), "play.fill") { player.play(songs: songs, startIndex: 0) }
                 actionButton(String(localized: "shuffle"), "shuffle") { player.playShuffled(songs: songs) }
-                actionButton(String(localized: "play_next"), "text.line.first.and.arrowtriangle.forward") { player.addPlayNext(songs) }
-                actionButton(String(localized: "add_to_queue"), "text.append") { player.addToQueue(songs) }
-                if enableFavorites {
-                    actionButton(albumStarred ? String(localized: "unfavorite") : String(localized: "favorite"),
-                                 albumStarred ? "heart.fill" : "heart") { toggleAlbumStar() }
+                HStack(spacing: 12) {
+                    iconButton("text.line.first.and.arrowtriangle.forward") { player.addPlayNext(songs) }
+                    iconButton("text.append") { player.addToQueue(songs) }
+                    if enableFavorites {
+                        iconButton(albumStarred ? "heart.fill" : "heart") { toggleAlbumStar() }
+                    }
                 }
             }
             .disabled(songs.isEmpty)
@@ -59,6 +60,13 @@ struct AlbumDetailView: View {
     private func actionButton(_ title: String, _ icon: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Label(title, systemImage: icon).frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+    }
+
+    private func iconButton(_ icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon).frame(maxWidth: .infinity)
         }
         .buttonStyle(.bordered)
     }

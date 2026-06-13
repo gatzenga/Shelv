@@ -202,26 +202,31 @@ struct PlaylistDetailView: View {
             VStack(spacing: 12) {
                 actionButton(String(localized: "play"), "play.fill") { player.play(songs: songs, startIndex: 0) }
                 actionButton(String(localized: "shuffle"), "shuffle") { player.playShuffled(songs: songs) }
-                actionButton(String(localized: "play_next"), "text.line.first.and.arrowtriangle.forward") { player.addPlayNext(songs) }
-                actionButton(String(localized: "add_to_queue"), "text.append") { player.addToQueue(songs) }
+                HStack(spacing: 12) {
+                    iconButton("text.line.first.and.arrowtriangle.forward") { player.addPlayNext(songs) }
+                    iconButton("text.append") { player.addToQueue(songs) }
+                    iconButton("pencil") { showRename = true }
+                    Button { showDeleteConfirm = true } label: {
+                        Image(systemName: "trash").frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.red)
+                }
             }
             .disabled(songs.isEmpty)
-
-            Menu {
-                Button { showRename = true } label: { Label(String(localized: "rename"), systemImage: "pencil") }
-                Button(role: .destructive) { showDeleteConfirm = true } label: {
-                    Label(String(localized: "delete_playlist"), systemImage: "trash")
-                }
-            } label: {
-                Label(String(localized: "edit"), systemImage: "ellipsis.circle").frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
         }
     }
 
     private func actionButton(_ title: String, _ icon: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Label(title, systemImage: icon).frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+    }
+
+    private func iconButton(_ icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon).frame(maxWidth: .infinity)
         }
         .buttonStyle(.bordered)
     }

@@ -345,9 +345,10 @@ struct DetailSongRow: View {
             // ist und nichts über den Spaltenrand ragt.
             .padding(.horizontal, 12)
         }
-        .buttonStyle(.plain)
+        // .borderless zeigt auf tvOS KEIN weißes System-Highlight (wie ArtistCard) —
+        // der Fokus wird allein durch die Akzent-Box dargestellt.
+        .buttonStyle(.borderless)
         .focused($focused)
-        .focusEffectDisabled()
         .animation(.easeOut(duration: 0.14), value: focused)
         .songContextMenu(song)
     }
