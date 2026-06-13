@@ -104,6 +104,7 @@ struct NowPlayingNumber: View {
         Group {
             if player.currentSong?.id == songId {
                 Image(systemName: "waveform")
+                    .font(.body)
                     .foregroundStyle(AppTheme.color(for: themeColor))
             } else {
                 Text("\(index + 1)")
