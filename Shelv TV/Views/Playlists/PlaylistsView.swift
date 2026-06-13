@@ -169,7 +169,6 @@ struct PlaylistDetailView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, 60)
         .toolbar(.hidden, for: .tabBar)
-        .onDisappear { NotificationCenter.default.post(name: .libraryScrollTop, object: nil) }
         .task { songs = await LibraryStore.shared.playlistSongs(playlist) }
         .sheet(isPresented: $showRename) {
             PlaylistEditSheet(title: String(localized: "rename"),

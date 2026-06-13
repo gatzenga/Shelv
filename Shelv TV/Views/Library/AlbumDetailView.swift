@@ -22,7 +22,6 @@ struct AlbumDetailView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, 60)
         .toolbar(.hidden, for: .tabBar)
-        .onDisappear { NotificationCenter.default.post(name: .libraryScrollTop, object: nil) }
         .task {
             songs = await LibraryStore.shared.albumSongs(album)
             albumStarred = album.starred != nil
