@@ -85,6 +85,13 @@ struct InsightsView: View {
             }
         }
         .task {
+            if InsightsCache.isFresh {
+                topArtists = InsightsCache.artists
+                topAlbums = InsightsCache.albums
+                topSongs = InsightsCache.songs
+                isLoading = false
+                return
+            }
             async let artists: Void = LibraryStore.shared.loadArtists()   // fürs Künstler-Matching
             await load()
             _ = await artists
@@ -168,6 +175,9 @@ struct InsightsView: View {
             .sorted { $0.totalPlayCount > $1.totalPlayCount }
             .prefix(20).map { $0 }
 
+        InsightsCache.albums = topAlbums
+        InsightsCache.artists = topArtists
+        InsightsCache.timestamp = Date()
         isLoading = false
         await loadTopSongs(from: frequent)
     }
@@ -188,5 +198,19 @@ struct InsightsView: View {
         topSongs = songs
             .sorted { ($0.playCount ?? 0) > ($1.playCount ?? 0) }
             .prefix(20).map { $0 }
+        InsightsCache.songs = topSongs
+    }
+}
+
+/// 30-Minuten-Cache für Insights — verhindert Neuladen bei jedem Öffnen.
+@MainActor
+private enum InsightsCache {
+    static var artists: [TopArtistEntry] = []
+    static var albums: [TopAlbumEntry] = []
+    static var songs: [Song] = []
+    static var timestamp: Date?
+    static var isFresh: Bool {
+        guard let t = timestamp, !artists.isEmpty else { return false }
+        return Date().timeIntervalSince(t) < 30 * 60
     }
 }
