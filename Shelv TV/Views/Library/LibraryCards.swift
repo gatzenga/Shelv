@@ -350,6 +350,8 @@ struct DetailSongRow: View {
         // der Fokus wird allein durch die Akzent-Box dargestellt.
         .buttonStyle(.borderless)
         .focused($focused)
+        // Kein System-Fokuseffekt → kein Cover-/Zeilen-Zoom; Markierung allein über die Akzent-Box.
+        .focusEffectDisabled()
         .animation(.easeOut(duration: 0.14), value: focused)
         .songContextMenu(song)
     }
@@ -383,6 +385,8 @@ struct AlbumListRow: View {
         }
         .buttonStyle(.borderless)
         .focused($focused)
+        // Kein System-Fokuseffekt → kein Cover-/Zeilen-Zoom; Markierung allein über die Akzent-Box.
+        .focusEffectDisabled()
         .animation(.easeOut(duration: 0.14), value: focused)
         .albumContextMenu(album)
     }
@@ -418,6 +422,8 @@ struct ArtistListRow: View {
         }
         .buttonStyle(.borderless)
         .focused($focused)
+        // Kein System-Fokuseffekt → kein Cover-/Zeilen-Zoom; Markierung allein über die Akzent-Box.
+        .focusEffectDisabled()
         .animation(.easeOut(duration: 0.14), value: focused)
         .artistContextMenu(artist)
     }
