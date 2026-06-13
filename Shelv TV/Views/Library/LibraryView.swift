@@ -38,13 +38,18 @@ struct LibraryView: View {
     // MARK: - Cover-Grid (Alben / Künstler) — gleicher Look wie Discover
 
     private func coverGrid<T: Identifiable, Card: View>(_ items: [T], @ViewBuilder card: @escaping (T) -> Card) -> some View {
-        ScrollView {
-            LazyVGrid(columns: coverGridColumns, alignment: .leading, spacing: 50) {
-                ForEach(items) { card($0) }
+        ScrollViewReader { proxy in
+            ScrollView {
+                Color.clear.frame(height: 1).id("top")
+                LazyVGrid(columns: coverGridColumns, alignment: .leading, spacing: 50) {
+                    ForEach(items) { card($0) }
+                }
+                .padding(.horizontal, 50)
+                .padding(.top, 30)
+                .padding(.bottom, 50)
             }
-            .padding(.horizontal, 50)
-            .padding(.top, 30)
-            .padding(.bottom, 50)
+            // Beim (Wieder-)Erscheinen nach oben springen statt mitten in der Liste zu bleiben.
+            .onAppear { proxy.scrollTo("top", anchor: .top) }
         }
     }
 
