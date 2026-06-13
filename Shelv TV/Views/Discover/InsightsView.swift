@@ -37,6 +37,8 @@ struct InsightsView: View {
     @State private var topAlbums: [TopAlbumEntry] = []
     @State private var topSongs: [Song] = []
     @State private var isLoading = true
+    @State private var navAlbum: Album?
+    @State private var navArtist: Artist?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -51,39 +53,39 @@ struct InsightsView: View {
             if isLoading && topArtists.isEmpty {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List {
-                    switch segment {
-                    case .artists:
-                        ForEach(Array(topArtists.enumerated()), id: \.element.id) { i, e in
-                            NavigationLink {
-                                ArtistDetailView(artist: libraryArtist(for: e))
-                            } label: {
-                                row(rank: i + 1, url: artistCoverURL(for: e),
-                                    isCircle: true, title: e.name, subtitle: nil, plays: e.totalPlayCount)
+                ScrollView {
+                    LazyVStack(spacing: 4) {
+                        switch segment {
+                        case .artists:
+                            ForEach(Array(topArtists.enumerated()), id: \.element.id) { i, e in
+                                InsightsRow { navArtist = libraryArtist(for: e) } content: {
+                                    row(rank: i + 1, url: artistCoverURL(for: e),
+                                        isCircle: true, title: e.name, subtitle: nil, plays: e.totalPlayCount)
+                                }
                             }
-                        }
-                    case .albums:
-                        ForEach(Array(topAlbums.enumerated()), id: \.element.id) { i, e in
-                            NavigationLink {
-                                AlbumDetailView(album: e.album)
-                            } label: {
-                                row(rank: i + 1, url: e.album.coverURL(200), isCircle: false,
-                                    title: e.album.name, subtitle: e.album.artist, plays: e.playCount)
+                        case .albums:
+                            ForEach(Array(topAlbums.enumerated()), id: \.element.id) { i, e in
+                                InsightsRow { navAlbum = e.album } content: {
+                                    row(rank: i + 1, url: e.album.coverURL(200), isCircle: false,
+                                        title: e.album.name, subtitle: e.album.artist, plays: e.playCount)
+                                }
                             }
-                        }
-                    case .songs:
-                        ForEach(Array(topSongs.enumerated()), id: \.element.id) { i, song in
-                            Button {
-                                player.play(songs: topSongs, startIndex: i)
-                            } label: {
-                                row(rank: i + 1, url: song.coverURL(200), isCircle: false,
-                                    title: song.title, subtitle: song.artist, plays: song.playCount ?? 0)
+                        case .songs:
+                            ForEach(Array(topSongs.enumerated()), id: \.element.id) { i, song in
+                                InsightsRow { player.play(songs: topSongs, startIndex: i) } content: {
+                                    row(rank: i + 1, url: song.coverURL(200), isCircle: false,
+                                        title: song.title, subtitle: song.artist, plays: song.playCount ?? 0)
+                                }
                             }
                         }
                     }
+                    .padding(.vertical, 24)
                 }
+                .scrollIndicators(.hidden)
             }
         }
+        .navigationDestination(item: $navAlbum) { AlbumDetailView(album: $0) }
+        .navigationDestination(item: $navArtist) { ArtistDetailView(artist: $0) }
         .task {
             if InsightsCache.isFresh {
                 topArtists = InsightsCache.artists
@@ -138,7 +140,6 @@ struct InsightsView: View {
             }
             .foregroundStyle(isTop3 ? AnyShapeStyle(accent) : AnyShapeStyle(.secondary))
         }
-        .padding(.vertical, 6)
     }
 
     // MARK: - Daten (portiert aus iOS)
@@ -199,6 +200,29 @@ struct InsightsView: View {
             .sorted { ($0.playCount ?? 0) > ($1.playCount ?? 0) }
             .prefix(20).map { $0 }
         InsightsCache.songs = topSongs
+    }
+}
+
+/// Gerankte Insights-Zeile im einheitlichen borderless-Akzent-Fokus-Stil.
+private struct InsightsRow<Content: View>: View {
+    let onSelect: () -> Void
+    @ViewBuilder let content: () -> Content
+    @FocusState private var focused: Bool
+    @AppStorage("themeColor") private var themeColor = "violet"
+
+    var body: some View {
+        content()
+            .padding(.vertical, 10)
+            .padding(.horizontal, 24)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 14)
+                .fill(focused ? AppTheme.color(for: themeColor).opacity(0.4) : Color.clear))
+            .padding(.horizontal, 12)
+            .contentShape(Rectangle())
+            .focusable()
+            .focused($focused)
+            .onTapGesture { onSelect() }
+            .animation(.easeOut(duration: 0.14), value: focused)
     }
 }
 

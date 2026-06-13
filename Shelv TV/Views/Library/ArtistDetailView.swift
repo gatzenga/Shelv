@@ -12,6 +12,7 @@ struct ArtistDetailView: View {
     @State private var albums: [Album] = []
     @State private var songs: [Song] = []
     @State private var isLoading = true
+    @State private var navAlbum: Album?
 
     private var sort: AlbumSortOption { AlbumSortOption(rawValue: sortRaw) ?? .newest }
     private var dir: SortDirection { SortDirection(rawValue: dirRaw) ?? .descending }
@@ -46,6 +47,7 @@ struct ArtistDetailView: View {
             .padding(.bottom, 50)
         }
         .toolbar(.hidden, for: .tabBar)
+        .navigationDestination(item: $navAlbum) { AlbumDetailView(album: $0) }
         .task {
             if let detail = await LibraryStore.shared.artistDetail(artist) {
                 albums = detail.album ?? []
@@ -104,23 +106,9 @@ struct ArtistDetailView: View {
     }
 
     private var albumList: some View {
-        LazyVStack(spacing: 0) {
+        LazyVStack(spacing: 4) {
             ForEach(displayAlbums) { album in
-                NavigationLink { AlbumDetailView(album: album) } label: {
-                    HStack(spacing: 20) {
-                        CoverArtView(url: album.coverURL(200), size: 80, cornerRadius: 6)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(album.name).lineLimit(1)
-                            if let year = album.year {
-                                Text(String(year)).font(.caption).foregroundStyle(.secondary)
-                            }
-                        }
-                        Spacer()
-                    }
-                    .padding(.vertical, 8)
-                }
-                .buttonStyle(.plain)
-                .albumContextMenu(album)
+                AlbumListRow(album: album) { navAlbum = album }
             }
         }
     }
