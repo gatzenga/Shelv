@@ -117,17 +117,13 @@ struct NowPlayingView: View {
         .padding(50)
     }
 
-    /// Künstler- und Album-Name als Navigationsziele (wenn IDs vorhanden).
+    /// Künstler- und Album-Name als Navigationsziele.
     @ViewBuilder
     private var trackLinks: some View {
         if let song = player.currentSong {
             if let artist = song.artist {
-                if let aid = song.artistId, !aid.isEmpty {
-                    TrackLink(text: artist, font: .body) {
-                        ArtistDetailView(artist: Artist(id: aid, name: artist))
-                    }
-                } else {
-                    Text(artist).font(.body).foregroundStyle(.secondary).lineLimit(1)
+                TrackLink(text: artist, font: .body) {
+                    ArtistDetailView(artist: resolvedArtist(name: artist, id: song.artistId))
                 }
             }
             if let album = song.album {
@@ -141,6 +137,14 @@ struct NowPlayingView: View {
                 }
             }
         }
+    }
+
+    /// Echtes Künstler-Objekt aus der Library (per Name), sonst aus den Song-Metadaten.
+    private func resolvedArtist(name: String, id: String?) -> Artist {
+        if let found = library.artists.first(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) {
+            return found
+        }
+        return Artist(id: id ?? "", name: name)
     }
 
     private func toggle(_ p: SidePanel) {
