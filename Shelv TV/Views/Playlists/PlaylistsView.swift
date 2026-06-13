@@ -74,7 +74,7 @@ struct PlaylistsView: View {
                 .focusSection()
             }
             .navigationDestination(for: Playlist.self) { PlaylistDetailView(playlist: $0) }
-            .task { await store.loadPlaylists() }
+            .task(id: store.reloadID) { await store.loadPlaylists() }
             .sheet(isPresented: $showCreate) {
                 PlaylistEditSheet(title: String(localized: "new_playlist_2"),
                                   initialName: "", initialComment: nil, showComment: false) { name, _ in

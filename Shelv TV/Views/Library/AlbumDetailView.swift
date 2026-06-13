@@ -5,11 +5,10 @@ import SwiftUI
 struct AlbumDetailView: View {
     let album: Album
     @AppStorage("enableFavorites") private var enableFavorites = true
-    private let api = SubsonicAPIService.shared
+    @ObservedObject private var library = LibraryStore.shared
     private let player = AudioPlayerService.shared
 
     @State private var songs: [Song] = []
-    @State private var albumStarred = false
 
     private var discNumbers: [Int] { Array(Set(songs.map { $0.discNumber ?? 1 })).sorted() }
     private var hasMultipleDiscs: Bool { discNumbers.count > 1 }
@@ -24,7 +23,6 @@ struct AlbumDetailView: View {
         .toolbar(.hidden, for: .tabBar)
         .task {
             songs = await LibraryStore.shared.albumSongs(album)
-            albumStarred = album.starred != nil
         }
     }
 
@@ -48,7 +46,9 @@ struct AlbumDetailView: View {
                     iconButton("text.line.first.and.arrowtriangle.forward") { player.addPlayNext(songs) }
                     iconButton("text.append") { player.addToQueue(songs) }
                     if enableFavorites {
-                        iconButton(albumStarred ? "heart.fill" : "heart") { toggleAlbumStar() }
+                        iconButton(library.isAlbumStarred(album) ? "heart.fill" : "heart") {
+                            Task { await library.toggleStarAlbum(album) }
+                        }
                     }
                 }
             }
@@ -107,14 +107,6 @@ struct AlbumDetailView: View {
         let idx = songs.firstIndex { $0.id == song.id } ?? 0
         return DetailSongRow(song: song, number: (song.track.map { $0 - 1 }) ?? idx) {
             player.play(songs: songs, startIndex: idx)
-        }
-    }
-
-    private func toggleAlbumStar() {
-        albumStarred.toggle()
-        Task {
-            if albumStarred { try? await api.star(albumId: album.id) }
-            else { try? await api.unstar(albumId: album.id) }
         }
     }
 }

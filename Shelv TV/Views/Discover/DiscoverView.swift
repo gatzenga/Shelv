@@ -44,7 +44,7 @@ struct DiscoverView: View {
                 }
                 .padding(.vertical, 50)
             }
-            .task { await load() }
+            .task(id: library.reloadID) { await load() }
         }
     }
 

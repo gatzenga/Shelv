@@ -54,6 +54,18 @@ struct Shelv_TVApp: App {
                     // keine Remote-Plays; erst syncNow() ruft downloadChanges() und holt die Historie.
                     await CloudKitSyncService.shared.syncNow()
                 }
+                // Server-Wechsel: alten Stream stoppen (VOR dem Reset, sonst spielt der alte
+                // Server weiter) und Library leeren → Views laden über reloadID neu. Wie iOS.
+                .onChange(of: serverStore.activeServerID) { _, _ in
+                    AudioPlayerService.shared.stop()
+                    LibraryStore.shared.resetInMemory()
+                    #if DEBUG
+                    if SubsonicAPIService.shared.isDemoActive {
+                        AudioPlayerService.shared.loadDemoStandby()
+                        UserDefaults.standard.set(true, forKey: "recapEnabled")
+                    }
+                    #endif
+                }
                 .onChange(of: scenePhase) { _, phase in
                     guard phase == .active else { return }
                     Task { await CloudKitSyncService.shared.syncNow() }

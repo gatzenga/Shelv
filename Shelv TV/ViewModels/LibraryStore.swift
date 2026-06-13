@@ -20,10 +20,25 @@ final class LibraryStore: ObservableObject {
     @Published var isLoadingPlaylists = false
     @Published var errorMessage: String?
 
+    /// Wechselt bei Server-Wechsel — Views hängen ihre `.task(id:)` daran und laden neu.
+    @Published var reloadID = UUID()
+
     private let api = SubsonicAPIService.shared
 
+    /// Alle In-Memory-Daten leeren + Reload anstoßen (wie iOS). Beim Server-Wechsel aufgerufen,
+    /// nachdem der Player gestoppt wurde — sonst bleiben Alben/Favoriten/Playlists des alten Servers.
+    func resetInMemory() {
+        albums = []
+        artists = []
+        favoriteSongs = []
+        favoriteAlbums = []
+        favoriteArtists = []
+        playlists = []
+        reloadID = UUID()
+    }
+
     func loadAlbums(sortBy: String = "alphabeticalByName") async {
-        guard albums.isEmpty || isLoadingAlbums == false else { return }
+        guard !isLoadingAlbums else { return }
         isLoadingAlbums = true; defer { isLoadingAlbums = false }
         var all: [Album] = []
         let pageSize = 500

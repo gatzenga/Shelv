@@ -87,9 +87,9 @@ struct LibraryView: View {
             }
             .navigationDestination(for: Album.self) { AlbumDetailView(album: $0) }
             .navigationDestination(for: Artist.self) { ArtistDetailView(artist: $0) }
-            .task(id: albumServerType) { await store.loadAlbums(sortBy: albumServerType) }
-            .task { await store.loadArtists() }
-            .task(id: enableFavorites) { if enableFavorites { await store.loadStarred() } }
+            .task(id: "\(store.reloadID)|\(albumServerType)") { await store.loadAlbums(sortBy: albumServerType) }
+            .task(id: store.reloadID) { await store.loadArtists() }
+            .task(id: "\(store.reloadID)|\(enableFavorites)") { if enableFavorites { await store.loadStarred() } }
         }
     }
 

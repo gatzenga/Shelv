@@ -17,6 +17,7 @@ private struct TopAlbumEntry: Identifiable {
 /// gerankte Liste mit Playcount. Rein serverbasiert (frequent-Alben), keine DB nötig.
 struct InsightsView: View {
     @AppStorage("themeColor") private var themeColor = "violet"
+    @ObservedObject private var library = LibraryStore.shared
     private var accent: Color { AppTheme.color(for: themeColor) }
     private let api = SubsonicAPIService.shared
     private let player = AudioPlayerService.shared
@@ -86,14 +87,15 @@ struct InsightsView: View {
         }
         .navigationDestination(item: $navAlbum) { AlbumDetailView(album: $0) }
         .navigationDestination(item: $navArtist) { ArtistDetailView(artist: $0) }
-        .task {
-            if InsightsCache.isFresh {
+        .task(id: library.reloadID) {
+            if InsightsCache.isFresh(for: library.reloadID) {
                 topArtists = InsightsCache.artists
                 topAlbums = InsightsCache.albums
                 topSongs = InsightsCache.songs
                 isLoading = false
                 return
             }
+            isLoading = true
             async let artists: Void = LibraryStore.shared.loadArtists()   // fürs Künstler-Matching
             await load()
             _ = await artists
@@ -178,9 +180,12 @@ struct InsightsView: View {
 
         InsightsCache.albums = topAlbums
         InsightsCache.artists = topArtists
-        InsightsCache.timestamp = Date()
         isLoading = false
         await loadTopSongs(from: frequent)
+        // Cache erst jetzt als „frisch" markieren — sonst gilt er mit leeren Songs als gültig
+        // und das Songs-Segment bliebe bis zum Ablauf leer (Songs werden erst hier befüllt).
+        InsightsCache.reloadID = library.reloadID
+        InsightsCache.timestamp = Date()
     }
 
     private func loadTopSongs(from frequent: [Album]) async {
@@ -220,8 +225,10 @@ private enum InsightsCache {
     static var albums: [TopAlbumEntry] = []
     static var songs: [Song] = []
     static var timestamp: Date?
-    static var isFresh: Bool {
-        guard let t = timestamp, !artists.isEmpty else { return false }
+    /// reloadID, unter der gecacht wurde — bei Server-Wechsel wechselt sie, Cache wird ungültig.
+    static var reloadID: UUID?
+    static func isFresh(for reloadID: UUID) -> Bool {
+        guard let t = timestamp, self.reloadID == reloadID, !artists.isEmpty else { return false }
         return Date().timeIntervalSince(t) < 30 * 60
     }
 }

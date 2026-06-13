@@ -50,7 +50,7 @@ struct RecapView: View {
                     }
                 }
             }
-            .task { await library.loadPlaylists() }
+            .task(id: library.reloadID) { await library.loadPlaylists() }
         }
     }
 }
