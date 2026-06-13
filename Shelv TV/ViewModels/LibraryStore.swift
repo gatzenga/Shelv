@@ -75,4 +75,52 @@ final class LibraryStore: ObservableObject {
     func playlistSongs(_ playlist: Playlist) async -> [Song] {
         (try? await api.getPlaylist(id: playlist.id).songs) ?? []
     }
+
+    // MARK: - Favoriten (optimistisch + Rollback)
+
+    func isSongStarred(_ song: Song) -> Bool { favoriteSongs.contains { $0.id == song.id } }
+    func isAlbumStarred(_ album: Album) -> Bool { favoriteAlbums.contains { $0.id == album.id } }
+    func isArtistStarred(_ artist: Artist) -> Bool { favoriteArtists.contains { $0.id == artist.id } }
+
+    func toggleStarSong(_ song: Song) async {
+        let wasStarred = isSongStarred(song)
+        if wasStarred { favoriteSongs.removeAll { $0.id == song.id } }
+        else { favoriteSongs.insert(song, at: 0) }
+        do {
+            if wasStarred { try await api.unstar(songId: song.id) }
+            else { try await api.star(songId: song.id) }
+        } catch {
+            if wasStarred { favoriteSongs.insert(song, at: 0) }
+            else { favoriteSongs.removeAll { $0.id == song.id } }
+            if !(error is CancellationError) { errorMessage = error.localizedDescription }
+        }
+    }
+
+    func toggleStarAlbum(_ album: Album) async {
+        let wasStarred = isAlbumStarred(album)
+        if wasStarred { favoriteAlbums.removeAll { $0.id == album.id } }
+        else { favoriteAlbums.insert(album, at: 0) }
+        do {
+            if wasStarred { try await api.unstar(albumId: album.id) }
+            else { try await api.star(albumId: album.id) }
+        } catch {
+            if wasStarred { favoriteAlbums.insert(album, at: 0) }
+            else { favoriteAlbums.removeAll { $0.id == album.id } }
+            if !(error is CancellationError) { errorMessage = error.localizedDescription }
+        }
+    }
+
+    func toggleStarArtist(_ artist: Artist) async {
+        let wasStarred = isArtistStarred(artist)
+        if wasStarred { favoriteArtists.removeAll { $0.id == artist.id } }
+        else { favoriteArtists.insert(artist, at: 0) }
+        do {
+            if wasStarred { try await api.unstar(artistId: artist.id) }
+            else { try await api.star(artistId: artist.id) }
+        } catch {
+            if wasStarred { favoriteArtists.insert(artist, at: 0) }
+            else { favoriteArtists.removeAll { $0.id == artist.id } }
+            if !(error is CancellationError) { errorMessage = error.localizedDescription }
+        }
+    }
 }
