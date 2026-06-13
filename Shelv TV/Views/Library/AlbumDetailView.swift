@@ -62,11 +62,13 @@ struct AlbumDetailView: View {
                 }
             }
             .listStyle(.plain)
+            .scrollIndicators(.hidden)
             .frame(maxHeight: .infinity)
         }
         .frame(maxHeight: .infinity, alignment: .top)
         .padding(.horizontal, 60)
         .padding(.top, 40)
+        .toolbar(.hidden, for: .tabBar)
         .task {
             songs = await LibraryStore.shared.albumSongs(album)
             albumStarred = album.starred != nil

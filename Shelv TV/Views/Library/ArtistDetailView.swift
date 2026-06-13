@@ -28,6 +28,7 @@ struct ArtistDetailView: View {
             .padding(.top, 30)
             .padding(.bottom, 50)
         }
+        .toolbar(.hidden, for: .tabBar)
         .task {
             if let detail = await LibraryStore.shared.artistDetail(artist) {
                 albums = detail.album ?? []
