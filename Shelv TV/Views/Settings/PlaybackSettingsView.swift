@@ -53,5 +53,6 @@ struct PlaybackSettingsView: View {
             }
         }
         .navigationTitle(String(localized: "playback"))
+        .toolbar(.hidden, for: .tabBar)
     }
 }

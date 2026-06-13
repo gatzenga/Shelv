@@ -35,6 +35,7 @@ struct ServerSettingsView: View {
             }
         }
         .navigationTitle(String(localized: "servers"))
+        .toolbar(.hidden, for: .tabBar)
     }
 }
 
@@ -70,6 +71,7 @@ struct ServerDetailView: View {
             }
         }
         .navigationTitle(server.displayName)
+        .toolbar(.hidden, for: .tabBar)
     }
 }
 
@@ -113,6 +115,7 @@ struct AddServerView: View {
             }
         }
         .navigationTitle(String(localized: "add_server"))
+        .toolbar(.hidden, for: .tabBar)
     }
 
     private func connect() async {

@@ -43,6 +43,7 @@ struct DatabaseSettingsView: View {
             }
         }
         .navigationTitle(String(localized: "database"))
+        .toolbar(.hidden, for: .tabBar)
         .task { await refresh() }
         .onChange(of: syncStatus.lastSyncDate) { _, _ in
             Task { await refresh() }

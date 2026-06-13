@@ -19,6 +19,7 @@ struct CacheSettingsView: View {
             }
         }
         .navigationTitle(String(localized: "cache"))
+        .toolbar(.hidden, for: .tabBar)
         .task { await refresh() }
     }
 
@@ -49,6 +50,7 @@ struct LogListView: View {
             }
         }
         .navigationTitle(title)
+        .toolbar(.hidden, for: .tabBar)
     }
 }
 
