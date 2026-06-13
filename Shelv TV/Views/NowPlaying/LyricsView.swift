@@ -35,6 +35,15 @@ struct LyricsView: View {
                 placeholder(String(localized: "no_lyrics"))
             }
         }
+        // Bei Song-Wechsel SOFORT (synchron) zurücksetzen → Spinner statt altem Zustand,
+        // danach lädt `.task` die Lyrics des neuen Songs neu.
+        .onChange(of: player.currentSong?.id) { _, _ in
+            isLoading = true
+            parsedLines = []
+            plainLines = []
+            instrumental = false
+            activeLineIndex = nil
+        }
         .task(id: player.currentSong?.id) { await load() }
         .onReceive(player.timePublisher) { update in
             currentTimeMs = Int(update.time * 1000)
@@ -71,7 +80,7 @@ struct LyricsView: View {
                 .padding(.vertical, 90)
             }
             .scrollIndicators(.hidden)
-            .mask(edgeFade)
+            .edgeFadeMask()
             .onChange(of: activeLineIndex) { _, index in
                 guard let index, index < parsedLines.count else { return }
                 withAnimation(.easeInOut(duration: 0.3)) {
@@ -99,7 +108,7 @@ struct LyricsView: View {
             .padding(.vertical, 90)
         }
         .scrollIndicators(.hidden)
-        .mask(edgeFade)
+        .edgeFadeMask()
     }
 
     private func placeholder(_ text: String) -> some View {
@@ -109,23 +118,10 @@ struct LyricsView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    /// Sanftes Aus-/Einblenden an Ober- und Unterkante, damit Text nicht hart
-    /// hinter der Tab-Leiste bzw. am unteren Rand abreißt.
-    private var edgeFade: some View {
-        LinearGradient(
-            stops: [
-                .init(color: .clear, location: 0),
-                .init(color: .black, location: 0.12),
-                .init(color: .black, location: 0.88),
-                .init(color: .clear, location: 1)
-            ],
-            startPoint: .top, endPoint: .bottom
-        )
-    }
-
     // MARK: - Laden & Sync
 
     private func load() async {
+        let songId = player.currentSong?.id
         isLoading = true
         instrumental = false
         parsedLines = []
@@ -137,6 +133,8 @@ struct LyricsView: View {
 
         await LyricsService.shared.setup()
         let record = await LyricsService.shared.fetchAndSave(song: song, serverId: serverId)
+        // Song kann während des (externen) Fetchs gewechselt haben → veraltetes Ergebnis verwerfen.
+        guard player.currentSong?.id == songId else { return }
         instrumental = record.isInstrumental
         if let synced = record.syncedLrc, !synced.isEmpty {
             parsedLines = parseLRC(synced)

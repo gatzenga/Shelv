@@ -44,9 +44,10 @@ struct QueueView: View {
                         }
                     }
                 }
-                .padding(.vertical, 30)
+                .padding(.vertical, 90)
             }
             .scrollIndicators(.hidden)
+            .edgeFadeMask()
         }
     }
 
