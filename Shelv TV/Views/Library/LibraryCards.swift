@@ -339,9 +339,11 @@ struct DetailSongRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 14)
-                    .fill(focused ? AppTheme.color(for: themeColor).opacity(0.35) : Color.clear)
+                    .fill(focused ? AppTheme.color(for: themeColor).opacity(0.4) : Color.clear)
             )
-            .scaleEffect(focused ? 1.01 : 1.0)
+            // Außenabstand: grenzt den Highlight ein, damit die Rundung links/rechts sichtbar
+            // ist und nichts über den Spaltenrand ragt.
+            .padding(.horizontal, 12)
         }
         .buttonStyle(.plain)
         .focused($focused)
