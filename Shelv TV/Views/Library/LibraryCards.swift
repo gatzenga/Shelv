@@ -106,6 +106,7 @@ struct NowPlayingNumber: View {
                 Image(systemName: "waveform")
                     .font(.body)
                     .foregroundStyle(AppTheme.color(for: themeColor))
+                    .symbolEffect(.variableColor.iterative.reversing, isActive: player.isPlaying)
             } else {
                 Text("\(index + 1)")
                     .font(.body.monospacedDigit())
