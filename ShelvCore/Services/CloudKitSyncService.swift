@@ -296,7 +296,7 @@ actor CloudKitSyncService {
     func downloadChanges() async {
         guard canSync else { return }
         guard await status.accountAvailable else {
-            debug("[CloudKitSync] downloadChanges skipped – account not available")
+            log("Download skipped — iCloud account not available")
             return
         }
         do {
@@ -329,9 +329,7 @@ actor CloudKitSyncService {
             // Retention-Settings: nach dem Einlesen lokalen Stand ggf. nachschieben.
             await pushRetentionIfNeeded()
             if let token = newToken { changeToken = token }
-            if playsIn + recapsIn > 0 {
-                log("Downloaded \(playsIn) plays, \(recapsIn) recaps")
-            }
+            log("Downloaded \(playsIn) plays, \(recapsIn) recaps (\(records.count) records total)")
             if playsDel + recapsDel > 0 {
                 log("Deleted on other device: \(playsDel) plays, \(recapsDel) recaps")
             }
