@@ -47,10 +47,15 @@ struct LogListView: View {
     var body: some View {
         Group {
             if entries.isEmpty {
+                // .focusable() ist auf tvOS Pflicht: ohne fokussierbares Element fängt der
+                // NavigationStack die Menu-Taste nicht als Pop ab → man fliegt aus der App.
                 ContentUnavailableView(String(localized: "no_entries"), systemImage: "doc.text")
+                    .focusable()
             } else {
                 List(Array(entries.enumerated()), id: \.offset) { _, line in
+                    // Fokussierbar → Liste wird per Remote scrollbar und Zurück funktioniert.
                     Text(line).font(.caption.monospaced())
+                        .focusable()
                 }
             }
         }
