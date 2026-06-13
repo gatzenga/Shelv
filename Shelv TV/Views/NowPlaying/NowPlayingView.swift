@@ -75,6 +75,16 @@ struct NowPlayingView: View {
                 .frame(maxWidth: 620)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+
+                // Codec · Bitrate (gleiche Quelle/Logik wie iOS & macOS); bei Buffering „Loading".
+                HStack(spacing: 6) {
+                    if player.showBufferingIndicator {
+                        ProgressView().scaleEffect(0.7).tint(.secondary)
+                    }
+                    Text(player.showBufferingIndicator ? String(localized: "loading_2") : (audioBadge ?? ""))
+                }
+                .font(.caption).foregroundStyle(.tertiary)
+                .frame(height: 22)
             }
 
             // Transport
@@ -142,6 +152,11 @@ struct NowPlayingView: View {
                 }
             }
         }
+    }
+
+    /// Codec · Bitrate des tatsächlich laufenden Streams — identisch zu iOS/macOS.
+    private var audioBadge: String? {
+        player.actualStreamFormat?.displayString
     }
 
     private func toggle(_ p: SidePanel) {
