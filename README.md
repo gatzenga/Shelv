@@ -5,7 +5,7 @@
 
 # Shelv
 
-A native, album and artist focused iOS and iPadOS client for [Navidrome](https://www.navidrome.org/) and Subsonic-compatible music servers, built with SwiftUI. Includes **Recap** — automatic weekly, monthly, and yearly playlists of your most-played songs, synced across iPhone, iPad, and Mac via iCloud. Also available as a [native macOS app](https://github.com/gatzenga/Shelv-Desktop).
+A native, album and artist focused iOS, iPadOS, macOS, and tvOS client for [Navidrome](https://www.navidrome.org/) and Subsonic-compatible music servers, built with SwiftUI. Includes **Recap** — automatic weekly, monthly, and yearly playlists of your most-played songs, synced across iPhone, iPad, Mac, and Apple TV via iCloud.
 
 [![Download on the App Store](https://developer.apple.com/app-store/marketing/guidelines/images/badge-download-on-the-app-store.svg)](https://apps.apple.com/us/app/shelv-player/id6762255865)
 
@@ -15,7 +15,7 @@ A native, album and artist focused iOS and iPadOS client for [Navidrome](https:/
 
 [![Website](https://img.shields.io/badge/Website-000000?style=for-the-badge&logo=safari&logoColor=white)](https://vkugler.app)
 
-![Platform](https://img.shields.io/badge/platform-iOS%20%7C%20iPadOS-lightgrey)
+![Platform](https://img.shields.io/badge/platform-iOS%20%7C%20iPadOS%20%7C%20macOS%20%7C%20tvOS-lightgrey)
 ![Swift](https://img.shields.io/badge/swift-5-orange)
 ![License](https://img.shields.io/badge/license-GPL--3.0-blue)
 
@@ -106,6 +106,8 @@ A native, album and artist focused iOS and iPadOS client for [Navidrome](https:/
 ## Requirements
 
 - iOS 18 or later / iPadOS 18 or later
+- macOS 15.6 or later
+- tvOS 26 or later
 - Xcode 26 or later
 - A running [Navidrome](https://www.navidrome.org/) or Subsonic-compatible server
 
@@ -180,14 +182,18 @@ See [LICENSE](LICENSE) for details.
 <table>
   <tr>
     <td><img src="Screenshots_iPhone/home.png" width="220"/></td>
+    <td><img src="Screenshots_iPhone/recap.png" width="220"/></td>
     <td><img src="Screenshots_iPhone/player.png" width="220"/></td>
-    <td><img src="Screenshots_iPhone/albums.png" width="220"/></td>
   </tr>
-</table>
-<table>
   <tr>
+    <td><img src="Screenshots_iPhone/albums.png" width="220"/></td>
     <td><img src="Screenshots_iPhone/artists.png" width="220"/></td>
     <td><img src="Screenshots_iPhone/favorites.png" width="220"/></td>
+  </tr>
+</table>
+<table align="center">
+  <tr>
+    <td><img src="Screenshots_iPhone/album.png" width="220"/></td>
     <td><img src="Screenshots_iPhone/playlists.png" width="220"/></td>
   </tr>
 </table>
@@ -197,14 +203,56 @@ See [LICENSE](LICENSE) for details.
 <table>
   <tr>
     <td><img src="Screenshots_iPad/home.png" width="220"/></td>
+    <td><img src="Screenshots_iPad/recap.png" width="220"/></td>
     <td><img src="Screenshots_iPad/player.png" width="220"/></td>
-    <td><img src="Screenshots_iPad/albums.png" width="220"/></td>
   </tr>
-</table>
-<table>
   <tr>
+    <td><img src="Screenshots_iPad/albums.png" width="220"/></td>
     <td><img src="Screenshots_iPad/artists.png" width="220"/></td>
     <td><img src="Screenshots_iPad/favorites.png" width="220"/></td>
+  </tr>
+</table>
+<table align="center">
+  <tr>
+    <td><img src="Screenshots_iPad/album.png" width="220"/></td>
     <td><img src="Screenshots_iPad/playlists.png" width="220"/></td>
+  </tr>
+</table>
+
+### macOS
+
+<table>
+  <tr>
+    <td><img src="screenshots_mac/home.png" width="360"/></td>
+    <td><img src="screenshots_mac/recap.png" width="360"/></td>
+  </tr>
+  <tr>
+    <td><img src="screenshots_mac/albums.png" width="360"/></td>
+    <td><img src="screenshots_mac/artists.png" width="360"/></td>
+  </tr>
+  <tr>
+    <td><img src="screenshots_mac/favorites.png" width="360"/></td>
+    <td><img src="screenshots_mac/album.png" width="360"/></td>
+  </tr>
+</table>
+
+### tvOS
+
+<table>
+  <tr>
+    <td><img src="screenshots_TV/home.png" width="250"/></td>
+    <td><img src="screenshots_TV/recap.png" width="250"/></td>
+    <td><img src="screenshots_TV/player.png" width="250"/></td>
+  </tr>
+  <tr>
+    <td><img src="screenshots_TV/albums.png" width="250"/></td>
+    <td><img src="screenshots_TV/artists.png" width="250"/></td>
+    <td><img src="screenshots_TV/favorites.png" width="250"/></td>
+  </tr>
+</table>
+<table align="center">
+  <tr>
+    <td><img src="screenshots_TV/album.png" width="250"/></td>
+    <td><img src="screenshots_TV/playlists.png" width="250"/></td>
   </tr>
 </table>
