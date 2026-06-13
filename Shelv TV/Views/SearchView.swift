@@ -14,10 +14,12 @@ struct SearchView: View {
                     if let artists = result?.artist, !artists.isEmpty {
                         sectionHeader(String(localized: "artists"))
                         cardRow { ForEach(artists) { ArtistCard(artist: $0, size: 220) } }
+                            .focusSection()
                     }
                     if let albums = result?.album, !albums.isEmpty {
                         sectionHeader(String(localized: "albums"))
                         cardRow { ForEach(albums) { AlbumCard(album: $0, size: 220) } }
+                            .focusSection()
                     }
                     if let songs = result?.song, !songs.isEmpty {
                         sectionHeader(String(localized: "songs"))
@@ -28,6 +30,7 @@ struct SearchView: View {
                                 }
                             }
                         }
+                        .focusSection()
                     }
                 }
                 .padding(.vertical, 24)

@@ -68,16 +68,21 @@ struct LibraryView: View {
                 if segment == 0 { albumControls }
                 else if segment == 1 { artistControls }
 
-                switch segment {
-                case 0:
-                    if albumIsGrid { coverGrid(displayAlbums) { AlbumCard(album: $0) } }
-                    else { albumList }
-                case 1:
-                    if artistIsGrid { coverGrid(displayArtists) { ArtistCard(artist: $0) } }
-                    else { artistList }
-                default:
-                    favoritesList
+                // Eigene Fokus-Sektion → von Picker/Steuerung springt „runter" zuverlässig
+                // in die Liste, auch wenn kein Element direkt darunter sitzt (z. B. Favoriten).
+                Group {
+                    switch segment {
+                    case 0:
+                        if albumIsGrid { coverGrid(displayAlbums) { AlbumCard(album: $0) } }
+                        else { albumList }
+                    case 1:
+                        if artistIsGrid { coverGrid(displayArtists) { ArtistCard(artist: $0) } }
+                        else { artistList }
+                    default:
+                        favoritesList
+                    }
                 }
+                .focusSection()
             }
             .navigationDestination(for: Album.self) { AlbumDetailView(album: $0) }
             .navigationDestination(for: Artist.self) { ArtistDetailView(artist: $0) }
@@ -182,14 +187,17 @@ struct LibraryView: View {
                             }
                         }
                     }
+                    .focusSection()
                 }
                 if !store.favoriteAlbums.isEmpty {
                     Text(String(localized: "albums")).font(.title3).bold().padding(.horizontal, 50)
                     cardRow { ForEach(store.favoriteAlbums) { AlbumCard(album: $0) } }
+                        .focusSection()
                 }
                 if !store.favoriteArtists.isEmpty {
                     Text(String(localized: "artists")).font(.title3).bold().padding(.horizontal, 50)
                     cardRow { ForEach(store.favoriteArtists) { ArtistCard(artist: $0) } }
+                        .focusSection()
                 }
             }
             .padding(.vertical, 24)

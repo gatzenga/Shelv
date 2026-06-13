@@ -4,6 +4,59 @@ import SwiftUI
 /// linksbündig gepackt — nicht zentriert, nicht gestreckt. Auf 1920 pt → 6 Spalten.
 let coverGridColumns = Array(repeating: GridItem(.fixed(240), spacing: 40), count: 6)
 
+/// tvOS-Zeilen-Button-Stil: KEIN System-Zoom/-Highlight (das käme von `.card`/`.automatic`),
+/// nur ein dezenter Press-Effekt. Den Fokus-Look zeichnet der `rowButton`-Modifier per Akzent-Box.
+struct PlainRowButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.6 : 1)
+    }
+}
+
+/// Verwandelt eine Zeilen-View (HStack o. ä.) in einen **echten** tvOS-Button — die
+/// Select-Taste feuert damit zuverlässig (anders als `.onTapGesture` auf `.focusable()`).
+/// Markierung allein über die abgerundete Akzent-Box, kein weißes Highlight, kein Cover-Zoom.
+private struct RowButtonModifier: ViewModifier {
+    let action: () -> Void
+    @FocusState private var focused: Bool
+    @AppStorage("themeColor") private var themeColor = "violet"
+
+    func body(content: Content) -> some View {
+        Button(action: action) {
+            content
+                .padding(.vertical, 10)
+                .padding(.horizontal, 24)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 14)
+                    .fill(focused ? AppTheme.color(for: themeColor).opacity(0.4) : Color.clear))
+                .padding(.horizontal, 12)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(PlainRowButtonStyle())
+        .focused($focused)
+        .animation(.easeOut(duration: 0.14), value: focused)
+    }
+}
+
+extension View {
+    /// Einheitlicher, zuverlässig auslösbarer Zeilen-Button mit Akzent-Box-Fokus.
+    func rowButton(action: @escaping () -> Void) -> some View { modifier(RowButtonModifier(action: action)) }
+
+    /// Sanftes Aus-/Einblenden an Ober- und Unterkante — Inhalt reißt nicht hart an der
+    /// Tab-Leiste bzw. am unteren Rand ab (Lyrics & Warteschlange im Now-Playing-Panel).
+    func edgeFadeMask() -> some View {
+        mask(LinearGradient(
+            stops: [
+                .init(color: .clear, location: 0),
+                .init(color: .black, location: 0.10),
+                .init(color: .black, location: 0.90),
+                .init(color: .clear, location: 1)
+            ],
+            startPoint: .top, endPoint: .bottom
+        ))
+    }
+}
+
 /// Album-Karte: das Cover hebt sich beim Fokus als Ganzes (nativer `.card`-Lift),
 /// Titel/Künstler stehen mit genug Abstand darunter — keine umschließende Box.
 struct AlbumCard: View {
@@ -314,8 +367,6 @@ struct DetailSongRow: View {
     let number: Int
     var showArtwork: Bool = false
     let onPlay: () -> Void
-    @FocusState private var focused: Bool
-    @AppStorage("themeColor") private var themeColor = "violet"
 
     var body: some View {
         HStack(spacing: 20) {
@@ -335,21 +386,7 @@ struct DetailSongRow: View {
                 Text(formatDuration(d)).font(.caption).foregroundStyle(.secondary).monospacedDigit()
             }
         }
-        .padding(.vertical, 12)
-        .padding(.horizontal, 24)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(focused ? AppTheme.color(for: themeColor).opacity(0.4) : Color.clear)
-        )
-        .padding(.horizontal, 12)
-        .contentShape(Rectangle())
-        // Reines fokussierbares Element (kein Button/NavigationLink) → tvOS legt KEINEN
-        // Bild-/Zeilen-Zoom drauf; Markierung allein über die Akzent-Box.
-        .focusable()
-        .focused($focused)
-        .onTapGesture { onPlay() }
-        .animation(.easeOut(duration: 0.14), value: focused)
+        .rowButton(action: onPlay)
         .songContextMenu(song)
     }
 }
@@ -358,8 +395,6 @@ struct DetailSongRow: View {
 struct AlbumListRow: View {
     let album: Album
     let onSelect: () -> Void
-    @FocusState private var focused: Bool
-    @AppStorage("themeColor") private var themeColor = "violet"
 
     var body: some View {
         HStack(spacing: 20) {
@@ -372,16 +407,7 @@ struct AlbumListRow: View {
             }
             Spacer()
         }
-        .padding(.vertical, 10)
-        .padding(.horizontal, 24)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 14).fill(focused ? AppTheme.color(for: themeColor).opacity(0.4) : Color.clear))
-        .padding(.horizontal, 12)
-        .contentShape(Rectangle())
-        .focusable()
-        .focused($focused)
-        .onTapGesture { onSelect() }
-        .animation(.easeOut(duration: 0.14), value: focused)
+        .rowButton(action: onSelect)
         .albumContextMenu(album)
     }
 }
@@ -391,8 +417,6 @@ struct ArtistListRow: View {
     let artist: Artist
     let albumCount: Int
     let onSelect: () -> Void
-    @FocusState private var focused: Bool
-    @AppStorage("themeColor") private var themeColor = "violet"
 
     var body: some View {
         HStack(spacing: 20) {
@@ -406,16 +430,7 @@ struct ArtistListRow: View {
             }
             Spacer()
         }
-        .padding(.vertical, 10)
-        .padding(.horizontal, 24)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 14).fill(focused ? AppTheme.color(for: themeColor).opacity(0.4) : Color.clear))
-        .padding(.horizontal, 12)
-        .contentShape(Rectangle())
-        .focusable()
-        .focused($focused)
-        .onTapGesture { onSelect() }
-        .animation(.easeOut(duration: 0.14), value: focused)
+        .rowButton(action: onSelect)
         .artistContextMenu(artist)
     }
 }
@@ -425,8 +440,6 @@ struct PlaylistListRow: View {
     let playlist: Playlist
     let onSelect: () -> Void
     @ObservedObject private var pins = PinnedPlaylistStore.shared
-    @FocusState private var focused: Bool
-    @AppStorage("themeColor") private var themeColor = "violet"
 
     var body: some View {
         HStack(spacing: 20) {
@@ -445,16 +458,7 @@ struct PlaylistListRow: View {
             }
             Spacer()
         }
-        .padding(.vertical, 10)
-        .padding(.horizontal, 24)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 14).fill(focused ? AppTheme.color(for: themeColor).opacity(0.4) : Color.clear))
-        .padding(.horizontal, 12)
-        .contentShape(Rectangle())
-        .focusable()
-        .focused($focused)
-        .onTapGesture { onSelect() }
-        .animation(.easeOut(duration: 0.14), value: focused)
+        .rowButton(action: onSelect)
         .playlistContextMenu(playlist)
     }
 }

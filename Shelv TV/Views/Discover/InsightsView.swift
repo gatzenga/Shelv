@@ -207,22 +207,9 @@ struct InsightsView: View {
 private struct InsightsRow<Content: View>: View {
     let onSelect: () -> Void
     @ViewBuilder let content: () -> Content
-    @FocusState private var focused: Bool
-    @AppStorage("themeColor") private var themeColor = "violet"
 
     var body: some View {
-        content()
-            .padding(.vertical, 10)
-            .padding(.horizontal, 24)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 14)
-                .fill(focused ? AppTheme.color(for: themeColor).opacity(0.4) : Color.clear))
-            .padding(.horizontal, 12)
-            .contentShape(Rectangle())
-            .focusable()
-            .focused($focused)
-            .onTapGesture { onSelect() }
-            .animation(.easeOut(duration: 0.14), value: focused)
+        content().rowButton(action: onSelect)
     }
 }
 
