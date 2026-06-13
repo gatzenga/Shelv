@@ -48,6 +48,7 @@ struct PlaylistCard: View {
                 CoverArtView(url: playlist.coverURL(500), size: size, cornerRadius: 8)
             }
             .buttonStyle(.card)
+            .playlistContextMenu(playlist)
 
             Text(playlist.name).lineLimit(1).font(.callout)
             if let count = playlist.songCount {
@@ -63,8 +64,6 @@ struct PlaylistCard: View {
 /// (immer sichtbar), rechts die scrollende Songliste (mit Covern, gemischte Alben).
 struct PlaylistDetailView: View {
     let playlist: Playlist
-    @AppStorage("enableFavorites") private var enableFavorites = true
-    private let api = SubsonicAPIService.shared
     private let player = AudioPlayerService.shared
 
     @State private var songs: [Song] = []
@@ -110,19 +109,6 @@ struct PlaylistDetailView: View {
                         player.play(songs: songs, startIndex: index)
                     }
                     .listRowInsets(EdgeInsets(top: 6, leading: 24, bottom: 6, trailing: 24))
-                    .contextMenu {
-                        Button { player.addPlayNext(song) } label: {
-                            Label(String(localized: "play_next"), systemImage: "text.line.first.and.arrowtriangle.forward")
-                        }
-                        Button { player.addToQueue(song) } label: {
-                            Label(String(localized: "add_to_queue"), systemImage: "text.append")
-                        }
-                        if enableFavorites {
-                            Button { Task { try? await api.star(songId: song.id) } } label: {
-                                Label(String(localized: "favorite"), systemImage: "heart")
-                            }
-                        }
-                    }
                 }
             }
             .listStyle(.plain)

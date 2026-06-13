@@ -59,19 +59,6 @@ struct AlbumDetailView: View {
                         player.play(songs: songs, startIndex: index)
                     }
                     .listRowInsets(EdgeInsets(top: 6, leading: 24, bottom: 6, trailing: 24))
-                    .contextMenu {
-                        Button { player.addPlayNext(song) } label: {
-                            Label(String(localized: "play_next"), systemImage: "text.line.first.and.arrowtriangle.forward")
-                        }
-                        Button { player.addToQueue(song) } label: {
-                            Label(String(localized: "add_to_queue"), systemImage: "text.append")
-                        }
-                        if enableFavorites {
-                            Button { Task { try? await api.star(songId: song.id) } } label: {
-                                Label(String(localized: "favorite"), systemImage: "heart")
-                            }
-                        }
-                    }
                 }
             }
             .listStyle(.plain)

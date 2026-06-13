@@ -18,6 +18,7 @@ struct AlbumCard: View {
                 CoverArtView(url: album.coverURL(500), size: size, cornerRadius: 8)
             }
             .buttonStyle(.card)
+            .albumContextMenu(album)
 
             Text(album.name).lineLimit(1).font(.callout)
             if let artist = album.artist {
@@ -48,6 +49,7 @@ struct ArtistCard: View {
             }
             .buttonStyle(.borderless)
             .focused($focused)
+            .artistContextMenu(artist)
 
             Text(artist.name).lineLimit(1).font(.callout)
                 .foregroundStyle(focused ? .primary : .secondary)
@@ -88,9 +90,126 @@ struct SongRow: View {
                 }
             }
         }
+        .songContextMenu(song)
     }
 }
 
 func formatDuration(_ seconds: Int) -> String {
     String(format: "%d:%02d", seconds / 60, seconds % 60)
+}
+
+// MARK: - Kontextmenüs (Long-Press auf der Remote)
+//
+// Zentral definiert, damit jede Card/Row dieselben Aktionen bekommt. Aktionen laufen
+// über den geteilten AudioPlayerService; Favorit-Status/-Toggle über den tvOS-LibraryStore.
+
+private struct SongContextMenuModifier: ViewModifier {
+    let song: Song
+    @AppStorage("enableFavorites") private var enableFavorites = true
+    @ObservedObject private var library = LibraryStore.shared
+
+    func body(content: Content) -> some View {
+        content.contextMenu {
+            let player = AudioPlayerService.shared
+            Button { player.addPlayNext(song) } label: {
+                Label(String(localized: "play_next"), systemImage: "text.line.first.and.arrowtriangle.forward")
+            }
+            Button { player.addToQueue(song) } label: {
+                Label(String(localized: "add_to_queue"), systemImage: "text.append")
+            }
+            if enableFavorites {
+                let starred = library.isSongStarred(song)
+                Button { Task { await library.toggleStarSong(song) } } label: {
+                    Label(starred ? String(localized: "unfavorite") : String(localized: "favorite"),
+                          systemImage: starred ? "heart.fill" : "heart")
+                }
+            }
+        }
+    }
+}
+
+private struct AlbumContextMenuModifier: ViewModifier {
+    let album: Album
+    @AppStorage("enableFavorites") private var enableFavorites = true
+    @ObservedObject private var library = LibraryStore.shared
+
+    func body(content: Content) -> some View {
+        content.contextMenu {
+            let player = AudioPlayerService.shared
+            Button { Task { let s = await library.albumSongs(album); player.play(songs: s, startIndex: 0) } } label: {
+                Label(String(localized: "play"), systemImage: "play.fill")
+            }
+            Button { Task { let s = await library.albumSongs(album); player.playShuffled(songs: s) } } label: {
+                Label(String(localized: "shuffle"), systemImage: "shuffle")
+            }
+            Button { Task { let s = await library.albumSongs(album); player.addPlayNext(s) } } label: {
+                Label(String(localized: "play_next"), systemImage: "text.line.first.and.arrowtriangle.forward")
+            }
+            Button { Task { let s = await library.albumSongs(album); player.addToQueue(s) } } label: {
+                Label(String(localized: "add_to_queue"), systemImage: "text.append")
+            }
+            if enableFavorites {
+                let starred = library.isAlbumStarred(album)
+                Button { Task { await library.toggleStarAlbum(album) } } label: {
+                    Label(starred ? String(localized: "unfavorite") : String(localized: "favorite"),
+                          systemImage: starred ? "heart.fill" : "heart")
+                }
+            }
+        }
+    }
+}
+
+private struct ArtistContextMenuModifier: ViewModifier {
+    let artist: Artist
+    @AppStorage("enableFavorites") private var enableFavorites = true
+    @ObservedObject private var library = LibraryStore.shared
+
+    func body(content: Content) -> some View {
+        content.contextMenu {
+            let player = AudioPlayerService.shared
+            Button { Task { let s = await library.artistSongs(artist); player.play(songs: s, startIndex: 0) } } label: {
+                Label(String(localized: "play"), systemImage: "play.fill")
+            }
+            Button { Task { let s = await library.artistSongs(artist); player.playShuffled(songs: s) } } label: {
+                Label(String(localized: "shuffle"), systemImage: "shuffle")
+            }
+            if enableFavorites {
+                let starred = library.isArtistStarred(artist)
+                Button { Task { await library.toggleStarArtist(artist) } } label: {
+                    Label(starred ? String(localized: "unfavorite") : String(localized: "favorite"),
+                          systemImage: starred ? "heart.fill" : "heart")
+                }
+            }
+        }
+    }
+}
+
+private struct PlaylistContextMenuModifier: ViewModifier {
+    let playlist: Playlist
+    @ObservedObject private var library = LibraryStore.shared
+
+    func body(content: Content) -> some View {
+        content.contextMenu {
+            let player = AudioPlayerService.shared
+            Button { Task { let s = await library.playlistSongs(playlist); player.play(songs: s, startIndex: 0) } } label: {
+                Label(String(localized: "play"), systemImage: "play.fill")
+            }
+            Button { Task { let s = await library.playlistSongs(playlist); player.playShuffled(songs: s) } } label: {
+                Label(String(localized: "shuffle"), systemImage: "shuffle")
+            }
+            Button { Task { let s = await library.playlistSongs(playlist); player.addPlayNext(s) } } label: {
+                Label(String(localized: "play_next"), systemImage: "text.line.first.and.arrowtriangle.forward")
+            }
+            Button { Task { let s = await library.playlistSongs(playlist); player.addToQueue(s) } } label: {
+                Label(String(localized: "add_to_queue"), systemImage: "text.append")
+            }
+        }
+    }
+}
+
+extension View {
+    func songContextMenu(_ song: Song) -> some View { modifier(SongContextMenuModifier(song: song)) }
+    func albumContextMenu(_ album: Album) -> some View { modifier(AlbumContextMenuModifier(album: album)) }
+    func artistContextMenu(_ artist: Artist) -> some View { modifier(ArtistContextMenuModifier(artist: artist)) }
+    func playlistContextMenu(_ playlist: Playlist) -> some View { modifier(PlaylistContextMenuModifier(playlist: playlist)) }
 }

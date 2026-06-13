@@ -29,6 +29,8 @@ struct Shelv_TVApp: App {
                     await PlayLogService.shared.setup()
                     await RecapStore.shared.loadEntries(serverId: server.stableId)
                     PinnedPlaylistStore.shared.setActiveServer(server.stableId)
+                    // Favoriten früh laden, damit Kontextmenüs den Stern-Status überall korrekt zeigen.
+                    await LibraryStore.shared.loadStarred()
                 }
                 // Einmaliges App-Setup: Tracking starten, remoteUserId-Backfill, iCloud-Sync.
                 .task {
