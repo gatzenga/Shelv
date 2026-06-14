@@ -249,7 +249,7 @@ struct QueueView: View {
             }
             .tint(accentColor)
             .onChange(of: infinityMode) { _, on in
-                if on { player.topUpInfinityIfNeeded() }
+                if on { player.topUpInfinityIfNeeded(startIfIdle: true) }
             }
         }
     }

@@ -39,7 +39,14 @@ class AudioPlayerService: ObservableObject {
     @Published var isBuffering: Bool = false
     @Published var showBufferingIndicator: Bool = false
     @Published var isNetworkAvailable: Bool = true
-    @Published var currentSong: Song?
+    @Published var currentSong: Song? {
+        didSet {
+            // Endlos-Modus: bei JEDEM Songwechsel (Skip, natürliches Ende, Gapless-Übergang)
+            // sicherstellen, dass wieder genau einer voraus bereitliegt. Deckt alle Pfade ab —
+            // auch im Hintergrund, da dort die Wiedergabe weiterläuft.
+            if currentSong?.id != oldValue?.id { topUpInfinityIfNeeded() }
+        }
+    }
     @Published var queue: [Song] = []
     @Published var currentIndex: Int = 0
     @Published var playNextQueue: [Song] = []
@@ -660,10 +667,6 @@ class AudioPlayerService: ObservableObject {
 
             guard self.playbackGeneration == gen else { return }
 
-            // Endlos-Modus: gleich nach Songstart den nächsten Zufallstitel bereitstellen
-            // (Precache greift damit auf den nahtlosen Übergang).
-            self.topUpInfinityIfNeeded()
-
             guard let url = self.resolveURL(for: song) else {
                 if OfflineModeService.shared.isOffline {
                     #if os(iOS)
@@ -1110,18 +1113,22 @@ class AudioPlayerService: ObservableObject {
     private var infinityTopUpTask: Task<Void, Never>?
 
     /// Hält bei aktivem Endlos-Modus immer genau einen Zufallstitel bereit (Precache-freundlich).
-    /// Wird beim Songstart und beim Einschalten des Modus aufgerufen. No-Op, wenn schon etwas
-    /// upcoming ist oder bereits ein Nachschub läuft.
-    func topUpInfinityIfNeeded() {
+    /// - `startIfIdle`: nur `true` beim manuellen Einschalten des Toggles — dann startet bei
+    ///   nichts-läuft sofort ein Zufallstitel. Beim Songwechsel `false`, damit nach einem Stop
+    ///   die Wiedergabe nicht ungewollt wieder anspringt.
+    func topUpInfinityIfNeeded(startIfIdle: Bool = false) {
         guard infinityModeEnabled, infinityTopUpTask == nil else { return }
+        // Schon etwas upcoming? Nichts tun.
         if currentSong != nil, peekNextSong() != nil { return }
+        // Nichts am Laufen und kein expliziter Start → nichts tun (kein Wiederbeleben nach Stop).
+        if currentSong == nil, !startIfIdle { return }
         infinityTopUpTask = Task { @MainActor [weak self] in
             guard let self else { return }
             defer { self.infinityTopUpTask = nil }
             guard let song = await self.nextInfinitySong() else { return }
             guard self.infinityModeEnabled else { return }
             if self.currentSong == nil {
-                self.play(songs: [song])
+                if startIfIdle { self.play(songs: [song]) }
             } else if self.peekNextSong() == nil {
                 self.addToQueue(song)
             }
@@ -1140,10 +1147,15 @@ class AudioPlayerService: ObservableObject {
 
     @MainActor
     private func refillInfinityPool() async {
+        // Online: bis zu 3 Versuche (mit kleinem Backoff), bevor auf Downloads ausgewichen wird.
+        // Offline: gar nicht erst beim Server versuchen — direkt Downloads (dort ist garantiert was).
         if !OfflineModeService.shared.isOffline {
-            if let songs = try? await SubsonicAPIService.shared.getRandomSongs(size: 25), !songs.isEmpty {
-                infinityPool = songs.shuffled()
-                return
+            for attempt in 0..<3 {
+                if let songs = try? await SubsonicAPIService.shared.getRandomSongs(size: 25), !songs.isEmpty {
+                    infinityPool = songs.shuffled()
+                    return
+                }
+                if attempt < 2 { try? await Task.sleep(for: .milliseconds(500 * (attempt + 1))) }
             }
         }
         // Offline oder Online-Fehler → Fallback auf Downloads.

@@ -43,7 +43,7 @@ struct QueueView: View {
                 }
                 .rowButton {
                     infinityMode.toggle()
-                    if infinityMode { player.topUpInfinityIfNeeded() }
+                    if infinityMode { player.topUpInfinityIfNeeded(startIfIdle: true) }
                 }
                 .padding(.bottom, 8)
 

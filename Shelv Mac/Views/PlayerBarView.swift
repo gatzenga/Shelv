@@ -422,7 +422,7 @@ struct QueuePopover: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
             .onChange(of: infinityMode) { _, on in
-                if on { player.topUpInfinityIfNeeded() }
+                if on { player.topUpInfinityIfNeeded(startIfIdle: true) }
             }
 
             Divider()
