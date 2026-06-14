@@ -92,10 +92,12 @@ struct Shelv_DesktopApp: App {
                     await RecapStore.shared.setup(serverId: server.stableId)
                     await DownloadStore.shared.setActiveServer(server.stableId)
                     PinnedPlaylistStore.shared.setActiveServer(server.stableId)
+                    await QueueSyncService.shared.checkForRemoteQueue()
                 }
                 .onChange(of: scenePhase) { _, phase in
                     guard phase == .active else { return }
                     Task { await CloudKitSyncService.shared.syncNow() }
+                    Task { await QueueSyncService.shared.checkForRemoteQueue() }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                     Task { await CloudKitSyncService.shared.syncNow() }

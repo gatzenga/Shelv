@@ -23,6 +23,11 @@ struct PlaybackSettingsWindow: View {
                     Image(systemName: "checkmark.seal")
                     Text(String(localized: "scrobble"))
                 }
+            QueueSyncPanel()
+                .tabItem {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                    Text(String(localized: "queue_sync"))
+                }
             LyricsSettingsPanel()
                 .tabItem {
                     Image(systemName: "text.quote")

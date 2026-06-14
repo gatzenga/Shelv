@@ -72,6 +72,7 @@ struct MainWindowView: View {
                 }
                 .onChange(of: appState.serverStore.activeServerID) { _, _ in
                     appState.player.stop()
+                    QueueSyncService.shared.handleServerChange()
                     libraryStore.reset()
                     #if DEBUG
                     // Demo-Server aktiv → festes Player-Standbild (nach stop(), sonst sofort
@@ -103,6 +104,8 @@ struct MainWindowView: View {
             VStack(spacing: 0) {
                 ServerErrorBanner()
                     .animation(.easeInOut, value: offlineMode.serverErrorBannerVisible)
+                QueueSyncBanner()
+                    .animation(.easeInOut, value: QueueSyncService.shared.pendingRemote != nil)
                 if let msg = toastMessage {
                     ToastView(message: msg)
                         .transition(.move(edge: .top).combined(with: .opacity))
