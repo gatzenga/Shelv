@@ -32,20 +32,19 @@ struct QueueView: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 16) {
-                    Image(systemName: "infinity")
-                        .foregroundStyle(infinityMode ? accent : .primary)
-                    Text(String(localized: "infinity_mode"))
-                        .foregroundStyle(.primary)
-                    Spacer()
-                    Image(systemName: infinityMode ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(infinityMode ? accent : .secondary)
+                Toggle(isOn: $infinityMode) {
+                    Label {
+                        Text(String(localized: "infinity_mode")).foregroundStyle(.primary)
+                    } icon: {
+                        Image(systemName: "infinity")
+                    }
                 }
-                .rowButton {
-                    infinityMode.toggle()
-                    if infinityMode { player.topUpInfinityIfNeeded(startIfIdle: true) }
-                }
+                .tint(accent)
+                .padding(.horizontal, 36)
                 .padding(.bottom, 8)
+                .onChange(of: infinityMode) { _, on in
+                    if on { player.topUpInfinityIfNeeded(startIfIdle: true) }
+                }
 
                 if isEmpty {
                     Text(String(localized: "queue_empty"))
@@ -73,10 +72,11 @@ struct QueueView: View {
                     }
                 }
             }
-            .padding(.vertical, 90)
+            .padding(.top, 20)
+            .padding(.bottom, 90)
         }
         .scrollIndicators(.hidden)
-        .edgeFadeMask()
+        .edgeFadeMask(top: 0, bottom: 0.06)
     }
 
     private func row(_ song: Song, _ play: @escaping () -> Void) -> some View {
