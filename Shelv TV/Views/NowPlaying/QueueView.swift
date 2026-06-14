@@ -51,7 +51,7 @@ struct QueueView: View {
                 .padding(.bottom, 90)
             }
             .scrollIndicators(.hidden)
-            .edgeFadeMask(fade: 0.04)
+            .edgeFadeMask(top: 0, bottom: 0.06)
         }
     }
 
