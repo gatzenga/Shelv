@@ -390,3 +390,4 @@
 "queue_available_subtitle" = "Wiedergabe von dort übernehmen?";
 "queue_take_over" = "Übernehmen";
 "queue_sync_log" = "Queue-Sync-Log";
+"infinity_mode" = "Endlos-Modus";

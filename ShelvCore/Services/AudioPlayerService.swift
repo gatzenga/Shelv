@@ -111,6 +111,7 @@ class AudioPlayerService: ObservableObject {
     @AppStorage("streamPreCacheEnabled") private var streamPreCacheEnabled = false
     @AppStorage("replayGainEnabled") private var replayGainEnabled = false
     @AppStorage("replayGainMode") private var replayGainMode = "track"
+    @AppStorage("infinityModeEnabled") private var infinityModeEnabled = false
     private var gaplessPreloadTriggered = false
     private var gaplessPreloadSong: Song? = nil
     private var gaplessPreloadURL: URL? = nil
@@ -659,6 +660,10 @@ class AudioPlayerService: ObservableObject {
 
             guard self.playbackGeneration == gen else { return }
 
+            // Endlos-Modus: gleich nach Songstart den nächsten Zufallstitel bereitstellen
+            // (Precache greift damit auf den nahtlosen Übergang).
+            self.topUpInfinityIfNeeded()
+
             guard let url = self.resolveURL(for: song) else {
                 if OfflineModeService.shared.isOffline {
                     #if os(iOS)
@@ -1097,6 +1102,63 @@ class AudioPlayerService: ObservableObject {
             userQueue.append(song)
         }
         saveState()
+    }
+
+    // MARK: - Endlos-Modus (Radio)
+
+    private var infinityPool: [Song] = []
+    private var infinityTopUpTask: Task<Void, Never>?
+
+    /// Hält bei aktivem Endlos-Modus immer genau einen Zufallstitel bereit (Precache-freundlich).
+    /// Wird beim Songstart und beim Einschalten des Modus aufgerufen. No-Op, wenn schon etwas
+    /// upcoming ist oder bereits ein Nachschub läuft.
+    func topUpInfinityIfNeeded() {
+        guard infinityModeEnabled, infinityTopUpTask == nil else { return }
+        if currentSong != nil, peekNextSong() != nil { return }
+        infinityTopUpTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.infinityTopUpTask = nil }
+            guard let song = await self.nextInfinitySong() else { return }
+            guard self.infinityModeEnabled else { return }
+            if self.currentSong == nil {
+                self.play(songs: [song])
+            } else if self.peekNextSong() == nil {
+                self.addToQueue(song)
+            }
+        }
+    }
+
+    @MainActor
+    private func nextInfinitySong() async -> Song? {
+        if infinityPool.isEmpty { await refillInfinityPool() }
+        while !infinityPool.isEmpty {
+            let song = infinityPool.removeFirst()
+            if song.id != currentSong?.id { return song }
+        }
+        return nil
+    }
+
+    @MainActor
+    private func refillInfinityPool() async {
+        if !OfflineModeService.shared.isOffline {
+            if let songs = try? await SubsonicAPIService.shared.getRandomSongs(size: 25), !songs.isEmpty {
+                infinityPool = songs.shuffled()
+                return
+            }
+        }
+        // Offline oder Online-Fehler → Fallback auf Downloads.
+        let serverId = SubsonicAPIService.shared.activeServer?.stableId ?? ""
+        guard !serverId.isEmpty else { return }
+        let records = await DownloadDatabase.shared.allRecords(serverId: serverId)
+        infinityPool = records.map { rec in
+            Song(
+                id: rec.songId, title: rec.title, artist: rec.artistName, artistId: rec.artistId,
+                album: rec.albumTitle, albumId: rec.albumId, track: rec.track, discNumber: rec.disc,
+                duration: rec.duration, coverArt: rec.coverArtId ?? rec.albumCoverArtId,
+                year: nil, genre: nil, playCount: nil, starred: nil, contentType: nil,
+                suffix: rec.fileExtension, bitRate: nil, replayGain: nil
+            )
+        }.shuffled()
     }
 
     func addToQueue(_ songs: [Song]) {

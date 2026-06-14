@@ -2,6 +2,9 @@ import SwiftUI
 
 struct QueueView: View {
     @ObservedObject var player = AudioPlayerService.shared
+    @AppStorage("themeColor") private var themeColor = "violet"
+    @AppStorage("infinityModeEnabled") private var infinityMode = false
+    private var accent: Color { AppTheme.color(for: themeColor) }
 
     private var upcomingAlbum: [Song] {
         let start = player.currentIndex + 1
@@ -13,12 +16,24 @@ struct QueueView: View {
     }
 
     var body: some View {
-        if isEmpty {
-            ContentUnavailableView(String(localized: "queue_empty"), systemImage: "music.note.list")
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 4) {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 4) {
+                Toggle(isOn: $infinityMode) {
+                    Label(String(localized: "infinity_mode"), systemImage: "infinity")
+                }
+                .tint(accent)
+                .padding(.horizontal, 36)
+                .padding(.bottom, 8)
+                .onChange(of: infinityMode) { _, on in
+                    if on { player.topUpInfinityIfNeeded() }
+                }
+
+                if isEmpty {
+                    Text(String(localized: "queue_empty"))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 36)
+                        .padding(.top, 20)
+                } else {
                     if !player.playNextQueue.isEmpty {
                         sectionHeader(String(localized: "play_next"))
                         ForEach(Array(player.playNextQueue.enumerated()), id: \.element.id) { i, song in
@@ -44,11 +59,11 @@ struct QueueView: View {
                         }
                     }
                 }
-                .padding(.vertical, 90)
             }
-            .scrollIndicators(.hidden)
-            .edgeFadeMask()
+            .padding(.vertical, 90)
         }
+        .scrollIndicators(.hidden)
+        .edgeFadeMask()
     }
 
     private func sectionHeader(_ title: String) -> some View {

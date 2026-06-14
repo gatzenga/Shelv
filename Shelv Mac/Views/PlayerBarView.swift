@@ -326,6 +326,7 @@ struct QueuePopover: View {
     @Environment(\.themeColor) private var themeColor
     @State private var showClearConfirm = false
     @State private var isEditing = false
+    @AppStorage("infinityModeEnabled") private var infinityMode = false
 
     @State private var playNextEntries: [QueueEntry] = []
     @State private var albumEntries: [QueueEntry] = []
@@ -410,6 +411,19 @@ struct QueuePopover: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
+
+            Divider()
+
+            Toggle(isOn: $infinityMode) {
+                Label(String(localized: "infinity_mode"), systemImage: "infinity")
+            }
+            .toggleStyle(.switch)
+            .tint(themeColor)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .onChange(of: infinityMode) { _, on in
+                if on { player.topUpInfinityIfNeeded() }
+            }
 
             Divider()
 

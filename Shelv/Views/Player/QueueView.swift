@@ -8,6 +8,7 @@ struct QueueView: View {
 
     @State private var editMode = EditMode.inactive
     @State private var showClearConfirm = false
+    @AppStorage("infinityModeEnabled") private var infinityMode = false
 
     @State private var localPlayNext: [Song] = []
     @State private var localAlbum: [Song] = []
@@ -35,17 +36,27 @@ struct QueueView: View {
         NavigationStack {
             Group {
                 if totalCount == 0 {
-                    VStack(spacing: 14) {
-                        Image(systemName: "music.note.list")
-                            .font(.largeTitle)
-                            .foregroundStyle(.secondary)
-                        Text(String(localized: "queue_is_empty"))
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                    List {
+                        infinityToggleSection
+                        Section {
+                            VStack(spacing: 14) {
+                                Image(systemName: "music.note.list")
+                                    .font(.largeTitle)
+                                    .foregroundStyle(.secondary)
+                                Text(String(localized: "queue_is_empty"))
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 40)
+                            .listRowBackground(Color.clear)
+                        }
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .listStyle(.plain)
+                    .scrollIndicators(.hidden)
                 } else {
                     List {
+                        infinityToggleSection
                         if player.isShuffled {
                             if !localPlayNext.isEmpty {
                                 Section(String(localized: "play_next")) {
@@ -226,6 +237,20 @@ struct QueueView: View {
             Button(String(localized: "cancel"), role: .cancel) {}
         } message: {
             Text(String(localized: "all_upcoming_songs_will_be_removed_from_the_queue"))
+        }
+    }
+
+    private var infinityToggleSection: some View {
+        Section {
+            Toggle(isOn: $infinityMode) {
+                Label { Text(String(localized: "infinity_mode")) } icon: {
+                    Image(systemName: "infinity").foregroundStyle(accentColor)
+                }
+            }
+            .tint(accentColor)
+            .onChange(of: infinityMode) { _, on in
+                if on { player.topUpInfinityIfNeeded() }
+            }
         }
     }
 

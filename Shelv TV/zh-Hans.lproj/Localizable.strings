@@ -413,6 +413,7 @@
 "queue_available_subtitle" = "接续在其他设备上的播放？";
 "queue_take_over" = "接续";
 "queue_sync_log" = "队列同步日志";
+"infinity_mode" = "无限模式";
 "move_up" = "上移";
 "move_down" = "下移";
 "move_to_top" = "移到顶部";
