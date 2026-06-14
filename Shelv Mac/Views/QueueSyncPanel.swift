@@ -5,6 +5,7 @@ import SwiftUI
 struct QueueSyncPanel: View {
     @AppStorage("queueSyncMode") private var queueSyncMode = "off"
     @Environment(\.themeColor) private var themeColor
+    @State private var showLog = false
 
     var body: some View {
         Form {
@@ -27,7 +28,16 @@ struct QueueSyncPanel: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            Section(String(localized: "logs")) {
+                Button { showLog = true } label: {
+                    Label(String(localized: "queue_sync_log"), systemImage: "doc.text")
+                }
+            }
         }
         .formStyle(.grouped)
+        .sheet(isPresented: $showLog) {
+            QueueSyncLogView()
+        }
     }
 }

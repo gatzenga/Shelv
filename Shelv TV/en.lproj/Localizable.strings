@@ -416,3 +416,4 @@
 "queue_available_title" = "Queue from another device";
 "queue_available_subtitle" = "Take over what was playing elsewhere?";
 "queue_take_over" = "Take over";
+"queue_sync_log" = "Queue Sync Log";

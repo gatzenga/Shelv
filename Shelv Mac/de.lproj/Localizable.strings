@@ -409,3 +409,4 @@
 "queue_available_title" = "Queue von einem anderen Gerät";
 "queue_available_subtitle" = "Wiedergabe von dort übernehmen?";
 "queue_take_over" = "Übernehmen";
+"queue_sync_log" = "Queue-Sync-Log";

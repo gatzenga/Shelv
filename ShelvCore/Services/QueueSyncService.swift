@@ -18,8 +18,25 @@ final class QueueSyncService: ObservableObject {
     /// Vom Banner beobachtet: liegt eine fremde, übernehmbare Queue vor?
     @Published var pendingRemote: QueueSnapshot?
 
+    /// Nachvollziehbarkeits-Log (Upload/Download/Übernahme), von der Log-Ansicht beobachtet.
+    @Published var logEntries: [String] = []
+
     private let modeKey = "queueSyncMode"
     private var uploadTask: Task<Void, Never>?
+
+    private static let logTimeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .none
+        f.timeStyle = .medium
+        return f
+    }()
+
+    private func appendLog(_ message: String) {
+        let stamp = Self.logTimeFormatter.string(from: Date())
+        logEntries.insert("[\(stamp)] \(message)", at: 0)
+        if logEntries.count > 200 { logEntries.removeLast(logEntries.count - 200) }
+        print("[QueueSync] \(message)")
+    }
 
     var mode: QueueSyncMode {
         QueueSyncMode(rawValue: UserDefaults.standard.string(forKey: modeKey) ?? "") ?? .off
@@ -87,6 +104,7 @@ final class QueueSyncService: ObservableObject {
                 signature: snapshot.signature
             )
             setLastKnownSignature(snapshot.signature, serverId: serverId)
+            appendLog("Uploaded to iCloud (\(snapshot.queue.count) songs)")
         case .subsonic:
             let flat = snapshot.flattenedForSubsonic()
             do {
@@ -96,8 +114,10 @@ final class QueueSyncService: ObservableObject {
                     positionMs: flat.positionMs
                 )
                 setLastKnownSignature(flat.signature, serverId: serverId)
+                appendLog("Uploaded to Subsonic (\(flat.queue.count) songs)")
             } catch {
                 // Nicht schlimm — der nächste Mutations-Upload versucht es erneut.
+                appendLog("Subsonic upload failed: \(error.localizedDescription)")
             }
         }
     }
@@ -129,21 +149,34 @@ final class QueueSyncService: ObservableObject {
             }
         }
 
-        guard let remote, !remote.isEmpty else { return }
+        let source = (m == .icloud) ? "iCloud" : "Subsonic"
+        guard let remote, !remote.isEmpty else {
+            appendLog("Checked \(source) — no remote queue")
+            return
+        }
         let sig = remote.signature
 
         // Eigener Stand (zuletzt hochgeladen/übernommen) oder bereits abgelehnt?
-        if sig == lastKnownSignature(serverId) || sig == lastDismissedSignature(serverId) { return }
+        if sig == lastKnownSignature(serverId) {
+            appendLog("Downloaded from \(source) — matches own last state, no prompt")
+            return
+        }
+        if sig == lastDismissedSignature(serverId) {
+            appendLog("Downloaded from \(source) — already dismissed, no prompt")
+            return
+        }
 
         // Belt-and-suspenders: identisch zur aktuellen lokalen Queue → kein Prompt.
         if let local = AudioPlayerService.shared.makeSnapshot(serverId: serverId) {
             let localSig = (m == .subsonic) ? local.flattenedForSubsonic().signature : local.signature
             if localSig == sig {
                 setLastKnownSignature(sig, serverId: serverId)
+                appendLog("Downloaded from \(source) — identical to local queue, no prompt")
                 return
             }
         }
 
+        appendLog("Downloaded from \(source) — foreign queue (\(remote.queue.count) songs), prompting")
         pendingRemote = remote
     }
 
@@ -174,6 +207,7 @@ final class QueueSyncService: ObservableObject {
         guard let snap = pendingRemote else { return }
         AudioPlayerService.shared.apply(snap)
         setLastKnownSignature(snap.signature, serverId: snap.serverId)
+        appendLog("Took over remote queue (\(snap.queue.count) songs)")
         pendingRemote = nil
     }
 
@@ -181,6 +215,7 @@ final class QueueSyncService: ObservableObject {
     func dismissPending() {
         guard let snap = pendingRemote else { return }
         setDismissedSignature(snap.signature, serverId: snap.serverId)
+        appendLog("Dismissed remote queue")
         pendingRemote = nil
     }
 

@@ -72,7 +72,22 @@ struct PlaybackSettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            Section(String(localized: "logs")) {
+                NavigationLink(String(localized: "queue_sync_log")) {
+                    QueueSyncLogView()
+                }
+            }
         }
         .toolbar(.hidden, for: .tabBar)
+    }
+}
+
+/// Live Queue-Sync-Log — beobachtet den QueueSyncService, neue Zeilen erscheinen sofort.
+private struct QueueSyncLogView: View {
+    @ObservedObject private var queueSync = QueueSyncService.shared
+
+    var body: some View {
+        LogListView(title: String(localized: "queue_sync_log"), entries: queueSync.logEntries)
     }
 }

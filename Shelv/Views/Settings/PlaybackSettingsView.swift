@@ -95,6 +95,14 @@ struct PlaybackSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section(String(localized: "logs")) {
+                NavigationLink(destination: QueueSyncLogView()) {
+                    Label { Text(String(localized: "queue_sync_log")) } icon: {
+                        Image(systemName: "doc.text").foregroundStyle(accentColor)
+                    }
+                }
+            }
+
             PlayerBottomSpacer()
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
