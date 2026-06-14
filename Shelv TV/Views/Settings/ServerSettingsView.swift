@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Server-Verwaltung in den Settings: aktiven Server wechseln, neue hinzufügen,
-/// einzelne entfernen. Nutzt dieselben ShelvCore-Primitiven wie die LoginView.
+/// einzelne bearbeiten/entfernen. Nutzt dieselben ShelvCore-Primitiven wie die LoginView.
 struct ServerSettingsView: View {
     @EnvironmentObject var serverStore: ServerStore
 
@@ -13,7 +13,7 @@ struct ServerSettingsView: View {
             Section(String(localized: "servers")) {
                 ForEach(serverStore.servers) { server in
                     NavigationLink {
-                        ServerDetailView(server: server)
+                        ServerFormView(editingServer: server)
                     } label: {
                         HStack {
                             VStack(alignment: .leading, spacing: 4) {
@@ -31,7 +31,7 @@ struct ServerSettingsView: View {
 
             Section {
                 NavigationLink {
-                    AddServerView()
+                    ServerFormView()
                 } label: {
                     Label(String(localized: "add_server"), systemImage: "plus")
                 }
@@ -41,105 +41,158 @@ struct ServerSettingsView: View {
     }
 }
 
-/// Detail eines Servers: aktivieren (falls nicht aktiv) oder entfernen.
-struct ServerDetailView: View {
-    let server: SubsonicServer
+/// Server-Formular — fürs Hinzufügen und Bearbeiten, strukturiert wie iOS/macOS:
+/// Abschnitt „Server" (Name + URL), „Account" (Username + Passwort), Test Connection.
+/// Im Bearbeiten-Modus zusätzlich Aktivieren + Entfernen (kein Kontextmenü auf tvOS).
+struct ServerFormView: View {
     @EnvironmentObject var serverStore: ServerStore
     @Environment(\.dismiss) private var dismiss
+    @AppStorage("themeColor") private var themeColor = "violet"
 
-    var body: some View {
-        List {
-            Text(server.displayName)
-                .font(.largeTitle).bold()
-                .listRowBackground(Color.clear)
-            Section {
-                LabeledContent(String(localized: "username"), value: server.username)
-                LabeledContent(String(localized: "server_url"), value: server.baseURL)
-            }
+    var editingServer: SubsonicServer? = nil
 
-            Section {
-                if server.id != serverStore.activeServerID {
-                    Button {
-                        serverStore.activate(server: server)
-                        dismiss()
-                    } label: {
-                        Label(String(localized: "activate"), systemImage: "checkmark.circle")
-                    }
-                }
-                Button(role: .destructive) {
-                    serverStore.delete(server: server)
-                    dismiss()
-                } label: {
-                    Label(String(localized: "remove_server"), systemImage: "trash")
-                }
-                .tint(.red)
-            }
-        }
-        .toolbar(.hidden, for: .tabBar)
-    }
-}
-
-/// Server-Anmeldeformular — wiederverwendbar fürs initiale Login und „Server hinzufügen".
-struct AddServerView: View {
-    @EnvironmentObject var serverStore: ServerStore
-    @Environment(\.dismiss) private var dismiss
-
+    @State private var name = ""
     @State private var serverURL = ""
     @State private var username = ""
     @State private var password = ""
-    @State private var isConnecting = false
-    @State private var errorMessage: String?
+    @State private var isTesting = false
+    @State private var isSaving = false
+    @State private var testResult: String?
+    @State private var testSuccess = false
+
+    private var accent: Color { AppTheme.color(for: themeColor) }
+    private var isEditing: Bool { editingServer != nil }
+    private var isActive: Bool { editingServer?.id == serverStore.activeServerID }
+    private var canSave: Bool {
+        !serverURL.trimmingCharacters(in: .whitespaces).isEmpty && !username.isEmpty && !password.isEmpty
+    }
 
     var body: some View {
         List {
-            Text(String(localized: "add_server"))
+            Text(isEditing ? String(localized: "edit_server") : String(localized: "add_server"))
                 .font(.largeTitle).bold()
                 .listRowBackground(Color.clear)
-            Section {
+
+            Section(String(localized: "server")) {
+                TextField(String(localized: "name_optional"), text: $name)
                 TextField(String(localized: "server_url"), text: $serverURL)
                     .textContentType(.URL)
+            }
+
+            Section(String(localized: "account")) {
                 TextField(String(localized: "username"), text: $username)
                     .textContentType(.username)
                 SecureField(String(localized: "password"), text: $password)
                     .textContentType(.password)
             }
 
-            if let errorMessage {
-                Text(errorMessage).foregroundStyle(.red).font(.callout)
+            Section {
+                Button {
+                    Task { await testConnection() }
+                } label: {
+                    HStack(spacing: 10) {
+                        if isTesting {
+                            ProgressView().tint(accent)
+                        } else {
+                            Image(systemName: testSuccess ? "checkmark.circle.fill" : "network")
+                                .foregroundStyle(testSuccess ? .green : accent)
+                        }
+                        Text(String(localized: "test_connection"))
+                    }
+                }
+                .disabled(isTesting || !canSave)
+
+                if let testResult {
+                    Text(testResult)
+                        .font(.caption)
+                        .foregroundStyle(testSuccess ? .green : .red)
+                }
             }
 
             Section {
                 Button {
-                    Task { await connect() }
+                    Task { await save() }
                 } label: {
-                    if isConnecting {
+                    if isSaving {
                         ProgressView()
                     } else {
-                        Text(String(localized: "connect"))
+                        Text(String(localized: "save"))
                     }
                 }
-                .disabled(isConnecting || serverURL.isEmpty || username.isEmpty)
+                .disabled(!canSave || isSaving)
+
+                if isEditing && !isActive {
+                    Button {
+                        if let s = editingServer { serverStore.activate(server: s); dismiss() }
+                    } label: {
+                        Label(String(localized: "activate"), systemImage: "checkmark.circle")
+                    }
+                }
+            }
+
+            if isEditing {
+                Section {
+                    DestructiveButton(title: String(localized: "remove_server"), systemImage: "trash") {
+                        if let s = editingServer { serverStore.delete(server: s); dismiss() }
+                    }
+                }
             }
         }
         .toolbar(.hidden, for: .tabBar)
+        .onAppear {
+            guard let server = editingServer else { return }
+            name = server.name
+            serverURL = server.baseURL
+            username = server.username
+            password = serverStore.password(for: server) ?? ""
+        }
     }
 
-    private func connect() async {
-        isConnecting = true
-        errorMessage = nil
-        defer { isConnecting = false }
+    private func testConnection() async {
+        isTesting = true
+        testResult = nil
+        testSuccess = false
+        defer { isTesting = false }
 
-        let normalized = serverURL.hasPrefix("http://") || serverURL.hasPrefix("https://")
-            ? serverURL : "https://" + serverURL
-        var server = SubsonicServer(name: "", baseURL: normalized, username: username)
+        let normalized = normalizedURL()
+        let temp = SubsonicServer(name: name, baseURL: normalized, username: username)
         do {
-            try await SubsonicAPIService.shared.ping(server: server, password: password)
-            server.remoteUserId = try await SubsonicAPIService.shared.authLogin(server: server, password: password)
-            serverStore.add(server: server, password: password)
-            serverStore.activate(server: server)
-            dismiss()
+            try await SubsonicAPIService.shared.ping(server: temp, password: password)
+            testSuccess = true
+            testResult = String(localized: "connection_successful")
         } catch {
-            errorMessage = error.localizedDescription
+            testResult = error.localizedDescription
         }
+    }
+
+    private func save() async {
+        isSaving = true
+        defer { isSaving = false }
+
+        let trimmedName = name.trimmingCharacters(in: .whitespaces)
+        let normalized = normalizedURL()
+
+        if let existing = editingServer {
+            var updated = existing
+            updated.name = trimmedName
+            updated.baseURL = normalized
+            updated.username = username
+            serverStore.update(server: updated, password: password.isEmpty ? nil : password)
+            dismiss()
+        } else {
+            var server = SubsonicServer(name: trimmedName, baseURL: normalized, username: username)
+            do {
+                server.remoteUserId = try await SubsonicAPIService.shared.authLogin(server: server, password: password)
+                serverStore.add(server: server, password: password)
+                dismiss()
+            } catch {
+                testSuccess = false
+                testResult = error.localizedDescription
+            }
+        }
+    }
+
+    private func normalizedURL() -> String {
+        serverURL.hasPrefix("http://") || serverURL.hasPrefix("https://") ? serverURL : "https://" + serverURL
     }
 }

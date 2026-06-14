@@ -53,6 +53,21 @@ struct SettingsView: View {
                     NavigationLink(String(localized: "cache")) { CacheSettingsView() }
                     NavigationLink(String(localized: "database")) { DatabaseSettingsView() }
                 }
+
+                Section(String(localized: "info")) {
+                    let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "–"
+                    let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "–"
+                    // tvOS scrollt nur, wenn der Fokus auf ein Element wandern kann — reiner Text
+                    // ist nicht fokussierbar, sonst bliebe der untere Hinweis unerreichbar.
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Shelv \(version) (\(build))")
+                        Text(String(localized: "shelv_is_an_unofficial_navidrome_client_and_has_no"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .focusable()
+                }
             }
         }
     }

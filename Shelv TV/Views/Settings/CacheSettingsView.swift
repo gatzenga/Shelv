@@ -36,15 +36,11 @@ struct CacheSettingsView: View {
             Section(String(localized: "cover_cache")) {
                 LabeledContent(String(localized: "size"),
                                value: ByteCountFormatter.string(fromByteCount: Int64(coverCacheBytes), countStyle: .file))
-                Button {
+                DestructiveButton(title: String(localized: "clear_cache"), systemImage: "trash") {
                     Task {
                         await ImageCacheService.shared.clearAll()
                         await refresh()
                     }
-                } label: {
-                    // Explizites Rot: role(.destructive) wird auf tvOS im Fokus (heller Hintergrund)
-                    // blass — feste rote Schrift bleibt satt.
-                    Text(String(localized: "clear_cache")).foregroundStyle(.red)
                 }
             }
         }

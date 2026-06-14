@@ -5,6 +5,7 @@ import SwiftUI
 struct LoginView: View {
     @EnvironmentObject var serverStore: ServerStore
 
+    @State private var name = ""
     @State private var serverURL = ""
     @State private var username = ""
     @State private var password = ""
@@ -21,6 +22,7 @@ struct LoginView: View {
             }
 
             VStack(spacing: 16) {
+                TextField(String(localized: "name_optional"), text: $name)
                 TextField(String(localized: "server_url"), text: $serverURL)
                     .textContentType(.URL)
                 TextField(String(localized: "username"), text: $username)
@@ -67,7 +69,7 @@ struct LoginView: View {
 
         let normalized = serverURL.hasPrefix("http://") || serverURL.hasPrefix("https://")
             ? serverURL : "https://" + serverURL
-        var server = SubsonicServer(name: "", baseURL: normalized, username: username)
+        var server = SubsonicServer(name: name.trimmingCharacters(in: .whitespaces), baseURL: normalized, username: username)
         do {
             try await SubsonicAPIService.shared.ping(server: server, password: password)
             server.remoteUserId = try await SubsonicAPIService.shared.authLogin(server: server, password: password)

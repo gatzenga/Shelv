@@ -194,6 +194,35 @@ struct NowPlayingOverlay: View {
     }
 }
 
+/// Destruktiver Listen-Button mit sattem Rot, das auch im Fokus rot bleibt.
+/// `role(.destructive)` / `.foregroundStyle(.red)` verblassen auf tvOS im Fokus (heller
+/// System-Platter). Mit `.buttonStyle(.plain)` bleibt die rote Schrift erhalten; der Fokus
+/// wird über einen roten Zeilen-Hintergrund angezeigt.
+struct DestructiveButton: View {
+    let title: String
+    var systemImage: String? = nil
+    let action: () -> Void
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        Button(action: action) {
+            Group {
+                if let systemImage {
+                    Label(title, systemImage: systemImage)
+                } else {
+                    Text(title)
+                }
+            }
+            .foregroundStyle(.red)
+            .bold()
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(.plain)
+        .focused($focused)
+        .listRowBackground(focused ? Color.red.opacity(0.22) : nil)
+    }
+}
+
 func formatDuration(_ seconds: Int) -> String {
     String(format: "%d:%02d", seconds / 60, seconds % 60)
 }
