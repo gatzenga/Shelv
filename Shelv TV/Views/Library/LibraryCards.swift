@@ -407,6 +407,10 @@ private struct PlaylistContextMenuModifier: ViewModifier {
 
 extension View {
     func songContextMenu(_ song: Song) -> some View { modifier(SongContextMenuModifier(song: song)) }
+    /// Kontextmenü nur anhängen, wenn `enabled` — in der Warteschlange unerwünscht.
+    @ViewBuilder func songContextMenuIf(_ enabled: Bool, _ song: Song) -> some View {
+        if enabled { songContextMenu(song) } else { self }
+    }
     func albumContextMenu(_ album: Album) -> some View { modifier(AlbumContextMenuModifier(album: album)) }
     func artistContextMenu(_ artist: Artist) -> some View { modifier(ArtistContextMenuModifier(artist: artist)) }
     func playlistContextMenu(_ playlist: Playlist) -> some View { modifier(PlaylistContextMenuModifier(playlist: playlist)) }
@@ -425,6 +429,8 @@ struct DetailSongRow: View {
     var rankAccent: Bool = false
     /// Recap: Playcount des Songs (Periodenwert) anzeigen. nil = kein Badge.
     var playCount: Int? = nil
+    /// In der Warteschlange kein Longpress-Menü (die Optionen sind dort sinnlos).
+    var showContextMenu: Bool = true
     let onPlay: () -> Void
     @AppStorage("themeColor") private var themeColor = "violet"
 
@@ -464,7 +470,7 @@ struct DetailSongRow: View {
             }
         }
         .rowButton(action: onPlay)
-        .songContextMenu(song)
+        .songContextMenuIf(showContextMenu, song)
     }
 }
 
