@@ -34,29 +34,22 @@ struct QueueView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
+            VStack(spacing: 0) {
+                infinityBar
+                Divider()
+                Group {
                 if totalCount == 0 {
-                    List {
-                        infinityToggleSection
-                        Section {
-                            VStack(spacing: 14) {
-                                Image(systemName: "music.note.list")
-                                    .font(.largeTitle)
-                                    .foregroundStyle(.secondary)
-                                Text(String(localized: "queue_is_empty"))
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 40)
-                            .listRowBackground(Color.clear)
-                        }
+                    VStack(spacing: 14) {
+                        Image(systemName: "music.note.list")
+                            .font(.largeTitle)
+                            .foregroundStyle(.secondary)
+                        Text(String(localized: "queue_is_empty"))
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     }
-                    .listStyle(.plain)
-                    .scrollIndicators(.hidden)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     List {
-                        infinityToggleSection
                         if player.isShuffled {
                             if !localPlayNext.isEmpty {
                                 Section(String(localized: "play_next")) {
@@ -189,6 +182,7 @@ struct QueueView: View {
                     .scrollIndicators(.hidden)
                     .environment(\.editMode, $editMode)
                 }
+                }
             }
             .navigationTitle(String(localized: "queue") + (totalCount > 0 ? " (\(totalCount))" : ""))
             .navigationBarTitleDisplayMode(.inline)
@@ -240,18 +234,21 @@ struct QueueView: View {
         }
     }
 
-    private var infinityToggleSection: some View {
-        Section {
-            Toggle(isOn: $infinityMode) {
-                Label { Text(String(localized: "infinity_mode")) } icon: {
-                    Image(systemName: "infinity").foregroundStyle(accentColor)
+    private var infinityBar: some View {
+        HStack {
+            Label { Text(String(localized: "infinity_mode")) } icon: {
+                Image(systemName: "infinity").foregroundStyle(accentColor)
+            }
+            Spacer()
+            Toggle("", isOn: $infinityMode)
+                .labelsHidden()
+                .tint(accentColor)
+                .onChange(of: infinityMode) { _, on in
+                    if on { player.topUpInfinityIfNeeded(startIfIdle: true) }
                 }
-            }
-            .tint(accentColor)
-            .onChange(of: infinityMode) { _, on in
-                if on { player.topUpInfinityIfNeeded(startIfIdle: true) }
-            }
         }
+        .padding(.horizontal)
+        .padding(.vertical, 10)
     }
 
     private func songRow(_ song: Song) -> some View {
