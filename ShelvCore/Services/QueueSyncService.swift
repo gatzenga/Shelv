@@ -90,7 +90,17 @@ final class QueueSyncService: ObservableObject {
         let m = mode
         guard m != .off else { return }
         guard let serverId = activeServerId else { return }
+        // Solange eine fremde Queue auf Entscheidung wartet, NICHT hochladen — sonst würde
+        // der lokale Stand genau die Queue überschreiben, die gerade angeboten wird.
+        guard pendingRemote == nil else { return }
         guard let snapshot = AudioPlayerService.shared.makeSnapshot(serverId: serverId) else { return }
+
+        // Signatur, die hochgeladen würde. Hat sich der Inhalt seit dem letzten Upload/der
+        // letzten Übernahme NICHT geändert, nicht erneut hochladen. Verhindert, dass ein
+        // spurious Upload (z.B. beim Foreground/Resume, wo saveState ebenfalls feuert) eine
+        // NEUERE Remote-Queue eines anderen Geräts überschreibt (last-write-wins).
+        let outgoingSig = (m == .subsonic) ? snapshot.flattenedForSubsonic().signature : snapshot.signature
+        if outgoingSig == lastKnownSignature(serverId) { return }
 
         switch m {
         case .off:

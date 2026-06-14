@@ -8,6 +8,7 @@ struct PlaybackSettingsView: View {
     @AppStorage("replayGainMode") private var replayGainMode = "track"
     @AppStorage("recapThreshold") private var recapThreshold = 30
     @AppStorage("queueSyncMode") private var queueSyncMode = "off"
+    @State private var showAboutQueueSync = false
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
@@ -84,20 +85,38 @@ struct PlaybackSettingsView: View {
                         Image(systemName: "arrow.triangle.2.circlepath").foregroundStyle(accentColor)
                     }
                 }
-            }
-
-            Section(String(localized: "about")) {
-                Text(String(localized: "queue_sync_about_icloud"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text(String(localized: "queue_sync_about_subsonic"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section(String(localized: "logs")) {
+                Button {
+                    showAboutQueueSync = true
+                } label: {
+                    Label {
+                        Text(String(localized: "about")).foregroundStyle(.primary)
+                    } icon: {
+                        Image(systemName: "info.circle").foregroundStyle(accentColor)
+                    }
+                }
+                .sheet(isPresented: $showAboutQueueSync) {
+                    NavigationStack {
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 16) {
+                                Text(String(localized: "queue_sync_about_icloud"))
+                                Text(String(localized: "queue_sync_about_subsonic"))
+                            }
+                            .font(.body)
+                            .padding()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .navigationTitle(String(localized: "queue_sync"))
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button(String(localized: "done")) { showAboutQueueSync = false }
+                            }
+                        }
+                    }
+                    .presentationDetents([.medium, .large])
+                }
                 NavigationLink(destination: QueueSyncLogView()) {
-                    Label { Text(String(localized: "queue_sync_log")) } icon: {
+                    Label { Text(String(localized: "logs")) } icon: {
                         Image(systemName: "doc.text").foregroundStyle(accentColor)
                     }
                 }

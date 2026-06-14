@@ -62,24 +62,30 @@ struct PlaybackSettingsView: View {
                     Text(String(localized: "queue_sync_subsonic")).tag("subsonic")
                     Text(String(localized: "queue_sync_icloud")).tag("icloud")
                 }
-            }
-
-            Section(String(localized: "about")) {
-                Text(String(localized: "queue_sync_about_icloud"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text(String(localized: "queue_sync_about_subsonic"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Section(String(localized: "logs")) {
+                NavigationLink(String(localized: "about")) {
+                    QueueSyncAboutView()
+                }
                 NavigationLink(String(localized: "queue_sync_log")) {
                     QueueSyncLogView()
                 }
             }
         }
         .toolbar(.hidden, for: .tabBar)
+    }
+}
+
+/// Erklärtext zum Queue-Sync (tvOS: als Unterseite statt Inline-Text).
+private struct QueueSyncAboutView: View {
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                Text(String(localized: "queue_sync_about_icloud"))
+                Text(String(localized: "queue_sync_about_subsonic"))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(60)
+        }
+        .navigationTitle(String(localized: "queue_sync"))
     }
 }
 
