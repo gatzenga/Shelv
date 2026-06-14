@@ -20,10 +20,13 @@ struct DiscoverView: View {
                     // Links Refresh (Reload + iCloud-Sync inkl. Queue-Check), rechts Insights.
                     HStack {
                         Button {
+                            // Wie der Mac-Refresh: Server neu kontaktieren (Discover + Playlists)
+                            // und iCloud-Sync inkl. Queue-Check.
                             Task {
-                                async let sync: Void = CloudKitSyncService.shared.syncNow()
-                                async let reload: Void = load()
-                                _ = await (sync, reload)
+                                async let discover:  Void = load()
+                                async let playlists: Void = LibraryStore.shared.loadPlaylists()
+                                async let sync:      Void = CloudKitSyncService.shared.syncNow()
+                                _ = await (discover, playlists, sync)
                             }
                         } label: {
                             Label(String(localized: "refresh"), systemImage: "arrow.clockwise")
