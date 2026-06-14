@@ -456,6 +456,7 @@ struct QueuePopover: View {
         .alert(String(localized: "clear_queue"), isPresented: $showClearConfirm) {
             Button(String(localized: "clear"), role: .destructive) {
                 player.clearUpcomingPlayQueue()
+                player.clearUserQueue()
             }
             Button(String(localized: "cancel"), role: .cancel) {}
         } message: {
