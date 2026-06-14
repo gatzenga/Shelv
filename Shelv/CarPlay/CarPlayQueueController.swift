@@ -165,14 +165,16 @@ final class CarPlayQueueController {
             accessoryImage: nil,
             accessoryType: .none
         )
-        item.handler = { [weak item] _, completion in
+        item.handler = { [weak self] _, completion in
             completion()
             let newOn = !UserDefaults.standard.bool(forKey: "infinityModeEnabled")
             UserDefaults.standard.set(newOn, forKey: "infinityModeEnabled")
             if newOn { AudioPlayerService.shared.topUpInfinityIfNeeded(startIfIdle: true) }
-            // detailText live aktualisieren — die Songliste ändert sich beim Ausschalten nicht,
-            // daher kein Rebuild.
-            item?.setDetailText(newOn ? String(localized: "on") : String(localized: "off"))
+            // Liste neu aufbauen → frische Zeile (Tipp-Highlight verschwindet, Zustand aktualisiert),
+            // genau wie die Album-Action-Buttons (Favorit/Play Next). Gate aushebeln, da sich die
+            // Songliste beim Ausschalten nicht ändert.
+            self?.lastSongIds = []
+            self?.scheduleRebuild()
         }
         return CPListSection(items: [item])
     }
