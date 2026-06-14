@@ -2,9 +2,7 @@ import SwiftUI
 
 struct QueueView: View {
     @ObservedObject var player = AudioPlayerService.shared
-    @AppStorage("themeColor") private var themeColor = "violet"
     @AppStorage("infinityModeEnabled") private var infinityMode = false
-    private var accent: Color { AppTheme.color(for: themeColor) }
 
     /// Hält den Fokus nach dem Abspielen eines Titels (der dann aus der Liste verschwindet)
     /// auf der nächsten Zeile — sonst verliert tvOS den Fokus komplett.

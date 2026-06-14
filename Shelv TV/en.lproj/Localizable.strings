@@ -420,7 +420,3 @@
 "infinity_mode" = "Infinity Mode";
 "on" = "On";
 "off" = "Off";
-"move_up" = "Move Up";
-"move_down" = "Move Down";
-"move_to_top" = "Move to Top";
-"remove_from_queue" = "Remove from Queue";

@@ -416,7 +416,3 @@
 "infinity_mode" = "无限模式";
 "on" = "开";
 "off" = "关";
-"move_up" = "上移";
-"move_down" = "下移";
-"move_to_top" = "移到顶部";
-"remove_from_queue" = "从队列中移除";

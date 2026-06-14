@@ -46,8 +46,6 @@ enum SubsonicAPIError: LocalizedError {
 struct SubsonicPlayQueue {
     let songs: [Song]
     let currentSongId: String?
-    /// Position im aktuellen Song in Millisekunden.
-    let positionMs: Int
     /// Server-Zeitstempel der letzten Änderung (ISO-String), falls geliefert.
     let changed: String?
 }
@@ -745,7 +743,6 @@ class SubsonicAPIService: ObservableObject {
         return SubsonicPlayQueue(
             songs: entries,
             currentSongId: q.current,
-            positionMs: q.position ?? 0,
             changed: q.changed
         )
     }

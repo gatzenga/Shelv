@@ -421,7 +421,3 @@
 "infinity_mode" = "Endlos-Modus";
 "on" = "An";
 "off" = "Aus";
-"move_up" = "Nach oben";
-"move_down" = "Nach unten";
-"move_to_top" = "An den Anfang";
-"remove_from_queue" = "Aus Warteschlange entfernen";

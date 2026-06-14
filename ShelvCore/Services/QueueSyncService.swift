@@ -24,6 +24,7 @@ final class QueueSyncService: ObservableObject {
     private let modeKey = "queueSyncMode"
     private var uploadTask: Task<Void, Never>?
     private var isChecking = false
+    private var lastCheckAt: Date?
 
     private static let logTimeFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -111,16 +112,25 @@ final class QueueSyncService: ObservableObject {
             return
         case .icloud:
             guard let payload = try? JSONEncoder().encode(snapshot) else { return }
-            await CloudKitSyncService.shared.savePlayQueue(
+            let ok = await CloudKitSyncService.shared.savePlayQueue(
                 serverId: serverId,
                 payload: payload,
                 changedAt: snapshot.changedAt,
                 signature: snapshot.signature
             )
-            setLastKnownSignature(snapshot.signature, serverId: serverId)
-            appendLog("Uploaded to iCloud (\(snapshot.queue.count) songs)")
+            // Signatur nur bei bestätigtem Upload merken — sonst hielten wir einen Stand für
+            // „eigen", der nie in iCloud landete.
+            if ok {
+                setLastKnownSignature(snapshot.signature, serverId: serverId)
+                appendLog("Uploaded to iCloud (\(snapshot.queue.count) songs)")
+            } else {
+                appendLog("iCloud upload failed")
+            }
         case .subsonic:
             let flat = snapshot.flattenedForSubsonic()
+            // Niemals eine leere Liste hochladen — das würde die serverseitige Queue (auch die
+            // eines anderen Geräts) löschen.
+            guard !flat.queue.isEmpty else { return }
             do {
                 try await SubsonicAPIService.shared.savePlayQueue(
                     songIds: flat.queue.map(\.id),
@@ -149,6 +159,9 @@ final class QueueSyncService: ObservableObject {
         }
         // Überlappende Checks vermeiden (syncNow kann von mehreren Auslösern gleichzeitig kommen).
         guard !isChecking else { return }
+        // Trigger-Bursts (z.B. Netz-Flapping) zusammenfassen — nicht öfter als alle 2 s prüfen.
+        if let last = lastCheckAt, Date().timeIntervalSince(last) < 2 { return }
+        lastCheckAt = Date()
         isChecking = true
         defer { isChecking = false }
 

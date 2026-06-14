@@ -356,10 +356,18 @@ class AudioPlayerService: ObservableObject {
             return songs.filter { LocalDownloadIndex.shared.contains(songId: $0.id, serverId: serverId) }
         }
 
-        let restoredQueue = avail(snapshot.queue)
-        let restoredPlayNext = avail(snapshot.playNextQueue)
-        let restoredUser = avail(snapshot.userQueue)
+        var restoredQueue = avail(snapshot.queue)
+        var restoredPlayNext = avail(snapshot.playNextQueue)
+        var restoredUser = avail(snapshot.userQueue)
         guard !(restoredQueue.isEmpty && restoredPlayNext.isEmpty && restoredUser.isEmpty) else { return }
+
+        // Ist der Hauptqueue nach der Offline-Filterung leer (aktueller Song nicht geladen),
+        // aber Play-Next/User-Queue haben Songs → ersten verfügbaren als aktuellen nehmen,
+        // sonst bliebe nichts abspielbar/aktuell.
+        if restoredQueue.isEmpty {
+            if !restoredPlayNext.isEmpty { restoredQueue = [restoredPlayNext.removeFirst()] }
+            else if !restoredUser.isEmpty { restoredQueue = [restoredUser.removeFirst()] }
+        }
 
         // currentIndex nach der Filterung anhand der currentSongId neu bestimmen.
         var idx = min(max(snapshot.currentIndex, 0), max(restoredQueue.count - 1, 0))
@@ -1118,6 +1126,9 @@ class AudioPlayerService: ObservableObject {
     ///   die Wiedergabe nicht ungewollt wieder anspringt.
     func topUpInfinityIfNeeded(startIfIdle: Bool = false) {
         guard infinityModeEnabled, infinityTopUpTask == nil else { return }
+        // Bei aktivem Repeat NICHT nachfüllen: peekNextSong() liefert am Queue-Ende bewusst nil
+        // (für den Wrap/Replay). Ohne diesen Guard würde stattdessen ein Zufallstitel angehängt.
+        guard repeatMode == .off else { return }
         // Schon etwas upcoming? Nichts tun.
         if currentSong != nil, peekNextSong() != nil { return }
         // Nichts am Laufen und kein expliziter Start → nichts tun (kein Wiederbeleben nach Stop).

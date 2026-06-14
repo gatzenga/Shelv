@@ -809,9 +809,11 @@ actor CloudKitSyncService {
     /// Lädt den (vom Aufrufer JSON-codierten) Queue-Snapshot in einen einzelnen Record.
     /// Codable-Arbeit bleibt bewusst beim @MainActor-Aufrufer (QueueSyncService) — der
     /// Actor hantiert nur mit `Data`, um main-actor-isolierte Conformances zu vermeiden.
-    func savePlayQueue(serverId: String, payload: Data, changedAt: Double, signature: String) async {
-        guard canSyncQueue else { return }
-        guard await status.accountAvailable else { return }
+    /// Liefert `true` nur bei bestätigtem Upload — der Aufrufer merkt sich die Signatur sonst nicht.
+    @discardableResult
+    func savePlayQueue(serverId: String, payload: Data, changedAt: Double, signature: String) async -> Bool {
+        guard canSyncQueue else { return false }
+        guard await status.accountAvailable else { return false }
         do {
             try await ensureZoneExists()
             let record = CKRecord(recordType: "PlayQueue", recordID: playQueueRecordID(serverId: serverId))
@@ -822,8 +824,10 @@ actor CloudKitSyncService {
             // Singleton pro Server, last-write-wins → Server-Konflikt bewusst überschreiben.
             _ = try await db.modifyRecords(saving: [record], deleting: [], savePolicy: .allKeys, atomically: true)
             debug("[CloudKitSync] PlayQueue uploaded (\(payload.count) bytes)")
+            return true
         } catch {
             debug("[CloudKitSync] PlayQueue save failed: \(error.localizedDescription)")
+            return false
         }
     }
 
