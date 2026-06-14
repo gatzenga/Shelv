@@ -78,12 +78,15 @@ struct PlaybackSettingsView: View {
 private struct QueueSyncAboutView: View {
     var body: some View {
         ScrollView {
+            // tvOS: reiner Text ist nicht fokussierbar → ohne .focusable() bricht die
+            // Navigation (Menü-Taste schließt die App statt zurückzugehen) und es scrollt nicht.
             VStack(alignment: .leading, spacing: 24) {
                 Text(String(localized: "queue_sync_about_icloud"))
                 Text(String(localized: "queue_sync_about_subsonic"))
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(60)
+            .focusable()
         }
         .navigationTitle(String(localized: "queue_sync"))
     }
