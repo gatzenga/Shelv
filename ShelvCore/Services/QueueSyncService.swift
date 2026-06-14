@@ -122,7 +122,7 @@ final class QueueSyncService: ObservableObject {
                 try await SubsonicAPIService.shared.savePlayQueue(
                     songIds: flat.queue.map(\.id),
                     current: flat.currentSongId,
-                    positionMs: flat.positionMs
+                    positionMs: 0
                 )
                 setLastKnownSignature(flat.signature, serverId: serverId)
                 appendLog("Uploaded to Subsonic (\(flat.queue.count) songs)")
@@ -207,7 +207,6 @@ final class QueueSyncService: ObservableObject {
             truthPlayNextQueue: [],
             truthUserQueue: [],
             currentSongId: pq.currentSongId,
-            positionMs: pq.positionMs,
             isShuffled: false,
             repeatMode: RepeatMode.off.rawValue,
             serverId: serverId,

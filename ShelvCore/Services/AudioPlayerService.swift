@@ -330,7 +330,6 @@ class AudioPlayerService: ObservableObject {
             truthPlayNextQueue: truthPlayNextQueue,
             truthUserQueue: truthUserQueue,
             currentSongId: currentSong?.id,
-            positionMs: Int(currentTime * 1000),
             isShuffled: isShuffled,
             repeatMode: repeatMode.rawValue,
             serverId: serverId,
@@ -372,9 +371,9 @@ class AudioPlayerService: ObservableObject {
         repeatMode = RepeatMode(rawValue: snapshot.repeatMode) ?? .off
 
         currentSong = restoredQueue.isEmpty ? nil : restoredQueue[currentIndex]
-        let pos = Double(snapshot.positionMs) / 1000.0
-        resumeTime = pos
-        currentTime = pos
+        // Bewusst keine Positions-Übernahme: der Song startet bei 0.
+        resumeTime = 0
+        currentTime = 0
         if let d = currentSong?.duration { duration = Double(d) }
         if let song = currentSong { updateNowPlayingInfo(song: song) }
         saveState()

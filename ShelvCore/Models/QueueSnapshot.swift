@@ -38,8 +38,6 @@ struct QueueSnapshot: Codable, Equatable {
 
     /// ID des aktuell spielenden Songs (Quelle der Wahrheit für „welcher Song").
     var currentSongId: String?
-    /// Wiedergabe-Position in Millisekunden (nur an Endpunkten aktualisiert).
-    var positionMs: Int
 
     var isShuffled: Bool
     /// `RepeatMode.rawValue`.
@@ -98,7 +96,6 @@ struct QueueSnapshot: Codable, Equatable {
             truthPlayNextQueue: [],
             truthUserQueue: [],
             currentSongId: current?.id,
-            positionMs: positionMs,
             isShuffled: isShuffled,
             repeatMode: repeatMode,
             serverId: serverId,
