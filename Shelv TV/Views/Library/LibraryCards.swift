@@ -44,12 +44,14 @@ extension View {
 
     /// Sanftes Aus-/Einblenden an Ober- und Unterkante — Inhalt reißt nicht hart an der
     /// Tab-Leiste bzw. am unteren Rand ab (Lyrics & Warteschlange im Now-Playing-Panel).
-    func edgeFadeMask() -> some View {
+    /// `fade` = Anteil der Höhe je Kante (Default 0.10). Kleiner = klarerer Rand, der
+    /// erste Inhalt sitzt höher und verschwindet nicht so leicht in der Ausblendung.
+    func edgeFadeMask(fade: CGFloat = 0.10) -> some View {
         mask(LinearGradient(
             stops: [
                 .init(color: .clear, location: 0),
-                .init(color: .black, location: 0.10),
-                .init(color: .black, location: 0.90),
+                .init(color: .black, location: fade),
+                .init(color: .black, location: 1 - fade),
                 .init(color: .clear, location: 1)
             ],
             startPoint: .top, endPoint: .bottom

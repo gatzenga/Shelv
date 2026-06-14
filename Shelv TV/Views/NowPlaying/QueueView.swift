@@ -44,10 +44,11 @@ struct QueueView: View {
                         }
                     }
                 }
-                .padding(.vertical, 90)
+                .padding(.top, 24)
+                .padding(.bottom, 90)
             }
             .scrollIndicators(.hidden)
-            .edgeFadeMask()
+            .edgeFadeMask(fade: 0.04)
         }
     }
 
