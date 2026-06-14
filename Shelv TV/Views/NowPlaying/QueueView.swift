@@ -32,16 +32,19 @@ struct QueueView: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 4) {
-                Toggle(isOn: $infinityMode) {
-                    Label(String(localized: "infinity_mode"), systemImage: "infinity")
+                HStack(spacing: 16) {
+                    Image(systemName: "infinity")
+                    Text(String(localized: "infinity_mode"))
+                    Spacer()
+                    Image(systemName: infinityMode ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(infinityMode ? accent : .secondary)
                 }
-                .toggleStyle(.button)
-                .tint(accent)
-                .padding(.horizontal, 36)
+                .foregroundStyle(.primary)
+                .rowButton {
+                    infinityMode.toggle()
+                    if infinityMode { player.topUpInfinityIfNeeded(startIfIdle: true) }
+                }
                 .padding(.bottom, 8)
-                .onChange(of: infinityMode) { _, on in
-                    if on { player.topUpInfinityIfNeeded(startIfIdle: true) }
-                }
 
                 if isEmpty {
                     Text(String(localized: "queue_empty"))
