@@ -140,7 +140,10 @@ final class QueueSyncService: ObservableObject {
     func checkForRemoteQueue() async {
         let m = mode
         guard m != .off else { return }
-        guard let serverId = activeServerId else { return }
+        guard let serverId = activeServerId else {
+            appendLog("Check skipped — no active server (stableId empty)")
+            return
+        }
         // Überlappende Checks vermeiden (syncNow kann von mehreren Auslösern gleichzeitig kommen).
         guard !isChecking else { return }
         isChecking = true
