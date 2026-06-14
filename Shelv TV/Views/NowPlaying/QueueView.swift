@@ -36,10 +36,12 @@ struct QueueView: View {
                     infinityMode.toggle()
                     if infinityMode { player.topUpInfinityIfNeeded(startIfIdle: true) }
                 } label: {
-                    Label(
-                        "\(String(localized: "infinity_mode")) · \(infinityMode ? String(localized: "on") : String(localized: "off"))",
-                        systemImage: "infinity"
-                    )
+                    HStack {
+                        Label(String(localized: "infinity_mode"), systemImage: "infinity")
+                        Spacer()
+                        Text(infinityMode ? String(localized: "on") : String(localized: "off"))
+                    }
+                    .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
                 .padding(.horizontal, 36)
