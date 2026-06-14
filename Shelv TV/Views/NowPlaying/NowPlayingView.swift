@@ -21,13 +21,11 @@ struct NowPlayingView: View {
                     HStack(spacing: 0) {
                         playerColumn
                             .frame(maxWidth: .infinity)
-                            .focusSection()
 
                         if let panel {
                             Divider()
                             sidePanel(panel)
                                 .frame(width: 720)
-                                .focusSection()
                                 .transition(.move(edge: .trailing).combined(with: .opacity))
                         }
                     }
