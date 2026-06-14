@@ -35,5 +35,13 @@ struct QueueSyncLogView: View {
         }
         .navigationTitle(String(localized: "queue_sync_log"))
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if !queueSync.logEntries.isEmpty {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(String(localized: "clear")) { queueSync.clearLog() }
+                        .foregroundStyle(.red)
+                }
+            }
+        }
     }
 }

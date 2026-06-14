@@ -32,6 +32,9 @@ final class QueueSyncService: ObservableObject {
         return f
     }()
 
+    /// Leert das Queue-Sync-Log (Clear-Button in der Log-Ansicht).
+    func clearLog() { logEntries.removeAll() }
+
     private func appendLog(_ message: String) {
         let stamp = Self.logTimeFormatter.string(from: Date())
         logEntries.insert("[\(stamp)] \(message)", at: 0)

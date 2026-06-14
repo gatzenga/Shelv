@@ -34,6 +34,10 @@ struct QueueSyncLogView: View {
         .frame(width: 640, height: 520)
         .navigationTitle(String(localized: "queue_sync_log"))
         .toolbar {
+            ToolbarItem(placement: .destructiveAction) {
+                Button(String(localized: "clear")) { queueSync.clearLog() }
+                    .disabled(queueSync.logEntries.isEmpty)
+            }
             ToolbarItem(placement: .confirmationAction) {
                 Button(String(localized: "done")) { dismiss() }
             }
