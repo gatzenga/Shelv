@@ -18,6 +18,10 @@ struct PlayerBarView: View {
     @AppStorage("autoFetchLyrics") private var autoFetchLyrics = true
     @State private var isDragging: Bool = false
     @State private var dragValue: Double = 0
+    // currentTime ist kein @Published → das Zeit-Label/der Slider werden über den
+    // timePublisher gespeist. Ohne das friert die Anzeige ein (z.B. nach einem Seek),
+    // obwohl der Ton normal weiterläuft.
+    @State private var displayTime: Double = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -188,7 +192,7 @@ struct PlayerBarView: View {
                     }
 
                     HStack(spacing: 10) {
-                        Text(formatTime(isDragging ? dragValue : player.currentTime))
+                        Text(formatTime(isDragging ? dragValue : displayTime))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .monospacedDigit()
@@ -196,7 +200,7 @@ struct PlayerBarView: View {
 
                         Slider(
                             value: Binding(
-                                get: { isDragging ? dragValue : player.currentTime },
+                                get: { isDragging ? dragValue : displayTime },
                                 set: { newVal in dragValue = newVal }
                             ),
                             in: 0...max(player.duration, 1)
@@ -205,6 +209,7 @@ struct PlayerBarView: View {
                                 isDragging = true
                             } else {
                                 player.seek(to: dragValue)
+                                displayTime = dragValue
                                 isDragging = false
                             }
                         }
@@ -274,6 +279,12 @@ struct PlayerBarView: View {
             .frame(height: 100)
         }
         .background(.bar)
+        .onReceive(player.timePublisher) { update in
+            guard !isDragging else { return }
+            displayTime = update.time
+        }
+        .onAppear { displayTime = player.currentTime }
+        .onChange(of: player.currentSong?.id) { _, _ in displayTime = player.currentTime }
         .task(id: player.currentSong?.id) {
             guard autoFetchLyrics,
                   let song = player.currentSong,
