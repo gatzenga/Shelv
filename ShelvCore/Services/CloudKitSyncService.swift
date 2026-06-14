@@ -863,6 +863,10 @@ actor CloudKitSyncService {
     }
 
     func syncNow() async {
+        // Queue-Sync hängt an einem eigenen Toggle und läuft unabhängig vom Play-Log-Sync.
+        // Bei jedem Sync-Auslöser (Foreground, Pull-to-Refresh, Mac-Refresh, Netz-Reconnect)
+        // die Remote-Queue mitprüfen — so wird ein fremder Stand zuverlässig überall erkannt.
+        Task { @MainActor in await QueueSyncService.shared.checkForRemoteQueue() }
         guard canSync else { return }
         log("Syncing…")
         await flushPendingMarkerDeletions()

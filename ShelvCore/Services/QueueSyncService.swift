@@ -23,6 +23,7 @@ final class QueueSyncService: ObservableObject {
 
     private let modeKey = "queueSyncMode"
     private var uploadTask: Task<Void, Never>?
+    private var isChecking = false
 
     private static let logTimeFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -140,6 +141,10 @@ final class QueueSyncService: ObservableObject {
         let m = mode
         guard m != .off else { return }
         guard let serverId = activeServerId else { return }
+        // Überlappende Checks vermeiden (syncNow kann von mehreren Auslösern gleichzeitig kommen).
+        guard !isChecking else { return }
+        isChecking = true
+        defer { isChecking = false }
 
         let remote: QueueSnapshot?
         switch m {

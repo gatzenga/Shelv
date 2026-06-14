@@ -96,8 +96,8 @@ struct Shelv_DesktopApp: App {
                 }
                 .onChange(of: scenePhase) { _, phase in
                     guard phase == .active else { return }
+                    // syncNow prüft die Remote-Queue automatisch mit.
                     Task { await CloudKitSyncService.shared.syncNow() }
-                    Task { await QueueSyncService.shared.checkForRemoteQueue() }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                     Task { await CloudKitSyncService.shared.syncNow() }
