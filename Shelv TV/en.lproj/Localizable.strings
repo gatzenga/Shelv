@@ -417,3 +417,7 @@
 "queue_available_subtitle" = "Take over what was playing elsewhere?";
 "queue_take_over" = "Take over";
 "queue_sync_log" = "Queue Sync Log";
+"move_up" = "Move Up";
+"move_down" = "Move Down";
+"move_to_top" = "Move to Top";
+"remove_from_queue" = "Remove from Queue";

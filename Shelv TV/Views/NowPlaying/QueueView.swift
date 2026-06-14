@@ -22,7 +22,8 @@ struct QueueView: View {
                     if !player.playNextQueue.isEmpty {
                         sectionHeader(String(localized: "play_next"))
                         ForEach(Array(player.playNextQueue.enumerated()), id: \.element.id) { i, song in
-                            DetailSongRow(song: song, number: i, showArtwork: true) {
+                            DetailSongRow(song: song, number: i, showArtwork: true,
+                                          queueActions: actions(.playNext, i, player.playNextQueue.count)) {
                                 player.jumpToPlayNext(at: i)
                             }
                         }
@@ -30,7 +31,8 @@ struct QueueView: View {
                     if !upcomingAlbum.isEmpty {
                         sectionHeader(String(localized: "up_next"))
                         ForEach(Array(upcomingAlbum.enumerated()), id: \.element.id) { i, song in
-                            DetailSongRow(song: song, number: i, showArtwork: true) {
+                            DetailSongRow(song: song, number: i, showArtwork: true,
+                                          queueActions: actions(.album, i, upcomingAlbum.count)) {
                                 player.jumpToQueueTrack(at: player.currentIndex + 1 + i)
                             }
                         }
@@ -38,7 +40,8 @@ struct QueueView: View {
                     if !player.userQueue.isEmpty {
                         sectionHeader(String(localized: "your_queue"))
                         ForEach(Array(player.userQueue.enumerated()), id: \.element.id) { i, song in
-                            DetailSongRow(song: song, number: i, showArtwork: true) {
+                            DetailSongRow(song: song, number: i, showArtwork: true,
+                                          queueActions: actions(.user, i, player.userQueue.count)) {
                                 player.jumpToUserQueue(at: i)
                             }
                         }
@@ -49,6 +52,39 @@ struct QueueView: View {
             }
             .scrollIndicators(.hidden)
             .edgeFadeMask(fade: 0.04)
+        }
+    }
+
+    private enum QSection { case playNext, album, user }
+
+    /// Queue-Aktionen fürs Kontextmenü (Select gedrückt halten). Nur sinnvolle Einträge.
+    private func actions(_ section: QSection, _ i: Int, _ count: Int) -> QueueRowActions {
+        QueueRowActions(
+            moveUp:   i > 0 ? { move(section, i, up: true) } : nil,
+            moveDown: i < count - 1 ? { move(section, i, up: false) } : nil,
+            moveToTop: i > 0 ? { moveTo(section, i, 0) } : nil,
+            remove:   { remove(section, i) }
+        )
+    }
+
+    private func move(_ section: QSection, _ i: Int, up: Bool) {
+        moveTo(section, i, up ? i - 1 : i + 2)   // SwiftUI move-Offset-Semantik
+    }
+
+    private func moveTo(_ section: QSection, _ i: Int, _ to: Int) {
+        let from = IndexSet(integer: i)
+        switch section {
+        case .playNext: player.moveInPlayNextQueue(from: from, to: to)
+        case .album:    player.moveInQueue(from: from, to: to)
+        case .user:     player.moveInUserQueue(from: from, to: to)
+        }
+    }
+
+    private func remove(_ section: QSection, _ i: Int) {
+        switch section {
+        case .playNext: player.removeFromPlayNextQueue(at: i)
+        case .album:    player.removeFromPlayQueue(at: player.currentIndex + 1 + i)
+        case .user:     player.removeFromUserQueue(at: i)
         }
     }
 

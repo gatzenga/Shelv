@@ -234,8 +234,18 @@ func formatDuration(_ seconds: Int) -> String {
 // Zentral definiert, damit jede Card/Row dieselben Aktionen bekommt. Aktionen laufen
 // über den geteilten AudioPlayerService; Favorit-Status/-Toggle über den tvOS-LibraryStore.
 
+/// Optionale Queue-Aktionen fürs Kontextmenü einer Zeile. Nur gesetzte Closures
+/// erscheinen — so bleibt das Menü überall sonst unverändert.
+struct QueueRowActions {
+    var moveUp: (() -> Void)? = nil
+    var moveDown: (() -> Void)? = nil
+    var moveToTop: (() -> Void)? = nil
+    var remove: (() -> Void)? = nil
+}
+
 private struct SongContextMenuModifier: ViewModifier {
     let song: Song
+    var queueActions: QueueRowActions? = nil
     @AppStorage("enableFavorites") private var enableFavorites = true
     @AppStorage("enablePlaylists") private var enablePlaylists = true
     @ObservedObject private var library = LibraryStore.shared
@@ -245,6 +255,23 @@ private struct SongContextMenuModifier: ViewModifier {
         content
             .contextMenu {
                 let player = AudioPlayerService.shared
+                if let q = queueActions {
+                    if let up = q.moveUp {
+                        Button { up() } label: { Label(String(localized: "move_up"), systemImage: "arrow.up") }
+                    }
+                    if let down = q.moveDown {
+                        Button { down() } label: { Label(String(localized: "move_down"), systemImage: "arrow.down") }
+                    }
+                    if let top = q.moveToTop {
+                        Button { top() } label: { Label(String(localized: "move_to_top"), systemImage: "arrow.up.to.line") }
+                    }
+                    if let remove = q.remove {
+                        Button(role: .destructive) { remove() } label: {
+                            Label(String(localized: "remove_from_queue"), systemImage: "trash")
+                        }
+                    }
+                    Divider()
+                }
                 Button { player.addPlayNext(song) } label: {
                     Label(String(localized: "play_next"), systemImage: "text.line.first.and.arrowtriangle.forward")
                 }
@@ -408,7 +435,9 @@ private struct PlaylistContextMenuModifier: ViewModifier {
 }
 
 extension View {
-    func songContextMenu(_ song: Song) -> some View { modifier(SongContextMenuModifier(song: song)) }
+    func songContextMenu(_ song: Song, queueActions: QueueRowActions? = nil) -> some View {
+        modifier(SongContextMenuModifier(song: song, queueActions: queueActions))
+    }
     func albumContextMenu(_ album: Album) -> some View { modifier(AlbumContextMenuModifier(album: album)) }
     func artistContextMenu(_ artist: Artist) -> some View { modifier(ArtistContextMenuModifier(artist: artist)) }
     func playlistContextMenu(_ playlist: Playlist) -> some View { modifier(PlaylistContextMenuModifier(playlist: playlist)) }
@@ -427,6 +456,8 @@ struct DetailSongRow: View {
     var rankAccent: Bool = false
     /// Recap: Playcount des Songs (Periodenwert) anzeigen. nil = kein Badge.
     var playCount: Int? = nil
+    /// Optionale Queue-Aktionen fürs Kontextmenü (nur in der Warteschlange gesetzt).
+    var queueActions: QueueRowActions? = nil
     let onPlay: () -> Void
     @AppStorage("themeColor") private var themeColor = "violet"
 
@@ -466,7 +497,7 @@ struct DetailSongRow: View {
             }
         }
         .rowButton(action: onPlay)
-        .songContextMenu(song)
+        .songContextMenu(song, queueActions: queueActions)
     }
 }
 
