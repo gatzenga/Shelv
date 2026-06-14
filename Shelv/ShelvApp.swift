@@ -97,6 +97,8 @@ struct ShelvApp: App {
                     await DownloadStore.shared.setActiveServer(server.stableId)
                     PinnedPlaylistStore.shared.setActiveServer(server.stableId)
                     await LibraryStore.shared.loadStarred()
+                    // Nach App-Start / Server-Wechsel: auf eine fremde Remote-Queue prüfen.
+                    await QueueSyncService.shared.checkForRemoteQueue()
                 }
                 .task {
                     Task.detached(priority: .utility) {
@@ -128,6 +130,8 @@ struct ShelvApp: App {
                 .onChange(of: scenePhase) { _, phase in
                     guard phase == .active else { return }
                     Task { await CloudKitSyncService.shared.syncNow() }
+                    // Beim Zurückkehren in den Vordergrund auf eine fremde Queue prüfen.
+                    Task { await QueueSyncService.shared.checkForRemoteQueue() }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .recapRegistryUpdated)) { _ in
                     guard let server = serverStore.activeServer else { return }

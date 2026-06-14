@@ -379,3 +379,13 @@
 "include_navidrome_lyrics" = "Navidrome-Lyrics einbeziehen";
 "artist_bio_show_more" = "Mehr anzeigen";
 "artist_bio_show_less" = "Weniger anzeigen";
+"about" = "Info";
+"queue_sync" = "Queue-Sync";
+"queue_sync_off" = "Aus";
+"queue_sync_subsonic" = "Subsonic";
+"queue_sync_icloud" = "iCloud";
+"queue_sync_about_icloud" = "iCloud: Beste Übernahme der Wiedergabe inkl. Reihenfolge, Shuffle und Wiederholung. Ideal, wenn du nur Shelv nutzt.";
+"queue_sync_about_subsonic" = "Subsonic: Speichert nur eine einfache Liste auf dem Server — dafür auch mit anderen Clients nutzbar.";
+"queue_available_title" = "Queue von einem anderen Gerät";
+"queue_available_subtitle" = "Wiedergabe von dort übernehmen?";
+"queue_take_over" = "Übernehmen";

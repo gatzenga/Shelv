@@ -378,3 +378,13 @@
 "include_navidrome_lyrics" = "Include Navidrome Lyrics";
 "artist_bio_show_more" = "Show more";
 "artist_bio_show_less" = "Show less";
+"about" = "About";
+"queue_sync" = "Queue Sync";
+"queue_sync_off" = "Off";
+"queue_sync_subsonic" = "Subsonic";
+"queue_sync_icloud" = "iCloud";
+"queue_sync_about_icloud" = "iCloud: Best playback hand-off including order, shuffle and repeat. Ideal if you only use Shelv.";
+"queue_sync_about_subsonic" = "Subsonic: Stores just a plain list on the server — but works with other clients too.";
+"queue_available_title" = "Queue from another device";
+"queue_available_subtitle" = "Take over what was playing elsewhere?";
+"queue_take_over" = "Take over";

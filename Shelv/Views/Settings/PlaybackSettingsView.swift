@@ -7,6 +7,7 @@ struct PlaybackSettingsView: View {
     @AppStorage("replayGainEnabled") private var replayGainEnabled = false
     @AppStorage("replayGainMode") private var replayGainMode = "track"
     @AppStorage("recapThreshold") private var recapThreshold = 30
+    @AppStorage("queueSyncMode") private var queueSyncMode = "off"
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
@@ -71,6 +72,27 @@ struct PlaybackSettingsView: View {
                         Image(systemName: "checkmark.seal").foregroundStyle(accentColor)
                     }
                 }
+            }
+
+            Section(String(localized: "queue_sync")) {
+                Picker(selection: $queueSyncMode) {
+                    Text(String(localized: "queue_sync_off")).tag("off")
+                    Text(String(localized: "queue_sync_subsonic")).tag("subsonic")
+                    Text(String(localized: "queue_sync_icloud")).tag("icloud")
+                } label: {
+                    Label { Text(String(localized: "queue_sync")) } icon: {
+                        Image(systemName: "arrow.triangle.2.circlepath").foregroundStyle(accentColor)
+                    }
+                }
+            }
+
+            Section(String(localized: "about")) {
+                Text(String(localized: "queue_sync_about_icloud"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(String(localized: "queue_sync_about_subsonic"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             PlayerBottomSpacer()

@@ -9,6 +9,7 @@ struct ContentView: View {
     @EnvironmentObject var serverStore: ServerStore
     @ObservedObject var libraryStore = LibraryStore.shared
     @ObservedObject var offlineMode = OfflineModeService.shared
+    @ObservedObject var queueSync = QueueSyncService.shared
     @Environment(\.horizontalSizeClass) var horizontalSizeClass
     @State private var selectedTab = 0
     @State private var searchResetToken = 0
@@ -70,6 +71,7 @@ struct ContentView: View {
         .shelveToast($offlineToast)
         .onChange(of: serverStore.activeServerID) { _, _ in
             AudioPlayerService.shared.stop()
+            QueueSyncService.shared.handleServerChange()
             libraryStore.resetInMemory()
             #if DEBUG
             // Demo-Server aktiv → festes Player-Standbild setzen (nach stop(), sonst würde
@@ -142,9 +144,12 @@ struct ContentView: View {
                 ServerErrorBanner()
                     .padding(.top, geometry.safeAreaInsets.top + 4)
                     .animation(.easeInOut, value: offlineMode.serverErrorBannerVisible)
+                QueueSyncBanner()
+                    .padding(.top, offlineMode.serverErrorBannerVisible ? 0 : geometry.safeAreaInsets.top + 4)
+                    .animation(.easeInOut, value: queueSync.pendingRemote != nil)
                 Spacer()
             }
-            .allowsHitTesting(offlineMode.serverErrorBannerVisible)
+            .allowsHitTesting(offlineMode.serverErrorBannerVisible || queueSync.pendingRemote != nil)
             .ignoresSafeArea(edges: .top)
         }
     }

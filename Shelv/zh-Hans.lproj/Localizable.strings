@@ -377,3 +377,13 @@
 "download_progress_format" = "%d / %d 首歌曲";
 "lyrics_progress_format" = "%d / %d 首歌词";
 "include_navidrome_lyrics" = "包含 Navidrome 歌词";
+"about" = "关于";
+"queue_sync" = "队列同步";
+"queue_sync_off" = "关闭";
+"queue_sync_subsonic" = "Subsonic";
+"queue_sync_icloud" = "iCloud";
+"queue_sync_about_icloud" = "iCloud：最佳的播放接续，包含顺序、随机和循环模式。如果你只使用 Shelv，建议选此项。";
+"queue_sync_about_subsonic" = "Subsonic：仅在服务器上保存一个简单列表，但也可与其他客户端通用。";
+"queue_available_title" = "来自其他设备的队列";
+"queue_available_subtitle" = "接续在其他设备上的播放？";
+"queue_take_over" = "接续";

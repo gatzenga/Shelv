@@ -183,4 +183,11 @@ final class QueueSyncService: ObservableObject {
         setDismissedSignature(snap.signature, serverId: snap.serverId)
         pendingRemote = nil
     }
+
+    /// Beim Server-Wechsel: laufenden Upload abbrechen und einen evtl. offenen Banner
+    /// (der den alten Server betraf) verwerfen. Der neue Server wird separat geprüft.
+    func handleServerChange() {
+        uploadTask?.cancel()
+        pendingRemote = nil
+    }
 }
