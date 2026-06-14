@@ -42,6 +42,16 @@ enum SubsonicAPIError: LocalizedError {
     }
 }
 
+/// Ergebnis von `getPlayQueue` — die serverseitig gespeicherte Wiedergabe-Queue.
+struct SubsonicPlayQueue {
+    let songs: [Song]
+    let currentSongId: String?
+    /// Position im aktuellen Song in Millisekunden.
+    let positionMs: Int
+    /// Server-Zeitstempel der letzten Änderung (ISO-String), falls geliefert.
+    let changed: String?
+}
+
 private struct Envelope<T: Decodable>: Decodable {
     let response: T
 
@@ -105,6 +115,19 @@ private struct SongBody: Decodable {
 private struct PingBody: Decodable {
     let status: String
     let error: StatusCheck.APIError?
+}
+
+private struct PlayQueueBody: Decodable {
+    let status: String
+    let error: StatusCheck.APIError?
+    let playQueue: PlayQueueDetail?
+
+    struct PlayQueueDetail: Decodable {
+        let entry: [Song]?
+        let current: String?
+        let position: Int?
+        let changed: String?
+    }
 }
 
 
@@ -689,6 +712,42 @@ class SubsonicAPIService: ObservableObject {
             extra.append(URLQueryItem(name: "time", value: String(Int64(ts * 1000))))
         }
         _ = try await fetchData(path: "scrobble", extra: extra)
+    }
+
+    /// Speichert die Wiedergabe-Queue serverseitig (`savePlayQueue`).
+    /// - Parameter songIds: Reihenfolge der Songs. Leer = gespeicherte Queue löschen.
+    /// - Parameter current: ID des aktuellen Songs (nur relevant, wenn `songIds` nicht leer).
+    /// - Parameter positionMs: Position im aktuellen Song in Millisekunden.
+    func savePlayQueue(songIds: [String], current: String?, positionMs: Int) async throws {
+        #if DEBUG
+        if isDemoActive { return }
+        #endif
+        var extra = songIds.map { URLQueryItem(name: "id", value: $0) }
+        if !songIds.isEmpty {
+            if let current { extra.append(URLQueryItem(name: "current", value: current)) }
+            extra.append(URLQueryItem(name: "position", value: String(positionMs)))
+        }
+        let data = try await fetchData(path: "savePlayQueue", extra: extra)
+        let body = try decoder.decode(Envelope<PingBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+    }
+
+    /// Liest die serverseitig gespeicherte Wiedergabe-Queue (`getPlayQueue`).
+    /// Liefert `nil`, wenn keine Queue gespeichert ist.
+    func getPlayQueue() async throws -> SubsonicPlayQueue? {
+        #if DEBUG
+        if isDemoActive { return nil }
+        #endif
+        let data = try await fetchData(path: "getPlayQueue")
+        let body = try decoder.decode(Envelope<PlayQueueBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+        guard let q = body.playQueue, let entries = q.entry, !entries.isEmpty else { return nil }
+        return SubsonicPlayQueue(
+            songs: entries,
+            currentSongId: q.current,
+            positionMs: q.position ?? 0,
+            changed: q.changed
+        )
     }
 
     /// Top-Songs eines Künstlers (macOS-Künstlerseite).

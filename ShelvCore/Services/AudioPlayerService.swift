@@ -225,6 +225,8 @@ class AudioPlayerService: ObservableObject {
 
     @objc private func appDidEnterBackground() {
         saveState()
+        // Vor einer möglichen Suspendierung sofort hochladen (Debounce überspringen).
+        QueueSyncService.shared.flushUpload()
     }
 
     private func saveState() {
@@ -243,6 +245,11 @@ class AudioPlayerService: ObservableObject {
         #if os(macOS)
         defaults.set(Double(volume), forKey: StateKey.volume)
         #endif
+
+        // Geräteübergreifender Queue-Sync (debounced; No-Op wenn Modus = off).
+        // Position wird beim Upload live gelesen — saveState läuft nur an diskreten
+        // Punkten (Mutationen, play/pause/stop, Songwechsel, Background), nicht periodisch.
+        QueueSyncService.shared.scheduleUpload()
     }
 
     private func clearSavedState() {
@@ -306,6 +313,71 @@ class AudioPlayerService: ObservableObject {
         #endif
 
         if let song = currentSong { updateNowPlayingInfo(song: song) }
+    }
+
+    // MARK: - Queue-Sync (geräteübergreifend)
+
+    /// Baut den aktuellen Wiedergabe-Zustand als Snapshot. `nil`, wenn nichts
+    /// Sinnvolles vorliegt (komplett leere Queue).
+    func makeSnapshot(serverId: String) -> QueueSnapshot? {
+        guard !(queue.isEmpty && playNextQueue.isEmpty && userQueue.isEmpty) else { return nil }
+        return QueueSnapshot(
+            queue: queue,
+            currentIndex: currentIndex,
+            playNextQueue: playNextQueue,
+            userQueue: userQueue,
+            truthAlbumQueue: truthAlbumQueue,
+            truthPlayNextQueue: truthPlayNextQueue,
+            truthUserQueue: truthUserQueue,
+            currentSongId: currentSong?.id,
+            positionMs: Int(currentTime * 1000),
+            isShuffled: isShuffled,
+            repeatMode: repeatMode.rawValue,
+            serverId: serverId,
+            changedAt: Date().timeIntervalSince1970
+        )
+    }
+
+    /// Übernimmt eine fremde Queue (vom Banner ausgelöst). Lädt den aktuellen Song
+    /// pausiert an der Position — kein Auto-Play, wie beim normalen Restore. Im
+    /// Offline-Modus werden nicht heruntergeladene Songs übersprungen.
+    func apply(_ snapshot: QueueSnapshot) {
+        let serverId = snapshot.serverId
+        let offline = OfflineModeService.shared.isOffline
+        func avail(_ songs: [Song]) -> [Song] {
+            guard offline else { return songs }
+            return songs.filter { LocalDownloadIndex.shared.contains(songId: $0.id, serverId: serverId) }
+        }
+
+        let restoredQueue = avail(snapshot.queue)
+        let restoredPlayNext = avail(snapshot.playNextQueue)
+        let restoredUser = avail(snapshot.userQueue)
+        guard !(restoredQueue.isEmpty && restoredPlayNext.isEmpty && restoredUser.isEmpty) else { return }
+
+        // currentIndex nach der Filterung anhand der currentSongId neu bestimmen.
+        var idx = min(max(snapshot.currentIndex, 0), max(restoredQueue.count - 1, 0))
+        if let cid = snapshot.currentSongId,
+           let found = restoredQueue.firstIndex(where: { $0.id == cid }) {
+            idx = found
+        }
+
+        queue = restoredQueue
+        currentIndex = restoredQueue.isEmpty ? 0 : min(idx, restoredQueue.count - 1)
+        playNextQueue = restoredPlayNext
+        userQueue = restoredUser
+        truthAlbumQueue = avail(snapshot.truthAlbumQueue)
+        truthPlayNextQueue = avail(snapshot.truthPlayNextQueue)
+        truthUserQueue = avail(snapshot.truthUserQueue)
+        isShuffled = snapshot.isShuffled
+        repeatMode = RepeatMode(rawValue: snapshot.repeatMode) ?? .off
+
+        currentSong = restoredQueue.isEmpty ? nil : restoredQueue[currentIndex]
+        let pos = Double(snapshot.positionMs) / 1000.0
+        resumeTime = pos
+        currentTime = pos
+        if let d = currentSong?.duration { duration = Double(d) }
+        if let song = currentSong { updateNowPlayingInfo(song: song) }
+        saveState()
     }
 
     #if os(iOS) || os(tvOS)

@@ -792,6 +792,55 @@ actor CloudKitSyncService {
         return isTest ? "test.\(base)" : base
     }
 
+    // MARK: - PlayQueue (geräteübergreifende Wiedergabe-Queue)
+
+    // Eigenes Gate, bewusst unabhängig vom Recap-/PlayLog-Sync (`syncEnabled`):
+    // die Wiedergabe-Queue soll auch syncen, wenn der allgemeine iCloud-Sync aus ist.
+    // Nur der Offline-Modus blockt (Server ohnehin nicht erreichbar).
+    private var canSyncQueue: Bool {
+        !UserDefaults.standard.bool(forKey: "offlineModeEnabled")
+    }
+
+    // Ein gemeinsamer Record pro Server (last-write-wins). recordName serverScoped.
+    private func playQueueRecordID(serverId: String) -> CKRecord.ID {
+        CKRecord.ID(recordName: "playqueue.\(serverId.lowercased())", zoneID: zoneID)
+    }
+
+    /// Lädt den (vom Aufrufer JSON-codierten) Queue-Snapshot in einen einzelnen Record.
+    /// Codable-Arbeit bleibt bewusst beim @MainActor-Aufrufer (QueueSyncService) — der
+    /// Actor hantiert nur mit `Data`, um main-actor-isolierte Conformances zu vermeiden.
+    func savePlayQueue(serverId: String, payload: Data, changedAt: Double, signature: String) async {
+        guard canSyncQueue else { return }
+        guard await status.accountAvailable else { return }
+        do {
+            try await ensureZoneExists()
+            let record = CKRecord(recordType: "PlayQueue", recordID: playQueueRecordID(serverId: serverId))
+            record["serverId"]  = serverId
+            record["payload"]   = payload as CKRecordValue
+            record["changedAt"] = changedAt
+            record["signature"] = signature
+            // Singleton pro Server, last-write-wins → Server-Konflikt bewusst überschreiben.
+            _ = try await db.modifyRecords(saving: [record], deleting: [], savePolicy: .allKeys, atomically: true)
+            debug("[CloudKitSync] PlayQueue uploaded (\(payload.count) bytes)")
+        } catch {
+            debug("[CloudKitSync] PlayQueue save failed: \(error.localizedDescription)")
+        }
+    }
+
+    /// Liest den rohen Queue-Payload für einen Server. `nil`, wenn keiner existiert.
+    func fetchPlayQueuePayload(serverId: String) async -> Data? {
+        guard canSyncQueue else { return nil }
+        guard await status.accountAvailable else { return nil }
+        do {
+            try await ensureZoneExists()
+            let record = try await db.record(for: playQueueRecordID(serverId: serverId))
+            return record["payload"] as? Data
+        } catch {
+            // unknownItem = kein Record vorhanden → kein Fehler, einfach nil.
+            return nil
+        }
+    }
+
     // MARK: - Scrobble Queue
 
     func flushScrobbleQueue() async {
