@@ -33,12 +33,9 @@ struct QueueView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 4) {
                 Toggle(isOn: $infinityMode) {
-                    Label {
-                        Text(String(localized: "infinity_mode")).foregroundStyle(.primary)
-                    } icon: {
-                        Image(systemName: "infinity")
-                    }
+                    Label(String(localized: "infinity_mode"), systemImage: "infinity")
                 }
+                .toggleStyle(.button)
                 .tint(accent)
                 .padding(.horizontal, 36)
                 .padding(.bottom, 8)
