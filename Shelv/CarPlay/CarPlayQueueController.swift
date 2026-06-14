@@ -145,11 +145,36 @@ final class CarPlayQueueController {
             }
         }
 
-        if sections.isEmpty {
+        let hasSongs = !sections.isEmpty
+        // Infinity-Zeile immer ganz oben (auch bei leerer Queue).
+        sections.insert(makeInfinitySection(), at: 0)
+        if !hasSongs {
             let empty = CPListItem(text: String(localized: "queue_is_empty"), detailText: nil)
             sections.append(CPListSection(items: [empty], header: nil, sectionIndexTitle: nil))
         }
         return (sections, itemsByCoverId)
+    }
+
+    /// „Infinity Mode · An/Aus" als oberste Zeile — Tippen schaltet um (wie iPhone-Queue).
+    private func makeInfinitySection() -> CPListSection {
+        let on = UserDefaults.standard.bool(forKey: "infinityModeEnabled")
+        let item = CPListItem(
+            text: String(localized: "infinity_mode"),
+            detailText: on ? String(localized: "on") : String(localized: "off"),
+            image: cpIcon("infinity", pointSize: 22),
+            accessoryImage: nil,
+            accessoryType: .none
+        )
+        item.handler = { [weak item] _, completion in
+            completion()
+            let newOn = !UserDefaults.standard.bool(forKey: "infinityModeEnabled")
+            UserDefaults.standard.set(newOn, forKey: "infinityModeEnabled")
+            if newOn { AudioPlayerService.shared.topUpInfinityIfNeeded(startIfIdle: true) }
+            // detailText live aktualisieren — die Songliste ändert sich beim Ausschalten nicht,
+            // daher kein Rebuild.
+            item?.setDetailText(newOn ? String(localized: "on") : String(localized: "off"))
+        }
+        return CPListSection(items: [item])
     }
 
     // MARK: - Helpers

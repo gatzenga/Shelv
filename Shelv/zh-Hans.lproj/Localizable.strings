@@ -389,3 +389,5 @@
 "queue_take_over" = "接续";
 "queue_sync_log" = "队列同步日志";
 "infinity_mode" = "无限模式";
+"on" = "开";
+"off" = "关";

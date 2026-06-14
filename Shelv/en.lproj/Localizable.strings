@@ -390,3 +390,5 @@
 "queue_take_over" = "Take over";
 "queue_sync_log" = "Queue Sync Log";
 "infinity_mode" = "Infinity Mode";
+"on" = "On";
+"off" = "Off";
