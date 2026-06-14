@@ -9,6 +9,7 @@ struct PlaybackSettingsView: View {
     @AppStorage("transcodingEnabled") private var transcodingEnabled = false
     @AppStorage("transcodingWifiCodec") private var streamCodec = "raw"
     @AppStorage("transcodingWifiBitrate") private var streamBitrate = 256
+    @AppStorage("queueSyncMode") private var queueSyncMode = "off"
 
     var body: some View {
         Form {
@@ -53,6 +54,23 @@ struct PlaybackSettingsView: View {
                         Text("\(pct)%").tag(pct)
                     }
                 }
+            }
+
+            Section(String(localized: "queue_sync")) {
+                Picker(String(localized: "queue_sync"), selection: $queueSyncMode) {
+                    Text(String(localized: "queue_sync_off")).tag("off")
+                    Text(String(localized: "queue_sync_subsonic")).tag("subsonic")
+                    Text(String(localized: "queue_sync_icloud")).tag("icloud")
+                }
+            }
+
+            Section(String(localized: "about")) {
+                Text(String(localized: "queue_sync_about_icloud"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(String(localized: "queue_sync_about_subsonic"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .toolbar(.hidden, for: .tabBar)

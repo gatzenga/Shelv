@@ -7,6 +7,7 @@ import SwiftUI
 struct MainTabView: View {
     @AppStorage("enablePlaylists") private var enablePlaylists = true
     @AppStorage("recapEnabled") private var recapEnabled = false
+    @ObservedObject private var queueSync = QueueSyncService.shared
     @State private var selection = "discover"
 
     var body: some View {
@@ -54,6 +55,17 @@ struct MainTabView: View {
         }
         .onChange(of: recapEnabled) { _, on in
             if !on && selection == "recap" { selection = "settings" }
+        }
+        // Fremde Queue von einem anderen Gerät — auf tvOS als nativer Alert (zuverlässig
+        // fokussierbar, im Gegensatz zu einem Custom-Top-Banner). Nie automatisch.
+        .alert(String(localized: "queue_available_title"), isPresented: Binding(
+            get: { queueSync.pendingRemote != nil },
+            set: { if !$0 { queueSync.dismissPending() } }
+        )) {
+            Button(String(localized: "queue_take_over")) { queueSync.acceptPending() }
+            Button(String(localized: "cancel"), role: .cancel) { queueSync.dismissPending() }
+        } message: {
+            Text(String(localized: "queue_available_subtitle"))
         }
     }
 }

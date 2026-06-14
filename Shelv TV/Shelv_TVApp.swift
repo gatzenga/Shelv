@@ -33,6 +33,7 @@ struct Shelv_TVApp: App {
                     // und der Künstler-Link im Player kann den Künstler per Name auflösen.
                     await LibraryStore.shared.loadStarred()
                     await LibraryStore.shared.loadArtists()
+                    await QueueSyncService.shared.checkForRemoteQueue()
                 }
                 // Einmaliges App-Setup: Tracking starten, remoteUserId-Backfill, iCloud-Sync.
                 .task {
@@ -69,11 +70,13 @@ struct Shelv_TVApp: App {
                     #endif
                     // Echter Server-Wechsel: alten Stream stoppen (VOR Reset) + Library leeren.
                     AudioPlayerService.shared.stop()
+                    QueueSyncService.shared.handleServerChange()
                     LibraryStore.shared.resetInMemory()
                 }
                 .onChange(of: scenePhase) { _, phase in
                     guard phase == .active else { return }
                     Task { await CloudKitSyncService.shared.syncNow() }
+                    Task { await QueueSyncService.shared.checkForRemoteQueue() }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .recapRegistryUpdated)) { _ in
                     guard let server = serverStore.activeServer else { return }
