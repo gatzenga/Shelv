@@ -17,8 +17,18 @@ struct DiscoverView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 40) {
-                    // Insights als sauberer Button in der Ecke (mit Hintergrund, nicht nacktes Icon)
+                    // Links Refresh (Reload + iCloud-Sync inkl. Queue-Check), rechts Insights.
                     HStack {
+                        Button {
+                            Task {
+                                async let sync: Void = CloudKitSyncService.shared.syncNow()
+                                async let reload: Void = load()
+                                _ = await (sync, reload)
+                            }
+                        } label: {
+                            Label(String(localized: "refresh"), systemImage: "arrow.clockwise")
+                        }
+                        .buttonStyle(.bordered)
                         Spacer()
                         NavigationLink { InsightsView() } label: {
                             Label(String(localized: "insights"), systemImage: "chart.bar.xaxis")
