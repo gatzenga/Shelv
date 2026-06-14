@@ -144,8 +144,6 @@ struct Shelv_DesktopApp: App {
                 Link(String(localized: "privacy_policy"), destination: URL(string: "https://vkugler.app/shelv_privacy.html")!)
                 Link(String(localized: "contact"), destination: URL(string: "mailto:contact@vkugler.app")!)
                 Link("Discord", destination: URL(string: "https://discord.gg/UdJK5mpmZu")!)
-                Divider()
-                Link(String(localized: "support_my_work"), destination: URL(string: "https://ko-fi.com/Shelv")!)
             }
 
             CommandMenu(String(localized: "playback")) {

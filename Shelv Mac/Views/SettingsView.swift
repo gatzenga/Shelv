@@ -705,8 +705,6 @@ struct AboutTab: View {
                 Link("Discord", destination: URL(string: "https://discord.gg/UdJK5mpmZu")!)
             }
             .font(.callout)
-            Link(String(localized: "support_my_work"), destination: URL(string: "https://ko-fi.com/Shelv")!)
-                .font(.callout)
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)

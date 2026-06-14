@@ -209,23 +209,6 @@ struct SettingsView: View {
                         }
                         .foregroundStyle(.primary)
                     }
-                    if let url = URL(string: "https://ko-fi.com/Shelv") {
-                        Button { openURL(url) } label: {
-                            Label {
-                                HStack {
-                                    Text(String(localized: "support_my_work"))
-                                    Spacer()
-                                    Image(systemName: "arrow.up.right")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            } icon: {
-                                Image(systemName: "cup.and.saucer")
-                                    .foregroundStyle(accentColor)
-                            }
-                        }
-                        .foregroundStyle(.primary)
-                    }
                 }
 
                 Section(String(localized: "info")) {
