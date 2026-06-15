@@ -328,28 +328,58 @@ struct QueuePopover: View {
     @State private var isEditing = false
     @AppStorage("infinityModeEnabled") private var infinityMode = false
 
-    @State private var playNextEntries: [QueueEntry] = []
-    @State private var albumEntries: [QueueEntry] = []
-    @State private var userQueueEntries: [QueueEntry] = []
-    @State private var isShuffled = false
+    @State private var playNextEntries: [QueueEntry]
+    @State private var albumEntries: [QueueEntry]
+    @State private var userQueueEntries: [QueueEntry]
+    @State private var isShuffled: Bool
     @State private var cancellables: Set<AnyCancellable> = []
 
-    private func rebuildEntries() {
-        isShuffled = player.isShuffled
-        playNextEntries = player.playNextQueue.enumerated().map {
+    init() {
+        // Snapshot synchron im init berechnen, damit der vollständige Inhalt schon
+        // beim ersten Frame existiert und komplett mit der Panel-Transition mitslidet.
+        // Würde der Inhalt erst in onAppear gefüllt, wechselte er mitten in der
+        // laufenden Transition von Placeholder zu Liste — der neue Inhalt erschiene
+        // dann sofort an seiner Endposition statt mitzuschieben.
+        let snap = Self.snapshot(from: AudioPlayerService.shared)
+        _isShuffled = State(initialValue: snap.isShuffled)
+        _playNextEntries = State(initialValue: snap.playNext)
+        _albumEntries = State(initialValue: snap.album)
+        _userQueueEntries = State(initialValue: snap.userQueue)
+    }
+
+    private struct QueueSnapshot {
+        var isShuffled: Bool
+        var playNext: [QueueEntry]
+        var album: [QueueEntry]
+        var userQueue: [QueueEntry]
+    }
+
+    private static func snapshot(from player: AudioPlayerService) -> QueueSnapshot {
+        let playNext = player.playNextQueue.enumerated().map {
             QueueEntry(id: "pn-\($0.offset)", index: $0.offset, song: $0.element)
         }
         let start = player.currentIndex + 1
+        let album: [QueueEntry]
         if start < player.queue.count {
-            albumEntries = Array(player.queue[start...]).enumerated().map { offset, song in
+            album = Array(player.queue[start...]).enumerated().map { offset, song in
                 QueueEntry(id: "alb-\(start + offset)-\(song.id)", index: start + offset, song: song)
             }
         } else {
-            albumEntries = []
+            album = []
         }
-        userQueueEntries = player.userQueue.enumerated().map {
+        let userQueue = player.userQueue.enumerated().map {
             QueueEntry(id: "uq-\($0.offset)", index: $0.offset, song: $0.element)
         }
+        return QueueSnapshot(isShuffled: player.isShuffled, playNext: playNext,
+                             album: album, userQueue: userQueue)
+    }
+
+    private func rebuildEntries() {
+        let snap = Self.snapshot(from: player)
+        isShuffled = snap.isShuffled
+        playNextEntries = snap.playNext
+        albumEntries = snap.album
+        userQueueEntries = snap.userQueue
     }
 
     private func subscribe() {
