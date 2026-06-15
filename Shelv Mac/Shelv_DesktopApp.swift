@@ -51,7 +51,7 @@ struct Shelv_DesktopApp: App {
                 .environmentObject(LibraryViewModel.shared)
                 .environmentObject(DownloadStore.shared)
                 .environmentObject(OfflineModeService.shared)
-                .frame(minWidth: 1190, minHeight: 600)
+                .frame(minWidth: 760, minHeight: 600)
                 .task { await LyricsStore.shared.setup() }
                 .task {
                     Task.detached(priority: .utility) {
