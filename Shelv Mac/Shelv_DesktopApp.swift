@@ -161,7 +161,6 @@ struct Shelv_DesktopApp: App {
                 }
                 .keyboardShortcut(.leftArrow, modifiers: .command)
                 Divider()
-                PlaybackSettingsMenuItem()
                 DataSaverMenuItem()
                 Divider()
                 OfflineModeMenuItem()
@@ -177,15 +176,6 @@ struct Shelv_DesktopApp: App {
                 }
             }
         }
-
-        Window(String(localized: "playback_settings"), id: "playback-settings") {
-            PlaybackSettingsWindow()
-                .environmentObject(appState)
-                .environmentObject(LyricsStore.shared)
-                .tint(AppTheme.color(for: themeColorName))
-                .environment(\.themeColor, AppTheme.color(for: themeColorName))
-        }
-        .defaultSize(width: 820, height: 660)
 
         Window(String(localized: "insights"), id: "insights") {
             InsightsView()
@@ -216,18 +206,9 @@ struct Shelv_DesktopApp: App {
         Settings {
             SettingsView()
                 .environmentObject(appState)
+                .environmentObject(LyricsStore.shared)
                 .tint(AppTheme.color(for: themeColorName))
                 .environment(\.themeColor, AppTheme.color(for: themeColorName))
-        }
-    }
-}
-
-struct PlaybackSettingsMenuItem: View {
-    @Environment(\.openWindow) private var openWindow
-
-    var body: some View {
-        Button(String(localized: "playback_settings")) {
-            openWindow(id: "playback-settings")
         }
     }
 }

@@ -17,6 +17,11 @@ struct SettingsView: View {
                     Image(systemName: "paintpalette")
                     Text(String(localized: "appearance"))
                 }
+            PlaybackTab()
+                .tabItem {
+                    Image(systemName: "play.circle")
+                    Text(String(localized: "playback"))
+                }
             RecapTab()
                 .tabItem {
                     Image(systemName: "calendar.badge.clock")
