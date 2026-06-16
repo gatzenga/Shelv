@@ -386,6 +386,15 @@ class AudioPlayerService: ObservableObject {
         isShuffled = snapshot.isShuffled
         repeatMode = RepeatMode(rawValue: snapshot.repeatMode) ?? .off
 
+        // Engine zurücksetzen: ggf. läuft noch der alte Song geladen in der Engine
+        // (isEngineLoaded == true). Ohne Reset würde resume() den alten Item via
+        // engine.resume() weiterspielen, obwohl currentSong bereits der neue ist.
+        // isEngineLoaded zuerst auf false, damit der Time-Sink das Stop ignoriert.
+        isEngineLoaded = false
+        engine.stop()
+        isPlaying = false
+        isBuffering = false
+
         currentSong = restoredQueue.isEmpty ? nil : restoredQueue[currentIndex]
         // Bewusst keine Positions-Übernahme: der Song startet bei 0.
         resumeTime = 0
