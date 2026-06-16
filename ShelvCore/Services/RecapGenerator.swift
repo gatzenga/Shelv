@@ -225,7 +225,7 @@ actor RecapGenerator {
         }
         CloudKitSyncService.recapLog("[RecapGen] Step 4: not found")
 
-        CloudKitSyncService.recapLog("[RecapGen] Step 5: top songs query (limit=\(await period.type.songLimit))")
+        CloudKitSyncService.recapLog("[RecapGen] Step 5: top songs query (limit=\(period.type.songLimit))")
         let topSongs = await PlayLogService.shared.topSongs(
             serverId: serverId,
             from: period.start,

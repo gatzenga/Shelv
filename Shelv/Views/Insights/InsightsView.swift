@@ -416,31 +416,27 @@ struct InsightsView: View {
         songsLoading = true
         defer { songsLoading = false }
 
-        do {
-            let sorted    = frequentAlbums.sorted { ($0.playCount ?? 0) > ($1.playCount ?? 0) }
-            let maxPC     = sorted.first?.playCount ?? 0
-            let threshold = max(maxPC / 50, 1)
+        let sorted    = frequentAlbums.sorted { ($0.playCount ?? 0) > ($1.playCount ?? 0) }
+        let maxPC     = sorted.first?.playCount ?? 0
+        let threshold = max(maxPC / 50, 1)
 
-            var filtered = sorted.filter { ($0.playCount ?? 0) >= threshold }
-            if filtered.count < 30 { filtered = Array(sorted.prefix(30)) }
-            if filtered.count > 80 { filtered = Array(sorted.prefix(80)) }
+        var filtered = sorted.filter { ($0.playCount ?? 0) >= threshold }
+        if filtered.count < 30 { filtered = Array(sorted.prefix(30)) }
+        if filtered.count > 80 { filtered = Array(sorted.prefix(80)) }
 
-            let songs = await withTaskGroup(of: [Song].self) { group in
-                for album in filtered {
-                    group.addTask {
-                        (try? await SubsonicAPIService.shared.getAlbum(id: album.id))?.song ?? []
-                    }
+        let songs = await withTaskGroup(of: [Song].self) { group in
+            for album in filtered {
+                group.addTask {
+                    (try? await SubsonicAPIService.shared.getAlbum(id: album.id))?.song ?? []
                 }
-                var all: [Song] = []
-                for await albumSongs in group { all.append(contentsOf: albumSongs) }
-                return all
             }
-            topSongs = songs
-                .sorted { ($0.playCount ?? 0) > ($1.playCount ?? 0) }
-                .prefix(20)
-                .map { $0 }
-        } catch {
-            // Silent fail — user kann per Pull-to-Refresh neu laden
+            var all: [Song] = []
+            for await albumSongs in group { all.append(contentsOf: albumSongs) }
+            return all
         }
+        topSongs = songs
+            .sorted { ($0.playCount ?? 0) > ($1.playCount ?? 0) }
+            .prefix(20)
+            .map { $0 }
     }
 }
