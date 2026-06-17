@@ -6,6 +6,42 @@ private struct LyricLine: Identifiable {
     let text: String
 }
 
+private struct LyricLineRow: View {
+    let line: LyricLine
+    let isActive: Bool
+    let accentColor: Color
+    let onTap: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: onTap) {
+            Text(line.text)
+                .font(.body)
+                .foregroundStyle(isActive ? Color.primary : (isHovered ? Color.primary : Color.secondary))
+                .padding(.vertical, 7)
+                .padding(.horizontal, 16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background {
+            if isActive {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(accentColor.opacity(0.15))
+            } else if isHovered {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.primary.opacity(0.05))
+            }
+        }
+        .onHover { hovering in
+            isHovered = hovering
+        }
+        .animation(.easeInOut(duration: 0.2), value: isActive)
+        .animation(.easeInOut(duration: 0.2), value: isHovered)
+    }
+}
+
 struct LyricsSheetView: View {
     @ObservedObject var player = AudioPlayerService.shared
     @EnvironmentObject var lyricsStore: LyricsStore
@@ -113,20 +149,20 @@ struct LyricsSheetView: View {
                 LazyVStack(alignment: .leading, spacing: 2) {
                     ForEach(Array(parsedLines.enumerated()), id: \.element.id) { index, line in
                         let isActive = activeLineIndex == index
-                        Text(line.text)
-                            .font(.body)
-                            .foregroundStyle(isActive ? Color.primary : Color.secondary)
-                            .padding(.vertical, 7)
-                            .padding(.horizontal, 16)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background {
-                                if isActive {
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .fill(accentColor.opacity(0.15))
+                        LyricLineRow(
+                            line: line,
+                            isActive: isActive,
+                            accentColor: accentColor,
+                            onTap: {
+                                let seconds = Double(line.timeMs) / 1000.0
+                                player.seek(to: seconds)
+                                isUserScrolling = false
+                                withAnimation(.easeInOut(duration: 0.3)) {
+                                    proxy.scrollTo(line.id, anchor: .center)
                                 }
                             }
-                            .animation(.easeInOut(duration: 0.2), value: isActive)
-                            .id(line.id)
+                        )
+                        .id(line.id)
                     }
                 }
                 .padding(.vertical, 16)
