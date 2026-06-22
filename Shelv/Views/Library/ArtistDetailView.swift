@@ -27,8 +27,6 @@ struct ArtistDetailView: View {
     @State private var searchQuery = ""
     @State private var albumToDeleteDownloads: Album?
     @State private var showDeleteArtistDownloadConfirm = false
-    @State private var scrollToAlbumId: String?
-
     private let columns = [GridItem(.adaptive(minimum: 150, maximum: 200), spacing: 16)]
 
     private var sortOption: AlbumSortOption {
@@ -254,7 +252,6 @@ struct ArtistDetailView: View {
                             .buttonStyle(.plain)
                         }
                     }
-                    .scrollTargetLayout()
                     .padding(.horizontal)
                 }
 
@@ -266,7 +263,6 @@ struct ArtistDetailView: View {
                 PlayerBottomSpacer()
             }
         }
-        .scrollPosition(id: $scrollToAlbumId, anchor: .top)
         .scrollIndicators(.hidden)
     }
 
@@ -357,7 +353,6 @@ struct ArtistDetailView: View {
                 .listRowSeparator(.hidden)
         }
         .listStyle(.plain)
-        .scrollPosition(id: $scrollToAlbumId, anchor: .top)
         .scrollIndicators(.hidden)
     }
 
