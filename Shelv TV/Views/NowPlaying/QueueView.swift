@@ -52,19 +52,19 @@ struct QueueView: View {
                         .padding(.top, 20)
                 } else {
                     if !player.playNextQueue.isEmpty {
-                        sectionHeader(String(localized: "play_next"))
+                        sectionHeader(String(localized: "play_next"), player.playNextQueue.count)
                         ForEach(Array(player.playNextQueue.enumerated()), id: \.element.id) { i, song in
                             row(song) { player.jumpToPlayNext(at: i) }
                         }
                     }
                     if !upcomingAlbum.isEmpty {
-                        sectionHeader(String(localized: "up_next"))
+                        sectionHeader(String(localized: "up_next"), upcomingAlbum.count)
                         ForEach(Array(upcomingAlbum.enumerated()), id: \.element.id) { i, song in
                             row(song) { player.jumpToQueueTrack(at: player.currentIndex + 1 + i) }
                         }
                     }
                     if !player.userQueue.isEmpty {
-                        sectionHeader(String(localized: "your_queue"))
+                        sectionHeader(String(localized: "your_queue"), player.userQueue.count)
                         ForEach(Array(player.userQueue.enumerated()), id: \.element.id) { i, song in
                             row(song) { player.jumpToUserQueue(at: i) }
                         }
@@ -86,8 +86,8 @@ struct QueueView: View {
         .focused($focusedID, equals: song.id)
     }
 
-    private func sectionHeader(_ title: String) -> some View {
-        Text(title)
+    private func sectionHeader(_ title: String, _ count: Int) -> some View {
+        Text("\(title) (\(count))")
             .font(.title3).bold()
             .foregroundStyle(.secondary)
             .padding(.horizontal, 36)
