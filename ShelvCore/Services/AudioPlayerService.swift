@@ -86,6 +86,7 @@ class AudioPlayerService: ObservableObject {
     #endif
 
     private var formatProbeTask: Task<Void, Never>?
+    private var fastSeekTimer: Timer?
     private var currentStreamURL: URL?
     private var streamTimeOffset: Double = 0
     private var networkResumeSong: Song?
@@ -588,6 +589,32 @@ class AudioPlayerService: ObservableObject {
             return .success
         }
 
+        cc.seekForwardCommand.isEnabled = true
+        cc.seekForwardCommand.addTarget { [weak self] event in
+            guard let e = event as? MPSeekCommandEvent else { return .commandFailed }
+            Task { @MainActor in
+                switch e.type {
+                case .beginSeeking: self?.startFastSeeking(forward: true)
+                case .endSeeking:   self?.stopFastSeeking()
+                @unknown default:   break
+                }
+            }
+            return .success
+        }
+
+        cc.seekBackwardCommand.isEnabled = true
+        cc.seekBackwardCommand.addTarget { [weak self] event in
+            guard let e = event as? MPSeekCommandEvent else { return .commandFailed }
+            Task { @MainActor in
+                switch e.type {
+                case .beginSeeking: self?.startFastSeeking(forward: false)
+                case .endSeeking:   self?.stopFastSeeking()
+                @unknown default:   break
+                }
+            }
+            return .success
+        }
+
         // Apple's CPNowPlayingRepeatButton / -ShuffleButton rendern den Selected-State
         // nur konsistent, wenn die zugehörigen MPRemoteCommands aktiviert sind und ein
         // Target haben. Ohne das wirkt der Button beim Wechsel zwischen .all → .one
@@ -743,6 +770,7 @@ class AudioPlayerService: ObservableObject {
     }
 
     private func startPlayback(song: Song, seekTo: Double = 0) {
+        stopFastSeeking()
         playbackGeneration += 1
         let gen = playbackGeneration
         #if os(tvOS)
@@ -1004,6 +1032,7 @@ class AudioPlayerService: ObservableObject {
     }
 
     func stop() {
+        stopFastSeeking()
         clearPlaybackState()
         queue = []
         currentIndex = 0
@@ -1141,6 +1170,41 @@ class AudioPlayerService: ObservableObject {
         engine.seek(to: seconds, pauseUntilBuffered: shouldPauseAndWait) { [weak self] _ in
             Task { @MainActor [weak self] in self?.isSeeking = false }
         }
+    }
+
+    private func startFastSeeking(forward: Bool) {
+        fastSeekTimer?.invalidate()
+        let step: Double = forward ? 3.0 : -3.0
+        let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
+            guard let self, self.currentSong != nil else { return }
+            let proposed = self.currentTime + step
+            // Obergrenze nur clampen, wenn die Dauer bekannt ist — sonst würde ein noch
+            // nicht geladenes Item (duration == 0) den Sprung auf 0 erzwingen.
+            let newTime: Double = self.duration > 1
+                ? max(0, min(proposed, self.duration - 0.5))
+                : max(0, proposed)
+            // isSeeking blockt den engine.$currentTime-Sink, damit der periodische
+            // Observer unsere manuelle Position nicht überschreibt.
+            self.isSeeking = true
+            self.currentTime = newTime
+            self.lastReportedNowPlayingTime = -1
+            self.updateNowPlayingTime(newTime)
+            // currentTime ist nicht @Published — die UI (In-App-Scrubber, Lock-Screen)
+            // hängt am timePublisher, daher hier explizit pushen.
+            self.timePublisher.send((time: newTime, duration: self.duration))
+            self.engine.seek(to: newTime, pauseUntilBuffered: false)
+        }
+        // .common-Modus: feuert auch während UI-Tracking; RunLoop.main statt .current
+        // macht das Scheduling unabhängig vom aufrufenden Runloop.
+        RunLoop.main.add(timer, forMode: .common)
+        fastSeekTimer = timer
+        timer.fire()
+    }
+
+    private func stopFastSeeking() {
+        fastSeekTimer?.invalidate()
+        fastSeekTimer = nil
+        isSeeking = false
     }
 
     func playFromQueue(index: Int) {
