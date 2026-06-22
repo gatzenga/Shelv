@@ -237,19 +237,79 @@ class AudioPlayerService: ObservableObject {
         QueueSyncService.shared.flushUpload()
     }
 
+    #if os(tvOS)
+    /// tvOS-only: Queue-State wird in eine Datei persistiert statt in UserDefaults.
+    /// CFPreferences hat auf tvOS ein hartes Größenlimit und bricht die App bei großen
+    /// Shuffle-Queues per abort() ab. Caches genügt — wird der Eintrag bei einer
+    /// System-Bereinigung gelöscht, entfällt nur die Wiederherstellung nach Neustart
+    /// (kein Crash, keine Integritätsfrage; restoreState kehrt dann einfach früh zurück).
+    private struct PersistedQueueState: Codable {
+        var queue: [Song]
+        var playNextQueue: [Song]
+        var userQueue: [Song]
+        var truthAlbum: [Song]
+        var truthPlayNext: [Song]
+        var truthUserQueue: [Song]
+    }
+
+    private var queueStateFileURL: URL? {
+        guard let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else { return nil }
+        return dir.appendingPathComponent("shelv_player_queue_state.json")
+    }
+
+    private func writeQueueStateFile() {
+        guard let url = queueStateFileURL else { return }
+        let state = PersistedQueueState(
+            queue: queue,
+            playNextQueue: playNextQueue,
+            userQueue: userQueue,
+            truthAlbum: truthAlbumQueue,
+            truthPlayNext: truthPlayNextQueue,
+            truthUserQueue: truthUserQueue
+        )
+        guard let data = try? JSONEncoder().encode(state) else { return }
+        try? data.write(to: url, options: .atomic)
+    }
+
+    private func readQueueStateFile() -> PersistedQueueState? {
+        guard let url = queueStateFileURL,
+              let data = try? Data(contentsOf: url) else { return nil }
+        return try? JSONDecoder().decode(PersistedQueueState.self, from: data)
+    }
+
+    private func deleteQueueStateFile() {
+        guard let url = queueStateFileURL else { return }
+        try? FileManager.default.removeItem(at: url)
+    }
+    #endif
+
     private func saveState() {
-        let encoder = JSONEncoder()
         let defaults = UserDefaults.standard
-        if let data = try? encoder.encode(queue) { defaults.set(data, forKey: StateKey.queue) }
+        // Skalare (klein) — auf allen Plattformen in UserDefaults.
         defaults.set(currentIndex, forKey: StateKey.index)
-        if let data = try? encoder.encode(playNextQueue) { defaults.set(data, forKey: StateKey.playNextQueue) }
-        if let data = try? encoder.encode(userQueue) { defaults.set(data, forKey: StateKey.userQueue) }
         defaults.set(currentTime, forKey: StateKey.resumeTime)
         defaults.set(isShuffled, forKey: StateKey.isShuffled)
         defaults.set(repeatMode.rawValue, forKey: StateKey.repeatMode)
+
+        // Große Song-Arrays.
+        #if os(tvOS)
+        writeQueueStateFile()
+        // Etwaige Alt-Daten aus UserDefaults tilgen (z.B. nach Update von einer Build,
+        // die noch in die Defaults schrieb) — so bleibt der Prefs-Container garantiert klein.
+        for key in [StateKey.queue, StateKey.playNextQueue, StateKey.userQueue,
+                    StateKey.truthAlbum, StateKey.truthPlayNext, StateKey.truthUserQueue] {
+            defaults.removeObject(forKey: key)
+        }
+        #else
+        let encoder = JSONEncoder()
+        if let data = try? encoder.encode(queue) { defaults.set(data, forKey: StateKey.queue) }
+        if let data = try? encoder.encode(playNextQueue) { defaults.set(data, forKey: StateKey.playNextQueue) }
+        if let data = try? encoder.encode(userQueue) { defaults.set(data, forKey: StateKey.userQueue) }
         if let data = try? encoder.encode(truthAlbumQueue) { defaults.set(data, forKey: StateKey.truthAlbum) }
         if let data = try? encoder.encode(truthPlayNextQueue) { defaults.set(data, forKey: StateKey.truthPlayNext) }
         if let data = try? encoder.encode(truthUserQueue) { defaults.set(data, forKey: StateKey.truthUserQueue) }
+        #endif
+
         #if os(macOS)
         defaults.set(Double(volume), forKey: StateKey.volume)
         #endif
@@ -275,16 +335,27 @@ class AudioPlayerService: ObservableObject {
         #if os(macOS)
         defaults.removeObject(forKey: StateKey.volume)
         #endif
+        #if os(tvOS)
+        deleteQueueStateFile()
+        #endif
     }
 
     private func restoreState() {
-        let decoder = JSONDecoder()
         let defaults = UserDefaults.standard
+        #if !os(tvOS)
+        let decoder = JSONDecoder()
+        #endif
 
+        #if os(tvOS)
+        // tvOS: große Arrays liegen in der Datei (siehe saveState).
+        guard let fileState = readQueueStateFile(), !fileState.queue.isEmpty else { return }
+        let restoredQueue = fileState.queue
+        #else
         guard let queueData = defaults.data(forKey: StateKey.queue),
               let restoredQueue = try? decoder.decode([Song].self, from: queueData),
               !restoredQueue.isEmpty
         else { return }
+        #endif
 
         queue = restoredQueue
         let idx = defaults.integer(forKey: StateKey.index)
@@ -294,6 +365,10 @@ class AudioPlayerService: ObservableObject {
         currentTime = resumeTime
         if let d = currentSong?.duration { duration = Double(d) }
 
+        #if os(tvOS)
+        playNextQueue = fileState.playNextQueue
+        userQueue = fileState.userQueue
+        #else
         if let pnData = defaults.data(forKey: StateKey.playNextQueue),
            let pn = try? decoder.decode([Song].self, from: pnData) {
             playNextQueue = pn
@@ -302,18 +377,25 @@ class AudioPlayerService: ObservableObject {
            let uq = try? decoder.decode([Song].self, from: uqData) {
             userQueue = uq
         }
+        #endif
 
         isShuffled = defaults.bool(forKey: StateKey.isShuffled)
         if let raw = defaults.string(forKey: StateKey.repeatMode) {
             repeatMode = RepeatMode(rawValue: raw) ?? .off
         }
 
+        #if os(tvOS)
+        truthAlbumQueue = fileState.truthAlbum
+        truthPlayNextQueue = fileState.truthPlayNext
+        truthUserQueue = fileState.truthUserQueue
+        #else
         if let data = defaults.data(forKey: StateKey.truthAlbum),
            let t = try? decoder.decode([Song].self, from: data) { truthAlbumQueue = t }
         if let data = defaults.data(forKey: StateKey.truthPlayNext),
            let t = try? decoder.decode([Song].self, from: data) { truthPlayNextQueue = t }
         if let data = defaults.data(forKey: StateKey.truthUserQueue),
            let t = try? decoder.decode([Song].self, from: data) { truthUserQueue = t }
+        #endif
 
         #if os(macOS)
         let savedVolume = defaults.double(forKey: StateKey.volume)
