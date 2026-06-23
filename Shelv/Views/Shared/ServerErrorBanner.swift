@@ -44,6 +44,7 @@ struct ServerErrorBanner: View {
             .shadow(color: .black.opacity(0.2), radius: 10, y: 4)
             .padding(.horizontal)
             .transition(.move(edge: .top).combined(with: .opacity))
+            .gesture(DragGesture().onEnded { if $0.translation.height < -30 { offlineMode.dismissBanner() } })
         }
     }
 }
