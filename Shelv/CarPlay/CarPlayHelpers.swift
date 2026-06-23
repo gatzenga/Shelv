@@ -123,6 +123,26 @@ func makeImageRowItem(text: String, images: [UIImage]) -> CPListImageRowItem {
     return CPListImageRowItem(text: text, images: images)
 }
 
+/// Erstellt einen horizontalen Action-Streifen (CPListImageRowItem) aus einer Liste von Aktionen.
+/// Ersetzt einzelne CPListItem-Zeilen für Play/Shuffle/Play Next/Add to Queue/Favorite —
+/// so sind Inhalte (Songs, Alben) sofort ohne Scrollen sichtbar.
+func makeActionRow(_ actions: [(icon: String, label: String, handler: () -> Void)]) -> CPListImageRowItem {
+    let images = actions.map { cpActionIcon($0.icon) }
+    let row: CPListImageRowItem
+    if #available(iOS 26.0, *) {
+        let elements = images.map { CPListImageRowItemGridElement(image: $0) }
+        row = CPListImageRowItem(text: "", gridElements: elements, allowsMultipleLines: false)
+    } else {
+        row = CPListImageRowItem(text: "", images: images)
+    }
+    row.listImageRowHandler = { _, index, completion in
+        guard index < actions.count else { completion(); return }
+        actions[index].handler()
+        completion()
+    }
+    return row
+}
+
 // MARK: - Image Loading
 
 @MainActor

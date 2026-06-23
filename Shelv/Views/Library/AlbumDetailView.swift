@@ -223,8 +223,11 @@ struct AlbumDetailView: View {
                     .buttonStyle(.plain)
                 }
                 HStack(spacing: 12) {
-                    if let year = detail?.year ?? album.year  { Text(String(year)) }
-                    if let genre = detail?.genre ?? album.genre { Text(genre) }
+                    if let year = detail?.year ?? album.year { Text(String(year)) }
+                    if let genre = detail?.genre ?? album.genre {
+                        if (detail?.year ?? album.year) != nil { Text("·") }
+                        Text(genre)
+                    }
                 }
                 .font(.caption)
                 .foregroundStyle(.tertiary)
