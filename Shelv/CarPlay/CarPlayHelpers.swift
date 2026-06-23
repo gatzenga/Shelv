@@ -324,8 +324,8 @@ private func firstMemoryHit(id: String, sizes: [Int]) -> UIImage? {
 /// Füllt bereits im Memory-Cache vorhandene Covers synchron in neue Items —
 /// verhindert Placeholder-Flackern wenn Sections vor dem streamCovers-Task gesetzt werden.
 @MainActor
-func prefillCoversFromCache(_ itemsByCoverId: [String: [CPListItem]], size: Int = 300) {
-    let fallback = [size, 150, 300, 600]
+func prefillCoversFromCache(_ itemsByCoverId: [String: [CPListItem]], size: Int = 150) {
+    let fallback = [size, 300, 150, 600]
     for (id, items) in itemsByCoverId {
         for s in fallback {
             if let img = ImageCacheService.shared.cachedImage(key: "\(id)_\(s)") {
@@ -345,7 +345,7 @@ func prefillCoversFromCache(_ itemsByCoverId: [String: [CPListItem]], size: Int 
 @MainActor
 func streamCovers(
     into itemsByCoverId: [String: [CPListItem]],
-    size: Int = 300,
+    size: Int = 150,
     chunkSize: Int = 20
 ) async {
     guard !itemsByCoverId.isEmpty else { return }
@@ -366,7 +366,7 @@ func streamCovers(
 func applyCoversAsync(
     template: CPListTemplate,
     coverArtIds ids: [String?],
-    size: Int = 300,
+    size: Int = 150,
     chunkSize: Int = 20,
     rebuild: @escaping ([String: UIImage]) -> [CPListSection]
 ) async {
