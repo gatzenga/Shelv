@@ -214,7 +214,7 @@ func actionListItem(title: String, systemImage: String, handler: @escaping CPIte
 }
 
 func menuListItem(title: String, systemImage: String, handler: @escaping CPItemHandler) -> CPListItem {
-    let item = CPListItem(text: title, detailText: nil, image: cpIcon(systemImage, pointSize: 20), accessoryImage: nil, accessoryType: .disclosureIndicator)
+    let item = CPListItem(text: title, detailText: nil, image: cpListIcon(systemImage), accessoryImage: nil, accessoryType: .disclosureIndicator)
     item.handler = handler
     return item
 }
