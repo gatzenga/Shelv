@@ -12,6 +12,7 @@ struct DiscoverView: View {
     @State private var newest: [Album] = []
     @State private var recent: [Album] = []
     @State private var frequent: [Album] = []
+    @State private var random: [Album] = []
 
     var body: some View {
         NavigationStack {
@@ -54,6 +55,7 @@ struct DiscoverView: View {
                     albumRow(String(localized: "recently_added"), newest)
                     albumRow(String(localized: "recently_played"), recent)
                     albumRow(String(localized: "frequently_played"), frequent)
+                    albumRow(String(localized: "random_albums"), random)
                 }
                 .padding(.vertical, 50)
             }
@@ -67,9 +69,11 @@ struct DiscoverView: View {
         async let n = try? api.getAlbumList(type: "newest", size: 20)
         async let r = try? api.getAlbumList(type: "recent", size: 20)
         async let f = try? api.getAlbumList(type: "frequent", size: 20)
+        async let rnd = try? api.getAlbumList(type: "random", size: 20)
         newest = await n ?? []
         recent = await r ?? []
         frequent = await f ?? []
+        random = await rnd ?? []
     }
 
     private enum Mix { case newest, frequent, recent, random }
