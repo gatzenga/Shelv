@@ -122,7 +122,7 @@ enum CarPlayNavigation {
                 }))
             }
 
-            var items: [any CPListTemplateItem] = [makeActionRow(actions)]
+            var items = makeActionItems(actions)
             if let artistId = album.artistId {
                 let candidate = LibraryStore.shared.artists.first { $0.id == artistId }
                     ?? DownloadStore.shared.artists.first { $0.artistId == artistId }?.asArtist()
@@ -258,7 +258,7 @@ enum CarPlayNavigation {
                 }))
             }
 
-            return CPListSection(items: [makeActionRow(actions)], header: artist.name, sectionIndexTitle: nil)
+            return CPListSection(items: makeActionItems(actions), header: artist.name, sectionIndexTitle: nil)
         }
 
         func makeAlbumsSection() -> (section: CPListSection, coverMap: [String: [CPListItem]]) {
@@ -377,7 +377,7 @@ enum CarPlayNavigation {
                     rebuildActionsAsync()
                 }),
             ]
-            return CPListSection(items: [makeActionRow(actions)], header: playlist.name, sectionIndexTitle: nil)
+            return CPListSection(items: makeActionItems(actions), header: playlist.name, sectionIndexTitle: nil)
         }
 
         func makeSongsSection() -> (section: CPListSection, coverMap: [String: [CPListItem]]) {
