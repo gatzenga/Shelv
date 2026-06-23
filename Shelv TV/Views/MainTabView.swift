@@ -67,5 +67,10 @@ struct MainTabView: View {
         } message: {
             Text(String(localized: "queue_available_subtitle"))
         }
+        .task(id: queueSync.pendingRemote != nil) {
+            guard queueSync.pendingRemote != nil else { return }
+            try? await Task.sleep(for: .seconds(6))
+            queueSync.dismissPending()
+        }
     }
 }

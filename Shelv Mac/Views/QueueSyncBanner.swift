@@ -40,6 +40,7 @@ struct QueueSyncBanner: View {
             .frame(maxWidth: 480)
             .padding(.top, 12)
             .transition(.move(edge: .top).combined(with: .opacity))
+            .task { try? await Task.sleep(for: .seconds(6)); queueSync.dismissPending() }
         }
     }
 }
