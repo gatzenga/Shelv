@@ -6,6 +6,7 @@ import SwiftUI
 struct QueueSyncBanner: View {
     @ObservedObject var queueSync = QueueSyncService.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
+    @State private var dragOffset: CGFloat = 0
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
@@ -49,7 +50,24 @@ struct QueueSyncBanner: View {
             .shadow(color: .black.opacity(0.2), radius: 10, y: 4)
             .padding(.horizontal)
             .transition(.move(edge: .top).combined(with: .opacity))
-            .gesture(DragGesture().onEnded { if $0.translation.height < -30 { queueSync.dismissPending() } })
+            .offset(y: dragOffset)
+            .gesture(
+                DragGesture()
+                    .onChanged { value in
+                        if value.translation.height < 0 { dragOffset = value.translation.height }
+                    }
+                    .onEnded { value in
+                        if value.translation.height < -30 {
+                            withAnimation(.easeOut(duration: 0.2)) { dragOffset = -300 }
+                            Task {
+                                try? await Task.sleep(for: .milliseconds(200))
+                                queueSync.dismissPending()
+                            }
+                        } else {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) { dragOffset = 0 }
+                        }
+                    }
+            )
             .task { try? await Task.sleep(for: .seconds(6)); queueSync.dismissPending() }
         }
     }

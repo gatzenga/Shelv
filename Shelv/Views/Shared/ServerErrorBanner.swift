@@ -3,6 +3,7 @@ import SwiftUI
 struct ServerErrorBanner: View {
     @ObservedObject var offlineMode = OfflineModeService.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
+    @State private var dragOffset: CGFloat = 0
 
     var body: some View {
         if offlineMode.serverErrorBannerVisible {
@@ -15,8 +16,8 @@ struct ServerErrorBanner: View {
                         .font(.subheadline.bold())
                         .foregroundStyle(.white)
                     Text(String(localized: "switch_to_offline_mode_to_use_your_downloads"))
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.85))
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.85))
                 }
                 Spacer()
                 Button {
@@ -44,7 +45,24 @@ struct ServerErrorBanner: View {
             .shadow(color: .black.opacity(0.2), radius: 10, y: 4)
             .padding(.horizontal)
             .transition(.move(edge: .top).combined(with: .opacity))
-            .gesture(DragGesture().onEnded { if $0.translation.height < -30 { offlineMode.dismissBanner() } })
+            .offset(y: dragOffset)
+            .gesture(
+                DragGesture()
+                    .onChanged { value in
+                        if value.translation.height < 0 { dragOffset = value.translation.height }
+                    }
+                    .onEnded { value in
+                        if value.translation.height < -30 {
+                            withAnimation(.easeOut(duration: 0.2)) { dragOffset = -300 }
+                            Task {
+                                try? await Task.sleep(for: .milliseconds(200))
+                                offlineMode.dismissBanner()
+                            }
+                        } else {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) { dragOffset = 0 }
+                        }
+                    }
+            )
         }
     }
 }
