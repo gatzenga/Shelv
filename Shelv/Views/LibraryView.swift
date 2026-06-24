@@ -81,6 +81,7 @@ struct LibraryView: View {
     @ObservedObject private var downloadStore = DownloadStore.shared
     @State private var albumToDeleteDownloads: Album?
     @State private var artistToDeleteDownloads: Artist?
+    @State private var rebuildTask: Task<Void, Never>?
 
     private let columns = [GridItem(.adaptive(minimum: 150, maximum: 200), spacing: 14)]
 
@@ -96,9 +97,9 @@ struct LibraryView: View {
         "het ", "een ", "de ",
     ]
 
-    private func sortKey(for name: String) -> String {
+    private static func sortKey(for name: String) -> String {
         let lower = name.lowercased()
-        for article in Self.sortArticles {
+        for article in sortArticles {
             if lower.hasPrefix(article) {
                 return String(name.dropFirst(article.count))
             }
@@ -106,7 +107,7 @@ struct LibraryView: View {
         return name
     }
 
-    private func groupByFirstLetter<T>(_ items: [T], name: KeyPath<T, String>) -> [(letter: String, items: [T])] {
+    private static func groupByFirstLetter<T>(_ items: [T], name: KeyPath<T, String>) -> [(letter: String, items: [T])] {
         var dict: [String: [T]] = [:]
         for item in items {
             let key = sortKey(for: item[keyPath: name])
@@ -258,26 +259,58 @@ struct LibraryView: View {
     }
 
     private func rebuildGroups() {
-        // Albums
-        let albumsSource = displayAlbums
-        if sortOption == .alphabetical {
-            albumGroups = groupByFirstLetter(albumsSource, name: \.name)
-        } else {
-            let items = albumDirection == .descending
-                ? albumsSource
-                : Array(albumsSource.reversed())
-            albumGroups = items.isEmpty ? [] : [(letter: "", items: items)]
-        }
+        rebuildTask?.cancel()
 
-        // Artists
-        let artistsBase = sortedArtists()
-        if artistSortOption == .alphabetical {
-            artistGroups = groupByFirstLetter(artistsBase, name: \.name)
-        } else {
-            let items = artistDirection == .descending
-                ? artistsBase
-                : Array(artistsBase.reversed())
-            artistGroups = items.isEmpty ? [] : [(letter: "", items: items)]
+        let albumsSource = displayAlbums
+        let artistsSource = displayArtists
+        let libraryAlbums = libraryStore.albums
+        let sortOpt = sortOption
+        let albumDir = albumDirection
+        let artistSort = artistSortOption
+        let artistDir = artistDirection
+
+        rebuildTask = Task.detached(priority: .userInitiated) {
+            // 1. Alben im Hintergrund gruppieren
+            let calculatedAlbumGroups: [(letter: String, items: [Album])]
+            if sortOpt == .alphabetical {
+                calculatedAlbumGroups = Self.groupByFirstLetter(albumsSource, name: \.name)
+            } else {
+                let items = albumDir == .descending
+                    ? albumsSource
+                    : Array(albumsSource.reversed())
+                calculatedAlbumGroups = items.isEmpty ? [] : [(letter: "", items: items)]
+            }
+
+            // 2. Künstler im Hintergrund sortieren
+            let sortedArtists: [Artist]
+            switch artistSort {
+            case .alphabetical:
+                sortedArtists = artistsSource
+            case .frequent:
+                let counts = Dictionary(
+                    grouping: libraryAlbums,
+                    by: { $0.artistId ?? "" }
+                ).mapValues { $0.compactMap { $0.playCount }.reduce(0, +) }
+                sortedArtists = artistsSource.sorted { (counts[$0.id] ?? 0) > (counts[$1.id] ?? 0) }
+            }
+
+            // 3. Künstler im Hintergrund gruppieren
+            let calculatedArtistGroups: [(letter: String, items: [Artist])]
+            if artistSort == .alphabetical {
+                calculatedArtistGroups = Self.groupByFirstLetter(sortedArtists, name: \.name)
+            } else {
+                let items = artistDir == .descending
+                    ? sortedArtists
+                    : Array(sortedArtists.reversed())
+                calculatedArtistGroups = items.isEmpty ? [] : [(letter: "", items: items)]
+            }
+
+            guard !Task.isCancelled else { return }
+
+            await MainActor.run {
+                self.albumGroups = calculatedAlbumGroups
+                self.artistGroups = calculatedArtistGroups
+            }
         }
     }
 
