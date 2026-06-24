@@ -263,7 +263,10 @@ enum CarPlayNavigation {
 
         func makeAlbumsSection() -> (section: CPListSection, coverMap: [String: [CPListItem]]) {
             var coverMap: [String: [CPListItem]] = [:]
-            let items = albums.map { album -> CPListItem in
+            let sortedAlbums = albums.sorted {
+                stripArticle($0.name).localizedStandardCompare(stripArticle($1.name)) == .orderedAscending
+            }
+            let items = sortedAlbums.map { album -> CPListItem in
                 let item = albumListItem(album) { [weak template] _, c in
                     c()
                     openAlbum(album, from: ic)

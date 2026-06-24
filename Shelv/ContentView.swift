@@ -200,7 +200,7 @@ private struct PlayerBarOverlay: View {
                         }
                     }
                     .padding(.horizontal, 20)
-                    .padding(.bottom, bottomOffset + 4)
+                    .padding(.bottom, bottomOffset + 3.5)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .ignoresSafeArea(edges: .bottom)
