@@ -114,7 +114,23 @@ struct PlayerView: View {
 
     var body: some View {
         NavigationStack {
-            GeometryReader { geo in
+            ZStack {
+                // Hintergrund-Verlauf als Root-Layer, damit er bis ganz nach oben hinter die
+                // Navigation Bar (Schließen-Pfeil/AirPlay) reicht. Lag er als .background am
+                // GeometryReader-frame, blieb der obere Safe-Area-Streifen schwarz.
+                LinearGradient(
+                    stops: [
+                        .init(color: playerBgPrimary, location: 0.0),
+                        .init(color: playerBgPrimary, location: 0.45),
+                        .init(color: playerBgSecondary, location: 0.75),
+                        .init(color: playerBgSecondary, location: 1.0)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea()
+
+                GeometryReader { geo in
                 let h = geo.size.height
                 let art = artSize(h)
                 let play = playButtonSize(h)
@@ -260,19 +276,6 @@ struct PlayerView: View {
                     .padding(.bottom, vPad(h, large: 32, small: 40))
                 }
                 .frame(width: geo.size.width, height: geo.size.height)
-                .background {
-                    LinearGradient(
-                        stops: [
-                            .init(color: playerBgPrimary, location: 0.0),
-                            .init(color: playerBgPrimary, location: 0.45),
-                            .init(color: playerBgSecondary, location: 0.75),
-                            .init(color: playerBgSecondary, location: 1.0)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .ignoresSafeArea()
-                }
                 .ignoresSafeArea(edges: .bottom)
                 .navigationTitle("")
                 .navigationBarTitleDisplayMode(.inline)
@@ -336,6 +339,7 @@ struct PlayerView: View {
                             .tint(accentColor)
                     }
                 }
+            }
             }
         }
     }
