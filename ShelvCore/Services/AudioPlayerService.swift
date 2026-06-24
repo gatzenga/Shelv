@@ -44,7 +44,13 @@ class AudioPlayerService: ObservableObject {
             // Endlos-Modus: bei JEDEM Songwechsel (Skip, natürliches Ende, Gapless-Übergang)
             // sicherstellen, dass wieder genau einer voraus bereitliegt. Deckt alle Pfade ab —
             // auch im Hintergrund, da dort die Wiedergabe weiterläuft.
-            if currentSong?.id != oldValue?.id { topUpInfinityIfNeeded() }
+            if currentSong?.id != oldValue?.id {
+                // Der zuvor vorgemerkte Infinity-Song ist jetzt nicht mehr "voraus" (gerade
+                // current geworden oder weggeskippt) → Marker zurücksetzen, bevor top-up einen
+                // frischen Titel nachlegt. Verhindert jede Stale-Situation.
+                infinityPendingSongId = nil
+                topUpInfinityIfNeeded()
+            }
         }
     }
     @Published var queue: [Song] = []
@@ -1239,12 +1245,14 @@ class AudioPlayerService: ObservableObject {
     }
 
     func addPlayNext(_ song: Song) {
+        removePendingInfinitySong()
         truthPlayNextQueue.append(song)
         playNextQueue.append(song)
         saveState()
     }
 
     func addPlayNext(_ songs: [Song]) {
+        removePendingInfinitySong()
         truthPlayNextQueue.append(contentsOf: songs)
         playNextQueue.append(contentsOf: songs)
         saveState()
@@ -1261,6 +1269,7 @@ class AudioPlayerService: ObservableObject {
     }
 
     func addToQueue(_ song: Song) {
+        removePendingInfinitySong()
         truthUserQueue.append(song)
         if isShuffled {
             insertRandomlyInShuffledQueue(song)
@@ -1274,6 +1283,10 @@ class AudioPlayerService: ObservableObject {
 
     private var infinityPool: [Song] = []
     private var infinityTopUpTask: Task<Void, Never>?
+    /// ID des einen Titels, den der Endlos-Modus vorausgelegt hat. Sobald der User selbst etwas
+    /// einreiht (Add to Queue / Play Next), wird genau dieser Song wieder entfernt — der bewusst
+    /// gewählte Inhalt kommt direkt dran, nicht hinter dem Radio-Auffüller.
+    private var infinityPendingSongId: String?
 
     /// Hält bei aktivem Endlos-Modus immer genau einen Zufallstitel bereit (Precache-freundlich).
     /// - `startIfIdle`: nur `true` beim manuellen Einschalten des Toggles — dann startet bei
@@ -1296,8 +1309,37 @@ class AudioPlayerService: ObservableObject {
             if self.currentSong == nil {
                 if startIfIdle { self.play(songs: [song]) }
             } else if self.peekNextSong() == nil {
-                self.addToQueue(song)
+                self.appendInfinitySong(song)
             }
+        }
+    }
+
+    /// Legt den vom Endlos-Modus gelieferten Titel ans Queue-Ende und merkt ihn als "pending"
+    /// vor. Bewusst nicht über das öffentliche `addToQueue`, damit der eigene Auffüller nicht
+    /// sofort wieder durch `removePendingInfinitySong()` entfernt würde.
+    private func appendInfinitySong(_ song: Song) {
+        truthUserQueue.append(song)
+        if isShuffled {
+            insertRandomlyInShuffledQueue(song)
+        } else {
+            userQueue.append(song)
+        }
+        infinityPendingSongId = song.id
+        saveState()
+    }
+
+    /// Entfernt den einen vorgemerkten Infinity-Song aus der Queue (egal ob in `userQueue` oder
+    /// — im Shuffle — im `queue`-Tail). Wird vor jeder expliziten Nutzer-Einreihung aufgerufen.
+    private func removePendingInfinitySong() {
+        guard let id = infinityPendingSongId else { return }
+        infinityPendingSongId = nil
+        if let i = userQueue.firstIndex(where: { $0.id == id }) {
+            userQueue.remove(at: i)
+        } else if let i = queue.firstIndex(where: { $0.id == id }), i > currentIndex {
+            queue.remove(at: i)
+        }
+        if let i = truthUserQueue.firstIndex(where: { $0.id == id }) {
+            truthUserQueue.remove(at: i)
         }
     }
 
@@ -1340,6 +1382,7 @@ class AudioPlayerService: ObservableObject {
     }
 
     func addToQueue(_ songs: [Song]) {
+        removePendingInfinitySong()
         truthUserQueue.append(contentsOf: songs)
         if isShuffled {
             songs.forEach { insertRandomlyInShuffledQueue($0) }
