@@ -194,7 +194,7 @@ final class CarPlayLibraryController {
             if !OfflineModeService.shared.isOffline {
                 await LibraryStore.shared.loadAlbums(sortBy: "alphabeticalByName")
                 let fresh = self.albumSource()
-                if fresh.map(\.id) != current.map(\.id) {
+                if fresh.count != current.count || zip(fresh, current).contains(where: { $0.id != $1.id }) {
                     current = fresh
                     built = self.makeAlbumSections(current)
                     template.updateSections(built.sections)
@@ -267,7 +267,7 @@ final class CarPlayLibraryController {
             if current.isEmpty && !OfflineModeService.shared.isOffline {
                 await LibraryStore.shared.loadArtists()
                 let fresh = self.artistSource()
-                if fresh.map(\.id) != current.map(\.id) {
+                if fresh.count != current.count || zip(fresh, current).contains(where: { $0.id != $1.id }) {
                     current = fresh
                     counts = self.albumCountByArtist()
                     built = self.makeArtistSections(current, counts: counts)
