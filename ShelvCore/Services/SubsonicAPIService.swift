@@ -43,14 +43,14 @@ enum SubsonicAPIError: LocalizedError {
 }
 
 /// Ergebnis von `getPlayQueue` — die serverseitig gespeicherte Wiedergabe-Queue.
-struct SubsonicPlayQueue {
+nonisolated struct SubsonicPlayQueue {
     let songs: [Song]
     let currentSongId: String?
     /// Server-Zeitstempel der letzten Änderung (ISO-String), falls geliefert.
     let changed: String?
 }
 
-private struct Envelope<T: Decodable>: Decodable {
+private nonisolated struct Envelope<T: Decodable>: Decodable {
     let response: T
 
     enum CodingKeys: String, CodingKey {
@@ -58,7 +58,7 @@ private struct Envelope<T: Decodable>: Decodable {
     }
 }
 
-private struct StatusCheck: Decodable {
+private nonisolated struct StatusCheck: Decodable {
     let status: String
     let error: APIError?
 
@@ -68,54 +68,54 @@ private struct StatusCheck: Decodable {
     }
 }
 
-private struct AlbumListBody: Decodable {
+private nonisolated struct AlbumListBody: Decodable {
     let status: String
     let error: StatusCheck.APIError?
     let albumList2: AlbumListContainer?
 }
 
-private struct ArtistsBody: Decodable {
+private nonisolated struct ArtistsBody: Decodable {
     let status: String
     let error: StatusCheck.APIError?
     let artists: ArtistsContainer?
 }
 
-private struct AlbumBody: Decodable {
+private nonisolated struct AlbumBody: Decodable {
     let status: String
     let error: StatusCheck.APIError?
     let album: AlbumDetail?
 }
 
-private struct ArtistBody: Decodable {
+private nonisolated struct ArtistBody: Decodable {
     let status: String
     let error: StatusCheck.APIError?
     let artist: ArtistDetail?
 }
 
-private struct ArtistInfoBody: Decodable {
+private nonisolated struct ArtistInfoBody: Decodable {
     let status: String
     let error: StatusCheck.APIError?
     let artistInfo2: ArtistInfo?
 }
 
-private struct SearchBody: Decodable {
+private nonisolated struct SearchBody: Decodable {
     let status: String
     let error: StatusCheck.APIError?
     let searchResult3: SearchResult?
 }
 
-private struct SongBody: Decodable {
+private nonisolated struct SongBody: Decodable {
     let status: String
     let error: StatusCheck.APIError?
     let song: Song?
 }
 
-private struct PingBody: Decodable {
+private nonisolated struct PingBody: Decodable {
     let status: String
     let error: StatusCheck.APIError?
 }
 
-private struct PlayQueueBody: Decodable {
+private nonisolated struct PlayQueueBody: Decodable {
     let status: String
     let error: StatusCheck.APIError?
     let playQueue: PlayQueueDetail?
@@ -129,7 +129,7 @@ private struct PlayQueueBody: Decodable {
 }
 
 
-private struct PingInfoBody: Decodable {
+private nonisolated struct PingInfoBody: Decodable {
     let status: String
     let version: String
     let type: String?
@@ -137,7 +137,7 @@ private struct PingInfoBody: Decodable {
     let error: StatusCheck.APIError?
 }
 
-private struct ScanStatusBody: Decodable {
+private nonisolated struct ScanStatusBody: Decodable {
     let status: String
     let error: StatusCheck.APIError?
     let scanStatus: ScanStatusDetail?
@@ -148,31 +148,31 @@ private struct ScanStatusBody: Decodable {
     }
 }
 
-struct ServerInfo {
+nonisolated struct ServerInfo {
     let apiVersion: String
     let serverVersion: String?
     let serverType: String?
 }
 
-struct ScanStatus {
+nonisolated struct ScanStatus {
     let scanning: Bool
     let count: Int
 }
 
-struct AlbumListContainer: Decodable {
+nonisolated struct AlbumListContainer: Decodable {
     let album: [Album]?
 }
 
-struct ArtistsContainer: Decodable {
+nonisolated struct ArtistsContainer: Decodable {
     let index: [ArtistIndex]?
 }
 
-struct ArtistIndex: Decodable {
+nonisolated struct ArtistIndex: Decodable {
     let name: String
     let artist: [Artist]?
 }
 
-struct AlbumDetail: Decodable, Identifiable {
+nonisolated struct AlbumDetail: Decodable, Identifiable {
     let id: String
     let name: String
     let artist: String?
@@ -223,7 +223,7 @@ struct AlbumDetail: Decodable, Identifiable {
     }
 }
 
-struct ArtistDetail: Decodable, Identifiable {
+nonisolated struct ArtistDetail: Decodable, Identifiable {
     let id: String
     let name: String
     let albumCount: Int?
@@ -231,43 +231,43 @@ struct ArtistDetail: Decodable, Identifiable {
     let album: [Album]?
 }
 
-struct ArtistInfo: Decodable {
+nonisolated struct ArtistInfo: Decodable {
     let biography: String?
 }
 
-struct SearchResult: Decodable {
+nonisolated struct SearchResult: Decodable {
     let artist: [Artist]?
     let album: [Album]?
     let song: [Song]?
 }
 
-struct StarredResult: Decodable {
+nonisolated struct StarredResult: Decodable {
     let artist: [Artist]?
     let album: [Album]?
     let song: [Song]?
 }
 
-private struct RandomSongsBody: Decodable {
+private nonisolated struct RandomSongsBody: Decodable {
     let status: String
     let error: StatusCheck.APIError?
     let randomSongs: RandomSongsList?
     struct RandomSongsList: Decodable { let song: [Song]? }
 }
 
-private struct TopSongsBody: Decodable {
+private nonisolated struct TopSongsBody: Decodable {
     let status: String
     let error: StatusCheck.APIError?
     let topSongs: TopSongsList?
     struct TopSongsList: Decodable { let song: [Song]? }
 }
 
-private struct StarredBody: Decodable {
+private nonisolated struct StarredBody: Decodable {
     let status: String
     let error: StatusCheck.APIError?
     let starred2: StarredResult?
 }
 
-private struct PlaylistsBody: Decodable {
+private nonisolated struct PlaylistsBody: Decodable {
     let status: String
     let error: StatusCheck.APIError?
     let playlists: PlaylistsContainer?
@@ -277,7 +277,7 @@ private struct PlaylistsBody: Decodable {
     }
 }
 
-private struct PlaylistBody: Decodable {
+private nonisolated struct PlaylistBody: Decodable {
     let status: String
     let error: StatusCheck.APIError?
     let playlist: PlaylistDetail?
@@ -293,30 +293,30 @@ private struct PlaylistBody: Decodable {
     }
 }
 
-private struct CreatePlaylistBody: Decodable {
+private nonisolated struct CreatePlaylistBody: Decodable {
     let status: String
     let error: StatusCheck.APIError?
     let playlist: PlaylistBody.PlaylistDetail?
 }
 
-class SubsonicAPIService: ObservableObject {
-    static let shared = SubsonicAPIService()
+nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
+    nonisolated static let shared = SubsonicAPIService()
 
     private let credentialLock = NSLock()
-    private var _activeServer: SubsonicServer?
-    private var _activePassword: String?
+    nonisolated(unsafe) private var _activeServer: SubsonicServer?
+    nonisolated(unsafe) private var _activePassword: String?
 
-    var activeServer: SubsonicServer? {
+    nonisolated var activeServer: SubsonicServer? {
         get { credentialLock.withLock { _activeServer } }
         set { credentialLock.withLock { _activeServer = newValue } }
     }
 
-    var activePassword: String? {
+    nonisolated var activePassword: String? {
         get { credentialLock.withLock { _activePassword } }
         set { credentialLock.withLock { _activePassword = newValue } }
     }
 
-    func setCredentials(server: SubsonicServer, password: String?) {
+    nonisolated func setCredentials(server: SubsonicServer, password: String?) {
         credentialLock.withLock {
             _activeServer = server
             _activePassword = password
@@ -326,7 +326,7 @@ class SubsonicAPIService: ObservableObject {
     #if DEBUG
     /// Aktiv, wenn der Demo-Server gewählt ist. Alle Daten-Methoden liefern dann
     /// `DemoContent`-Daten statt echter Netzwerk-Antworten. Siehe `DemoContent`.
-    var isDemoActive: Bool { activeServer?.baseURL == DemoContent.serverBaseURL }
+    nonisolated var isDemoActive: Bool { activeServer?.baseURL == DemoContent.serverBaseURL }
     #endif
 
     private let apiVersion = "1.16.1"
@@ -504,6 +504,7 @@ class SubsonicAPIService: ObservableObject {
         try check(status: body.status, error: body.error)
     }
 
+    @discardableResult
     func ping(server: SubsonicServer, password: String) async throws -> ServerInfo {
         let data = try await fetchData(for: server, password: password, path: "ping")
         let body = try decoder.decode(Envelope<PingInfoBody>.self, from: data).response
@@ -1012,7 +1013,7 @@ class SubsonicAPIService: ObservableObject {
     }
 }
 
-struct StructuredLyrics: Codable {
+nonisolated struct StructuredLyrics: Codable {
     let synced: Bool
     let lang: String?
     let line: [LyricsLine]?
@@ -1023,7 +1024,7 @@ struct StructuredLyrics: Codable {
     }
 }
 
-private struct LyricsListBody: Decodable {
+private nonisolated struct LyricsListBody: Decodable {
     let status: String
     let error: StatusCheck.APIError?
     let lyricsList: LyricsList?

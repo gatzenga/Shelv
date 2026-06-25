@@ -85,7 +85,9 @@ actor PlayLogService {
                !FileManager.default.fileExists(atPath: url.path) {
                 try? FileManager.default.moveItem(at: legacy, to: url)
             }
-            let p = try DatabasePool(path: url.path)
+            var config = Configuration()
+            config.targetQueue = DispatchQueue(label: "shelv.db.playlog", qos: .userInitiated)
+            let p = try DatabasePool(path: url.path, configuration: config)
             var m = DatabaseMigrator()
             m.registerMigration("v1_create") { db in
                 try db.create(table: "play_log", ifNotExists: true) { t in
@@ -107,9 +109,16 @@ actor PlayLogService {
                 // SQLite erlaubt kein UNIQUE auf ALTER TABLE ADD COLUMN.
                 // Stattdessen Spalte hinzufügen und partiellen UNIQUE-Index anlegen
                 // (NULL-Werte aus pre-CloudKit-Zeilen werden nicht geprüft).
-                try db.alter(table: "play_log") { t in
-                    t.add(column: "uuid",     .text)
-                    t.add(column: "syncedAt", .double)
+                let cols = try db.columns(in: "play_log").map(\.name)
+                if !cols.contains("uuid") || !cols.contains("syncedAt") {
+                    try db.alter(table: "play_log") { t in
+                        if !cols.contains("uuid") {
+                            t.add(column: "uuid", .text)
+                        }
+                        if !cols.contains("syncedAt") {
+                            t.add(column: "syncedAt", .double)
+                        }
+                    }
                 }
                 try db.execute(sql: """
                     CREATE UNIQUE INDEX IF NOT EXISTS idx_play_log_uuid
@@ -117,6 +126,8 @@ actor PlayLogService {
                 """)
             }
             m.registerMigration("v3_cloudkit_registry") { db in
+                let cols = try db.columns(in: "recap_registry").map(\.name)
+                guard !cols.contains("ckRecordName") else { return }
                 try db.alter(table: "recap_registry") { t in
                     t.add(column: "ckRecordName", .text)
                 }
@@ -131,6 +142,8 @@ actor PlayLogService {
                 }
             }
             m.registerMigration("v5_registry_is_test") { db in
+                let cols = try db.columns(in: "recap_registry").map(\.name)
+                guard !cols.contains("isTest") else { return }
                 try db.alter(table: "recap_registry") { t in
                     t.add(column: "isTest", .boolean).notNull().defaults(to: false)
                 }

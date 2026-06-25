@@ -66,7 +66,9 @@ actor LyricsService {
                 at: url.deletingLastPathComponent(),
                 withIntermediateDirectories: true
             )
-            let p = try DatabasePool(path: url.path)
+            var config = Configuration()
+            config.targetQueue = DispatchQueue(label: "shelv.db.lyrics", qos: .userInitiated)
+            let p = try DatabasePool(path: url.path, configuration: config)
             Self.applyDataProtection(at: url)
             var m = DatabaseMigrator()
             m.registerMigration("v1_createLyrics") { db in

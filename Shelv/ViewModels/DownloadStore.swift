@@ -1,6 +1,6 @@
 import Foundation
 import SwiftUI
-import Combine
+@preconcurrency import Combine
 
 @MainActor
 final class DownloadStore: ObservableObject {
@@ -13,7 +13,7 @@ final class DownloadStore: ObservableObject {
     @Published private(set) var totalBytes: Int64 = 0
     private(set) var inFlightProgress: [String: Double] = [:]
     private(set) var inFlightStates: [String: DownloadState] = [:]
-    nonisolated let progressPublisher = PassthroughSubject<Void, Never>()
+    nonisolated(unsafe) let progressPublisher = PassthroughSubject<Void, Never>()
     @Published private(set) var batchProgress: BatchProgress? = nil
     @Published private(set) var isLoading: Bool = false
     @Published private(set) var offlinePlaylistIds: Set<String> = []
@@ -42,7 +42,7 @@ final class DownloadStore: ObservableObject {
             .store(in: &cancellables)
 
         DownloadService.shared.stateUpdates
-            .sink { update in
+            .sink { [weak self] update in
                 Task { @MainActor [weak self] in
                     guard let self else { return }
                     let isDl: Bool

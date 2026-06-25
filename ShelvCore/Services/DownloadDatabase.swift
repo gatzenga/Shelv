@@ -121,7 +121,9 @@ actor DownloadDatabase {
     }
 
     private func openAndMigrate(at url: URL) throws -> DatabasePool {
-        let p = try DatabasePool(path: url.path)
+        var config = Configuration()
+        config.targetQueue = DispatchQueue(label: "shelv.db.downloads", qos: .userInitiated)
+        let p = try DatabasePool(path: url.path, configuration: config)
         var m = DatabaseMigrator()
         m.registerMigration("v1_create") { db in
             try db.create(table: "downloads", ifNotExists: true) { t in
@@ -158,14 +160,22 @@ actor DownloadDatabase {
             }
         }
         m.registerMigration("v2_add_artist_cover") { db in
+            let cols = try db.columns(in: "downloads").map(\.name)
+            guard !cols.contains("artistCoverArtId") else { return }
             try db.alter(table: "downloads") { t in
                 t.add(column: "artistCoverArtId", .text)
             }
         }
         m.registerMigration("v3_add_album_artist") { db in
+            let cols = try db.columns(in: "downloads").map(\.name)
+            guard !cols.contains("albumArtistName") || !cols.contains("albumCoverArtId") else { return }
             try db.alter(table: "downloads") { t in
-                t.add(column: "albumArtistName", .text)
-                t.add(column: "albumCoverArtId", .text)
+                if !cols.contains("albumArtistName") {
+                    t.add(column: "albumArtistName", .text)
+                }
+                if !cols.contains("albumCoverArtId") {
+                    t.add(column: "albumCoverArtId", .text)
+                }
             }
         }
         // Stammt aus der alten Desktop-App: Playlist-Download-Marker leben dort in

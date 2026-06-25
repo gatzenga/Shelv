@@ -72,7 +72,7 @@ class LyricsStore: ObservableObject {
         downloadTotal = 0
         currentDownloadServerId = serverId
 
-        downloadTask = Task {
+        downloadTask = Task { [weak self] in
             defer {
                 Task { @MainActor [weak self] in
                     self?.refreshDbSize()

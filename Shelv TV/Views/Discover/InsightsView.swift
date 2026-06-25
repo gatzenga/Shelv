@@ -123,7 +123,7 @@ struct InsightsView: View {
     private func row(rank: Int, url: URL?, isCircle: Bool, title: String, subtitle: String?, plays: Int,
                      nowPlayingSongId: String? = nil) -> some View {
         let isTop3 = rank <= 3
-        return HStack(spacing: 20) {
+        HStack(spacing: 20) {
             Text("\(rank)")
                 .font(isTop3 ? .title3.bold() : .body)
                 .foregroundStyle(isTop3 ? AnyShapeStyle(accent) : AnyShapeStyle(.secondary))
