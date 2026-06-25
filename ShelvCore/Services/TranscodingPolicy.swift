@@ -1,6 +1,6 @@
 import Foundation
 
-enum TranscodingCodec: String, CaseIterable, Identifiable, Codable {
+nonisolated enum TranscodingCodec: String, CaseIterable, Identifiable, Codable {
     case raw, opus, mp3, aac
     var id: String { rawValue }
     var label: String {
@@ -26,13 +26,13 @@ enum TranscodingCodec: String, CaseIterable, Identifiable, Codable {
     static var downloadOptions: [TranscodingCodec] { [.raw, .opus, .mp3] }
 }
 
-enum TranscodingBitrate: Int, CaseIterable, Identifiable {
+nonisolated enum TranscodingBitrate: Int, CaseIterable, Identifiable {
     case k64 = 64, k96 = 96, k128 = 128, k192 = 192, k256 = 256, k320 = 320
     var id: Int { rawValue }
     var label: String { "\(rawValue) kbps" }
 }
 
-struct TranscodingPolicy {
+nonisolated struct TranscodingPolicy {
     /// Liefert das gewünschte Stream-Format basierend auf aktuellem Netz.
     /// `nil` = kein Transcoding, Original wird angefordert.
     static func currentStreamFormat() -> (codec: TranscodingCodec, bitrate: Int)? {

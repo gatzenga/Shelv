@@ -49,13 +49,15 @@ final class PlayerEngine: ObservableObject {
     }
 
     deinit {
-        removeTimeObserver()
-        removeItemFinishedObserver()
-        itemStatusObservation?.invalidate()
-        likelyKeepUpObservation?.invalidate()
-        timeControlObservation?.invalidate()
-        if let obs = itemFailureObserver { NotificationCenter.default.removeObserver(obs) }
-        if let obs = itemStallObserver { NotificationCenter.default.removeObserver(obs) }
+        MainActor.assumeIsolated {
+            removeTimeObserver()
+            removeItemFinishedObserver()
+            itemStatusObservation?.invalidate()
+            likelyKeepUpObservation?.invalidate()
+            timeControlObservation?.invalidate()
+            if let obs = itemFailureObserver { NotificationCenter.default.removeObserver(obs) }
+            if let obs = itemStallObserver { NotificationCenter.default.removeObserver(obs) }
+        }
     }
 
     func play(url: URL) {
@@ -201,7 +203,7 @@ final class PlayerEngine: ObservableObject {
         isPlaying = true
     }
 
-    func seek(to seconds: TimeInterval, pauseUntilBuffered: Bool = false, completion: ((Bool) -> Void)? = nil) {
+    func seek(to seconds: TimeInterval, pauseUntilBuffered: Bool = false, completion: (@MainActor @Sendable (Bool) -> Void)? = nil) {
         let time = CMTime(seconds: seconds, preferredTimescale: 1000)
         isSeeking = true
         currentTime = seconds
@@ -214,8 +216,10 @@ final class PlayerEngine: ObservableObject {
             pendingResumeAfterBuffer = true
         }
         player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] finished in
-            self?.isSeeking = false
-            completion?(finished)
+            Task { @MainActor [weak self] in
+                self?.isSeeking = false
+                completion?(finished)
+            }
         }
     }
 
@@ -323,9 +327,11 @@ final class PlayerEngine: ObservableObject {
             queue: .main
         ) { [weak self] time in
             guard let self else { return }
-            self.refreshDuration()
-            guard !self.isSeeking else { return }
-            self.currentTime = time.seconds
+            Task { @MainActor in
+                self.refreshDuration()
+                guard !self.isSeeking else { return }
+                self.currentTime = time.seconds
+            }
         }
     }
 
@@ -348,12 +354,14 @@ final class PlayerEngine: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             guard let self else { return }
-            if self.gaplessPreloaded {
-                self.performGaplessSwap()
-                self.onTrackFinished?()
-            } else {
-                self.isPlaying = false
-                self.onTrackFinished?()
+            Task { @MainActor in
+                if self.gaplessPreloaded {
+                    self.performGaplessSwap()
+                    self.onTrackFinished?()
+                } else {
+                    self.isPlaying = false
+                    self.onTrackFinished?()
+                }
             }
         }
     }

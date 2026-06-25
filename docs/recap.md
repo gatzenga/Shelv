@@ -36,7 +36,7 @@ You can disable iCloud sync in Settings → Recap. When off:
 - Multiple devices can create independent Recap playlists with the same name
 - Backups must be handled manually via export/import
 
-When turning iCloud sync back on, Shelv merges the local database with iCloud (pending plays go up, missing records come down). Nothing is deleted automatically.
+When turning iCloud sync back on, Shelv treats the local database as the source of truth: it deletes the Shelv iCloud zone, marks local plays and recap markers for re-upload, then uploads the local state again. Other devices recover from the missing zone on their next sync and re-upload their local state as well. This avoids adopting stale recap markers from periods where sync was disabled.
 
 #### Cross-device identity
 
@@ -76,9 +76,9 @@ Shelv keeps a configurable number of Recaps per period type. Once the limit is e
 
 You can change these limits in Settings.
 
-### Automatic cleanup when playlists go missing
+### Missing playlists
 
-If you delete a Recap playlist directly on your Navidrome server (for example through the web interface), Shelv detects this on the next refresh and automatically removes the corresponding registry entry from the local database and iCloud. This cleanup only runs after a successful server response, so being offline won't accidentally trigger it.
+If you delete a Recap playlist directly on your Navidrome server (for example through the web interface), Shelv does not automatically delete the local registry entry or iCloud marker. The UI marks the entry as missing, and you can decide whether to recreate the playlist, update it, or remove only the registry entry. This avoids accidental delete cascades caused by temporary server/API failures.
 
 ---
 
@@ -135,7 +135,7 @@ A manual trigger for creating a Recap from the last 7 days' plays. Useful for te
 
 | Setting | Description |
 |---------|-------------|
-| Recap enabled | Master switch. When off, no plays are recorded and no Recaps are generated. |
+| Recap enabled | Master switch for Recap playlist generation and Recap UI. Play logging and scrobbling still run because mixes, insights, and sync also consume the play log. |
 | iCloud Sync | Enables automatic sync of plays and Recap markers across your devices via iCloud. When off, data stays local. |
 | Play threshold | How much of a song must be heard for it to count (10–50%). |
 | Weekly Recap | Generates a playlist for each completed calendar week (Monday–Sunday). |
@@ -158,6 +158,6 @@ Shelv replaces the local database with the imported one, then automatically:
 1. Rewrites all entries to belong to the currently active server account
 2. Uploads any plays that iCloud doesn't have yet
 3. Downloads any plays from iCloud that weren't in the imported database
-4. Recreates missing Recap playlists on Navidrome (if the registry references playlists that no longer exist on the server)
+4. Checks registry entries against Navidrome so missing Recap playlists can be reviewed and recreated manually
 
 Nothing is deleted during import — only uploaded and downloaded. If the backup contains plays from a different Navidrome account, they're reassigned to the current account, since the intention of importing is always to bring your history to the current user.

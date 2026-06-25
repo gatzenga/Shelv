@@ -26,7 +26,7 @@ Every playlist detail page has a download button that saves all songs in the pla
 
 In Offline Mode, the Playlists tab shows **only** playlists that have been downloaded — playlists without a download marker are hidden entirely.
 
-When you go back online, Shelv checks whether all songs in a marked playlist are still present. If any are missing the download marker is removed automatically and the download button reappears, so you can re-download the playlist.
+When the local download index is reloaded, Shelv removes a playlist's offline marker only if none of the playlist's saved songs are still present locally. If a playlist is only partially downloaded, the marker is kept and the UI can offer downloading the missing songs.
 
 ### Bulk download
 

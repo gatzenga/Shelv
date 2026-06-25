@@ -1,7 +1,7 @@
 import Foundation
 import Security
 
-enum KeychainService {
+nonisolated enum KeychainService {
     static func save(password: String, for serverID: UUID) {
         let key = "shelv_server_\(serverID.uuidString)"
         let data = Data(password.utf8)

@@ -1,6 +1,6 @@
 import Foundation
 
-enum DownloadState: Equatable {
+nonisolated enum DownloadState: Equatable {
     case none
     case queued
     case downloading(progress: Double)
@@ -17,7 +17,7 @@ enum DownloadState: Equatable {
     }
 }
 
-struct DownloadedSong: Identifiable, Hashable {
+nonisolated struct DownloadedSong: Identifiable, Hashable {
     let songId: String
     let serverId: String
     let albumId: String
@@ -68,7 +68,7 @@ struct DownloadedSong: Identifiable, Hashable {
     }
 }
 
-struct DownloadedAlbum: Identifiable, Hashable {
+nonisolated struct DownloadedAlbum: Identifiable, Hashable {
     let albumId: String
     let serverId: String
     let title: String
@@ -100,7 +100,7 @@ struct DownloadedAlbum: Identifiable, Hashable {
     }
 }
 
-struct DownloadedArtist: Identifiable, Hashable {
+nonisolated struct DownloadedArtist: Identifiable, Hashable {
     let artistId: String
     let serverId: String
     let name: String

@@ -107,7 +107,7 @@ A native, album and artist focused iOS, iPadOS, macOS, and tvOS client for [Navi
 
 - iOS 18 or later / iPadOS 18 or later
 - macOS 15.6 or later
-- tvOS 26 or later
+- tvOS 18.6 or later
 - Xcode 26 or later
 - A running [Navidrome](https://www.navidrome.org/) or Subsonic-compatible server
 
@@ -121,7 +121,7 @@ A native, album and artist focused iOS, iPadOS, macOS, and tvOS client for [Navi
 3. Select a simulator or connected device and hit **Run** (`⌘R`).
 4. On first launch, enter your server URL and credentials.
 
-> No external dependencies or Swift Package Manager packages are required — the project is fully self-contained.
+> The project uses Swift Package Manager for GRDB. The resolved package state is tracked in `Package.resolved`.
 
 ## Architecture
 

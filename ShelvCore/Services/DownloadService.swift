@@ -1,5 +1,5 @@
 import Foundation
-import Combine
+@preconcurrency import Combine
 
 // MARK: - Notifications
 
@@ -14,7 +14,7 @@ extension Notification.Name {
 
 // MARK: - DownloadJob
 
-private struct DownloadJob: Codable {
+private nonisolated struct DownloadJob: Codable {
     let song: Song
     let serverId: String
     var downloadURL: URL
@@ -37,7 +37,7 @@ private struct DownloadJob: Codable {
     var requestedFormat: TranscodingCodec? = nil
     var fellBackToRaw: Bool = false
     var attempt: Int = 0
-    let queuedAt: Date = Date()
+    var queuedAt: Date = Date()
 }
 
 // MARK: - DownloadService
@@ -73,9 +73,9 @@ actor DownloadService {
     // jobSongIds prüft auch diese Map, damit deleteAlbum/deleteArtist auch in-completion Songs canceln kann.
     private var inCompletionJobs: [String: DownloadJob] = [:]  // key -> Job
 
-    nonisolated private let progressSubject = CurrentValueSubject<[String: Double], Never>([:])
-    nonisolated private let stateSubject = PassthroughSubject<(key: String, state: DownloadState), Never>()
-    nonisolated private let batchSubject = CurrentValueSubject<BatchProgress?, Never>(nil)
+    nonisolated(unsafe) private let progressSubject = CurrentValueSubject<[String: Double], Never>([:])
+    nonisolated(unsafe) private let stateSubject = PassthroughSubject<(key: String, state: DownloadState), Never>()
+    nonisolated(unsafe) private let batchSubject = CurrentValueSubject<BatchProgress?, Never>(nil)
 
     nonisolated var progressUpdates: AnyPublisher<[String: Double], Never> {
         progressSubject.eraseToAnyPublisher()
@@ -197,7 +197,7 @@ actor DownloadService {
             // Stale Cancel-Marker beim Neu-Enqueue entfernen — sonst würde eine spätere
             // Completion fälschlich als "cancelled" interpretiert.
             cancelledKeys.remove(key)
-            let transcoding = await TranscodingPolicy.currentDownloadFormat()
+            let transcoding = TranscodingPolicy.currentDownloadFormat()
             guard let url = api.api.downloadURL(for: song.id, server: api.server, password: api.password,
                                                 transcoding: transcoding) else { continue }
             let cover = song.coverArt.flatMap { api.api.coverArtURL(for: $0, server: api.server, password: api.password, size: 600) }
@@ -636,7 +636,7 @@ actor DownloadService {
 
         let serverDir = Self.serverDirectory(serverId: job.serverId)
         // Wenn der Server nicht das angeforderte Format liefert, mit korrekter Extension speichern.
-        let actualExt = await TranscodingPolicy.extensionFor(mimeType: mimeType) ?? job.fileExtension
+        let actualExt = TranscodingPolicy.extensionFor(mimeType: mimeType) ?? job.fileExtension
         let finalURL = serverDir.appendingPathComponent("\(job.song.id.pathSafeComponent).\(actualExt)")
 
         // Race-Window 1: User cancel-te zwischen erstem `await` und jetzt.
@@ -869,11 +869,11 @@ actor DownloadService {
     }
 
     private func currentAPI(for serverId: String) async -> ResolvedAPI? {
-        let api = await SubsonicAPIService.shared
+        let api = SubsonicAPIService.shared
         let snapshot: (SubsonicServer?, String?) = await MainActor.run {
             (api.activeServer, api.activePassword)
         }
-        guard let server = snapshot.0, await server.stableId == serverId,
+        guard let server = snapshot.0, server.stableId == serverId,
               let pw = snapshot.1 else { return nil }
         return ResolvedAPI(api: api, server: server, password: pw)
     }
@@ -909,7 +909,7 @@ actor DownloadService {
 // MARK: - Coordinator
 
 private final class DownloadSessionCoordinator: NSObject, URLSessionDownloadDelegate {
-    weak var service: DownloadService?
+    nonisolated(unsafe) weak var service: DownloadService?
 
     func urlSession(_ session: URLSession,
                     downloadTask: URLSessionDownloadTask,

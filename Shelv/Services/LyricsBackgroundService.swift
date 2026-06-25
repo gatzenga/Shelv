@@ -1,5 +1,5 @@
 import Foundation
-import Combine
+@preconcurrency import Combine
 
 /// Bulk-Lyrics-Downloader via Background-URLSession. iOS lädt die Requests im
 /// `nsurlsessiond`-Daemon — läuft weiter bei gesperrtem Handy und sogar nach App-Kill.
@@ -48,7 +48,7 @@ actor LyricsBackgroundService {
     private var totalCount: Int = 0
     private var completedCount: Int = 0
 
-    nonisolated private let progressSubject = CurrentValueSubject<(completed: Int, total: Int)?, Never>(nil)
+    nonisolated(unsafe) private let progressSubject = CurrentValueSubject<(completed: Int, total: Int)?, Never>(nil)
     nonisolated var progressUpdates: AnyPublisher<(completed: Int, total: Int)?, Never> {
         progressSubject.eraseToAnyPublisher()
     }
@@ -445,7 +445,7 @@ actor LyricsBackgroundService {
 // MARK: - Coordinator
 
 private final class LyricsSessionCoordinator: NSObject, URLSessionDownloadDelegate {
-    weak var service: LyricsBackgroundService?
+    nonisolated(unsafe) weak var service: LyricsBackgroundService?
 
     func urlSession(_ session: URLSession,
                     downloadTask: URLSessionDownloadTask,

@@ -85,7 +85,7 @@ struct LibraryView: View {
 
     private let columns = [GridItem(.adaptive(minimum: 150, maximum: 200), spacing: 14)]
 
-    private static let sortArticles: [String] = [
+    private nonisolated static let sortArticles: [String] = [
         "the ", "an ", "a ",
         "der ", "die ", "das ", "dem ", "den ", "des ",
         "eine ", "einer ", "einem ", "einen ", "ein ",
@@ -97,7 +97,7 @@ struct LibraryView: View {
         "het ", "een ", "de ",
     ]
 
-    private static func sortKey(for name: String) -> String {
+    private nonisolated static func sortKey(for name: String) -> String {
         let lower = name.lowercased()
         for article in sortArticles {
             if lower.hasPrefix(article) {
@@ -107,7 +107,7 @@ struct LibraryView: View {
         return name
     }
 
-    private static func groupByFirstLetter<T>(_ items: [T], name: KeyPath<T, String>) -> [(letter: String, items: [T])] {
+    private nonisolated static func groupByFirstLetter<T>(_ items: [T], name: KeyPath<T, String>) -> [(letter: String, items: [T])] {
         var dict: [String: [T]] = [:]
         for item in items {
             let key = sortKey(for: item[keyPath: name])

@@ -35,12 +35,9 @@ actor ImageCacheService {
         if let hit = memory.object(forKey: key as NSString) { return hit }
         let diskURL = cacheDir.appendingPathComponent(key.pathSafeComponent)
         let dir = cacheDir
-        let mem = memory
-        return await Task.detached(priority: .medium) { () -> UIImage? in
+        let img = await Task.detached(priority: .medium) { () -> UIImage? in
             if let data = try? Data(contentsOf: diskURL),
                let img = UIImage(data: data) {
-                let cost = Int(img.size.width * img.size.height * 4)
-                mem.setObject(img, forKey: key as NSString, cost: cost)
                 return img
             }
             // Fallback: gleiche Cover-ID, andere gecachte Grösse
@@ -53,12 +50,15 @@ actor ImageCacheService {
                 let fallbackURL = dir.appendingPathComponent(fallbackKey.pathSafeComponent)
                 guard let data = try? Data(contentsOf: fallbackURL),
                       let img = UIImage(data: data) else { continue }
-                let cost = Int(img.size.width * img.size.height * 4)
-                mem.setObject(img, forKey: key as NSString, cost: cost)
                 return img
             }
             return nil
         }.value
+        if let img {
+            let cost = Int(img.size.width * img.size.height * 4)
+            memory.setObject(img, forKey: key as NSString, cost: cost)
+        }
+        return img
     }
 
     func image(url: URL, key: String) async -> UIImage? {

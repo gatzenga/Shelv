@@ -47,8 +47,8 @@ class LibraryStore: ObservableObject {
 
     private func save<T: Encodable>(_ value: T, name: String, serverID: UUID) {
         let url = Self.diskURL(name: name, serverID: serverID)
+        guard let data = try? JSONEncoder().encode(value) else { return }
         Task.detached(priority: .utility) {
-            guard let data = try? JSONEncoder().encode(value) else { return }
             try? FileManager.default.createDirectory(at: Self.libraryDir, withIntermediateDirectories: true)
             try? data.write(to: url, options: .atomic)
         }

@@ -11,7 +11,7 @@ import Foundation
 /// festes Player-Standbild.
 ///
 /// Single Source of Truth: alles hier ist deterministisch, also über Jahre reproduzierbar.
-enum DemoContent {
+nonisolated enum DemoContent {
 
     static let serverBaseURL = "demo://shelv"
     static let serverID = UUID(uuidString: "DEC0DE00-0000-0000-0000-000000000001")!

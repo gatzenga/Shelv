@@ -208,13 +208,15 @@ class AudioPlayerService: ObservableObject {
     }
 
     deinit {
-        NotificationCenter.default.removeObserver(self)
-        #if os(macOS)
-        if let obs = willTerminateObserver {
-            NotificationCenter.default.removeObserver(obs)
+        MainActor.assumeIsolated {
+            NotificationCenter.default.removeObserver(self)
+            #if os(macOS)
+            if let obs = willTerminateObserver {
+                NotificationCenter.default.removeObserver(obs)
+            }
+            #endif
+            networkMonitor.cancel()
         }
-        #endif
-        networkMonitor.cancel()
     }
 
     private func setupNetworkMonitor() {
@@ -860,10 +862,7 @@ class AudioPlayerService: ObservableObject {
                 #if os(iOS)
                 // Background-Task damit iOS den Download nicht einfriert wenn Handy gesperrt wird
                 // bevor der erste Song je gespielt hat (kein aktiver Audio-Kontext vorhanden)
-                var bgTask = UIBackgroundTaskIdentifier.invalid
-                bgTask = UIApplication.shared.beginBackgroundTask(withName: "shelv.streamload") {
-                    UIApplication.shared.endBackgroundTask(bgTask)
-                }
+                let bgTask = UIApplication.shared.beginBackgroundTask(withName: "shelv.streamload")
                 defer { if bgTask != .invalid { UIApplication.shared.endBackgroundTask(bgTask) } }
                 #endif
                 // Polling bis Datei da ist (alle 200ms, max 60s)
@@ -1182,23 +1181,25 @@ class AudioPlayerService: ObservableObject {
         fastSeekTimer?.invalidate()
         let step: Double = forward ? 3.0 : -3.0
         let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
-            guard let self, self.currentSong != nil else { return }
-            let proposed = self.currentTime + step
-            // Obergrenze nur clampen, wenn die Dauer bekannt ist — sonst würde ein noch
-            // nicht geladenes Item (duration == 0) den Sprung auf 0 erzwingen.
-            let newTime: Double = self.duration > 1
-                ? max(0, min(proposed, self.duration - 0.5))
-                : max(0, proposed)
-            // isSeeking blockt den engine.$currentTime-Sink, damit der periodische
-            // Observer unsere manuelle Position nicht überschreibt.
-            self.isSeeking = true
-            self.currentTime = newTime
-            self.lastReportedNowPlayingTime = -1
-            self.updateNowPlayingTime(newTime)
-            // currentTime ist nicht @Published — die UI (In-App-Scrubber, Lock-Screen)
-            // hängt am timePublisher, daher hier explizit pushen.
-            self.timePublisher.send((time: newTime, duration: self.duration))
-            self.engine.seek(to: newTime, pauseUntilBuffered: false)
+            Task { @MainActor [weak self] in
+                guard let self, self.currentSong != nil else { return }
+                let proposed = self.currentTime + step
+                // Obergrenze nur clampen, wenn die Dauer bekannt ist — sonst würde ein noch
+                // nicht geladenes Item (duration == 0) den Sprung auf 0 erzwingen.
+                let newTime: Double = self.duration > 1
+                    ? max(0, min(proposed, self.duration - 0.5))
+                    : max(0, proposed)
+                // isSeeking blockt den engine.$currentTime-Sink, damit der periodische
+                // Observer unsere manuelle Position nicht überschreibt.
+                self.isSeeking = true
+                self.currentTime = newTime
+                self.lastReportedNowPlayingTime = -1
+                self.updateNowPlayingTime(newTime)
+                // currentTime ist nicht @Published — die UI (In-App-Scrubber, Lock-Screen)
+                // hängt am timePublisher, daher hier explizit pushen.
+                self.timePublisher.send((time: newTime, duration: self.duration))
+                self.engine.seek(to: newTime, pauseUntilBuffered: false)
+            }
         }
         // .common-Modus: feuert auch während UI-Tracking; RunLoop.main statt .current
         // macht das Scheduling unabhängig vom aufrufenden Runloop.

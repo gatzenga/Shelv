@@ -1,13 +1,13 @@
 import Foundation
 
-struct ReplayGain: Codable, Hashable {
+nonisolated struct ReplayGain: Codable, Hashable {
     let trackGain: Float?
     let albumGain: Float?
     let trackPeak: Float?
     let albumPeak: Float?
 }
 
-struct Song: Identifiable, Codable, Hashable {
+nonisolated struct Song: Identifiable, Codable, Hashable {
     let id: String
     let title: String
     let artist: String?

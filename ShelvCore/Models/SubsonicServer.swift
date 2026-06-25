@@ -1,6 +1,6 @@
 import Foundation
 
-struct SubsonicServer: Identifiable, Codable {
+nonisolated struct SubsonicServer: Identifiable, Codable {
     let id: UUID
     var name: String
     var baseURL: String

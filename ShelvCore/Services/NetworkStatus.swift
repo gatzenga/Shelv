@@ -1,7 +1,7 @@
 import Foundation
 import Network
 
-final class NetworkStatus {
+nonisolated final class NetworkStatus: @unchecked Sendable {
     static let shared = NetworkStatus()
 
     private let monitor = NWPathMonitor()
@@ -25,12 +25,26 @@ final class NetworkStatus {
     // Suspends until the first NWPathMonitor callback has fired.
     // Returns immediately on every call after the first update — typically <10 ms after init.
     func waitUntilReady() async {
-        lock.lock()
-        if _isReady { lock.unlock(); return }
+        if isReady { return }
         await withCheckedContinuation { continuation in
-            _readyContinuations.append(continuation)
-            lock.unlock()
+            appendReadyContinuation(continuation)
         }
+    }
+
+    private var isReady: Bool {
+        lock.lock(); defer { lock.unlock() }
+        return _isReady
+    }
+
+    private func appendReadyContinuation(_ continuation: CheckedContinuation<Void, Never>) {
+        lock.lock()
+        if _isReady {
+            lock.unlock()
+            continuation.resume()
+            return
+        }
+        _readyContinuations.append(continuation)
+        lock.unlock()
     }
 
     // Synchroner Path-Sync, damit ein anderer Pfad-Monitor (z.B. AudioPlayerService.networkMonitor)
