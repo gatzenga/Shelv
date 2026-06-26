@@ -4,8 +4,8 @@ import Foundation
 import Network
 
 // MARK: - Sync Status (UI-facing)
-// Kein @MainActor — Publishes werden via MainActor.run vom Service dispatched.
 
+@MainActor
 final class CloudKitSyncStatus: ObservableObject {
     @Published var lastSyncDate: Date?
     @Published var isSyncing = false
@@ -103,7 +103,7 @@ actor CloudKitSyncService {
     private var deviceId: String {
         if let id = UserDefaults.standard.string(forKey: deviceIdKey) { return id }
         let id = UUID().uuidString.lowercased()
-        UserDefaults.standard.set(id, forKey: deviceIdKey)
+        Self.setUserDefault(.string(id), forKey: deviceIdKey)
         return id
     }
 
@@ -117,9 +117,52 @@ actor CloudKitSyncService {
         set {
             if let token = newValue,
                let data = try? NSKeyedArchiver.archivedData(withRootObject: token, requiringSecureCoding: true) {
-                UserDefaults.standard.set(data, forKey: tokenKey)
+                Self.setUserDefault(.data(data), forKey: tokenKey)
             } else {
-                UserDefaults.standard.removeObject(forKey: tokenKey)
+                Self.removeUserDefault(forKey: tokenKey)
+            }
+        }
+    }
+
+    private nonisolated enum UserDefaultValue: Sendable {
+        case string(String)
+        case data(Data)
+        case stringArray([String])
+        case int(Int)
+        case double(Double)
+    }
+
+    private nonisolated static func setUserDefault(_ value: UserDefaultValue, forKey key: String) {
+        if Thread.isMainThread {
+            writeUserDefault(value, forKey: key)
+        } else {
+            DispatchQueue.main.sync {
+                writeUserDefault(value, forKey: key)
+            }
+        }
+    }
+
+    private nonisolated static func writeUserDefault(_ value: UserDefaultValue, forKey key: String) {
+        switch value {
+        case .string(let value):
+            UserDefaults.standard.set(value, forKey: key)
+        case .data(let value):
+            UserDefaults.standard.set(value, forKey: key)
+        case .stringArray(let value):
+            UserDefaults.standard.set(value, forKey: key)
+        case .int(let value):
+            UserDefaults.standard.set(value, forKey: key)
+        case .double(let value):
+            UserDefaults.standard.set(value, forKey: key)
+        }
+    }
+
+    private nonisolated static func removeUserDefault(forKey key: String) {
+        if Thread.isMainThread {
+            UserDefaults.standard.removeObject(forKey: key)
+        } else {
+            DispatchQueue.main.sync {
+                UserDefaults.standard.removeObject(forKey: key)
             }
         }
     }
@@ -575,7 +618,7 @@ actor CloudKitSyncService {
 
     private var pendingMarkerDeletions: [String] {
         get { UserDefaults.standard.stringArray(forKey: Self.pendingMarkerDeletionsKey) ?? [] }
-        set { UserDefaults.standard.set(newValue, forKey: Self.pendingMarkerDeletionsKey) }
+        set { Self.setUserDefault(.stringArray(newValue), forKey: Self.pendingMarkerDeletionsKey) }
     }
 
     func isMarkerPendingDeletion(_ ckRecordName: String) -> Bool {
@@ -583,7 +626,7 @@ actor CloudKitSyncService {
     }
 
     func clearPendingMarkerDeletions() {
-        UserDefaults.standard.removeObject(forKey: Self.pendingMarkerDeletionsKey)
+        Self.removeUserDefault(forKey: Self.pendingMarkerDeletionsKey)
     }
 
     /// Marker zur Löschung vormerken und sofort einen Versuch starten.
@@ -630,7 +673,7 @@ actor CloudKitSyncService {
     /// setzen und sofort hochzuladen versuchen. Schlägt der Upload fehl (offline/Sync aus),
     /// holt ihn der nächste `syncNow` über `pushRetentionIfNeeded` nach.
     func recordRetentionChange() async {
-        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: retentionUpdatedAtKey)
+        Self.setUserDefault(.double(Date().timeIntervalSince1970), forKey: retentionUpdatedAtKey)
         await pushRetentionIfNeeded()
     }
 
@@ -654,7 +697,7 @@ actor CloudKitSyncService {
             rec["updatedAt"]        = updatedAt
             // Singleton, Last-write-wins → Server-Konflikt bewusst überschreiben.
             _ = try await db.modifyRecords(saving: [rec], deleting: [], savePolicy: .allKeys, atomically: true)
-            UserDefaults.standard.set(updatedAt, forKey: retentionSyncedAtKey)
+            Self.setUserDefault(.double(updatedAt), forKey: retentionSyncedAtKey)
             log("Retention settings uploaded")
         } catch {
             log("Retention upload failed — will retry on next sync: \(error.localizedDescription)", isError: true)
@@ -666,11 +709,11 @@ actor CloudKitSyncService {
         guard let updatedAt = record["updatedAt"] as? Double else { return }
         let localUpdated = UserDefaults.standard.double(forKey: retentionUpdatedAtKey)
         guard updatedAt > localUpdated else { return }   // lokaler Wert ist neuer → behalten
-        if let w = record["weeklyRetention"]  as? Int64 { UserDefaults.standard.set(Int(w), forKey: Self.weeklyKey) }
-        if let m = record["monthlyRetention"] as? Int64 { UserDefaults.standard.set(Int(m), forKey: Self.monthlyKey) }
-        if let y = record["yearlyRetention"]  as? Int64 { UserDefaults.standard.set(Int(y), forKey: Self.yearlyKey) }
-        UserDefaults.standard.set(updatedAt, forKey: retentionUpdatedAtKey)
-        UserDefaults.standard.set(updatedAt, forKey: retentionSyncedAtKey)   // kommt vom Server → kein Re-Upload
+        if let w = record["weeklyRetention"]  as? Int64 { Self.setUserDefault(.int(Int(w)), forKey: Self.weeklyKey) }
+        if let m = record["monthlyRetention"] as? Int64 { Self.setUserDefault(.int(Int(m)), forKey: Self.monthlyKey) }
+        if let y = record["yearlyRetention"]  as? Int64 { Self.setUserDefault(.int(Int(y)), forKey: Self.yearlyKey) }
+        Self.setUserDefault(.double(updatedAt), forKey: retentionUpdatedAtKey)
+        Self.setUserDefault(.double(updatedAt), forKey: retentionSyncedAtKey)   // kommt vom Server → kein Re-Upload
         log("Retention settings updated from iCloud")
     }
 
@@ -754,7 +797,7 @@ actor CloudKitSyncService {
         // Retention-Settings sind serverunabhängig: nach einem Zone-Wipe den lokalen
         // Stand neu hochladbar machen, damit er nicht aus iCloud verschwindet.
         if UserDefaults.standard.double(forKey: retentionUpdatedAtKey) > 0 {
-            UserDefaults.standard.set(0, forKey: retentionSyncedAtKey)
+            Self.setUserDefault(.int(0), forKey: retentionSyncedAtKey)
         }
         let sid: String = await MainActor.run {
             SubsonicAPIService.shared.activeServer?.stableId ?? ""

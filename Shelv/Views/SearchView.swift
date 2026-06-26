@@ -20,6 +20,7 @@ struct SearchView: View {
     @State private var lyricsResults: [LyricsSearchResult] = []
     @State private var isSearching = false
     @State private var searchTask: Task<Void, Never>?
+    @State private var appliedResetToken = 0
     @State private var showAddToPlaylist = false
     @State private var playlistSongIds: [String] = []
     @State private var errorMessage: String?
@@ -72,6 +73,28 @@ struct SearchView: View {
         !(result?.song ?? []).isEmpty ||
         !lyricsResults.isEmpty ||
         hasFavoriteResults
+    }
+
+    private func applyResetTokenIfNeeded(_ token: Int) {
+        guard token != 0, token != appliedResetToken else { return }
+        appliedResetToken = token
+        resetAndFocusSearch()
+    }
+
+    private func resetAndFocusSearch() {
+        searchTask?.cancel()
+        query = ""
+        result = nil
+        lyricsResults = []
+        isSearching = false
+        searchFieldActive = false
+
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(250))
+            searchFieldActive = true
+            try? await Task.sleep(for: .milliseconds(350))
+            searchFieldActive = true
+        }
     }
 
     var body: some View {
@@ -554,20 +577,11 @@ struct SearchView: View {
                 isPresented: $searchFieldActive,
                 prompt: String(localized: "artists_albums_songs")
             )
-            .onChange(of: resetToken) { _, _ in
-                searchTask?.cancel()
-                query = ""
-                result = nil
-                lyricsResults = []
-                // Erst Fokus explizit lösen → zurück in den leeren Initialzustand. Ohne dieses
-                // false→true-Toggle würde ein bereits aktives Suchfeld die Tastatur nicht neu
-                // öffnen (true→true ist kein Zustandswechsel). Die kurze Verzögerung lässt
-                // zusätzlich den Tab-Übergang sichtbar werden, bevor die Tastatur aufgeht.
-                searchFieldActive = false
-                Task { @MainActor in
-                    try? await Task.sleep(for: .milliseconds(300))
-                    searchFieldActive = true
-                }
+            .onAppear {
+                applyResetTokenIfNeeded(resetToken)
+            }
+            .onChange(of: resetToken) { _, newValue in
+                applyResetTokenIfNeeded(newValue)
             }
             .onChange(of: query) { _, newValue in
                 searchTask?.cancel()

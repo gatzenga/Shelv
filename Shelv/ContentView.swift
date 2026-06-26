@@ -11,9 +11,11 @@ struct ContentView: View {
     @ObservedObject var offlineMode = OfflineModeService.shared
     @ObservedObject var queueSync = QueueSyncService.shared
     @Environment(\.horizontalSizeClass) var horizontalSizeClass
+    @Environment(\.scenePhase) private var scenePhase
     @State private var selectedTab = 0
     @State private var searchResetToken = 0
     @State private var showPlayer = false
+    @State private var showRecap = false
     @State private var showAddServer = false
     @State private var playlistSongIds: [String]? = nil
     @State private var offlineToast: ShelveToast?
@@ -47,6 +49,13 @@ struct ContentView: View {
                 .presentationDragIndicator(.visible)
                 .tint(accentColor)
         }
+        .sheet(isPresented: $showRecap) {
+            RecapView()
+                .environmentObject(serverStore)
+                .presentationDetents([.large])
+                .presentationCornerRadius(24)
+                .tint(accentColor)
+        }
         .sheet(isPresented: $showAddServer) {
             AddServerView()
                 .environmentObject(serverStore)
@@ -68,6 +77,15 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .offlinePlaybackBlocked)) { _ in
             offlineToast = ShelveToast(message: String(localized: "not_available_offline"), isError: true)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .shelvShortcutDestinationRequested)) { note in
+            guard let rawValue = note.object as? String,
+                  let destination = ShelvShortcutDestination(rawValue: rawValue)
+            else {
+                handlePendingShortcutDestination()
+                return
+            }
+            handleShortcutDestination(destination)
+        }
         .shelveToast($offlineToast)
         .onChange(of: serverStore.activeServerID) { _, _ in
             AudioPlayerService.shared.stop()
@@ -85,10 +103,15 @@ struct ContentView: View {
         .onChange(of: enablePlaylists) { _, enabled in
             if !enabled && selectedTab == 2 { selectedTab = 0 }
         }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            handlePendingShortcutDestination()
+        }
         .onAppear {
             if serverStore.servers.isEmpty {
                 showAddServer = true
             }
+            handlePendingShortcutDestination()
         }
     }
 
@@ -151,6 +174,32 @@ struct ContentView: View {
             }
             .allowsHitTesting(offlineMode.serverErrorBannerVisible || queueSync.pendingRemote != nil)
             .ignoresSafeArea(edges: .top)
+        }
+    }
+
+    private func handlePendingShortcutDestination() {
+        guard let destination = ShelvShortcutHandoff.consumePendingDestination() else { return }
+        handleShortcutDestination(destination)
+    }
+
+    private func handleShortcutDestination(_ destination: ShelvShortcutDestination) {
+        switch destination {
+        case .discover:
+            selectedTab = 0
+        case .library:
+            selectedTab = 1
+        case .search:
+            searchResetToken += 1
+            selectedTab = 4
+        case .recap:
+            selectedTab = 0
+            showRecap = true
+        case .nowPlaying:
+            if AudioPlayerService.shared.currentSong != nil {
+                showPlayer = true
+            } else {
+                selectedTab = 0
+            }
         }
     }
 }

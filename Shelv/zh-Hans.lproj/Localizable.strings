@@ -322,6 +322,7 @@
 "manage_server" = "管理服务器";
 "enable_downloads" = "启用下载";
 "offline_mode" = "离线模式";
+"prevent_sleep_during_downloads" = "下载时保持屏幕常亮";
 "max_storage" = "最大存储";
 "delete_all_downloads" = "删除全部下载";
 "delete_all_downloads_2" = "删除全部下载？";

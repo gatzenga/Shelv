@@ -4,6 +4,7 @@ struct DownloadsSettingsView: View {
     @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage("enableDownloads") private var enableDownloads = false
     @AppStorage("maxBulkDownloadStorageGB") private var maxBulkStorageGB = 10
+    @AppStorage("preventSleepDuringDownloads") private var preventSleepDuringDownloads = false
     @ObservedObject var offlineMode = OfflineModeService.shared
 
     @State private var showBulkDownloadSheet = false
@@ -40,6 +41,13 @@ struct DownloadsSettingsView: View {
                     )) {
                         Label { Text(String(localized: "offline_mode")) } icon: {
                             Image(systemName: "wifi.slash").foregroundStyle(accentColor)
+                        }
+                    }
+                    .tint(accentColor)
+
+                    Toggle(isOn: $preventSleepDuringDownloads) {
+                        Label { Text(String(localized: "prevent_sleep_during_downloads")) } icon: {
+                            Image(systemName: "lock.open.display").foregroundStyle(accentColor)
                         }
                     }
                     .tint(accentColor)

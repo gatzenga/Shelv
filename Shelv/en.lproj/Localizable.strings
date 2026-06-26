@@ -323,6 +323,7 @@
 "manage_server" = "Manage Server";
 "enable_downloads" = "Enable Downloads";
 "offline_mode" = "Offline Mode";
+"prevent_sleep_during_downloads" = "Keep Screen On During Downloads";
 "max_storage" = "Max Storage";
 "delete_all_downloads" = "Delete All Downloads";
 "delete_all_downloads_2" = "Delete all downloads?";

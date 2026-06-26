@@ -1,3 +1,4 @@
+import AppIntents
 import SwiftUI
 
 let appLang: String = Locale.preferredLanguages.first?.hasPrefix("de") == true ? "de" : "en"
@@ -36,9 +37,11 @@ func haptic(_ style: UIImpactFeedbackGenerator.FeedbackStyle = .light) {
 struct ShelvApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var serverStore = ServerStore()
+    @ObservedObject private var downloadStore = DownloadStore.shared
     private let _playTracker = PlayTracker.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage("appAppearance") private var appAppearance = "system"
+    @AppStorage("preventSleepDuringDownloads") private var preventSleepDuringDownloads = false
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
@@ -62,6 +65,7 @@ struct ShelvApp: App {
             "transcodingDownloadCodec": "raw",
             "transcodingDownloadBitrate": 192,
         ])
+        ShelvAppShortcuts.updateAppShortcutParameters()
     }
 
     private var preferredScheme: ColorScheme? {
@@ -128,14 +132,33 @@ struct ShelvApp: App {
                     await CloudKitSyncService.shared.setup()
                 }
                 .onChange(of: scenePhase) { _, phase in
+                    updateIdleTimer(phase: phase)
                     guard phase == .active else { return }
                     // syncNow prüft die Remote-Queue automatisch mit.
                     Task { await CloudKitSyncService.shared.syncNow() }
+                }
+                .onChange(of: downloadStore.batchProgress) { _, _ in
+                    updateIdleTimer(phase: scenePhase)
+                }
+                .onChange(of: preventSleepDuringDownloads) { _, _ in
+                    updateIdleTimer(phase: scenePhase)
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .recapRegistryUpdated)) { _ in
                     guard let server = serverStore.activeServer else { return }
                     Task { await RecapStore.shared.loadEntries(serverId: server.stableId) }
                 }
         }
+    }
+
+    /// Verhindert das automatische Sperren des Bildschirms, solange der Toggle aktiv ist,
+    /// Downloads laufen und die App im Vordergrund ist. Sobald eine dieser Bedingungen
+    /// wegfällt (App in Background, Downloads fertig, Toggle aus), wird das normale
+    /// Sperrverhalten wiederhergestellt.
+    private func updateIdleTimer(phase: ScenePhase) {
+        let hasRunningDownloads = (downloadStore.batchProgress?.remaining ?? 0) > 0
+        let shouldPrevent = preventSleepDuringDownloads
+            && phase == .active
+            && hasRunningDownloads
+        UIApplication.shared.isIdleTimerDisabled = shouldPrevent
     }
 }
