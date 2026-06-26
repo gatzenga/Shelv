@@ -10,6 +10,13 @@ struct PlaybackSettingsView: View {
     @AppStorage("transcodingWifiCodec") private var streamCodec = "raw"
     @AppStorage("transcodingWifiBitrate") private var streamBitrate = 256
     @AppStorage("queueSyncMode") private var queueSyncMode = "off"
+    @AppStorage("autoFetchLyrics") private var autoFetchLyrics = true
+    @AppStorage("includeNavidromeLyrics") private var includeNavidromeLyrics = false
+    @AppStorage("useCustomLrcLibServer") private var useCustomLrcLibServer = false
+    @AppStorage("customLrcLibBaseURL") private var customLrcLibBaseURL = ""
+
+    @State private var showLrcLibServerEditor = false
+    @State private var draftLrcLibBaseURL = ""
 
     var body: some View {
         Form {
@@ -56,6 +63,26 @@ struct PlaybackSettingsView: View {
                 }
             }
 
+            Section(String(localized: "lyrics")) {
+                Toggle(String(localized: "autofetch_on_playback"), isOn: $autoFetchLyrics)
+                Toggle(String(localized: "include_navidrome_lyrics"), isOn: $includeNavidromeLyrics)
+                Toggle(String(localized: "use_custom_lrclib_server"), isOn: $useCustomLrcLibServer)
+                if useCustomLrcLibServer {
+                    Button {
+                        draftLrcLibBaseURL = customLrcLibBaseURL
+                        showLrcLibServerEditor = true
+                    } label: {
+                        HStack {
+                            Text(String(localized: "lrclib_server_url"))
+                            Spacer()
+                            Text(customLrcLibBaseURL.isEmpty ? LrcLibEndpoint.defaultBaseURL : customLrcLibBaseURL)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
+                }
+            }
+
             Section(String(localized: "queue_sync")) {
                 Picker(String(localized: "queue_sync"), selection: $queueSyncMode) {
                     Text(String(localized: "queue_sync_off")).tag("off")
@@ -71,6 +98,33 @@ struct PlaybackSettingsView: View {
             }
         }
         .toolbar(.hidden, for: .tabBar)
+        .sheet(isPresented: $showLrcLibServerEditor) {
+            NavigationStack {
+                Form {
+                    Section(String(localized: "lyrics")) {
+                        TextField(String(localized: "lrclib_server_url"), text: $draftLrcLibBaseURL)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .keyboardType(.URL)
+                    }
+                }
+                .navigationTitle(String(localized: "lrclib_server_url"))
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button(String(localized: "cancel")) {
+                            showLrcLibServerEditor = false
+                        }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button(String(localized: "done")) {
+                            customLrcLibBaseURL = draftLrcLibBaseURL
+                                .trimmingCharacters(in: .whitespacesAndNewlines)
+                            showLrcLibServerEditor = false
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

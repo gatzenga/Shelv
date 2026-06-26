@@ -5,6 +5,9 @@ struct LyricsSettingsPanel: View {
     @EnvironmentObject var lyricsStore: LyricsStore
     @Environment(\.themeColor) private var themeColor
     @AppStorage("autoFetchLyrics") private var autoFetchLyrics = true
+    @AppStorage("includeNavidromeLyrics") private var includeNavidromeLyrics = false
+    @AppStorage("useCustomLrcLibServer") private var useCustomLrcLibServer = false
+    @AppStorage("customLrcLibBaseURL") private var customLrcLibBaseURL = ""
 
     @State private var showResetConfirm = false
 
@@ -16,9 +19,40 @@ struct LyricsSettingsPanel: View {
         Form {
             Section {
                 Toggle(isOn: $autoFetchLyrics) {
-                    Label(String(localized: "autofetch_on_playback"), systemImage: "wand.and.stars")
+                    Label {
+                        Text(String(localized: "autofetch_on_playback"))
+                    } icon: {
+                        Image(systemName: "wand.and.stars")
+                            .foregroundStyle(themeColor)
+                    }
                 }
                 .tint(themeColor)
+
+                Toggle(isOn: $includeNavidromeLyrics) {
+                    Label {
+                        Text(String(localized: "include_navidrome_lyrics"))
+                    } icon: {
+                        Image(systemName: "server.rack")
+                            .foregroundStyle(themeColor)
+                    }
+                }
+                .tint(themeColor)
+
+                Toggle(isOn: $useCustomLrcLibServer) {
+                    Label {
+                        Text(String(localized: "use_custom_lrclib_server"))
+                    } icon: {
+                        Image(systemName: "globe")
+                            .foregroundStyle(themeColor)
+                    }
+                }
+                .tint(themeColor)
+
+                if useCustomLrcLibServer {
+                    TextField(String(localized: "lrclib_server_url"), text: $customLrcLibBaseURL)
+                        .textFieldStyle(.roundedBorder)
+                        .autocorrectionDisabled()
+                }
             }
 
             Section(String(localized: "database")) {

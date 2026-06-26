@@ -74,8 +74,39 @@ private struct SyncLogView: View {
 /// Live Datenbank-Fehler-Log — beobachtet DBErrorLog, neue Fehler erscheinen sofort.
 private struct DatabaseErrorLogView: View {
     @ObservedObject private var dbErrors = DBErrorLog.shared
+    @State private var segment: LogTab = .playLog
+
+    private enum LogTab: String, CaseIterable {
+        case playLog, lyrics
+
+        var title: String {
+            switch self {
+            case .playLog: return String(localized: "play_log_db")
+            case .lyrics: return String(localized: "lyrics_db")
+            }
+        }
+    }
+
+    private var entries: [String] {
+        switch segment {
+        case .playLog: return dbErrors.playLogEntries
+        case .lyrics: return dbErrors.lyricsEntries
+        }
+    }
 
     var body: some View {
-        LogListView(title: String(localized: "database_errors"), entries: dbErrors.playLogEntries)
+        VStack(spacing: 0) {
+            Picker("", selection: $segment) {
+                ForEach(LogTab.allCases, id: \.self) { tab in
+                    Text(tab.title).tag(tab)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(.horizontal, 50)
+            .padding(.top, 24)
+
+            LogListView(title: String(localized: "database_errors"), entries: entries)
+        }
     }
 }

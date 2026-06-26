@@ -133,7 +133,7 @@ struct DatabaseTab: View {
                     Label(String(localized: "sync_log"), systemImage: "doc.text")
                 }
                 Button { showDBLog = true } label: {
-                    Label(String(localized: "database_errors"), systemImage: "exclamationmark.octagon")
+                    Label(String(localized: "database_errors"), systemImage: "tablecells")
                 }
             }
 

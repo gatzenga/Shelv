@@ -199,7 +199,7 @@ struct DatabaseSettingsView: View {
                     }
                     NavigationLink(destination: RecapDBLogView()) {
                         Label { Text(String(localized: "database_errors")) } icon: {
-                            Image(systemName: "exclamationmark.octagon").foregroundStyle(accentColor)
+                            Image(systemName: "tablecells").foregroundStyle(accentColor)
                         }
                     }
                 }

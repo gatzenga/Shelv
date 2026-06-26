@@ -92,12 +92,14 @@ class LyricsStore: ObservableObject {
             }
             guard !Task.isCancelled else { return }
 
-            let totalCount = allSongs.count
-            await MainActor.run { [weak self] in self?.downloadTotal = totalCount }
+            let cachedSongIds = await LyricsService.shared.cachedSongIds(serverId: serverId)
+            let songsToDownload = allSongs.filter { !cachedSongIds.contains($0.id) }
+
+            await MainActor.run { [weak self] in self?.downloadTotal = songsToDownload.count }
 
             await withTaskGroup(of: Void.self) { group in
                 let maxConcurrent = 5
-                var iterator = allSongs.makeIterator()
+                var iterator = songsToDownload.makeIterator()
                 var active = 0
                 while active < maxConcurrent, let song = iterator.next() {
                     group.addTask { _ = await svc.fetchAndSave(song: song, serverId: serverId) }
@@ -136,7 +138,9 @@ class LyricsStore: ObservableObject {
     // MARK: - Reset
 
     func reset(serverId: String) async {
-        await LyricsService.shared.reset(serverId: serverId)
+        downloadTask?.cancel()
+        downloadTask = nil
+        await LyricsService.shared.resetAll()
         currentLyrics = nil
         downloadFetched = 0
         downloadTotal = 0

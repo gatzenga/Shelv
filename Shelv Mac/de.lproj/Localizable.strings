@@ -157,6 +157,9 @@
 "instrumental" = "Instrumental";
 "no_lyrics_available" = "Keine Lyrics verfügbar";
 "autofetch_on_playback" = "Beim Abspielen laden";
+"include_navidrome_lyrics" = "Navidrome-Lyrics einbeziehen";
+"use_custom_lrclib_server" = "Eigenen LRCLIB-Server verwenden";
+"lrclib_server_url" = "LRCLIB-Server-URL";
 "database" = "Datenbank";
 "stored" = "Gespeichert";
 "download_all_lyrics" = "Alle Lyrics laden";
@@ -238,7 +241,7 @@
 "play_log_db" = "Play-Log-DB";
 "lyrics_db" = "Lyrics-DB";
 "no_database_errors" = "Keine Datenbank-Fehler.";
-"database_errors" = "Datenbank-Fehler";
+"database_errors" = "Datenbank";
 "no_songs" = "Keine Titel";
 "no_songs_found_for_this_period" = "Keine Titel für diesen Zeitraum gefunden.";
 "delete_recap" = "Recap löschen";

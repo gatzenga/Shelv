@@ -105,6 +105,7 @@ struct SearchView: View {
                                 ForEach(lyricsResults) { item in
                                     LyricsSearchRow(
                                         item: item,
+                                        query: vm.query,
                                         showFavorite: enableFavorites,
                                         showPlaylist: enablePlaylists,
                                         onPlay: { playLyricsResult(item) },
@@ -431,6 +432,7 @@ class SearchViewModel: ObservableObject {
 
 struct LyricsSearchRow: View {
     let item: LyricsSearchResult
+    let query: String
     var showFavorite: Bool = false
     var showPlaylist: Bool = false
     let onPlay: () -> Void
@@ -462,9 +464,12 @@ struct LyricsSearchRow: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
-                Text(item.snippet)
+                highlightedLyricsSnippet(
+                    item.snippet,
+                    query: query,
+                    accentColor: themeColor
+                )
                     .font(.caption2)
-                    .foregroundStyle(.tertiary)
                     .lineLimit(1)
                     .italic()
             }
@@ -508,6 +513,39 @@ struct LyricsSearchRow: View {
                 }
             }
         }
+    }
+
+    private func highlightedLyricsSnippet(_ snippet: String, query: String, accentColor: Color) -> Text {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !snippet.isEmpty, !needle.isEmpty else {
+            return Text(snippet).foregroundStyle(.tertiary)
+        }
+
+        var output = Text("")
+        var searchStart = snippet.startIndex
+
+        while searchStart < snippet.endIndex,
+              let range = snippet.range(
+                of: needle,
+                options: [.caseInsensitive, .diacriticInsensitive],
+                range: searchStart..<snippet.endIndex
+              ) {
+            if searchStart < range.lowerBound {
+                output = output + Text(String(snippet[searchStart..<range.lowerBound]))
+                    .foregroundStyle(.tertiary)
+            }
+            output = output + Text(String(snippet[range]))
+                .foregroundStyle(accentColor)
+                .bold()
+            searchStart = range.upperBound
+        }
+
+        if searchStart < snippet.endIndex {
+            output = output + Text(String(snippet[searchStart..<snippet.endIndex]))
+                .foregroundStyle(.tertiary)
+        }
+
+        return output
     }
 }
 

@@ -9,7 +9,9 @@ actor LyricsBackgroundService {
     private let coordinator = LyricsSessionCoordinator()
     private var session: URLSession?
     private let backgroundIdentifier = "ch.vkugler.Shelv.lyrics.bg"
-    private let maxConcurrent = 10
+    /// Number of song pipelines running at once. Each pipeline walks
+    /// Navidrome -> LRCLIB cached -> LRCLIB full before another song takes that slot.
+    private let maxConcurrent = 5
 
     // MARK: - Job
 
@@ -66,10 +68,13 @@ actor LyricsBackgroundService {
             cfg.sessionSendsLaunchEvents = true
             cfg.allowsCellularAccess = true
             cfg.httpMaximumConnectionsPerHost = maxConcurrent
+            cfg.timeoutIntervalForRequest = 12
+            cfg.timeoutIntervalForResource = 30
             // TCP-Connection-Reuse über mehrere Requests hinweg (HTTP/2-Multiplexing nutzbar)
             cfg.shouldUseExtendedBackgroundIdleMode = true
-            // Bei kurzem Connectivity-Loss warten statt sofort failen → spart Retry-Backoffs
-            cfg.waitsForConnectivity = true
+            // Lyrics-Bulk soll pro Song sichtbar weiterlaufen. Wenn ein Custom-Server
+            // nicht erreichbar ist, darf nsurlsessiond nicht minutenlang auf Connectivity warten.
+            cfg.waitsForConnectivity = false
             let s = URLSession(configuration: cfg, delegate: coordinator, delegateQueue: nil)
             session = s
             s.getAllTasks { [weak self] tasks in
@@ -99,6 +104,10 @@ actor LyricsBackgroundService {
 
     func isRunning() -> Bool {
         !pending.isEmpty || !inflight.isEmpty
+    }
+
+    func progressSnapshot() -> (completed: Int, total: Int)? {
+        totalCount > 0 ? (completedCount, totalCount) : nil
     }
 
     func enqueueSongs(_ songs: [Song], serverId: String) async {
@@ -186,10 +195,16 @@ actor LyricsBackgroundService {
             case .lrcGet:    url = job.lrcGetURL
             }
             guard let url else {
+                DBErrorLog.logLyrics("Bulk skipped → \(layerDescription(job.layer)): missing URL for \(job.songTitle)")
                 advanceLayerOrFinish(job: job)
                 continue
             }
-            let task = session.downloadTask(with: url)
+            logRequest(job: job, url: url)
+            var request = URLRequest(url: url, timeoutInterval: 12)
+            if job.layer != .navidrome {
+                request.setValue("Shelv/1.0 (https://github.com/gatzenga/Shelv)", forHTTPHeaderField: "User-Agent")
+            }
+            let task = session.downloadTask(with: request)
             if let desc = encodeJob(job) { task.taskDescription = desc }
             inflight[task.taskIdentifier] = job
             task.resume()
@@ -208,6 +223,7 @@ actor LyricsBackgroundService {
 
         // Netzwerk-Fehler (5xx, 429) → Retry-Pfad
         if (500...599).contains(statusCode) || statusCode == 429 {
+            DBErrorLog.logLyrics("Bulk response → \(layerDescription(job.layer)) HTTP \(statusCode): \(job.songTitle)")
             handleNetworkFailure(job: job)
             return
         }
@@ -224,14 +240,12 @@ actor LyricsBackgroundService {
 
         if let record = savedRecord {
             Task { await LyricsService.shared.save(record) }
-            trackedKeys.remove("\(job.serverId)::\(job.songId)")
-            completedCount += 1
-            publishProgress()
-            startNextJobs()
+            finishJob(job, result: record.source)
             return
         }
 
         // Kein Match → weiter zur nächsten Layer (oder fertig)
+        logNoMatch(job: job, statusCode: statusCode)
         advanceLayerOrFinish(job: job)
     }
 
@@ -243,13 +257,15 @@ actor LyricsBackgroundService {
             var next = job
             next.layer = .lrcCached
             next.retryCount = 0
-            pending.append(next)
+            DBErrorLog.logLyrics("Bulk next → LRCLIB cached: \(job.songTitle)")
+            pending.insert(next, at: 0)
             startNextJobs()
         case .lrcCached:
             var next = job
             next.layer = .lrcGet
             next.retryCount = 0
-            pending.append(next)
+            DBErrorLog.logLyrics("Bulk next → LRCLIB full: \(job.songTitle)")
+            pending.insert(next, at: 0)
             startNextJobs()
         case .lrcGet:
             saveNone(job: job)
@@ -267,6 +283,7 @@ actor LyricsBackgroundService {
         // User-Cancel: kein Save, kein Progress-Bump
         if let urlError = error as? URLError, urlError.code == .cancelled { return }
 
+        DBErrorLog.logLyrics("Bulk error → \(layerDescription(job.layer)): \(job.songTitle) — \(error?.localizedDescription ?? "unknown error")")
         handleNetworkFailure(job: job)
     }
 
@@ -278,6 +295,7 @@ actor LyricsBackgroundService {
             let attempt = next.retryCount  // 1 oder 2
             let backoffMs: UInt64 = attempt == 1 ? 500 : 1500
             let jitter = UInt64.random(in: 0...250)
+            DBErrorLog.logLyrics("Bulk retry → \(layerDescription(job.layer)) attempt \(attempt + 1): \(job.songTitle)")
             Task { [weak self] in
                 try? await Task.sleep(nanoseconds: (backoffMs + jitter) * 1_000_000)
                 await self?.requeue(next)
@@ -285,16 +303,21 @@ actor LyricsBackgroundService {
             // Freigewordenen Slot direkt mit dem nächsten Pending-Job füllen
             startNextJobs()
         } else {
+            DBErrorLog.logLyrics("Bulk give up → \(layerDescription(job.layer)): \(job.songTitle)")
+            if LrcLibEndpoint.isCustomEnabled && (job.layer == .lrcCached || job.layer == .lrcGet) {
+                DBErrorLog.logLyrics("Bulk fallback skipped → LRCLIB online: custom server is enabled")
+            }
             advanceLayerOrFinish(job: job)
         }
     }
 
     private func requeue(_ job: LyricsJob) {
-        pending.append(job)
+        pending.insert(job, at: 0)
         startNextJobs()
     }
 
     private func saveNone(job: LyricsJob) {
+        DBErrorLog.logLyrics("Bulk no lyrics → \(job.songTitle)")
         let none = LyricsRecord(
             songId: job.songId, serverId: job.serverId, source: "none",
             plainText: nil, syncedLrc: nil, isSynced: false,
@@ -304,10 +327,54 @@ actor LyricsBackgroundService {
             songDuration: job.duration
         )
         Task { await LyricsService.shared.save(none) }
+        finishJob(job, result: "none")
+    }
+
+    private func finishJob(_ job: LyricsJob, result: String) {
         trackedKeys.remove("\(job.serverId)::\(job.songId)")
         completedCount += 1
+        DBErrorLog.logLyrics("Bulk complete → \(result): \(job.songTitle) (\(completedCount)/\(totalCount))")
         publishProgress()
         startNextJobs()
+    }
+
+    private func logRequest(job: LyricsJob, url: URL) {
+        let source: String
+        switch job.layer {
+        case .navidrome:
+            source = "Navidrome"
+        case .lrcCached, .lrcGet:
+            source = LrcLibEndpoint.sourceDescription(for: url)
+        }
+        DBErrorLog.logLyrics("Bulk request → \(source): \(displayURL(url, for: job.layer))")
+    }
+
+    private func logNoMatch(job: LyricsJob, statusCode: Int) {
+        let status = statusCode > 0 ? "HTTP \(statusCode)" : "no HTTP response"
+        DBErrorLog.logLyrics("Bulk no match → \(layerDescription(job.layer)) \(status): \(job.songTitle)")
+    }
+
+    private func layerDescription(_ layer: LyricsJob.Layer) -> String {
+        switch layer {
+        case .navidrome:
+            return "Navidrome"
+        case .lrcCached:
+            return LrcLibEndpoint.isCustomEnabled ? "LRCLIB custom cached" : "LRCLIB online cached"
+        case .lrcGet:
+            return LrcLibEndpoint.isCustomEnabled ? "LRCLIB custom full" : "LRCLIB online full"
+        }
+    }
+
+    private func displayURL(_ url: URL, for layer: LyricsJob.Layer) -> String {
+        guard layer == .navidrome,
+              var comps = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        else { return url.absoluteString }
+
+        let safeItems = (comps.queryItems ?? []).filter { item in
+            item.name == "id" || item.name == "v" || item.name == "c" || item.name == "f"
+        }
+        comps.queryItems = safeItems.isEmpty ? nil : safeItems
+        return comps.url?.absoluteString ?? url.host ?? "Navidrome"
     }
 
     // MARK: - Parsing
@@ -375,14 +442,12 @@ actor LyricsBackgroundService {
 
     /// cached=true → schnelle Cache-Schicht (~3.6s typ.), cached=false → volle Suche (~7.5s typ.)
     private static func buildLrcLibURL(cached: Bool, title: String, artist: String?, album: String?, duration: Int?) -> URL? {
-        guard var comps = URLComponents(string: "https://lrclib.net/api/get") else { return nil }
         var items = [URLQueryItem(name: "track_name", value: title)]
         if let a = artist { items.append(URLQueryItem(name: "artist_name", value: a)) }
         if let a = album  { items.append(URLQueryItem(name: "album_name",  value: a)) }
         if let d = duration { items.append(URLQueryItem(name: "duration", value: "\(d)")) }
         if cached { items.append(URLQueryItem(name: "cached", value: "true")) }
-        comps.queryItems = items
-        return comps.url
+        return LrcLibEndpoint.apiURL(queryItems: items)
     }
 
     // MARK: - Codable Helpers

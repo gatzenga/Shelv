@@ -35,6 +35,96 @@ struct LyricsSearchResult: Identifiable {
 
 // MARK: - LRCLIB Response
 
+enum LrcLibEndpoint {
+    struct RequestInfo {
+        let url: URL
+        let source: String
+    }
+
+    nonisolated static let defaultBaseURL = "https://lrclib.net"
+    nonisolated static let useCustomKey = "useCustomLrcLibServer"
+    nonisolated static let customBaseURLKey = "customLrcLibBaseURL"
+
+    nonisolated static func apiURL(queryItems: [URLQueryItem]) -> URL? {
+        apiRequest(queryItems: queryItems)?.url
+    }
+
+    nonisolated static func apiRequest(queryItems: [URLQueryItem]) -> RequestInfo? {
+        guard let resolved = selectedBaseURL() else { return nil }
+        let base = resolved.url
+        let source = resolved.isCustom ? "LRCLIB custom" : "LRCLIB online"
+        var endpoint = base
+        let path = endpoint.path
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            .lowercased()
+
+        if path.hasSuffix("api/get") {
+            // User supplied a full endpoint; keep it usable.
+        } else if path.hasSuffix("api") {
+            endpoint.appendPathComponent("get")
+        } else {
+            endpoint.appendPathComponent("api")
+            endpoint.appendPathComponent("get")
+        }
+
+        guard var comps = URLComponents(url: endpoint, resolvingAgainstBaseURL: false) else {
+            return nil
+        }
+        comps.queryItems = queryItems
+        guard let url = comps.url else { return nil }
+        return RequestInfo(url: url, source: source)
+    }
+
+    nonisolated static func sourceDescription(for url: URL) -> String {
+        guard let defaultHost = URL(string: defaultBaseURL)?.host?.lowercased(),
+              url.host?.lowercased() == defaultHost
+        else { return "LRCLIB custom" }
+        return "LRCLIB online"
+    }
+
+    nonisolated static var isCustomEnabled: Bool {
+        UserDefaults.standard.bool(forKey: useCustomKey)
+    }
+
+    nonisolated private static func selectedBaseURL() -> (url: URL, isCustom: Bool)? {
+        let defaults = UserDefaults.standard
+        if defaults.bool(forKey: useCustomKey) {
+            guard let custom = normalizedBaseURL(from: defaults.string(forKey: customBaseURLKey) ?? "") else {
+                return nil
+            }
+            return (custom, true)
+        }
+        return (URL(string: defaultBaseURL)!, false)
+    }
+
+    nonisolated private static func normalizedBaseURL(from rawValue: String) -> URL? {
+        var raw = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty else { return nil }
+
+        let hasScheme = raw.range(
+            of: #"^[A-Za-z][A-Za-z0-9+\-.]*://"#,
+            options: .regularExpression
+        ) != nil
+        if !hasScheme {
+            raw = "https://\(raw)"
+        }
+
+        guard var comps = URLComponents(string: raw),
+              let scheme = comps.scheme?.lowercased(),
+              scheme == "http" || scheme == "https",
+              comps.host?.isEmpty == false
+        else { return nil }
+
+        comps.scheme = scheme
+        comps.query = nil
+        comps.fragment = nil
+        while comps.path.hasSuffix("/") {
+            comps.path.removeLast()
+        }
+        return comps.url
+    }
+}
+
 nonisolated private struct LrcLibResponse: Decodable, Sendable {
     let instrumental: Bool?
     let plainLyrics: String?
@@ -229,6 +319,17 @@ actor LyricsService {
         safeWrite { db in
             try db.execute(sql: "DELETE FROM lyrics WHERE serverId = ?", arguments: [serverId])
         }
+        shrinkDatabaseAfterReset()
+    }
+
+    func resetAll() {
+        safeWrite { db in
+            try db.execute(sql: "DELETE FROM lyrics")
+        }
+        shrinkDatabaseAfterReset()
+    }
+
+    private func shrinkDatabaseAfterReset() {
         guard let pool else { return }
         // VACUUM + WAL-Checkpoint(TRUNCATE): schrumpft sowohl .db als auch .db-wal.
         // Beides muss außerhalb einer Transaktion laufen.
@@ -265,7 +366,8 @@ actor LyricsService {
             return cached
         }
 
-        if let lrc = await fetchFromNavidrome(song: song, serverId: serverId) {
+        let includeNavidrome = UserDefaults.standard.bool(forKey: "includeNavidromeLyrics")
+        if includeNavidrome, let lrc = await fetchFromNavidrome(song: song, serverId: serverId) {
             save(lrc); return lrc
         }
 
@@ -338,8 +440,12 @@ actor LyricsService {
     // MARK: - Navidrome
 
     private func fetchFromNavidrome(song: Song, serverId: String) async -> LyricsRecord? {
+        DBErrorLog.logLyrics("Request → Navidrome: \(song.title)")
         guard let entry = try? await SubsonicAPIService.shared.getLyricsBySongId(songId: song.id),
-              let lines = entry.line, !lines.isEmpty else { return nil }
+              let lines = entry.line, !lines.isEmpty else {
+            DBErrorLog.logLyrics("No match → Navidrome: \(song.title)")
+            return nil
+        }
 
         let plain = lines.map { $0.value }.joined(separator: "\n")
         guard !plain.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
@@ -369,13 +475,18 @@ actor LyricsService {
     // MARK: - LRCLIB
 
     private func fetchFromLrcLib(song: Song, serverId: String) async -> LrcLibOutcome {
-        guard var comps = URLComponents(string: "https://lrclib.net/api/get") else { return .indeterminate }
         var items: [URLQueryItem] = [URLQueryItem(name: "track_name", value: song.title)]
         if let a = song.artist  { items.append(URLQueryItem(name: "artist_name", value: a)) }
         if let a = song.album   { items.append(URLQueryItem(name: "album_name",  value: a)) }
         if let d = song.duration { items.append(URLQueryItem(name: "duration",   value: "\(d)")) }
-        comps.queryItems = items
-        guard let url = comps.url else { return .indeterminate }
+        guard let requestInfo = LrcLibEndpoint.apiRequest(queryItems: items) else {
+            if LrcLibEndpoint.isCustomEnabled {
+                DBErrorLog.logLyrics("Request skipped → LRCLIB custom: invalid or empty server URL")
+            }
+            return .indeterminate
+        }
+        let url = requestInfo.url
+        DBErrorLog.logLyrics("Request → \(requestInfo.source): \(url.absoluteString)")
 
         var req = URLRequest(url: url, timeoutInterval: 10)
         req.setValue("Shelv/1.0 (https://github.com/gatzenga/Shelv)", forHTTPHeaderField: "User-Agent")
@@ -397,17 +508,32 @@ actor LyricsService {
                 guard let h = resp as? HTTPURLResponse else { continue }
                 http = h
                 data = d
-                if h.statusCode == 404 { return .notFound }
+                if h.statusCode == 404 {
+                    DBErrorLog.logLyrics("No match → \(requestInfo.source) HTTP 404: \(song.title)")
+                    return .notFound
+                }
                 if h.statusCode == 200 { break }
                 // 429, 5xx → nächster Versuch
-                if Task.isCancelled || attempt == backoffsMs.count - 1 { return .indeterminate }
+                DBErrorLog.logLyrics("Response → \(requestInfo.source) HTTP \(h.statusCode): \(song.title)")
+                if Task.isCancelled || attempt == backoffsMs.count - 1 {
+                    logLrcLibFallbackSkippedIfNeeded()
+                    return .indeterminate
+                }
             } catch {
-                if Task.isCancelled || attempt == backoffsMs.count - 1 { return .indeterminate }
+                DBErrorLog.logLyrics("Error → \(requestInfo.source): \(song.title) — \(error.localizedDescription)")
+                if Task.isCancelled || attempt == backoffsMs.count - 1 {
+                    logLrcLibFallbackSkippedIfNeeded()
+                    return .indeterminate
+                }
             }
         }
-        guard http?.statusCode == 200 else { return .indeterminate }
+        guard http?.statusCode == 200 else {
+            logLrcLibFallbackSkippedIfNeeded()
+            return .indeterminate
+        }
 
         guard let lrc = try? JSONDecoder().decode(LrcLibResponse.self, from: data) else {
+            DBErrorLog.logLyrics("Invalid response → \(requestInfo.source): \(song.title)")
             return .indeterminate
         }
 
@@ -421,7 +547,10 @@ actor LyricsService {
             ))
         }
 
-        guard lrc.plainLyrics != nil || lrc.syncedLyrics != nil else { return .notFound }
+        guard lrc.plainLyrics != nil || lrc.syncedLyrics != nil else {
+            DBErrorLog.logLyrics("No match → \(requestInfo.source): \(song.title)")
+            return .notFound
+        }
 
         return .found(LyricsRecord(
             songId: song.id, serverId: serverId, source: "lrclib",
@@ -432,5 +561,11 @@ actor LyricsService {
             fetchedAt: Date().timeIntervalSince1970,
             songTitle: song.title, artistName: song.artist, coverArt: song.coverArt
         ))
+    }
+
+    private func logLrcLibFallbackSkippedIfNeeded() {
+        if LrcLibEndpoint.isCustomEnabled {
+            DBErrorLog.logLyrics("Fallback skipped → LRCLIB online: custom server is enabled")
+        }
     }
 }

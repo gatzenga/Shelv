@@ -6,6 +6,8 @@ struct LyricsSettingsView: View {
     @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage("autoFetchLyrics") private var autoFetchLyrics = true
     @AppStorage("includeNavidromeLyrics") private var includeNavidromeLyrics = false
+    @AppStorage("useCustomLrcLibServer") private var useCustomLrcLibServer = false
+    @AppStorage("customLrcLibBaseURL") private var customLrcLibBaseURL = ""
 
     @State private var showResetLyricsConfirm = false
     @State private var showPreCacheInfo = false
@@ -48,6 +50,20 @@ struct LyricsSettingsView: View {
                 }
                 .tint(accentColor)
 
+                Toggle(isOn: $useCustomLrcLibServer) {
+                    Label { Text(String(localized: "use_custom_lrclib_server")) } icon: {
+                        Image(systemName: "globe").foregroundStyle(accentColor)
+                    }
+                }
+                .tint(accentColor)
+
+                if useCustomLrcLibServer {
+                    TextField(String(localized: "lrclib_server_url"), text: $customLrcLibBaseURL)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.URL)
+                }
+
                 if lyricsStore.isDownloading {
                     VStack(alignment: .leading, spacing: 8) {
                         let lyrTotal = max(lyricsStore.downloadTotal, 1)
@@ -69,8 +85,8 @@ struct LyricsSettingsView: View {
                         lyricsStore.startBulkDownload(serverId: sid)
                     } label: {
                         Label { Text(String(localized: "download_all_lyrics")) } icon: {
-                        Image(systemName: "arrow.down.circle").foregroundStyle(accentColor)
-                    }
+                            Image(systemName: "arrow.down.circle").foregroundStyle(accentColor)
+                        }
                     }
                 }
 

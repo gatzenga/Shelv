@@ -176,7 +176,7 @@
 "play_log_db" = "Play Log DB";
 "lyrics_db" = "Lyrics DB";
 "no_database_errors" = "No database errors.";
-"database_errors" = "Database errors";
+"database_errors" = "Database";
 "no_songs" = "No Songs";
 "no_songs_found_for_this_period" = "No songs found for this period.";
 "delete_recap" = "Delete Recap";
@@ -376,6 +376,8 @@
 "download_progress_format" = "%d of %d Songs";
 "lyrics_progress_format" = "%d of %d Lyrics";
 "include_navidrome_lyrics" = "Include Navidrome Lyrics";
+"use_custom_lrclib_server" = "Use custom LRCLIB server";
+"lrclib_server_url" = "LRCLIB server URL";
 "artist_bio_show_more" = "Show more";
 "artist_bio_show_less" = "Show less";
 "about" = "About";

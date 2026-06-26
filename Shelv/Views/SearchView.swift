@@ -357,9 +357,12 @@ struct SearchView: View {
                                                         .font(.caption)
                                                         .foregroundStyle(.secondary)
                                                 }
-                                                Text(item.snippet)
+                                                highlightedLyricsSnippet(
+                                                    item.snippet,
+                                                    query: query,
+                                                    accentColor: accentColor
+                                                )
                                                     .font(.caption2)
-                                                    .foregroundStyle(.tertiary)
                                                     .lineLimit(1)
                                                     .italic()
                                             }
@@ -776,5 +779,38 @@ struct SearchView: View {
         let allLyrics = await LyricsService.shared.searchLyrics(text: query, serverId: lyricsSid)
         let downloadedIds = Set(DownloadStore.shared.songs.map { $0.songId })
         lyricsResults = allLyrics.filter { downloadedIds.contains($0.songId) }
+    }
+
+    private func highlightedLyricsSnippet(_ snippet: String, query: String, accentColor: Color) -> Text {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !snippet.isEmpty, !needle.isEmpty else {
+            return Text(snippet).foregroundStyle(.tertiary)
+        }
+
+        var output = Text("")
+        var searchStart = snippet.startIndex
+
+        while searchStart < snippet.endIndex,
+              let range = snippet.range(
+                of: needle,
+                options: [.caseInsensitive, .diacriticInsensitive],
+                range: searchStart..<snippet.endIndex
+              ) {
+            if searchStart < range.lowerBound {
+                output = output + Text(String(snippet[searchStart..<range.lowerBound]))
+                    .foregroundStyle(.tertiary)
+            }
+            output = output + Text(String(snippet[range]))
+                .foregroundStyle(accentColor)
+                .bold()
+            searchStart = range.upperBound
+        }
+
+        if searchStart < snippet.endIndex {
+            output = output + Text(String(snippet[searchStart..<snippet.endIndex]))
+                .foregroundStyle(.tertiary)
+        }
+
+        return output
     }
 }

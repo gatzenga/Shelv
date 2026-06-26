@@ -179,7 +179,7 @@
 "play_log_db" = "Play-Log-DB";
 "lyrics_db" = "Lyrics-DB";
 "no_database_errors" = "Keine Datenbank-Fehler.";
-"database_errors" = "Datenbank-Fehler";
+"database_errors" = "Datenbank";
 "no_songs" = "Keine Titel";
 "no_songs_found_for_this_period" = "Keine Titel für diesen Zeitraum gefunden.";
 "delete_recap" = "Recap löschen";
@@ -380,6 +380,8 @@
 "download_progress_format" = "%d von %d Songs";
 "lyrics_progress_format" = "%d von %d Lyrics";
 "include_navidrome_lyrics" = "Navidrome-Lyrics einbeziehen";
+"use_custom_lrclib_server" = "Eigenen LRCLIB-Server verwenden";
+"lrclib_server_url" = "LRCLIB-Server-URL";
 "artist_bio_show_more" = "Mehr anzeigen";
 "artist_bio_show_less" = "Weniger anzeigen";
 

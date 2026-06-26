@@ -176,7 +176,7 @@
 "play_log_db" = "播放记录数据库";
 "lyrics_db" = "歌词数据库";
 "no_database_errors" = "无数据库错误。";
-"database_errors" = "数据库错误";
+"database_errors" = "数据库";
 "no_songs" = "无歌曲";
 "no_songs_found_for_this_period" = "此时间段内未找到歌曲。";
 "delete_recap" = "删除回顾";
@@ -377,6 +377,8 @@
 "download_progress_format" = "%d / %d 首歌曲";
 "lyrics_progress_format" = "%d / %d 首歌词";
 "include_navidrome_lyrics" = "包含 Navidrome 歌词";
+"use_custom_lrclib_server" = "使用自定义 LRCLIB 服务器";
+"lrclib_server_url" = "LRCLIB 服务器 URL";
 "about" = "关于";
 "queue_sync" = "队列同步";
 "queue_sync_off" = "关闭";
