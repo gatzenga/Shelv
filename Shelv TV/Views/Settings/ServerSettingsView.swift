@@ -17,8 +17,9 @@ struct ServerSettingsView: View {
                     } label: {
                         HStack {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(server.displayName).font(.headline)
-                                Text(server.baseURL).font(.callout).foregroundStyle(.secondary)
+                                Text(server.displayName)
+                                Text(server.baseURL)
+                                    .foregroundStyle(.secondary)
                             }
                             Spacer()
                             if server.id == serverStore.activeServerID {
@@ -59,6 +60,8 @@ struct ServerFormView: View {
     @State private var isSaving = false
     @State private var testResult: String?
     @State private var testSuccess = false
+    @State private var showServerURLEditor = false
+    @State private var draftServerURL = ""
 
     private var accent: Color { AppTheme.color(for: themeColor) }
     private var isEditing: Bool { editingServer != nil }
@@ -75,8 +78,18 @@ struct ServerFormView: View {
 
             Section(String(localized: "server")) {
                 TextField(String(localized: "name_optional"), text: $name)
-                TextField(String(localized: "server_url"), text: $serverURL)
-                    .textContentType(.URL)
+                Button {
+                    draftServerURL = serverURL
+                    showServerURLEditor = true
+                } label: {
+                    HStack {
+                        Text(String(localized: "server_url"))
+                        Spacer()
+                        Text(serverURL.isEmpty ? String(localized: "server_url") : serverURL)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
             }
 
             Section(String(localized: "account")) {
@@ -139,6 +152,17 @@ struct ServerFormView: View {
             }
         }
         .toolbar(.hidden, for: .tabBar)
+        .alert(String(localized: "server_url"), isPresented: $showServerURLEditor) {
+            TextField(String(localized: "server_url"), text: $draftServerURL)
+                .textContentType(.URL)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .keyboardType(.URL)
+            Button(String(localized: "cancel"), role: .cancel) {}
+            Button(String(localized: "done")) {
+                serverURL = draftServerURL.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
         .onAppear {
             guard let server = editingServer else { return }
             name = server.name

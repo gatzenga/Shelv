@@ -497,26 +497,54 @@ class AudioPlayerService: ObservableObject {
 
     #if os(iOS) || os(tvOS)
     private func setupAudioSession() {
-        activateSession()
+        Task.detached(priority: .utility) {
+            do {
+                try Self.configureAudioSession()
+            } catch {
+                print("[AudioSession] initial activate failed: \(error)")
+            }
+        }
     }
 
     /// Kategorie setzen + Session aktivieren. Wird vor jeder Wiedergabe aufgerufen, weil tvOS
     /// die Session nach Pause/Stop/App-Wechsel deaktiviert und ein folgendes play() sonst stumm bleibt.
     func activateSession() {
+        if Thread.isMainThread {
+            Task { await activateSessionAsync() }
+            return
+        }
+
         do {
-            #if os(tvOS)
-            try AVAudioSession.sharedInstance().setCategory(.playback)
-            #else
-            try AVAudioSession.sharedInstance().setCategory(
-                .playback,
-                mode: .default,
-                options: [.allowAirPlay, .allowBluetoothHFP]
-            )
-            #endif
-            try AVAudioSession.sharedInstance().setActive(true)
+            try Self.configureAudioSession()
         } catch {
             print("[AudioSession] activate failed: \(error)")
         }
+    }
+
+    nonisolated private static func configureAudioSession() throws {
+        #if os(tvOS)
+        try AVAudioSession.sharedInstance().setCategory(.playback)
+        #else
+        try AVAudioSession.sharedInstance().setCategory(
+            .playback,
+            mode: .default,
+            options: [.allowAirPlay, .allowBluetoothHFP]
+        )
+        #endif
+        try AVAudioSession.sharedInstance().setActive(true)
+    }
+
+    @discardableResult
+    private func activateSessionAsync(logMessage: String = "activate failed") async -> Bool {
+        await Task.detached(priority: .userInitiated) {
+            do {
+                try Self.configureAudioSession()
+                return true
+            } catch {
+                print("[AudioSession] \(logMessage): \(error)")
+                return false
+            }
+        }.value
     }
 
     private func setupInterruptionObserver() {
@@ -547,11 +575,6 @@ class AudioPlayerService: ObservableObject {
                         // Audio-Session vor Resume reaktivieren — iOS deaktiviert sie bei Interruption
                         // (z.B. Anruf), und ohne explizites setActive(true) bleibt der Player lautlos
                         // obwohl er "spielt".
-                        do {
-                            try AVAudioSession.sharedInstance().setActive(true)
-                        } catch {
-                            print("[AudioSession] Reaktivierung nach Interruption fehlgeschlagen: \(error)")
-                        }
                         self.resume()
                     }
                 }
@@ -787,7 +810,8 @@ class AudioPlayerService: ObservableObject {
         Task { @MainActor [weak self] in
             guard let self else { return }
             #if os(iOS) || os(tvOS)
-            self.activateSession()
+            await self.activateSessionAsync()
+            guard self.playbackGeneration == gen else { return }
             #endif
             self.networkResumeSong = nil
             self.isEngineLoaded = false
@@ -997,39 +1021,45 @@ class AudioPlayerService: ObservableObject {
             resumeTime = 0
             startPlayback(song: song, seekTo: seek)
         } else {
-            #if os(tvOS)
-            // tvOS deaktiviert die Audio-Session bei Pause — vor dem Resume reaktivieren.
-            activateSession()
-            #endif
-            #if os(iOS)
-            // iOS deaktiviert die Session bei Interruption — vor Resume reaktivieren.
-            do {
-                try AVAudioSession.sharedInstance().setActive(true)
-            } catch {
-                print("[AudioSession] Reaktivierung vor Resume fehlgeschlagen: \(error)")
+            #if os(iOS) || os(tvOS)
+            let gen = playbackGeneration
+            let expectedSongId = song.id
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                await self.activateSessionAsync(logMessage: "Reaktivierung vor Resume fehlgeschlagen")
+                guard self.playbackGeneration == gen,
+                      self.isEngineLoaded,
+                      self.currentSong?.id == expectedSongId
+                else { return }
+                self.resumeLoadedPlayback(song: song)
             }
-            #endif
-            engine.resume()
-            isPlaying = true
-            updateNowPlayingPlaybackRate(1)
-            MPNowPlayingInfoCenter.default().playbackState = .playing
-
-            #if os(tvOS)
-            // tvOS verwirft den Puffer eines pausierten HTTP-Streams; play() am alten Item läuft
-            // dann nicht mehr los. Watchdog: schreitet die Zeit nach ~1,2 s nicht fort, den Stream
-            // an der aktuellen Position neu laden — das funktioniert zuverlässig (wie ein Neustart).
-            let resumePosition = currentTime
-            let expectedId = song.id
-            resumeWatchdog?.cancel()
-            resumeWatchdog = Task { @MainActor [weak self] in
-                try? await Task.sleep(for: .milliseconds(1200))
-                guard let self, !Task.isCancelled, self.isPlaying,
-                      self.currentSong?.id == expectedId,
-                      self.currentTime <= resumePosition + 0.3 else { return }
-                self.startPlayback(song: song, seekTo: resumePosition)
-            }
+            #else
+            resumeLoadedPlayback(song: song)
             #endif
         }
+    }
+
+    private func resumeLoadedPlayback(song: Song) {
+        engine.resume()
+        isPlaying = true
+        updateNowPlayingPlaybackRate(1)
+        MPNowPlayingInfoCenter.default().playbackState = .playing
+
+        #if os(tvOS)
+        // tvOS verwirft den Puffer eines pausierten HTTP-Streams; play() am alten Item läuft
+        // dann nicht mehr los. Watchdog: schreitet die Zeit nach ~1,2 s nicht fort, den Stream
+        // an der aktuellen Position neu laden — das funktioniert zuverlässig (wie ein Neustart).
+        let resumePosition = currentTime
+        let expectedId = song.id
+        resumeWatchdog?.cancel()
+        resumeWatchdog = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(1200))
+            guard let self, !Task.isCancelled, self.isPlaying,
+                  self.currentSong?.id == expectedId,
+                  self.currentTime <= resumePosition + 0.3 else { return }
+            self.startPlayback(song: song, seekTo: resumePosition)
+        }
+        #endif
     }
 
     func togglePlayPause() {

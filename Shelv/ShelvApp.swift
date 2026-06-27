@@ -65,7 +65,6 @@ struct ShelvApp: App {
             "transcodingDownloadCodec": "raw",
             "transcodingDownloadBitrate": 192,
         ])
-        ShelvAppShortcuts.updateAppShortcutParameters()
     }
 
     private var preferredScheme: ColorScheme? {
@@ -89,7 +88,11 @@ struct ShelvApp: App {
                 .environmentObject(OfflineModeService.shared)
                 .tint(AppTheme.color(for: themeColorName))
                 .preferredColorScheme(preferredScheme)
-                .task { await LyricsStore.shared.setup() }
+                .task {
+                    ShelvAppShortcuts.updateAppShortcutParameters()
+                    print("[Shortcuts] Parameters updated")
+                    await LyricsStore.shared.setup()
+                }
                 .task(id: serverStore.activeServerID) {
                     guard let server = serverStore.activeServer else { return }
                     await PlayLogService.shared.setup()

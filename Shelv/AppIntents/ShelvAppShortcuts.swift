@@ -1,8 +1,5 @@
 import AppIntents
 import Foundation
-#if canImport(Intents)
-import Intents
-#endif
 
 enum ShelvShortcutDestination: String, AppEnum {
     case discover
@@ -110,23 +107,13 @@ struct ShelvPlaylistQuery: EntityStringQuery {
             .map {
                 ShelvPlaylistEntity(id: $0.id, name: $0.name, songCount: $0.songCount)
             }
-        updatePlaylistVocabulary(playlists)
         print("[Shortcuts] Playlists available → \(playlists.count)")
         return playlists
     }
 }
 
-private func updatePlaylistVocabulary(_ playlists: [ShelvPlaylistEntity]) {
-    #if os(iOS)
-    let names = playlists
-        .map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines) }
-        .filter { !$0.isEmpty }
-    guard !names.isEmpty else { return }
-    INVocabulary.shared().setVocabularyStrings(NSOrderedSet(array: names), of: .mediaPlaylistTitle)
-    print("[Shortcuts] Playlist vocabulary updated → \(names.count)")
-    #endif
-}
-
+// Parked for a later Shortcuts/Siri pass. These intents stay compiled but hidden
+// until the basic app-opening shortcuts are reliable on device builds.
 private enum ShelvPlaylistIntentResult {
     case noServer
     case notFound
@@ -139,6 +126,7 @@ struct ShelvPlayPauseIntent: AppIntent, AudioPlaybackIntent {
     static let title: LocalizedStringResource = "Play or Pause in Shelv"
     static let description = IntentDescription("Toggle playback in Shelv.")
     static let openAppWhenRun = false
+    static var isDiscoverable: Bool { false }
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let result = await MainActor.run { () -> ShelvPlaybackIntentResult in
@@ -166,6 +154,7 @@ struct ShelvNextTrackIntent: AppIntent, AudioPlaybackIntent {
     static let title: LocalizedStringResource = "Next Track in Shelv"
     static let description = IntentDescription("Skip to the next track in Shelv.")
     static let openAppWhenRun = false
+    static var isDiscoverable: Bool { false }
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let result = await MainActor.run { () -> ShelvPlaybackIntentResult in
@@ -191,6 +180,7 @@ struct ShelvPreviousTrackIntent: AppIntent, AudioPlaybackIntent {
     static let title: LocalizedStringResource = "Previous Track in Shelv"
     static let description = IntentDescription("Go back to the previous track in Shelv.")
     static let openAppWhenRun = false
+    static var isDiscoverable: Bool { false }
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let result = await MainActor.run { () -> ShelvPlaybackIntentResult in
@@ -216,6 +206,7 @@ struct ShelvPlayPlaylistIntent: AppIntent, AudioPlaybackIntent {
     static let title: LocalizedStringResource = "Play Playlist in Shelv"
     static let description = IntentDescription("Start playing a selected playlist in Shelv.")
     static let openAppWhenRun = false
+    static var isDiscoverable: Bool { false }
 
     @Parameter(title: "Playlist")
     var playlist: ShelvPlaylistEntity
@@ -246,6 +237,7 @@ struct ShelvShufflePlaylistIntent: AppIntent, AudioPlaybackIntent {
     static let title: LocalizedStringResource = "Shuffle Playlist in Shelv"
     static let description = IntentDescription("Shuffle a selected playlist in Shelv.")
     static let openAppWhenRun = false
+    static var isDiscoverable: Bool { false }
 
     @Parameter(title: "Playlist")
     var playlist: ShelvPlaylistEntity
@@ -351,74 +343,10 @@ struct ShelvAppShortcuts: AppShortcutsProvider {
 
     static var appShortcuts: [AppShortcut] {
         AppShortcut(
-            intent: ShelvPlayPauseIntent(),
-            phrases: [
-                "Play or pause in \(.applicationName)",
-                "Toggle playback in \(.applicationName)",
-                "Wiedergabe in \(.applicationName) starten oder pausieren",
-            ],
-            shortTitle: "Play/Pause",
-            systemImageName: "playpause.fill"
-        )
-
-        AppShortcut(
-            intent: ShelvNextTrackIntent(),
-            phrases: [
-                "Next track in \(.applicationName)",
-                "Skip in \(.applicationName)",
-                "Nächster Titel in \(.applicationName)",
-            ],
-            shortTitle: "Next Track",
-            systemImageName: "forward.fill"
-        )
-
-        AppShortcut(
-            intent: ShelvPreviousTrackIntent(),
-            phrases: [
-                "Previous track in \(.applicationName)",
-                "Go back in \(.applicationName)",
-                "Vorheriger Titel in \(.applicationName)",
-            ],
-            shortTitle: "Previous Track",
-            systemImageName: "backward.fill"
-        )
-
-        AppShortcut(
-            intent: ShelvPlayPlaylistIntent(),
-            phrases: [
-                "Play \(\.$playlist) in \(.applicationName)",
-                "Play the \(\.$playlist) playlist in \(.applicationName)",
-                "Play playlist \(\.$playlist) in \(.applicationName)",
-                "Play playlist in \(.applicationName)",
-                "Spiele \(\.$playlist) in \(.applicationName)",
-                "Spiele Playlist \(\.$playlist) in \(.applicationName)",
-            ],
-            shortTitle: "Play Playlist",
-            systemImageName: "music.note.list"
-        )
-
-        AppShortcut(
-            intent: ShelvShufflePlaylistIntent(),
-            phrases: [
-                "Shuffle \(\.$playlist) in \(.applicationName)",
-                "Shuffle the \(\.$playlist) playlist in \(.applicationName)",
-                "Shuffle playlist \(\.$playlist) in \(.applicationName)",
-                "Shuffle playlist in \(.applicationName)",
-                "Mische \(\.$playlist) in \(.applicationName)",
-                "Mische Playlist \(\.$playlist) in \(.applicationName)",
-            ],
-            shortTitle: "Shuffle Playlist",
-            systemImageName: "shuffle"
-        )
-
-        AppShortcut(
             intent: ShelvOpenPlayerIntent(),
             phrases: [
                 "Open player in \(.applicationName)",
                 "Open \(.applicationName) player",
-                "Show player in \(.applicationName)",
-                "Open now playing in \(.applicationName)",
-                "Aktuelle Wiedergabe in \(.applicationName) anzeigen",
             ],
             shortTitle: "Now Playing",
             systemImageName: "music.note"
@@ -429,9 +357,6 @@ struct ShelvAppShortcuts: AppShortcutsProvider {
             phrases: [
                 "Open search in \(.applicationName)",
                 "Open \(.applicationName) search",
-                "Search in \(.applicationName)",
-                "Search with \(.applicationName)",
-                "Suche in \(.applicationName) öffnen",
             ],
             shortTitle: "Search",
             systemImageName: "magnifyingglass"
@@ -442,7 +367,6 @@ struct ShelvAppShortcuts: AppShortcutsProvider {
             phrases: [
                 "Open library in \(.applicationName)",
                 "Show library in \(.applicationName)",
-                "Mediathek in \(.applicationName) öffnen",
             ],
             shortTitle: "Library",
             systemImageName: "books.vertical.fill"
@@ -453,7 +377,6 @@ struct ShelvAppShortcuts: AppShortcutsProvider {
             phrases: [
                 "Open Recap in \(.applicationName)",
                 "Show Recap in \(.applicationName)",
-                "Recap in \(.applicationName) öffnen",
             ],
             shortTitle: "Recap",
             systemImageName: "calendar.badge.clock"

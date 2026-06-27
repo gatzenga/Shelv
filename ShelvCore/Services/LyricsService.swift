@@ -39,6 +39,7 @@ enum LrcLibEndpoint {
     struct RequestInfo {
         let url: URL
         let source: String
+        let fallbackReason: String?
     }
 
     nonisolated static let defaultBaseURL = "https://lrclib.net"
@@ -50,7 +51,7 @@ enum LrcLibEndpoint {
     }
 
     nonisolated static func apiRequest(queryItems: [URLQueryItem]) -> RequestInfo? {
-        guard let resolved = selectedBaseURL() else { return nil }
+        let resolved = selectedBaseURL()
         let base = resolved.url
         let source = resolved.isCustom ? "LRCLIB custom" : "LRCLIB online"
         var endpoint = base
@@ -72,7 +73,7 @@ enum LrcLibEndpoint {
         }
         comps.queryItems = queryItems
         guard let url = comps.url else { return nil }
-        return RequestInfo(url: url, source: source)
+        return RequestInfo(url: url, source: source, fallbackReason: resolved.fallbackReason)
     }
 
     nonisolated static func sourceDescription(for url: URL) -> String {
@@ -86,15 +87,15 @@ enum LrcLibEndpoint {
         UserDefaults.standard.bool(forKey: useCustomKey)
     }
 
-    nonisolated private static func selectedBaseURL() -> (url: URL, isCustom: Bool)? {
+    nonisolated private static func selectedBaseURL() -> (url: URL, isCustom: Bool, fallbackReason: String?) {
         let defaults = UserDefaults.standard
         if defaults.bool(forKey: useCustomKey) {
-            guard let custom = normalizedBaseURL(from: defaults.string(forKey: customBaseURLKey) ?? "") else {
-                return nil
+            if let custom = normalizedBaseURL(from: defaults.string(forKey: customBaseURLKey) ?? "") {
+                return (custom, true, nil)
             }
-            return (custom, true)
+            return (URL(string: defaultBaseURL)!, false, "custom server URL is invalid or empty")
         }
-        return (URL(string: defaultBaseURL)!, false)
+        return (URL(string: defaultBaseURL)!, false, nil)
     }
 
     nonisolated private static func normalizedBaseURL(from rawValue: String) -> URL? {
@@ -480,10 +481,10 @@ actor LyricsService {
         if let a = song.album   { items.append(URLQueryItem(name: "album_name",  value: a)) }
         if let d = song.duration { items.append(URLQueryItem(name: "duration",   value: "\(d)")) }
         guard let requestInfo = LrcLibEndpoint.apiRequest(queryItems: items) else {
-            if LrcLibEndpoint.isCustomEnabled {
-                DBErrorLog.logLyrics("Request skipped → LRCLIB custom: invalid or empty server URL")
-            }
             return .indeterminate
+        }
+        if let fallbackReason = requestInfo.fallbackReason {
+            DBErrorLog.logLyrics("Fallback → LRCLIB online: \(fallbackReason)")
         }
         let url = requestInfo.url
         DBErrorLog.logLyrics("Request → \(requestInfo.source): \(url.absoluteString)")

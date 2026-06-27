@@ -98,31 +98,16 @@ struct PlaybackSettingsView: View {
             }
         }
         .toolbar(.hidden, for: .tabBar)
-        .sheet(isPresented: $showLrcLibServerEditor) {
-            NavigationStack {
-                Form {
-                    Section(String(localized: "lyrics")) {
-                        TextField(String(localized: "lrclib_server_url"), text: $draftLrcLibBaseURL)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .keyboardType(.URL)
-                    }
-                }
-                .navigationTitle(String(localized: "lrclib_server_url"))
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button(String(localized: "cancel")) {
-                            showLrcLibServerEditor = false
-                        }
-                    }
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button(String(localized: "done")) {
-                            customLrcLibBaseURL = draftLrcLibBaseURL
-                                .trimmingCharacters(in: .whitespacesAndNewlines)
-                            showLrcLibServerEditor = false
-                        }
-                    }
-                }
+        .alert(String(localized: "lrclib_server_url"), isPresented: $showLrcLibServerEditor) {
+            TextField(String(localized: "lrclib_server_url"), text: $draftLrcLibBaseURL)
+                .textContentType(.URL)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .keyboardType(.URL)
+            Button(String(localized: "cancel"), role: .cancel) {}
+            Button(String(localized: "done")) {
+                customLrcLibBaseURL = draftLrcLibBaseURL
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
             }
         }
     }
