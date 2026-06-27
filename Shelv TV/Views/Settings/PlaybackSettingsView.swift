@@ -18,6 +18,35 @@ struct PlaybackSettingsView: View {
     @State private var showLrcLibServerEditor = false
     @State private var draftLrcLibBaseURL = ""
 
+    private var codecOptions: [TVSettingsChoiceOption<String>] {
+        TranscodingCodec.streamingOptions.map { codec in
+            TVSettingsChoiceOption(value: codec.rawValue, title: codec.label)
+        }
+    }
+    private var bitrateOptions: [TVSettingsChoiceOption<Int>] {
+        TranscodingBitrate.allCases.map { rate in
+            TVSettingsChoiceOption(value: rate.rawValue, title: rate.label)
+        }
+    }
+    private var replayGainOptions: [TVSettingsChoiceOption<String>] {
+        [
+            TVSettingsChoiceOption(value: "track", title: String(localized: "track_gain")),
+            TVSettingsChoiceOption(value: "album", title: String(localized: "album_gain")),
+        ]
+    }
+    private var recapThresholdOptions: [TVSettingsChoiceOption<Int>] {
+        [10, 20, 30, 40, 50].map { pct in
+            TVSettingsChoiceOption(value: pct, title: "\(pct)%")
+        }
+    }
+    private var queueSyncOptions: [TVSettingsChoiceOption<String>] {
+        [
+            TVSettingsChoiceOption(value: "off", title: String(localized: "queue_sync_off")),
+            TVSettingsChoiceOption(value: "subsonic", title: String(localized: "queue_sync_subsonic")),
+            TVSettingsChoiceOption(value: "icloud", title: String(localized: "queue_sync_icloud")),
+        ]
+    }
+
     var body: some View {
         Form {
             Text(String(localized: "playback"))
@@ -30,17 +59,17 @@ struct PlaybackSettingsView: View {
             Section(String(localized: "transcoding")) {
                 Toggle(String(localized: "transcoding"), isOn: $transcodingEnabled)
                 if transcodingEnabled {
-                    Picker(String(localized: "format"), selection: $streamCodec) {
-                        ForEach(TranscodingCodec.streamingOptions) { codec in
-                            Text(codec.label).tag(codec.rawValue)
-                        }
-                    }
+                    TVSettingsChoiceRow(
+                        title: String(localized: "format"),
+                        selection: $streamCodec,
+                        options: codecOptions
+                    )
                     if streamCodec != "raw" {
-                        Picker(String(localized: "bitrate"), selection: $streamBitrate) {
-                            ForEach(TranscodingBitrate.allCases) { rate in
-                                Text(rate.label).tag(rate.rawValue)
-                            }
-                        }
+                        TVSettingsChoiceRow(
+                            title: String(localized: "bitrate"),
+                            selection: $streamBitrate,
+                            options: bitrateOptions
+                        )
                     }
                 }
             }
@@ -48,25 +77,29 @@ struct PlaybackSettingsView: View {
             Section(String(localized: "replay_gain")) {
                 Toggle(String(localized: "replay_gain"), isOn: $replayGainEnabled)
                 if replayGainEnabled {
-                    Picker(String(localized: "replay_gain_mode"), selection: $replayGainMode) {
-                        Text(String(localized: "track_gain")).tag("track")
-                        Text(String(localized: "album_gain")).tag("album")
-                    }
+                    TVSettingsChoiceRow(
+                        title: String(localized: "replay_gain_mode"),
+                        selection: $replayGainMode,
+                        options: replayGainOptions
+                    )
                 }
             }
 
             Section(String(localized: "scrobble")) {
-                Picker(String(localized: "count_from"), selection: $recapThreshold) {
-                    ForEach([10, 20, 30, 40, 50], id: \.self) { pct in
-                        Text("\(pct)%").tag(pct)
-                    }
-                }
+                TVSettingsChoiceRow(
+                    title: String(localized: "count_from"),
+                    selection: $recapThreshold,
+                    options: recapThresholdOptions
+                )
             }
 
             Section(String(localized: "lyrics")) {
                 Toggle(String(localized: "autofetch_on_playback"), isOn: $autoFetchLyrics)
                 Toggle(String(localized: "include_navidrome_lyrics"), isOn: $includeNavidromeLyrics)
                 Toggle(String(localized: "use_custom_lrclib_server"), isOn: $useCustomLrcLibServer)
+                    .onChange(of: useCustomLrcLibServer) { _, _ in
+                        Task { await CloudKitSyncService.shared.recordLyricsServerSettingsChange() }
+                    }
                 if useCustomLrcLibServer {
                     Button {
                         draftLrcLibBaseURL = customLrcLibBaseURL
@@ -84,11 +117,11 @@ struct PlaybackSettingsView: View {
             }
 
             Section(String(localized: "queue_sync")) {
-                Picker(String(localized: "queue_sync"), selection: $queueSyncMode) {
-                    Text(String(localized: "queue_sync_off")).tag("off")
-                    Text(String(localized: "queue_sync_subsonic")).tag("subsonic")
-                    Text(String(localized: "queue_sync_icloud")).tag("icloud")
-                }
+                TVSettingsChoiceRow(
+                    title: String(localized: "queue_sync"),
+                    selection: $queueSyncMode,
+                    options: queueSyncOptions
+                )
                 NavigationLink(String(localized: "about")) {
                     QueueSyncAboutView()
                 }
@@ -108,6 +141,7 @@ struct PlaybackSettingsView: View {
             Button(String(localized: "done")) {
                 customLrcLibBaseURL = draftLrcLibBaseURL
                     .trimmingCharacters(in: .whitespacesAndNewlines)
+                Task { await CloudKitSyncService.shared.recordLyricsServerSettingsChange() }
             }
         }
     }
