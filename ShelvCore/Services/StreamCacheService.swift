@@ -28,6 +28,31 @@ actor StreamCacheService {
         }
     }
 
+    private static func normalizedCodecLabel(_ label: String) -> String {
+        switch label.trimmingCharacters(in: .whitespacesAndNewlines).uppercased() {
+        case "M4A": return "AAC"
+        default:    return label.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        }
+    }
+
+    private static func deliveredFormat(from response: HTTPURLResponse,
+                                        requested: ActualStreamFormat) -> (format: ActualStreamFormat, fileExtension: String) {
+        guard let ext = TranscodingPolicy.extensionFor(mimeType: response.mimeType) else {
+            return (requested, fileExtension(for: requested.codecLabel))
+        }
+        let codec = ActualStreamFormat.codecLabel(forMime: response.mimeType)
+        let requestedCodec = normalizedCodecLabel(requested.codecLabel)
+        let deliveredCodec = normalizedCodecLabel(codec)
+        let bitrate = deliveredCodec == requestedCodec ? requested.bitrateKbps : nil
+        return (ActualStreamFormat(codecLabel: codec, bitrateKbps: bitrate), ext)
+    }
+
+    private static func didFormatChange(requested: ActualStreamFormat, delivered: ActualStreamFormat) -> Bool {
+        let requestedCodec = normalizedCodecLabel(requested.codecLabel)
+        let deliveredCodec = normalizedCodecLabel(delivered.codecLabel)
+        return requestedCodec != deliveredCodec || requested.bitrateKbps != delivered.bitrateKbps
+    }
+
     func localURL(for songId: String) -> URL? {
         cachedURLs[songId]
     }
@@ -48,7 +73,7 @@ actor StreamCacheService {
         }
         let desc = bitrate > 0 ? "\(codec.uppercased()) · \(bitrate) kbps" : codec.uppercased()
         StreamCacheLog.log(songId: songId, message: "Prefetch started (\(desc))")
-        let format = ActualStreamFormat(codecLabel: codec.uppercased(), bitrateKbps: bitrate)
+        let format = ActualStreamFormat(codecLabel: codec.uppercased(), bitrateKbps: bitrate > 0 ? bitrate : nil)
         activeFormats[songId] = format
         activeTasks[songId] = Task {
             await downloadWithRetry(songId: songId, url: url, format: format, maxAttempts: 3)
@@ -101,8 +126,7 @@ actor StreamCacheService {
     }
 
     private func downloadWithRetry(songId: String, url: URL, format: ActualStreamFormat, maxAttempts: Int) async {
-        let ext = Self.fileExtension(for: format.codecLabel)
-        let dest = Self.tempURL(for: songId, ext: ext)
+        let requestedDest = Self.tempURL(for: songId, ext: Self.fileExtension(for: format.codecLabel))
         for attempt in 1...maxAttempts {
             guard !Task.isCancelled else { return }
             do {
@@ -116,13 +140,22 @@ actor StreamCacheService {
                     if attempt < maxAttempts { try? await Task.sleep(nanoseconds: 1_000_000_000) }
                     continue
                 }
+                let delivered = Self.deliveredFormat(from: http, requested: format)
+                let dest = Self.tempURL(for: songId, ext: delivered.fileExtension)
                 try? FileManager.default.removeItem(at: dest)
+                if dest != requestedDest {
+                    try? FileManager.default.removeItem(at: requestedDest)
+                }
                 try FileManager.default.moveItem(at: tmpURL, to: dest)
-                cachedFormats[songId] = format
+                cachedFormats[songId] = delivered.format
                 cachedURLs[songId] = dest
                 activeFormats.removeValue(forKey: songId)
                 activeTasks.removeValue(forKey: songId)
-                StreamCacheLog.log(songId: songId, message: "Cached ✓")
+                if Self.didFormatChange(requested: format, delivered: delivered.format) {
+                    StreamCacheLog.log(songId: songId, message: "Cached as \(delivered.format.displayString) (requested \(format.displayString))")
+                } else {
+                    StreamCacheLog.log(songId: songId, message: "Cached ✓")
+                }
                 return
             } catch let urlError as URLError where urlError.code == .timedOut {
                 StreamCacheLog.log(songId: songId, message: "Timeout – no retry")

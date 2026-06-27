@@ -102,6 +102,11 @@ struct PlayerView: View {
     private func artSize(_ h: CGFloat) -> CGFloat {
         isPad ? min(480, max(300, h * 0.50)) : min(280, h * 0.44)
     }
+    private func visibleArtSize(_ h: CGFloat) -> CGFloat {
+        let base = artSize(h)
+        let extra: CGFloat = isPad ? min(56, max(36, h * 0.045)) : (h < 700 ? 18 : 30)
+        return min(isPad ? 536 : 310, base + extra)
+    }
     private func playButtonSize(_ h: CGFloat) -> CGFloat { isPad ? min(96, max(72, h * 0.11)) : 72 }
     private func controlSize(_ h: CGFloat) -> CGFloat { isPad ? min(56, max(44, h * 0.065)) : 44 }
     private func vPad(_ h: CGFloat, large: CGFloat, small: CGFloat) -> CGFloat {
@@ -131,15 +136,19 @@ struct PlayerView: View {
                 GeometryReader { geo in
                 let h = geo.size.height
                 let art = artSize(h)
+                let visibleArt = visibleArtSize(h)
                 let play = playButtonSize(h)
                 let ctrl = controlSize(h)
                 VStack(spacing: 0) {
                     Spacer(minLength: 0)
 
-                    AlbumArtView(coverArtId: player.currentSong?.coverArt, size: 600, cornerRadius: isPad ? 22 : 20)
-                        .frame(width: art, height: art)
-                        .shadow(color: .black.opacity(0.4), radius: 30, y: 15)
-                        .padding(.bottom, vPad(h, large: 20, small: 28))
+                    ZStack(alignment: .bottom) {
+                        AlbumArtView(coverArtId: player.currentSong?.coverArt, size: 600, cornerRadius: isPad ? 22 : 20)
+                            .frame(width: visibleArt, height: visibleArt)
+                    }
+                    .frame(width: art, height: art, alignment: .bottom)
+                    .shadow(color: .black.opacity(0.4), radius: 30, y: 15)
+                    .padding(.bottom, vPad(h, large: 20, small: 28))
 
                     trackInfo
 

@@ -889,7 +889,7 @@ class AudioPlayerService: ObservableObject {
             if self.isTranscodedRemote(url), let fmt = TranscodingPolicy.currentStreamFormat() {
                 self.engine.stop()
                 let songId = song.id
-                // Format sofort setzen (wir kennen Codec + Bitrate aus der Policy)
+                // Erwartetes Format sofort setzen; der Cache aktualisiert es nach der Server-Antwort.
                 self.actualStreamFormat = ActualStreamFormat(
                     codecLabel: fmt.codec.rawValue.uppercased(),
                     bitrateKbps: fmt.bitrate
@@ -920,6 +920,12 @@ class AudioPlayerService: ObservableObject {
                         let precise = cmTime.flatMap { $0.isValid && !$0.isIndefinite ? CMTimeGetSeconds($0) : nil }
                         let resolvedDuration = (precise ?? 0) > 0 ? precise! : Double(song.duration ?? 0)
                         self.currentStreamURL = local
+                        let cachedFormat = await StreamCacheService.shared.cachedFormat(for: songId)
+                        guard self.playbackGeneration == gen else { return }
+                        if let cachedFormat {
+                            self.actualStreamFormat = cachedFormat
+                        }
+                        self.probeStreamFormat(for: song, url: local)
                         self.engine.play(url: local)
                         if !self.isPlaying { self.engine.pause() }
                         self.engine.trustedDuration = resolvedDuration

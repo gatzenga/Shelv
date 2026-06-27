@@ -17,6 +17,7 @@
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "BC7B83F42FDB17700058CB78"
                BuildableName = "Shelv.app"
+               BlueprintName = "Shelv Mac"
                ReferencedContainer = "container:Shelv.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -46,6 +47,7 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "BC7B83F42FDB17700058CB78"
             BuildableName = "Shelv.app"
+            BlueprintName = "Shelv Mac"
             ReferencedContainer = "container:Shelv.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
@@ -62,6 +64,7 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "BC7B83F42FDB17700058CB78"
             BuildableName = "Shelv.app"
+            BlueprintName = "Shelv Mac"
             ReferencedContainer = "container:Shelv.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>

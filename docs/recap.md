@@ -48,7 +48,7 @@ For plays to be correctly attributed across devices, Shelv links each server con
 
 ### When a Recap is created
 
-After a period ends (week, month, or year), Shelv waits a short grace period before generating the Recap — this gives devices that were offline time to sync their plays before the top list is finalised. The grace period is 24 hours for weekly, 48 hours for monthly, and 96 hours for yearly Recaps.
+After a period ends (week, month, or year), Shelv waits a short grace period before generating the Recap — this gives devices that were offline time to sync their plays before the top list is finalised. The grace period is 6 hours for weekly, monthly, and yearly Recaps.
 
 Once the grace period has passed, Shelv generates the Recap on the next app start or sync cycle.
 
