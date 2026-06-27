@@ -423,3 +423,6 @@
 "infinity_mode" = "Endlos-Modus";
 "on" = "An";
 "off" = "Aus";
+"what_to_sync" = "Was synchronisiert wird";
+"play_history" = "Wiedergabehistorie";
+"lyrics_server" = "Lyrics-Server";

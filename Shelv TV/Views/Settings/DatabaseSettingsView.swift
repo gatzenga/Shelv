@@ -3,7 +3,6 @@ import SwiftUI
 struct DatabaseSettingsView: View {
     @ObservedObject private var syncStatus = CloudKitSyncService.shared.status
     @AppStorage("mixUseDatabase") private var mixUseDatabase = false
-    @AppStorage("iCloudSyncEnabled") private var iCloudSyncEnabled = true
 
     @State private var totalPlays = 0
 
@@ -16,24 +15,6 @@ struct DatabaseSettingsView: View {
             Section(String(localized: "overview")) {
                 LabeledContent(String(localized: "total_plays"), value: "\(totalPlays)")
                 Toggle(String(localized: "mixes_from_database"), isOn: $mixUseDatabase)
-            }
-
-            Section(String(localized: "icloud_sync")) {
-                Toggle(String(localized: "icloud_sync"), isOn: $iCloudSyncEnabled)
-                    .onChange(of: iCloudSyncEnabled) { _, _ in
-                        Task { await CloudKitSyncService.shared.handleSyncEnabledChange() }
-                    }
-                if iCloudSyncEnabled {
-                    if let date = syncStatus.lastSyncDate {
-                        LabeledContent(String(localized: "last_sync"),
-                                       value: date.formatted(date: .abbreviated, time: .shortened))
-                    }
-                    LabeledContent(String(localized: "pending_uploads"), value: "\(syncStatus.pendingUploads)")
-                    Button(String(localized: "sync_now")) {
-                        Task { await CloudKitSyncService.shared.syncNow() }
-                    }
-                    .disabled(syncStatus.isSyncing)
-                }
             }
 
             Section(String(localized: "logs")) {
@@ -59,6 +40,65 @@ struct DatabaseSettingsView: View {
         if let sid = SubsonicAPIService.shared.activeServer?.stableId, !sid.isEmpty {
             totalPlays = await PlayLogService.shared.logCount(serverId: sid)
         }
+    }
+}
+
+struct ICloudSyncSettingsView: View {
+    @ObservedObject private var syncStatus = CloudKitSyncService.shared.status
+
+    @AppStorage("iCloudSyncEnabled") private var iCloudSyncEnabled = true
+    @AppStorage("iCloudSyncPlayHistoryEnabled") private var playHistorySyncEnabled = true
+    @AppStorage("iCloudSyncRecapEnabled") private var recapSyncEnabled = true
+    @AppStorage("iCloudSyncLyricsServerEnabled") private var lyricsServerSyncEnabled = false
+
+    var body: some View {
+        Form {
+            Text("iCloud")
+                .font(.largeTitle).bold()
+                .listRowBackground(Color.clear)
+
+            Section(String(localized: "icloud_sync")) {
+                Toggle(String(localized: "icloud_sync"), isOn: $iCloudSyncEnabled)
+                    .onChange(of: iCloudSyncEnabled) { _, _ in
+                        Task { await CloudKitSyncService.shared.handleSyncEnabledChange() }
+                    }
+
+                if iCloudSyncEnabled {
+                    if let date = syncStatus.lastSyncDate {
+                        LabeledContent(
+                            String(localized: "last_sync"),
+                            value: date.formatted(date: .abbreviated, time: .shortened)
+                        )
+                    } else {
+                        LabeledContent(String(localized: "last_sync"), value: String(localized: "never"))
+                    }
+                    LabeledContent(String(localized: "pending_uploads"), value: "\(syncStatus.pendingUploads)")
+                    Button(String(localized: "sync_now")) {
+                        Task { await CloudKitSyncService.shared.syncNow() }
+                    }
+                    .disabled(syncStatus.isSyncing)
+                }
+            }
+
+            Section(String(localized: "what_to_sync")) {
+                Toggle(String(localized: "play_history"), isOn: $playHistorySyncEnabled)
+                    .disabled(!iCloudSyncEnabled)
+                    .onChange(of: playHistorySyncEnabled) { _, _ in
+                        Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
+                    }
+                Toggle(String(localized: "recap"), isOn: $recapSyncEnabled)
+                    .disabled(!iCloudSyncEnabled)
+                    .onChange(of: recapSyncEnabled) { _, _ in
+                        Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
+                    }
+                Toggle(String(localized: "lyrics_server"), isOn: $lyricsServerSyncEnabled)
+                    .disabled(!iCloudSyncEnabled)
+                    .onChange(of: lyricsServerSyncEnabled) { _, _ in
+                        Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
+                    }
+            }
+        }
+        .toolbar(.hidden, for: .tabBar)
     }
 }
 

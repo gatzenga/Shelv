@@ -121,6 +121,11 @@ struct SettingsView: View {
                             Image(systemName: "cylinder").foregroundStyle(accentColor)
                         }
                     }
+                    NavigationLink(destination: ICloudSyncSettingsView()) {
+                        Label { Text("iCloud") } icon: {
+                            Image(systemName: "icloud").foregroundStyle(accentColor)
+                        }
+                    }
                 }
 
                 Section(String(localized: "links_contact")) {

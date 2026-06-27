@@ -42,6 +42,11 @@ struct SettingsView: View {
                     Image(systemName: "cylinder")
                     Text(String(localized: "database"))
                 }
+            ICloudSyncTab()
+                .tabItem {
+                    Image(systemName: "icloud")
+                    Text("iCloud")
+                }
             AboutTab()
                 .tabItem {
                     Image(systemName: "info.circle")

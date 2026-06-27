@@ -19,13 +19,11 @@ struct DatabaseSettingsView: View {
     @EnvironmentObject var recapStore: RecapStore
     @EnvironmentObject var ckStatus: CloudKitSyncStatus
     @AppStorage("themeColor") private var themeColorName = "violet"
-    @AppStorage("iCloudSyncEnabled") private var iCloudSyncEnabled = true
     @AppStorage("mixUseDatabase") private var mixUseDatabase = false
 
     @State private var totalPlays: Int = 0
     @State private var showImportFilePicker = false
     @State private var showSyncReport = false
-    @State private var isSyncingManually = false
     @State private var isPreparingExport = false
     @State private var exportItem: ShareableFileWrap?
     @State private var exportError: String?
@@ -102,82 +100,6 @@ struct DatabaseSettingsView: View {
                     Label { Text(String(localized: "import_database")) } icon: {
                         Image(systemName: "square.and.arrow.down").foregroundStyle(accentColor)
                     }
-                }
-            }
-
-            // MARK: iCloud Sync
-            Section(String(localized: "icloud_sync")) {
-                if !ckStatus.accountAvailable {
-                    HStack(spacing: 10) {
-                        Image(systemName: "icloud.slash")
-                            .foregroundStyle(.secondary)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(String(localized: "no_icloud_account"))
-                                .font(.subheadline)
-                            Text(String(localized: "use_exportimport_as_backup_instead"))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .padding(.vertical, 2)
-                } else {
-                    Toggle(isOn: $iCloudSyncEnabled) {
-                        Label { Text(String(localized: "icloud_sync")) } icon: {
-                            Image(systemName: "icloud").foregroundStyle(accentColor)
-                        }
-                    }
-                    .tint(accentColor)
-                    .onChange(of: iCloudSyncEnabled) { _, _ in
-                        Task { await CloudKitSyncService.shared.handleSyncEnabledChange() }
-                    }
-
-                    if !iCloudSyncEnabled {
-                        Text(String(localized: "data_stays_local_multiple_devices_may_create_dupli"))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    HStack {
-                        Label { Text(String(localized: "last_sync")) } icon: {
-                            Image(systemName: "arrow.triangle.2.circlepath").foregroundStyle(accentColor)
-                        }
-                        Spacer()
-                        if let date = ckStatus.lastSyncDate {
-                            Text(date, style: .relative)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        } else {
-                            Text(String(localized: "never"))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    HStack {
-                        Label { Text(String(localized: "pending_uploads")) } icon: {
-                            Image(systemName: "icloud.and.arrow.up").foregroundStyle(accentColor)
-                        }
-                        Spacer()
-                        Text(ckStatus.pendingUploads > 0 ? "\(ckStatus.pendingUploads)" : "—")
-                            .font(.caption).foregroundStyle(.secondary).monospacedDigit()
-                    }
-
-                    Button {
-                        guard !isSyncingManually else { return }
-                        isSyncingManually = true
-                        Task {
-                            defer { isSyncingManually = false }
-                            await CloudKitSyncService.shared.syncNow()
-                        }
-                    } label: {
-                        HStack {
-                            Label { Text(String(localized: "sync_now")) } icon: {
-                                Image(systemName: "arrow.triangle.2.circlepath").foregroundStyle(accentColor)
-                            }
-                            if isSyncingManually { Spacer(); ProgressView() }
-                        }
-                    }
-                    .disabled(isSyncingManually)
                 }
             }
 
@@ -485,6 +407,144 @@ struct DatabaseSettingsView: View {
         }
         .presentationDetents([.medium, .large])
         .presentationCornerRadius(24)
+    }
+}
+
+struct ICloudSyncSettingsView: View {
+    @EnvironmentObject var ckStatus: CloudKitSyncStatus
+    @AppStorage("themeColor") private var themeColorName = "violet"
+    @AppStorage("iCloudSyncEnabled") private var iCloudSyncEnabled = true
+    @AppStorage("iCloudSyncPlayHistoryEnabled") private var playHistorySyncEnabled = true
+    @AppStorage("iCloudSyncRecapEnabled") private var recapSyncEnabled = true
+    @AppStorage("iCloudSyncLyricsServerEnabled") private var lyricsServerSyncEnabled = false
+
+    @State private var isSyncingManually = false
+
+    private var accentColor: Color { AppTheme.color(for: themeColorName) }
+
+    var body: some View {
+        List {
+            Section(String(localized: "icloud_sync")) {
+                if !ckStatus.accountAvailable {
+                    HStack(spacing: 10) {
+                        Image(systemName: "icloud.slash")
+                            .foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(String(localized: "no_icloud_account"))
+                                .font(.subheadline)
+                            Text(String(localized: "use_exportimport_as_backup_instead"))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                } else {
+                    Toggle(isOn: $iCloudSyncEnabled) {
+                        Label { Text(String(localized: "icloud_sync")) } icon: {
+                            Image(systemName: "icloud").foregroundStyle(accentColor)
+                        }
+                    }
+                    .tint(accentColor)
+                    .onChange(of: iCloudSyncEnabled) { _, _ in
+                        Task { await CloudKitSyncService.shared.handleSyncEnabledChange() }
+                    }
+
+                    if !iCloudSyncEnabled {
+                        Text(String(localized: "data_stays_local_multiple_devices_may_create_dupli"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    HStack {
+                        Label { Text(String(localized: "last_sync")) } icon: {
+                            Image(systemName: "arrow.triangle.2.circlepath").foregroundStyle(accentColor)
+                        }
+                        Spacer()
+                        if let date = ckStatus.lastSyncDate {
+                            Text(date, style: .relative)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text(String(localized: "never"))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    HStack {
+                        Label { Text(String(localized: "pending_uploads")) } icon: {
+                            Image(systemName: "icloud.and.arrow.up").foregroundStyle(accentColor)
+                        }
+                        Spacer()
+                        Text(ckStatus.pendingUploads > 0 ? "\(ckStatus.pendingUploads)" : "—")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+
+                    Button {
+                        guard !isSyncingManually else { return }
+                        isSyncingManually = true
+                        Task {
+                            defer { isSyncingManually = false }
+                            await CloudKitSyncService.shared.syncNow()
+                        }
+                    } label: {
+                        HStack {
+                            Label { Text(String(localized: "sync_now")) } icon: {
+                                Image(systemName: "arrow.triangle.2.circlepath").foregroundStyle(accentColor)
+                            }
+                            if isSyncingManually { Spacer(); ProgressView() }
+                        }
+                    }
+                    .disabled(isSyncingManually)
+                }
+            }
+
+            Section(String(localized: "what_to_sync")) {
+                Toggle(isOn: $playHistorySyncEnabled) {
+                    Label { Text(String(localized: "play_history")) } icon: {
+                        Image(systemName: "music.note.list").foregroundStyle(accentColor)
+                    }
+                }
+                .tint(accentColor)
+                .disabled(!iCloudSyncEnabled)
+                .onChange(of: playHistorySyncEnabled) { _, _ in
+                    Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
+                }
+
+                Toggle(isOn: $recapSyncEnabled) {
+                    Label { Text(String(localized: "recap")) } icon: {
+                        Image(systemName: "calendar.badge.clock").foregroundStyle(accentColor)
+                    }
+                }
+                .tint(accentColor)
+                .disabled(!iCloudSyncEnabled)
+                .onChange(of: recapSyncEnabled) { _, _ in
+                    Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
+                }
+
+                Toggle(isOn: $lyricsServerSyncEnabled) {
+                    Label { Text(String(localized: "lyrics_server")) } icon: {
+                        Image(systemName: "text.bubble").foregroundStyle(accentColor)
+                    }
+                }
+                .tint(accentColor)
+                .disabled(!iCloudSyncEnabled)
+                .onChange(of: lyricsServerSyncEnabled) { _, _ in
+                    Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
+                }
+            }
+
+            PlayerBottomSpacer()
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+        }
+        .tint(accentColor)
+        .listStyle(.insetGrouped)
+        .scrollIndicators(.hidden)
+        .navigationTitle("iCloud")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 

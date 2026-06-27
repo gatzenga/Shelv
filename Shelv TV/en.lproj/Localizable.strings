@@ -422,3 +422,6 @@
 "infinity_mode" = "Infinity Mode";
 "on" = "On";
 "off" = "Off";
+"what_to_sync" = "What to Sync";
+"play_history" = "Play History";
+"lyrics_server" = "Lyrics Server";

@@ -8,13 +8,11 @@ struct DatabaseTab: View {
     @StateObject private var ckStatus = CloudKitSyncService.shared.status
     @Environment(\.themeColor) private var themeColor
 
-    @AppStorage("iCloudSyncEnabled") private var iCloudSyncEnabled = true
     @AppStorage("mixUseDatabase") private var mixUseDatabase = false
 
     @State private var totalPlays: Int = 0
     @State private var isPreparingExport = false
     @State private var exportError: String?
-    @State private var isSyncingManually = false
     @State private var showPlayLog = false
     @State private var showSyncLog = false
     @State private var showDBLog = false
@@ -69,59 +67,6 @@ struct DatabaseTab: View {
                     runImportOpenPanel()
                 } label: {
                     Label(String(localized: "import_database"), systemImage: "square.and.arrow.down")
-                }
-            }
-
-            Section(String(localized: "icloud_sync")) {
-                Toggle(String(localized: "enable_icloud_sync"), isOn: $iCloudSyncEnabled)
-                    .onChange(of: iCloudSyncEnabled) { _, _ in
-                        Task { await CloudKitSyncService.shared.handleSyncEnabledChange() }
-                    }
-
-                if !iCloudSyncEnabled {
-                    Text(String(localized: "data_stays_local_multiple_devices_may_create_dupli"))
-                        .font(.caption).foregroundStyle(.secondary)
-                } else if !ckStatus.accountAvailable {
-                    Label {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(String(localized: "no_icloud_account"))
-                            Text(String(localized: "use_exportimport_as_backup_instead"))
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
-                    } icon: {
-                        Image(systemName: "icloud.slash").foregroundStyle(.secondary)
-                    }
-                } else {
-                    LabeledContent(String(localized: "last_sync_2")) {
-                        if let date = ckStatus.lastSyncDate {
-                            Text(date, style: .relative).font(.caption).foregroundStyle(.secondary)
-                        } else {
-                            Text(String(localized: "never")).font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                    LabeledContent(String(localized: "pending_uploads")) {
-                        Text(ckStatus.pendingUploads > 0 ? "\(ckStatus.pendingUploads)" : "—")
-                            .font(.caption).foregroundStyle(.secondary).monospacedDigit()
-                    }
-                    Button {
-                        guard !isSyncingManually else { return }
-                        isSyncingManually = true
-                        Task {
-                            defer { isSyncingManually = false }
-                            await CloudKitSyncService.shared.syncNow()
-                        }
-                    } label: {
-                        Label {
-                            Text(String(localized: "sync_now"))
-                        } icon: {
-                            if isSyncingManually {
-                                ProgressView().controlSize(.small)
-                            } else {
-                                Image(systemName: "arrow.triangle.2.circlepath")
-                            }
-                        }
-                    }
-                    .disabled(isSyncingManually)
                 }
             }
 
@@ -403,6 +348,104 @@ struct DatabaseTab: View {
         guard panel.runModal() == .OK, let url = panel.url,
               let sid = appState.serverStore.activeServer?.stableId else { return }
         Task { await recapStore.importDatabase(from: url, serverId: sid) }
+    }
+}
+
+struct ICloudSyncTab: View {
+    @StateObject private var ckStatus = CloudKitSyncService.shared.status
+    @Environment(\.themeColor) private var themeColor
+
+    @AppStorage("iCloudSyncEnabled") private var iCloudSyncEnabled = true
+    @AppStorage("iCloudSyncPlayHistoryEnabled") private var playHistorySyncEnabled = true
+    @AppStorage("iCloudSyncRecapEnabled") private var recapSyncEnabled = true
+    @AppStorage("iCloudSyncLyricsServerEnabled") private var lyricsServerSyncEnabled = false
+
+    @State private var isSyncingManually = false
+
+    var body: some View {
+        Form {
+            Section(String(localized: "icloud_sync")) {
+                Toggle(String(localized: "enable_icloud_sync"), isOn: $iCloudSyncEnabled)
+                    .onChange(of: iCloudSyncEnabled) { _, _ in
+                        Task { await CloudKitSyncService.shared.handleSyncEnabledChange() }
+                    }
+
+                if !iCloudSyncEnabled {
+                    Text(String(localized: "data_stays_local_multiple_devices_may_create_dupli"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if !ckStatus.accountAvailable {
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(String(localized: "no_icloud_account"))
+                            Text(String(localized: "use_exportimport_as_backup_instead"))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        Image(systemName: "icloud.slash")
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    LabeledContent(String(localized: "last_sync_2")) {
+                        if let date = ckStatus.lastSyncDate {
+                            Text(date, style: .relative)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text(String(localized: "never"))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    LabeledContent(String(localized: "pending_uploads")) {
+                        Text(ckStatus.pendingUploads > 0 ? "\(ckStatus.pendingUploads)" : "—")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                    Button {
+                        guard !isSyncingManually else { return }
+                        isSyncingManually = true
+                        Task {
+                            defer { isSyncingManually = false }
+                            await CloudKitSyncService.shared.syncNow()
+                        }
+                    } label: {
+                        Label {
+                            Text(String(localized: "sync_now"))
+                        } icon: {
+                            if isSyncingManually {
+                                ProgressView().controlSize(.small)
+                            } else {
+                                Image(systemName: "arrow.triangle.2.circlepath")
+                            }
+                        }
+                    }
+                    .disabled(isSyncingManually)
+                }
+            }
+
+            Section(String(localized: "what_to_sync")) {
+                Toggle(String(localized: "play_history"), isOn: $playHistorySyncEnabled)
+                    .disabled(!iCloudSyncEnabled)
+                    .onChange(of: playHistorySyncEnabled) { _, _ in
+                        Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
+                    }
+                Toggle(String(localized: "recap"), isOn: $recapSyncEnabled)
+                    .disabled(!iCloudSyncEnabled)
+                    .onChange(of: recapSyncEnabled) { _, _ in
+                        Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
+                    }
+                Toggle(String(localized: "lyrics_server"), isOn: $lyricsServerSyncEnabled)
+                    .disabled(!iCloudSyncEnabled)
+                    .onChange(of: lyricsServerSyncEnabled) { _, _ in
+                        Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
+                    }
+            }
+        }
+        .formStyle(.grouped)
+        .padding()
     }
 }
 

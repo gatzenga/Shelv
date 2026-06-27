@@ -9,6 +9,18 @@ struct SettingsView: View {
     @AppStorage("recapEnabled") private var recapEnabled = false
 
     private var isGerman: Bool { Locale.preferredLanguages.first?.hasPrefix("de") == true }
+    private var appearanceOptions: [TVSettingsChoiceOption<String>] {
+        [
+            TVSettingsChoiceOption(value: "system", title: String(localized: "system")),
+            TVSettingsChoiceOption(value: "light", title: String(localized: "light")),
+            TVSettingsChoiceOption(value: "dark", title: String(localized: "dark")),
+        ]
+    }
+    private var themeOptions: [TVSettingsChoiceOption<String>] {
+        AppTheme.options.map { opt in
+            TVSettingsChoiceOption(value: opt.name, title: isGerman ? opt.nameDE : opt.nameEN)
+        }
+    }
 
     var body: some View {
         NavigationStack {
@@ -27,16 +39,16 @@ struct SettingsView: View {
                 }
 
                 Section(String(localized: "appearance")) {
-                    Picker(String(localized: "appearance"), selection: $appAppearance) {
-                        Text(String(localized: "system")).tag("system")
-                        Text(String(localized: "light")).tag("light")
-                        Text(String(localized: "dark")).tag("dark")
-                    }
-                    Picker(String(localized: "accent_color"), selection: $themeColor) {
-                        ForEach(AppTheme.options, id: \.name) { opt in
-                            Text(isGerman ? opt.nameDE : opt.nameEN).tag(opt.name)
-                        }
-                    }
+                    TVSettingsChoiceRow(
+                        title: String(localized: "appearance"),
+                        selection: $appAppearance,
+                        options: appearanceOptions
+                    )
+                    TVSettingsChoiceRow(
+                        title: String(localized: "accent_color"),
+                        selection: $themeColor,
+                        options: themeOptions
+                    )
                 }
 
                 Section(String(localized: "library")) {
@@ -47,11 +59,9 @@ struct SettingsView: View {
 
                 Section {
                     NavigationLink(String(localized: "playback")) { PlaybackSettingsView() }
-                }
-
-                Section {
                     NavigationLink(String(localized: "cache")) { CacheSettingsView() }
                     NavigationLink(String(localized: "database")) { DatabaseSettingsView() }
+                    NavigationLink(String(localized: "icloud_sync")) { ICloudSyncSettingsView() }
                 }
 
                 Section(String(localized: "info")) {

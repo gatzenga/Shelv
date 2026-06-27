@@ -418,3 +418,6 @@
 "infinity_mode" = "无限模式";
 "on" = "开";
 "off" = "关";
+"what_to_sync" = "同步内容";
+"play_history" = "播放历史";
+"lyrics_server" = "歌词服务器";
