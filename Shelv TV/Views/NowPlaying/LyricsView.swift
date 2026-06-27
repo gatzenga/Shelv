@@ -128,7 +128,7 @@ struct LyricsView: View {
         plainLines = []
         activeLineIndex = nil
         guard let song = player.currentSong,
-              let serverId = SubsonicAPIService.shared.activeServer?.stableId, !serverId.isEmpty
+              let serverId = SubsonicAPIService.shared.activeServer?.id.uuidString, !serverId.isEmpty
         else { isLoading = false; return }
 
         await LyricsService.shared.setup()

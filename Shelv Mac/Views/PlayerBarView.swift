@@ -5,7 +5,6 @@ import Combine
 struct PlayerBarView: View {
     @EnvironmentObject var appState: AppState
     @ObservedObject var libraryStore = LibraryViewModel.shared
-    @EnvironmentObject var lyricsStore: LyricsStore
     @ObservedObject var downloadStore = DownloadStore.shared
     @ObservedObject private var player = AudioPlayerService.shared
 
@@ -15,7 +14,6 @@ struct PlayerBarView: View {
     @Environment(\.themeColor) private var themeColor
     @AppStorage("enableFavorites") private var enableFavorites = true
     @AppStorage("enablePlaylists") private var enablePlaylists = true
-    @AppStorage("autoFetchLyrics") private var autoFetchLyrics = true
     @State private var isDragging: Bool = false
     @State private var dragValue: Double = 0
     // currentTime ist kein @Published → das Zeit-Label/der Slider werden über den
@@ -285,17 +283,6 @@ struct PlayerBarView: View {
         }
         .onAppear { displayTime = player.currentTime }
         .onChange(of: player.currentSong?.id) { _, _ in displayTime = player.currentTime }
-        .task(id: player.currentSong?.id) {
-            guard autoFetchLyrics,
-                  let song = player.currentSong,
-                  let serverId = appState.serverStore.activeServerID?.uuidString
-            else {
-                lyricsStore.currentLyrics = nil
-                lyricsStore.isLoadingLyrics = false
-                return
-            }
-            lyricsStore.loadLyrics(for: song, serverId: serverId)
-        }
     }
 
     private var repeatHelpText: String {

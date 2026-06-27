@@ -123,6 +123,7 @@ class AudioPlayerService: ObservableObject {
     private var lastArtworkCoverArt: String? = nil
     @AppStorage("gaplessEnabled") private var gaplessEnabled = false
     @AppStorage("streamPreCacheEnabled") private var streamPreCacheEnabled = false
+    @AppStorage("autoFetchLyrics") private var autoFetchLyrics = true
     @AppStorage("replayGainEnabled") private var replayGainEnabled = false
     @AppStorage("replayGainMode") private var replayGainMode = "track"
     @AppStorage("infinityModeEnabled") private var infinityModeEnabled = false
@@ -135,6 +136,7 @@ class AudioPlayerService: ObservableObject {
     private var playbackGeneration: Int = 0
     private var currentArtwork: MPMediaItemArtwork?
     private var artworkTask: Task<Void, Never>?
+    private var lyricsAutoFetchTask: Task<Void, Never>?
 
     private var networkMonitor = NWPathMonitor()
     private let networkMonitorQueue = DispatchQueue(label: "shelv.network", qos: .utility)
@@ -795,6 +797,21 @@ class AudioPlayerService: ObservableObject {
         return SubsonicAPIService.shared.streamURL(for: song.id)
     }
 
+    private func scheduleLyricsAutoFetch(for song: Song?) {
+        lyricsAutoFetchTask?.cancel()
+        guard autoFetchLyrics,
+              !UserDefaults.standard.bool(forKey: "offlineModeEnabled"),
+              let song,
+              let serverId = SubsonicAPIService.shared.activeServer?.id.uuidString
+        else { return }
+
+        lyricsAutoFetchTask = Task(priority: .utility) { [song, serverId] in
+            await LyricsService.shared.setup()
+            guard !Task.isCancelled else { return }
+            _ = await LyricsService.shared.fetchAndSave(song: song, serverId: serverId)
+        }
+    }
+
     private func isTranscodedRemote(_ url: URL) -> Bool {
         guard !url.isFileURL else { return false }
         return url.queryParam("format").map { $0 != "raw" } ?? false
@@ -847,6 +864,7 @@ class AudioPlayerService: ObservableObject {
             self.formatProbeTask?.cancel()
             self.actualStreamFormat = nil
             self.currentSong = song
+            self.scheduleLyricsAutoFetch(for: song)
             self.applyReplayGain(for: song)
             self.isBuffering = false
             self.isBuffering = true
@@ -989,6 +1007,7 @@ class AudioPlayerService: ObservableObject {
         streamTimeOffset = 0
         networkResumeSong = nil
         networkResumeTime = 0
+        lyricsAutoFetchTask?.cancel()
         formatProbeTask?.cancel()
         actualStreamFormat = nil
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
@@ -1545,6 +1564,7 @@ class AudioPlayerService: ObservableObject {
 
                 self.advanceQueueState()
                 self.currentSong = song
+                self.scheduleLyricsAutoFetch(for: song)
                 self.applyReplayGain(for: song)
                 self.currentTime = 0
                 self.isSeeking = false

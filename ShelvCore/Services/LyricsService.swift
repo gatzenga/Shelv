@@ -151,6 +151,7 @@ actor LyricsService {
     // MARK: - Setup
 
     func setup() {
+        guard pool == nil else { return }
         let url = Self.dbURL
         do {
             try FileManager.default.createDirectory(

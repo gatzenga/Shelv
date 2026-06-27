@@ -75,10 +75,14 @@ struct LyricsPanel: View {
             lyricsContent
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear { rebuildLines() }
+        .onAppear {
+            rebuildLines()
+            triggerLyricsLoad()
+        }
         .onChange(of: player.currentSong?.id) { _, _ in
             activeLineIndex = nil
             parsedLines = []
+            triggerLyricsLoad()
         }
         .onChange(of: lyricsStore.currentLyrics?.songId) { _, _ in
             activeLineIndex = nil
@@ -192,6 +196,13 @@ struct LyricsPanel: View {
     }
 
     // MARK: - Logic
+
+    private func triggerLyricsLoad() {
+        guard let song = player.currentSong,
+              let serverId = SubsonicAPIService.shared.activeServer?.id.uuidString
+        else { return }
+        lyricsStore.loadLyrics(for: song, serverId: serverId)
+    }
 
     private func rebuildLines() {
         parsedLines = lyricsStore.currentLyrics?.syncedLrc.map(parseLRC) ?? []

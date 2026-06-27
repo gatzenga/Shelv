@@ -13,7 +13,6 @@ private final class PlayerPaletteResult: NSObject {
 struct PlayerView: View {
     @ObservedObject var player = AudioPlayerService.shared
     @ObservedObject var libraryStore = LibraryStore.shared
-    @EnvironmentObject var lyricsStore: LyricsStore
     @ObservedObject private var offlineMode = OfflineModeService.shared
     @Environment(\.dismiss) var dismiss
     @Environment(\.colorScheme) var colorScheme
@@ -23,7 +22,6 @@ struct PlayerView: View {
 
     @AppStorage("enableFavorites") private var enableFavorites = true
     @AppStorage("enablePlaylists") private var enablePlaylists = true
-    @AppStorage("autoFetchLyrics") private var autoFetchLyrics = true
 
     @State private var seekValue: Double = 0
     @State private var isDragging: Bool = false
@@ -302,13 +300,6 @@ struct PlayerView: View {
                     artistResolveTask?.cancel()
                     artistResolveTask = nil
                     isResolvingArtist = false
-                }
-                .task(id: player.currentSong?.id) {
-                    guard autoFetchLyrics,
-                          let song = player.currentSong,
-                          let serverId = SubsonicAPIService.shared.activeServer?.id.uuidString
-                    else { lyricsStore.currentLyrics = nil; lyricsStore.isLoadingLyrics = false; return }
-                    lyricsStore.loadLyrics(for: song, serverId: serverId)
                 }
                 .task(id: player.currentSong?.coverArt) {
                     await updatePlayerBackground()
