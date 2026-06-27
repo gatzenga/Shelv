@@ -526,12 +526,14 @@ struct ICloudSyncSettingsView: View {
                 .onChange(of: lyricsServerSyncEnabled) { _, _ in
                     Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
                 }
+            }
 
+            Section(String(localized: "logs")) {
                 NavigationLink(destination:
                     RecapSyncLogView()
                         .environmentObject(ckStatus)
                 ) {
-                    Label { Text(String(localized: "logs")) } icon: {
+                    Label { Text(String(localized: "sync_log")) } icon: {
                         Image(systemName: "doc.text").foregroundStyle(accentColor)
                     }
                 }

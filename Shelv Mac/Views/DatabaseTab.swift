@@ -14,7 +14,6 @@ struct DatabaseTab: View {
     @State private var isPreparingExport = false
     @State private var exportError: String?
     @State private var showPlayLog = false
-    @State private var showSyncLog = false
     @State private var showDBLog = false
     @State private var showResetConfirm = false
     @State private var showIcloudResetConfirm = false
@@ -73,9 +72,6 @@ struct DatabaseTab: View {
             Section(String(localized: "logs")) {
                 Button { showPlayLog = true } label: {
                     Label(String(localized: "recent_plays"), systemImage: "list.bullet.clipboard")
-                }
-                Button { showSyncLog = true } label: {
-                    Label(String(localized: "sync_log"), systemImage: "doc.text")
                 }
                 Button { showDBLog = true } label: {
                     Label(String(localized: "database_errors"), systemImage: "tablecells")
@@ -161,9 +157,6 @@ struct DatabaseTab: View {
             if let sid = appState.serverStore.activeServer?.stableId {
                 RecapPlayLogView(serverId: sid)
             }
-        }
-        .sheet(isPresented: $showSyncLog) {
-            RecapSyncLogView()
         }
         .sheet(isPresented: $showDBLog) {
             RecapDBLogView()
@@ -361,6 +354,7 @@ struct ICloudSyncTab: View {
     @AppStorage("iCloudSyncLyricsServerEnabled") private var lyricsServerSyncEnabled = false
 
     @State private var isSyncingManually = false
+    @State private var showSyncLog = false
 
     var body: some View {
         Form {
@@ -443,9 +437,18 @@ struct ICloudSyncTab: View {
                         Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
                     }
             }
+
+            Section(String(localized: "logs")) {
+                Button { showSyncLog = true } label: {
+                    Label(String(localized: "sync_log"), systemImage: "doc.text")
+                }
+            }
         }
         .formStyle(.grouped)
         .padding()
+        .sheet(isPresented: $showSyncLog) {
+            RecapSyncLogView()
+        }
     }
 }
 

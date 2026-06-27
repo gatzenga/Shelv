@@ -93,7 +93,10 @@ struct ICloudSyncSettingsView: View {
                     .onChange(of: lyricsServerSyncEnabled) { _, _ in
                         Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
                     }
-                NavigationLink(String(localized: "logs")) {
+            }
+
+            Section(String(localized: "logs")) {
+                NavigationLink(String(localized: "sync_log")) {
                     SyncLogView()
                 }
             }
