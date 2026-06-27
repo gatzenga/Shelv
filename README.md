@@ -5,7 +5,7 @@
 
 # Shelv
 
-A native, album and artist focused iOS, iPadOS, macOS, and tvOS client for [Navidrome](https://www.navidrome.org/) and Subsonic-compatible music servers, built with SwiftUI. Includes **Recap** — automatic weekly, monthly, and yearly playlists of your most-played songs, synced across iPhone, iPad, Mac, and Apple TV via iCloud.
+A native, album and artist focused iOS, iPadOS, macOS, and tvOS client for [Navidrome](https://www.navidrome.org/) and Subsonic-compatible music servers, built with SwiftUI. Includes **Recap** — automatic weekly, monthly, and yearly playlists of your most-played songs, with optional iCloud sync across iPhone, iPad, Mac, and Apple TV.
 
 [![Download on the App Store](https://developer.apple.com/app-store/marketing/guidelines/images/badge-download-on-the-app-store.svg)](https://apps.apple.com/us/app/shelv-player/id6762255865)
 
@@ -45,6 +45,7 @@ A native, album and artist focused iOS, iPadOS, macOS, and tvOS client for [Navi
 - **Reorder and delete** — Drag to reorder or swipe to delete any track in any queue section
 - **Shuffle** — Merges all three queues into one shuffled list; a snapshot preserves the original order so it can be fully restored when shuffle is turned off. When an album or artist is started via Shuffle, the shuffled order itself becomes the reference — disabling shuffle mid-playback keeps the same shuffled sequence without losing any tracks
 - **Persistent state** — Queue, current track, playback position, shuffle state, and repeat mode all survive app restarts
+- **Queue Sync** — Optionally sync the current queue through iCloud or Subsonic, with a takeover prompt when another device has a newer queue
 
 ### Favorites *(optional)*
 - Star songs, albums, and artists — synced to the server via the Subsonic API
@@ -59,11 +60,12 @@ A native, album and artist focused iOS, iPadOS, macOS, and tvOS client for [Navi
 ### Lyrics
 - Synced and plain-text lyrics displayed in the full-screen player, with automatic line highlighting and scrolling for time-coded tracks
 - Lyrics are fetched from your Navidrome server first; if none are stored there, Shelv falls back to [lrclib.net](https://lrclib.net) automatically
+- Custom LRCLIB-compatible servers are supported, and the server setting can be synced through iCloud
 - Each song's lyrics are cached locally so they load instantly after the first fetch
 - **Auto-load** — when enabled in Settings, lyrics are fetched in the background as soon as a song starts playing
 - **Bulk download** — a one-tap option in Settings pre-fetches lyrics for your entire library in the background, with a live progress counter
 
-### Downloads & Offline Mode *(optional)*
+### Downloads & Offline Mode *(optional, iOS/iPadOS/macOS)*
 - Download albums and artists to your device for playback without a network connection
 - **Bulk download** — queue your entire library in one tap; Shelv prioritises frequently played, recently played, and starred content first
 - Configurable storage limit; download badges on album covers show full or partial download status
@@ -72,7 +74,7 @@ A native, album and artist focused iOS, iPadOS, macOS, and tvOS client for [Navi
 - Can be enabled or disabled in Settings; when disabled, all download UI is hidden
 
 ### Transcoding *(optional)*
-- Set separate audio format and bitrate policies for Wi-Fi streaming, cellular streaming, and downloads
+- Set audio format and bitrate policies for streaming and downloads; iOS, iPadOS, and macOS support separate Wi-Fi, cellular, and download profiles, while tvOS uses one streaming profile
 - Supported formats: `raw` (original file), `mp3`, `opus`
 - Useful for saving storage on downloaded files or reducing cellular data usage
 - Falls back to `raw` automatically if the server doesn't support the chosen format
@@ -81,10 +83,15 @@ A native, album and artist focused iOS, iPadOS, macOS, and tvOS client for [Navi
 ### Recap
 - Automatic weekly, monthly, and yearly playlists of your most-played songs, created directly on your Navidrome server
 - Configurable play threshold (10–50%): a track only counts once you've heard enough of it
-- Plays are recorded locally and synced across all your devices via iCloud — offline plays are queued and uploaded as soon as the network is available
-- Duplicate-safe: a CloudKit marker prevents multiple devices from creating the same Recap playlist
+- Plays are recorded locally and can be synced across your devices via iCloud — offline plays are queued and uploaded as soon as the network is available
+- Duplicate-safe: an iCloud marker prevents multiple devices from creating the same Recap playlist when Recap sync is enabled
 - **Playlog Sync** — checks whether existing Recap playlists on the server still match the database and lets you apply fixes or create a new playlist
 - Database can be exported and imported; after an import a sync check runs automatically with rollback on cancel
+
+### CarPlay
+- Browse Discover, Library, Playlists, Favorites, Recaps, and the current queue from CarPlay
+- Play, shuffle, queue, favorite, and open Now Playing using CarPlay-native templates
+- Cover art is streamed in small batches so lists stay responsive while artwork loads
 
 ### Search
 - Global search across artists, albums, and tracks on your server; also searches locally cached lyrics
@@ -95,8 +102,9 @@ A native, album and artist focused iOS, iPadOS, macOS, and tvOS client for [Navi
 - **Appearance** — Choose between Light, Dark, and System mode; pick one of ten accent colors
 - **Cache** — See the current cover art cache size and clear it with a single tap
 - **Downloads** — Enable downloads, set storage limit, run a bulk download, toggle Offline Mode, manage downloaded content
-- **Transcoding** — Enable transcoding and configure format and bitrate per network type and for downloads
-- **Recap** — Configure periods (weekly, monthly, yearly), retention, play threshold, iCloud sync, and database export/import
+- **Playback** — Configure gapless playback, transcoding, replay gain, scrobble threshold, lyrics, and Queue Sync
+- **iCloud** — Enable iCloud sync and choose what to sync: Play History, Recap, and Lyrics Server
+- **Recap** — Configure periods (weekly, monthly, yearly), retention, play threshold, and database export/import
 - **Favorites & Playlists** — Toggle each feature on or off independently
 
 ### Cover Art
@@ -108,7 +116,7 @@ A native, album and artist focused iOS, iPadOS, macOS, and tvOS client for [Navi
 - iOS 18 or later / iPadOS 18 or later
 - macOS 15.6 or later
 - tvOS 18.6 or later
-- Xcode 26 or later
+- Xcode 27 or later
 - A running [Navidrome](https://www.navidrome.org/) or Subsonic-compatible server
 
 ## Getting Started
@@ -129,7 +137,9 @@ A native, album and artist focused iOS, iPadOS, macOS, and tvOS client for [Navi
 ShelvApp  (@main)
 ├── ServerStore              — server list, active server, Keychain integration
 ├── LibraryStore  (@MainActor) — albums, artists, Discover data (disk + memory cache)
-└── AudioPlayerService.shared — AVPlayer, 3-queue system, MPRemoteCommandCenter, AirPlay
+├── AudioPlayerService.shared — AVPlayer, 3-queue system, MPRemoteCommandCenter, AirPlay
+├── QueueSyncService.shared   — optional iCloud/Subsonic queue handoff
+└── CloudKitSyncService.shared — Play History, Recap, Lyrics Server, and Queue Sync records
 ```
 
 All API communication goes through `SubsonicAPIService.shared` using MD5 token authentication. Cover art is handled exclusively by `ImageCacheService` (actor-isolated, NSCache + disk, concurrent deduplication) — `AsyncImage` is never used directly.
@@ -152,6 +162,8 @@ Playback order: `playNextQueue` → `queue[currentIndex+1...]` → `userQueue` (
 - **One** — Replays the current track on natural end; a manual skip advances to the next track
 
 **Jump** — Tapping any track in the queue removes it from its position, inserts it directly after the current track, and starts playback immediately. Nothing before it is discarded.
+
+**Queue Sync** — The queue can stay local, sync through Subsonic's play queue endpoint, or sync through iCloud. Subsonic mode stores a flat queue that can interoperate with other clients; iCloud mode keeps Shelv's full queue structure, shuffle, and repeat state. Remote queues are offered as a takeover prompt instead of replacing local playback automatically.
 
 ### Caching Strategy
 
@@ -181,20 +193,20 @@ See [LICENSE](LICENSE) for details.
 
 <table>
   <tr>
-    <td><img src="Screenshots_iPhone/home.png" width="220"/></td>
-    <td><img src="Screenshots_iPhone/recap.png" width="220"/></td>
-    <td><img src="Screenshots_iPhone/player.png" width="220"/></td>
+    <td><img src="screenshots_iPhone/home.png" width="220"/></td>
+    <td><img src="screenshots_iPhone/recap.png" width="220"/></td>
+    <td><img src="screenshots_iPhone/player.png" width="220"/></td>
   </tr>
   <tr>
-    <td><img src="Screenshots_iPhone/albums.png" width="220"/></td>
-    <td><img src="Screenshots_iPhone/artists.png" width="220"/></td>
-    <td><img src="Screenshots_iPhone/favorites.png" width="220"/></td>
+    <td><img src="screenshots_iPhone/albums.png" width="220"/></td>
+    <td><img src="screenshots_iPhone/artists.png" width="220"/></td>
+    <td><img src="screenshots_iPhone/favorites.png" width="220"/></td>
   </tr>
 </table>
 <table align="center">
   <tr>
-    <td><img src="Screenshots_iPhone/album.png" width="220"/></td>
-    <td><img src="Screenshots_iPhone/playlists.png" width="220"/></td>
+    <td><img src="screenshots_iPhone/album.png" width="220"/></td>
+    <td><img src="screenshots_iPhone/playlists.png" width="220"/></td>
   </tr>
 </table>
 
@@ -202,20 +214,20 @@ See [LICENSE](LICENSE) for details.
 
 <table>
   <tr>
-    <td><img src="Screenshots_iPad/home.png" width="220"/></td>
-    <td><img src="Screenshots_iPad/recap.png" width="220"/></td>
-    <td><img src="Screenshots_iPad/player.png" width="220"/></td>
+    <td><img src="screenshots_iPad/home.png" width="220"/></td>
+    <td><img src="screenshots_iPad/recap.png" width="220"/></td>
+    <td><img src="screenshots_iPad/player.png" width="220"/></td>
   </tr>
   <tr>
-    <td><img src="Screenshots_iPad/albums.png" width="220"/></td>
-    <td><img src="Screenshots_iPad/artists.png" width="220"/></td>
-    <td><img src="Screenshots_iPad/favorites.png" width="220"/></td>
+    <td><img src="screenshots_iPad/albums.png" width="220"/></td>
+    <td><img src="screenshots_iPad/artists.png" width="220"/></td>
+    <td><img src="screenshots_iPad/favorites.png" width="220"/></td>
   </tr>
 </table>
 <table align="center">
   <tr>
-    <td><img src="Screenshots_iPad/album.png" width="220"/></td>
-    <td><img src="Screenshots_iPad/playlists.png" width="220"/></td>
+    <td><img src="screenshots_iPad/album.png" width="220"/></td>
+    <td><img src="screenshots_iPad/playlists.png" width="220"/></td>
   </tr>
 </table>
 
