@@ -56,12 +56,18 @@ struct LyricsSettingsView: View {
                     }
                 }
                 .tint(accentColor)
+                .onChange(of: useCustomLrcLibServer) { _, _ in
+                    Task { await CloudKitSyncService.shared.recordLyricsServerSettingsChange() }
+                }
 
                 if useCustomLrcLibServer {
                     TextField(String(localized: "lrclib_server_url"), text: $customLrcLibBaseURL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .keyboardType(.URL)
+                        .onChange(of: customLrcLibBaseURL) { _, _ in
+                            Task { await CloudKitSyncService.shared.recordLyricsServerSettingsChange() }
+                        }
                 }
 
                 if lyricsStore.isDownloading {

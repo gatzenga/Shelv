@@ -47,11 +47,17 @@ struct LyricsSettingsPanel: View {
                     }
                 }
                 .tint(themeColor)
+                .onChange(of: useCustomLrcLibServer) { _, _ in
+                    Task { await CloudKitSyncService.shared.recordLyricsServerSettingsChange() }
+                }
 
                 if useCustomLrcLibServer {
                     TextField(String(localized: "lrclib_server_url"), text: $customLrcLibBaseURL)
                         .textFieldStyle(.roundedBorder)
                         .autocorrectionDisabled()
+                        .onChange(of: customLrcLibBaseURL) { _, _ in
+                            Task { await CloudKitSyncService.shared.recordLyricsServerSettingsChange() }
+                        }
                 }
             }
 

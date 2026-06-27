@@ -52,6 +52,39 @@ enum RecapMarkerSaveResult {
     case conflict(existingPlaylistId: String)
 }
 
+private enum CloudSyncCategory: String, CaseIterable {
+    case playHistory
+    case recap
+    case lyricsServer
+
+    nonisolated var displayName: String {
+        switch self {
+        case .playHistory: return "Play History"
+        case .recap: return "Recap"
+        case .lyricsServer: return "Lyrics Server"
+        }
+    }
+
+    nonisolated var tokenKey: String {
+        switch self {
+        case .playHistory: return "shelv_ck_zone_token_play_history"
+        case .recap: return "shelv_ck_zone_token_recap"
+        case .lyricsServer: return "shelv_ck_zone_token_lyrics_server"
+        }
+    }
+
+    nonisolated func handles(recordType: CKRecord.RecordType) -> Bool {
+        switch self {
+        case .playHistory:
+            return recordType == "PlayEvent"
+        case .recap:
+            return recordType == "RecapMarker" || recordType == "RecapSettings"
+        case .lyricsServer:
+            return recordType == "LyricsServerSettings"
+        }
+    }
+}
+
 // MARK: - CloudKitSyncService
 
 actor CloudKitSyncService {
@@ -64,9 +97,13 @@ actor CloudKitSyncService {
     private let zoneID     = CKRecordZone.ID(zoneName: "ShelveRecapZone",
                                               ownerName: CKCurrentUserDefaultName)
 
-    private let tokenKey    = "shelv_ck_zone_token"
+    private let legacyTokenKey = "shelv_ck_zone_token"
     private let deviceIdKey = "shelv_device_id"
     private let syncEnabledKey = "iCloudSyncEnabled"
+    private let playHistorySyncEnabledKey = "iCloudSyncPlayHistoryEnabled"
+    private let recapSyncEnabledKey = "iCloudSyncRecapEnabled"
+    private let lyricsServerSyncEnabledKey = "iCloudSyncLyricsServerEnabled"
+    private let queueSyncModeKey = "queueSyncMode"
 
     // Geteilte Recap-Retention (eine Wahrheit über alle Geräte, statt lokalem @AppStorage).
     // Singleton-Record in der Zone; Last-write-wins per updatedAt-Zeitstempel.
@@ -77,22 +114,67 @@ actor CloudKitSyncService {
     private let retentionUpdatedAtKey = "recap_retention_updated_at"
     private let retentionSyncedAtKey  = "recap_retention_synced_at"
 
+    private static let lyricsServerRecordName = "lyrics_server_settings"
+    private static let lyricsUseCustomKey = "useCustomLrcLibServer"
+    private static let lyricsCustomURLKey = "customLrcLibBaseURL"
+    private let lyricsServerUpdatedAtKey = "lyrics_server_updated_at"
+    private let lyricsServerSyncedAtKey = "lyrics_server_synced_at"
+    private let lyricsServerEchoUseCustomKey = "lyrics_server_echo_use_custom"
+    private let lyricsServerEchoCustomURLKey = "lyrics_server_echo_custom_url"
+    private let lyricsServerEchoUpdatedAtKey = "lyrics_server_echo_updated_at"
+
     private var isZoneReady = false
+    private var lastDisabledLogAt: [String: Date] = [:]
 
     private var syncEnabled: Bool {
         if UserDefaults.standard.object(forKey: syncEnabledKey) == nil { return true }
         return UserDefaults.standard.bool(forKey: syncEnabledKey)
     }
 
+    private var playHistorySyncEnabled: Bool {
+        boolDefaultingToTrue(forKey: playHistorySyncEnabledKey)
+    }
+
+    private var recapSyncEnabled: Bool {
+        boolDefaultingToTrue(forKey: recapSyncEnabledKey)
+    }
+
+    private var lyricsServerSyncEnabled: Bool {
+        UserDefaults.standard.bool(forKey: lyricsServerSyncEnabledKey)
+    }
+
+    private var offlineModeEnabled: Bool {
+        UserDefaults.standard.bool(forKey: "offlineModeEnabled")
+    }
+
     /// Voraussetzungen für *jeden* iCloud-Sync-Pfad:
     /// - iCloud-Sync vom User aktiviert
     /// - Nicht im Offline-Modus (Server eh nicht erreichbar)
-    /// Unabhängig von Recap: synchronisiert wird die SQLite-DB (Play-Log + Recap-Marker).
-    /// Recap ist nur einer ihrer Konsumenten — die DB existiert auch ohne aktives Recap.
-    private var canSync: Bool {
+    private var canSyncBase: Bool {
         guard syncEnabled else { return false }
-        if UserDefaults.standard.bool(forKey: "offlineModeEnabled") { return false }
+        if offlineModeEnabled { return false }
         return true
+    }
+
+    private var canSync: Bool {
+        canSyncBase && CloudSyncCategory.allCases.contains { isEnabled($0) }
+    }
+
+    private func boolDefaultingToTrue(forKey key: String) -> Bool {
+        if UserDefaults.standard.object(forKey: key) == nil { return true }
+        return UserDefaults.standard.bool(forKey: key)
+    }
+
+    private func isEnabled(_ category: CloudSyncCategory) -> Bool {
+        switch category {
+        case .playHistory: return playHistorySyncEnabled
+        case .recap: return recapSyncEnabled
+        case .lyricsServer: return lyricsServerSyncEnabled
+        }
+    }
+
+    private func canSync(_ category: CloudSyncCategory) -> Bool {
+        canSyncBase && isEnabled(category)
     }
     // NWPathMonitor lebt im actor – kein Lifecycle-Problem auf SwiftUI-Structs
     nonisolated(unsafe) private var pathMonitor: NWPathMonitor?
@@ -109,22 +191,29 @@ actor CloudKitSyncService {
 
     // MARK: - Change Token
 
-    private var changeToken: CKServerChangeToken? {
-        get {
-            guard let data = UserDefaults.standard.data(forKey: tokenKey) else { return nil }
-            return try? NSKeyedUnarchiver.unarchivedObject(ofClass: CKServerChangeToken.self, from: data)
-        }
-        set {
-            if let token = newValue,
-               let data = try? NSKeyedArchiver.archivedData(withRootObject: token, requiringSecureCoding: true) {
-                Self.setUserDefault(.data(data), forKey: tokenKey)
-            } else {
-                Self.removeUserDefault(forKey: tokenKey)
-            }
+    private func changeToken(for category: CloudSyncCategory) -> CKServerChangeToken? {
+        guard let data = UserDefaults.standard.data(forKey: category.tokenKey) else { return nil }
+        return try? NSKeyedUnarchiver.unarchivedObject(ofClass: CKServerChangeToken.self, from: data)
+    }
+
+    private func setChangeToken(_ token: CKServerChangeToken?, for category: CloudSyncCategory) {
+        if let token,
+           let data = try? NSKeyedArchiver.archivedData(withRootObject: token, requiringSecureCoding: true) {
+            Self.setUserDefault(.data(data), forKey: category.tokenKey)
+        } else {
+            Self.removeUserDefault(forKey: category.tokenKey)
         }
     }
 
+    private func clearChangeTokens() {
+        for category in CloudSyncCategory.allCases {
+            setChangeToken(nil, for: category)
+        }
+        Self.removeUserDefault(forKey: legacyTokenKey)
+    }
+
     private nonisolated enum UserDefaultValue: Sendable {
+        case bool(Bool)
         case string(String)
         case data(Data)
         case stringArray([String])
@@ -144,6 +233,8 @@ actor CloudKitSyncService {
 
     private nonisolated static func writeUserDefault(_ value: UserDefaultValue, forKey key: String) {
         switch value {
+        case .bool(let value):
+            UserDefaults.standard.set(value, forKey: key)
         case .string(let value):
             UserDefaults.standard.set(value, forKey: key)
         case .data(let value):
@@ -171,8 +262,8 @@ actor CloudKitSyncService {
 
     func setup() async {
         debug("[CloudKitSync] setup() starting")
-        guard canSync else {
-            debug("[CloudKitSync] setup() skipped — sync conditions not met (icloud/recap/offline)")
+        guard canSyncBase || canSyncQueue else {
+            debug("[CloudKitSync] setup() skipped — sync conditions not met (icloud/offline)")
             return
         }
         let accountStatus = await updateAccountStatus()
@@ -264,14 +355,21 @@ actor CloudKitSyncService {
     // MARK: - Upload
 
     func uploadPendingEvents() async {
-        guard canSync else { return }
+        guard canSyncBase else {
+            logDisabled(.playHistory, action: "pending play upload")
+            return
+        }
+        guard canSync(.playHistory) else {
+            logDisabled(.playHistory, action: "pending play upload")
+            return
+        }
         guard await status.accountAvailable else {
             debug("[CloudKitSync] uploadPendingEvents skipped – account not available")
             return
         }
         do {
             try await ensureZoneExists()
-            while canSync {
+            while canSync(.playHistory) {
                 let unsynced = await PlayLogService.shared.fetchUnsynced(limit: 200)
                 debug("[CloudKitSync] Pending events to upload: \(unsynced.count)")
                 guard !unsynced.isEmpty else { return }
@@ -337,72 +435,105 @@ actor CloudKitSyncService {
     // MARK: - Download
 
     func downloadChanges() async {
-        guard canSync else { return }
+        guard canSyncBase else {
+            logDisabled(nil, action: "iCloud download")
+            return
+        }
         guard await status.accountAvailable else {
             log("Download skipped — iCloud account not available")
             return
         }
+        let enabledCategories = CloudSyncCategory.allCases.filter { canSync($0) }
+        guard !enabledCategories.isEmpty else {
+            logDisabled(nil, action: "iCloud download")
+            return
+        }
+        for category in enabledCategories {
+            await downloadChanges(for: category)
+        }
+    }
+
+    private func downloadChanges(for category: CloudSyncCategory) async {
         do {
             try await ensureZoneExists()
-            let hasToken = changeToken != nil
-            debug("[CloudKitSync] Fetching changes with token: \(hasToken ? "hasToken" : "noToken")")
-            let (records, deletions, newToken) = try await fetchZoneChanges()
-            debug("[CloudKitSync] Received \(records.count) new records, \(deletions.count) deletions")
+            let token = changeToken(for: category)
+            let hasToken = token != nil
+            debug("[CloudKitSync] Fetching \(category.displayName) changes with token: \(hasToken ? "hasToken" : "noToken")")
+            let (records, deletions, newToken) = try await fetchZoneChanges(previousToken: token)
+            debug("[CloudKitSync] Received \(records.count) new records, \(deletions.count) deletions for \(category.displayName)")
             // Deletionen zuerst: verhindert, dass ein Add mit gleichem recordName
             // (z.B. Recap-Marker Reset + Neu-Erzeugung auf anderem Gerät) durch
             // eine nachfolgende Delete-Meldung wieder entfernt wird.
-            var playsDel = 0, recapsDel = 0
+            var playsDel = 0, recapsDel = 0, settingsDel = 0
             for (recordID, recordType) in deletions {
+                guard category.handles(recordType: recordType) else { continue }
                 switch recordType {
                 case "PlayEvent": playsDel += 1
                 case "RecapMarker": recapsDel += 1
+                case "RecapSettings", "LyricsServerSettings": settingsDel += 1
                 default: break
                 }
                 await handleDeletedRecord(id: recordID, type: recordType)
             }
-            var playsIn = 0, recapsIn = 0
+            var playsIn = 0, recapsIn = 0, settingsIn = 0
             for record in records {
+                guard category.handles(recordType: record.recordType) else { continue }
                 switch record.recordType {
                 case "PlayEvent": playsIn += 1
                 case "RecapMarker": recapsIn += 1
+                case "RecapSettings", "LyricsServerSettings": settingsIn += 1
                 default: break
                 }
                 await handleIncomingRecord(record)
             }
             // Retention-Settings: nach dem Einlesen lokalen Stand ggf. nachschieben.
-            await pushRetentionIfNeeded()
-            if let token = newToken { changeToken = token }
-            log("Downloaded \(playsIn) plays, \(recapsIn) recaps (\(records.count) records total)")
-            if playsDel + recapsDel > 0 {
-                log("Deleted on other device: \(playsDel) plays, \(recapsDel) recaps")
+            if category == .recap {
+                await pushRetentionIfNeeded()
+            } else if category == .lyricsServer {
+                await pushLyricsServerSettingsIfNeeded()
+            }
+            if let token = newToken { setChangeToken(token, for: category) }
+            let downloadedSummary = [
+                playsIn > 0 ? "\(playsIn) plays" : nil,
+                recapsIn > 0 ? "\(recapsIn) recaps" : nil,
+                settingsIn > 0 ? "\(settingsIn) settings" : nil
+            ].compactMap { $0 }.joined(separator: ", ")
+            log("Downloaded \(category.displayName): \(downloadedSummary.isEmpty ? "no changes" : downloadedSummary)")
+            if playsDel + recapsDel + settingsDel > 0 {
+                let deletedSummary = [
+                    playsDel > 0 ? "\(playsDel) plays" : nil,
+                    recapsDel > 0 ? "\(recapsDel) recaps" : nil,
+                    settingsDel > 0 ? "\(settingsDel) settings" : nil
+                ].compactMap { $0 }.joined(separator: ", ")
+                log("Deleted on other device (\(category.displayName)): \(deletedSummary)")
             }
             await MainActor.run { status.lastSyncDate = Date() }
         } catch {
-            debug("[CloudKitSync] Download error: \(error)")
+            debug("[CloudKitSync] \(category.displayName) download error: \(error)")
             debug("[CloudKitSync] Download error description: \(error.localizedDescription)")
             if let ck = error as? CKError {
                 debug("[CloudKitSync] Download CKError code=\(ck.code.rawValue) (\(ck.code)) userInfo=\(ck.userInfo)")
             }
             if isZoneNotFound(error) {
                 await markLocalAsUnsyncedForActiveServer()
-                changeToken = nil
+                setChangeToken(nil, for: category)
                 isZoneReady = false
-                log("iCloud zone was reset on another device — marking local data for re-upload")
+                log("iCloud zone was reset on another device — marking local \(category.displayName) data for re-upload")
             } else if isChangeTokenExpired(error) {
                 // Zone was wiped and recreated on another device (typical when that device
                 // re-enabled sync in the same flow). Treat like zoneNotFound so our local
                 // truth gets re-uploaded.
                 await markLocalAsUnsyncedForActiveServer()
-                changeToken = nil
+                setChangeToken(nil, for: category)
                 isZoneReady = false
-                log("Change token expired — marking local data for re-upload")
+                log("Change token expired for \(category.displayName) — marking local data for re-upload")
             } else {
-                log("Download error: \(error.localizedDescription)", isError: true)
+                log("\(category.displayName) download error: \(error.localizedDescription)", isError: true)
             }
         }
     }
 
-    private func fetchZoneChanges() async throws -> (changed: [CKRecord], deleted: [(CKRecord.ID, CKRecord.RecordType)], token: CKServerChangeToken?) {
+    private func fetchZoneChanges(previousToken: CKServerChangeToken?) async throws -> (changed: [CKRecord], deleted: [(CKRecord.ID, CKRecord.RecordType)], token: CKServerChangeToken?) {
         try await withCheckedThrowingContinuation { continuation in
             var changed: [CKRecord] = []
             var deleted: [(CKRecord.ID, CKRecord.RecordType)] = []
@@ -410,7 +541,7 @@ actor CloudKitSyncService {
             var zoneError: Error?
 
             let config = CKFetchRecordZoneChangesOperation.ZoneConfiguration()
-            config.previousServerChangeToken = changeToken
+            config.previousServerChangeToken = previousToken
 
             let op = CKFetchRecordZoneChangesOperation(
                 recordZoneIDs: [zoneID],
@@ -457,6 +588,7 @@ actor CloudKitSyncService {
     private func handleIncomingRecord(_ record: CKRecord) async {
         switch record.recordType {
         case "PlayEvent":
+            guard canSync(.playHistory) else { return }
             guard
                 let uuid       = record["uuid"]         as? String,
                 let songId     = record["songId"]        as? String,
@@ -470,6 +602,7 @@ actor CloudKitSyncService {
             )
 
         case "RecapMarker":
+            guard canSync(.recap) else { return }
             guard
                 let playlistId  = record["playlistId"]  as? String,
                 let serverId    = record["serverId"]     as? String,
@@ -499,7 +632,12 @@ actor CloudKitSyncService {
             }
 
         case "RecapSettings":
+            guard canSync(.recap) else { return }
             applyIncomingRetention(record)
+
+        case "LyricsServerSettings":
+            guard canSync(.lyricsServer) else { return }
+            applyIncomingLyricsServerSettings(record)
 
         default:
             break
@@ -509,6 +647,7 @@ actor CloudKitSyncService {
     private func handleDeletedRecord(id: CKRecord.ID, type: CKRecord.RecordType) async {
         switch type {
         case "RecapMarker":
+            guard canSync(.recap) else { return }
             if let entry = await PlayLogService.shared.registryEntry(byCKRecordName: id.recordName),
                entry.periodType == RecapPeriod.PeriodType.week.rawValue,
                !entry.isTest {
@@ -520,6 +659,7 @@ actor CloudKitSyncService {
                 NotificationCenter.default.post(name: .recapRegistryUpdated, object: nil)
             }
         case "PlayEvent":
+            guard canSync(.playHistory) else { return }
             await PlayLogService.shared.deletePlayLog(uuid: id.recordName)
             await updatePendingCounts()
         default:
@@ -530,7 +670,10 @@ actor CloudKitSyncService {
     // MARK: - RecapMarker
 
     func saveRecapMarker(_ entry: RecapRegistryRecord, periodKey: String) async throws -> RecapMarkerSaveResult {
-        guard canSync else { return .created }
+        guard canSync(.recap) else {
+            logDisabled(.recap, action: "recap marker upload")
+            return .created
+        }
         try await ensureZoneExists()
         let recordName = makeRecapMarkerRecordName(serverId: entry.serverId, periodKey: periodKey, isTest: entry.isTest)
         let rid = CKRecord.ID(recordName: recordName, zoneID: zoneID)
@@ -570,7 +713,10 @@ actor CloudKitSyncService {
     }
 
     func fetchRecapMarker(serverId: String, periodKey: String, isTest: Bool = false) async -> RecapRegistryRecord? {
-        guard canSync else { return nil }
+        guard canSync(.recap) else {
+            logDisabled(.recap, action: "recap marker download")
+            return nil
+        }
         let recordName = makeRecapMarkerRecordName(serverId: serverId, periodKey: periodKey, isTest: isTest)
         let rid = CKRecord.ID(recordName: recordName, zoneID: zoneID)
         guard let record = try? await db.record(for: rid) else { return nil }
@@ -590,7 +736,10 @@ actor CloudKitSyncService {
     }
 
     func deleteRecapMarker(ckRecordName: String, force: Bool = false) async {
-        guard syncEnabled || force else { return }
+        guard canSync(.recap) || force else {
+            logDisabled(.recap, action: "recap marker deletion")
+            return
+        }
         await MainActor.run { status.isSyncing = true }
         log("Syncing…")
         let rid = CKRecord.ID(recordName: ckRecordName, zoneID: zoneID)
@@ -638,7 +787,12 @@ actor CloudKitSyncService {
     }
 
     func flushPendingMarkerDeletions() async {
-        guard syncEnabled else { return }
+        guard canSync(.recap) else {
+            if !pendingMarkerDeletions.isEmpty {
+                logDisabled(.recap, action: "queued marker deletion")
+            }
+            return
+        }
         let queue = pendingMarkerDeletions
         guard !queue.isEmpty else { return }
         for name in queue {
@@ -674,12 +828,19 @@ actor CloudKitSyncService {
     /// holt ihn der nächste `syncNow` über `pushRetentionIfNeeded` nach.
     func recordRetentionChange() async {
         Self.setUserDefault(.double(Date().timeIntervalSince1970), forKey: retentionUpdatedAtKey)
+        guard canSync(.recap) else {
+            logDisabled(.recap, action: "retention upload")
+            return
+        }
         await pushRetentionIfNeeded()
     }
 
     /// Lädt den lokalen Retention-Stand hoch, falls er neuer ist als der zuletzt gesyncte.
     func pushRetentionIfNeeded() async {
-        guard canSync else { return }
+        guard canSync(.recap) else {
+            logDisabled(.recap, action: "retention upload")
+            return
+        }
         let updatedAt = UserDefaults.standard.double(forKey: retentionUpdatedAtKey)
         let syncedAt  = UserDefaults.standard.double(forKey: retentionSyncedAtKey)
         guard updatedAt > syncedAt else { return }
@@ -722,8 +883,93 @@ actor CloudKitSyncService {
         return raw > 0 ? raw : def
     }
 
+    // MARK: - Geteilte Lyrics-Server-Settings
+
+    func recordLyricsServerSettingsChange() async {
+        if shouldSuppressLyricsServerEcho() {
+            log("Lyrics server settings echo skipped")
+            return
+        }
+        clearLyricsServerEchoMarker()
+        Self.setUserDefault(.double(Date().timeIntervalSince1970), forKey: lyricsServerUpdatedAtKey)
+        guard canSync(.lyricsServer) else {
+            logDisabled(.lyricsServer, action: "lyrics server settings upload")
+            return
+        }
+        await pushLyricsServerSettingsIfNeeded()
+    }
+
+    func pushLyricsServerSettingsIfNeeded() async {
+        guard canSync(.lyricsServer) else {
+            logDisabled(.lyricsServer, action: "lyrics server settings upload")
+            return
+        }
+        var updatedAt = UserDefaults.standard.double(forKey: lyricsServerUpdatedAtKey)
+        let syncedAt = UserDefaults.standard.double(forKey: lyricsServerSyncedAtKey)
+        let useCustom = UserDefaults.standard.bool(forKey: Self.lyricsUseCustomKey)
+        let customURL = UserDefaults.standard.string(forKey: Self.lyricsCustomURLKey) ?? ""
+
+        if updatedAt == 0, useCustom || !customURL.isEmpty {
+            updatedAt = Date().timeIntervalSince1970
+            Self.setUserDefault(.double(updatedAt), forKey: lyricsServerUpdatedAtKey)
+        }
+        guard updatedAt > syncedAt else { return }
+
+        do {
+            try await ensureZoneExists()
+            let rid = CKRecord.ID(recordName: Self.lyricsServerRecordName, zoneID: zoneID)
+            let rec = CKRecord(recordType: "LyricsServerSettings", recordID: rid)
+            rec["useCustom"] = useCustom ? 1 : 0
+            rec["customBaseURL"] = customURL
+            rec["updatedAt"] = updatedAt
+            _ = try await db.modifyRecords(saving: [rec], deleting: [], savePolicy: .allKeys, atomically: true)
+            Self.setUserDefault(.double(updatedAt), forKey: lyricsServerSyncedAtKey)
+            log("Lyrics server settings uploaded")
+        } catch {
+            log("Lyrics server settings upload failed — will retry on next sync: \(error.localizedDescription)", isError: true)
+        }
+    }
+
+    private func applyIncomingLyricsServerSettings(_ record: CKRecord) {
+        guard let updatedAt = record["updatedAt"] as? Double else { return }
+        let localUpdated = UserDefaults.standard.double(forKey: lyricsServerUpdatedAtKey)
+        guard updatedAt > localUpdated else { return }
+        let useCustom = (record["useCustom"] as? Int64 ?? 0) == 1
+        let customURL = record["customBaseURL"] as? String ?? ""
+        Self.setUserDefault(.bool(useCustom), forKey: Self.lyricsUseCustomKey)
+        Self.setUserDefault(.string(customURL), forKey: Self.lyricsCustomURLKey)
+        Self.setUserDefault(.double(updatedAt), forKey: lyricsServerUpdatedAtKey)
+        Self.setUserDefault(.double(updatedAt), forKey: lyricsServerSyncedAtKey)
+        Self.setUserDefault(.bool(useCustom), forKey: lyricsServerEchoUseCustomKey)
+        Self.setUserDefault(.string(customURL), forKey: lyricsServerEchoCustomURLKey)
+        Self.setUserDefault(.double(updatedAt), forKey: lyricsServerEchoUpdatedAtKey)
+        log("Lyrics server settings updated from iCloud")
+    }
+
+    private func shouldSuppressLyricsServerEcho() -> Bool {
+        let echoUpdatedAt = UserDefaults.standard.double(forKey: lyricsServerEchoUpdatedAtKey)
+        guard echoUpdatedAt > 0 else { return false }
+        guard UserDefaults.standard.double(forKey: lyricsServerUpdatedAtKey) == echoUpdatedAt else { return false }
+        guard UserDefaults.standard.double(forKey: lyricsServerSyncedAtKey) == echoUpdatedAt else { return false }
+
+        let useCustom = UserDefaults.standard.bool(forKey: Self.lyricsUseCustomKey)
+        let customURL = UserDefaults.standard.string(forKey: Self.lyricsCustomURLKey) ?? ""
+        let echoUseCustom = UserDefaults.standard.bool(forKey: lyricsServerEchoUseCustomKey)
+        let echoCustomURL = UserDefaults.standard.string(forKey: lyricsServerEchoCustomURLKey) ?? ""
+        return useCustom == echoUseCustom && customURL == echoCustomURL
+    }
+
+    private func clearLyricsServerEchoMarker() {
+        Self.removeUserDefault(forKey: lyricsServerEchoUseCustomKey)
+        Self.removeUserDefault(forKey: lyricsServerEchoCustomURLKey)
+        Self.removeUserDefault(forKey: lyricsServerEchoUpdatedAtKey)
+    }
+
     func deletePlayEvent(uuid: String, force: Bool = false) async {
-        guard syncEnabled || force else { return }
+        guard canSync(.playHistory) || force else {
+            logDisabled(.playHistory, action: "play event deletion")
+            return
+        }
         await MainActor.run { status.isSyncing = true }
         log("Syncing…")
         let rid = CKRecord.ID(recordName: uuid, zoneID: zoneID)
@@ -741,7 +987,10 @@ actor CloudKitSyncService {
     }
 
     func deletePlayEvents(uuids: [String], force: Bool = false) async {
-        guard syncEnabled || force else { return }
+        guard canSync(.playHistory) || force else {
+            logDisabled(.playHistory, action: "play event deletion")
+            return
+        }
         guard !uuids.isEmpty else { return }
         await MainActor.run { status.isSyncing = true }
         log("Syncing…")
@@ -773,7 +1022,7 @@ actor CloudKitSyncService {
         do {
             _ = try await db.deleteRecordZone(withID: zoneID)
             isZoneReady = false
-            changeToken = nil
+            clearChangeTokens()
             clearPendingMarkerDeletions()   // Zone weg = wartende Marker-Löschungen erledigt
             await MainActor.run {
                 status.lastSyncDate = Date()
@@ -784,7 +1033,7 @@ actor CloudKitSyncService {
             await MainActor.run { status.isSyncing = false }
             if let ck = error as? CKError, ck.code == .zoneNotFound {
                 isZoneReady = false
-                changeToken = nil
+                clearChangeTokens()
                 clearPendingMarkerDeletions()
                 log("iCloud zone already gone")
             } else {
@@ -808,7 +1057,10 @@ actor CloudKitSyncService {
     }
 
     func deleteRecapMarkers(serverId: String, force: Bool = false) async {
-        guard syncEnabled || force else { return }
+        guard canSync(.recap) || force else {
+            logDisabled(.recap, action: "recap marker deletion")
+            return
+        }
         let entries = await PlayLogService.shared.allRegistryEntries(serverId: serverId)
         let ids = entries.compactMap { e -> CKRecord.ID? in
             guard let name = e.ckRecordName else { return nil }
@@ -837,11 +1089,11 @@ actor CloudKitSyncService {
 
     // MARK: - PlayQueue (geräteübergreifende Wiedergabe-Queue)
 
-    // Eigenes Gate, bewusst unabhängig vom Recap-/PlayLog-Sync (`syncEnabled`):
-    // die Wiedergabe-Queue soll auch syncen, wenn der allgemeine iCloud-Sync aus ist.
-    // Nur der Offline-Modus blockt (Server ohnehin nicht erreichbar).
+    // Eigenes Gate, bewusst unabhängig vom Recap-/PlayLog-Sync (`syncEnabled`).
+    // CloudKit wird hier nur verwendet, wenn Queue-Sync explizit auf iCloud steht.
     private var canSyncQueue: Bool {
-        !UserDefaults.standard.bool(forKey: "offlineModeEnabled")
+        UserDefaults.standard.string(forKey: queueSyncModeKey) == QueueSyncMode.icloud.rawValue
+            && !offlineModeEnabled
     }
 
     // Ein gemeinsamer Record pro Server (last-write-wins). recordName serverScoped.
@@ -914,13 +1166,29 @@ actor CloudKitSyncService {
         // Bei jedem Sync-Auslöser (Foreground, Pull-to-Refresh, Mac-Refresh, Netz-Reconnect)
         // die Remote-Queue mitprüfen — so wird ein fremder Stand zuverlässig überall erkannt.
         Task { @MainActor in await QueueSyncService.shared.checkForRemoteQueue() }
-        guard canSync else { return }
+        guard canSyncBase else {
+            logDisabled(nil, action: "iCloud sync")
+            return
+        }
+        guard canSync else {
+            logDisabled(nil, action: "iCloud sync")
+            return
+        }
         log("Syncing…")
-        await flushPendingMarkerDeletions()
+        if canSync(.recap) {
+            await flushPendingMarkerDeletions()
+        } else {
+            logDisabled(.recap, action: "queued marker deletion")
+        }
         await uploadPendingEvents()
         await downloadChanges()
         await uploadPendingEvents()
-        await reuploadAllRecapMarkers()
+        if canSync(.recap) {
+            await reuploadAllRecapMarkers()
+        } else {
+            logDisabled(.recap, action: "recap marker reupload")
+        }
+        await pushLyricsServerSettingsIfNeeded()
         await flushScrobbleQueue()
         log("Sync done")
     }
@@ -955,7 +1223,7 @@ actor CloudKitSyncService {
     }
 
     func resetChangeToken() {
-        changeToken = nil
+        clearChangeTokens()
         isZoneReady = false
     }
 
@@ -973,12 +1241,39 @@ actor CloudKitSyncService {
         await markLocalAsUnsyncedForActiveServer()
         resetChangeToken()
         await uploadPendingEvents()
-        await reuploadAllRecapMarkers()
+        if canSync(.recap) {
+            await reuploadAllRecapMarkers()
+        }
+        await pushLyricsServerSettingsIfNeeded()
         await downloadChanges()
         await flushScrobbleQueue()
     }
 
+    func handleSyncCategoryChange() async {
+        log("What to Sync updated — Play History: \(playHistorySyncEnabled ? "on" : "off"), Recap: \(recapSyncEnabled ? "on" : "off"), Lyrics Server: \(lyricsServerSyncEnabled ? "on" : "off")")
+        guard canSyncBase else {
+            logDisabled(nil, action: "What to Sync update")
+            return
+        }
+        if canSync(.playHistory) {
+            await uploadPendingEvents()
+        }
+        if canSync(.recap) {
+            await pushRetentionIfNeeded()
+            await reuploadAllRecapMarkers()
+        }
+        if canSync(.lyricsServer) {
+            await pushLyricsServerSettingsIfNeeded()
+        }
+        await downloadChanges()
+        await updatePendingCounts()
+    }
+
     private func reuploadAllRecapMarkers() async {
+        guard canSync(.recap) else {
+            logDisabled(.recap, action: "recap marker reupload")
+            return
+        }
         await reuploadRecapMarkers(onlyLocalOnly: false)
     }
 
@@ -1097,6 +1392,27 @@ actor CloudKitSyncService {
             status.appendDebugLog("[CloudKitSync] \(msg)")
             if isError { status.lastError = msg }
         }
+    }
+
+    private func logDisabled(_ category: CloudSyncCategory?, action: String) {
+        let key = "\(category?.rawValue ?? "all").\(action)"
+        let now = Date()
+        let message: String
+        if !syncEnabled {
+            message = "iCloud sync disabled — \(action) skipped"
+        } else if offlineModeEnabled {
+            message = "Offline mode active — \(action) skipped"
+        } else if let category {
+            message = "\(category.displayName) sync disabled — \(action) skipped"
+        } else {
+            message = "iCloud sync categories disabled — \(action) skipped"
+        }
+        if let last = lastDisabledLogAt[key], now.timeIntervalSince(last) < 30 {
+            debug("[CloudKitSync] \(message)")
+            return
+        }
+        lastDisabledLogAt[key] = now
+        log(message)
     }
 
     private func debug(_ message: String) {
