@@ -18,9 +18,6 @@ struct DatabaseSettingsView: View {
             }
 
             Section(String(localized: "logs")) {
-                NavigationLink(String(localized: "sync_log")) {
-                    SyncLogView()
-                }
                 NavigationLink(String(localized: "database_errors")) {
                     DatabaseErrorLogView()
                 }
@@ -96,6 +93,9 @@ struct ICloudSyncSettingsView: View {
                     .onChange(of: lyricsServerSyncEnabled) { _, _ in
                         Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
                     }
+                NavigationLink(String(localized: "logs")) {
+                    SyncLogView()
+                }
             }
         }
         .toolbar(.hidden, for: .tabBar)

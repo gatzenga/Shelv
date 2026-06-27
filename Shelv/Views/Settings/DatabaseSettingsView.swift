@@ -111,14 +111,6 @@ struct DatabaseSettingsView: View {
                             Image(systemName: "list.bullet.clipboard").foregroundStyle(accentColor)
                         }
                     }
-                    NavigationLink(destination:
-                        RecapSyncLogView()
-                            .environmentObject(ckStatus)
-                    ) {
-                        Label { Text(String(localized: "sync_log")) } icon: {
-                            Image(systemName: "doc.text").foregroundStyle(accentColor)
-                        }
-                    }
                     NavigationLink(destination: RecapDBLogView()) {
                         Label { Text(String(localized: "database_errors")) } icon: {
                             Image(systemName: "tablecells").foregroundStyle(accentColor)
@@ -533,6 +525,15 @@ struct ICloudSyncSettingsView: View {
                 .disabled(!iCloudSyncEnabled)
                 .onChange(of: lyricsServerSyncEnabled) { _, _ in
                     Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
+                }
+
+                NavigationLink(destination:
+                    RecapSyncLogView()
+                        .environmentObject(ckStatus)
+                ) {
+                    Label { Text(String(localized: "logs")) } icon: {
+                        Image(systemName: "doc.text").foregroundStyle(accentColor)
+                    }
                 }
             }
 
