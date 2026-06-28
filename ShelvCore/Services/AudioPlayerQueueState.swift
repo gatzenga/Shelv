@@ -140,4 +140,36 @@ nonisolated struct AudioPlayerQueueState: Equatable {
         truthPlayNextQueue.append(contentsOf: songs)
         playNextQueue.append(contentsOf: songs)
     }
+
+    mutating func previous() -> Song? {
+        let previousIndex = currentIndex - 1
+        guard queue.indices.contains(previousIndex) else { return nil }
+        currentIndex = previousIndex
+        return queue[previousIndex]
+    }
+
+    func peekNextSong() -> Song? {
+        if !playNextQueue.isEmpty { return playNextQueue[0] }
+        let nextIndex = currentIndex + 1
+        if nextIndex < queue.count { return queue[nextIndex] }
+        if !userQueue.isEmpty { return userQueue[0] }
+        return nil
+    }
+
+    mutating func advancePreparedQueueState(repeatMode: RepeatMode) {
+        if !playNextQueue.isEmpty {
+            playNextQueue.removeFirst()
+        } else {
+            let nextIndex = currentIndex + 1
+            if nextIndex < queue.count {
+                currentIndex = nextIndex
+            } else if !userQueue.isEmpty {
+                let song = userQueue.removeFirst()
+                queue.append(song)
+                currentIndex = queue.count - 1
+            } else if repeatMode == .all && !queue.isEmpty {
+                currentIndex = 0
+            }
+        }
+    }
 }

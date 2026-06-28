@@ -1047,10 +1047,10 @@ class AudioPlayerService: ObservableObject {
             saveState()
             return
         }
-        let prevIndex = currentIndex - 1
-        guard prevIndex >= 0 else { return }
-        currentIndex = prevIndex
-        startPlayback(song: queue[prevIndex])
+        var state = queueState
+        guard let song = state.previous() else { return }
+        applyQueueState(state)
+        startPlayback(song: song)
         saveState()
     }
 
@@ -1568,28 +1568,13 @@ class AudioPlayerService: ObservableObject {
     }
 
     private func peekNextSong() -> Song? {
-        if !playNextQueue.isEmpty { return playNextQueue[0] }
-        let nextIndex = currentIndex + 1
-        if nextIndex < queue.count { return queue[nextIndex] }
-        if !userQueue.isEmpty { return userQueue[0] }
-        return nil
+        queueState.peekNextSong()
     }
 
     private func advanceQueueState() {
-        if !playNextQueue.isEmpty {
-            playNextQueue.removeFirst()
-        } else {
-            let nextIndex = currentIndex + 1
-            if nextIndex < queue.count {
-                currentIndex = nextIndex
-            } else if !userQueue.isEmpty {
-                let song = userQueue.removeFirst()
-                queue.append(song)
-                currentIndex = queue.count - 1
-            } else if repeatMode == .all && !queue.isEmpty {
-                currentIndex = 0
-            }
-        }
+        var state = queueState
+        state.advancePreparedQueueState(repeatMode: repeatMode)
+        applyQueueState(state)
     }
 
     private func checkGaplessTrigger(currentTime: Double) {

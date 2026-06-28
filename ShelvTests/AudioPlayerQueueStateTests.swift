@@ -305,6 +305,90 @@ final class AudioPlayerQueueStateTests: XCTestCase {
         XCTAssertEqual(state.playNextQueue.map(\.id), ["next-1", "next-2", "next-3"])
         XCTAssertEqual(state.truthPlayNextQueue.map(\.id), ["next-1", "next-2", "next-3"])
     }
+
+    func testPreviousMovesToPreviousAlbumTrack() {
+        var state = makeQueueState(
+            queue: [testSong("album-1"), testSong("album-2")],
+            currentIndex: 1
+        )
+
+        let song = state.previous()
+
+        XCTAssertEqual(song?.id, "album-1")
+        XCTAssertEqual(state.currentIndex, 0)
+        XCTAssertNil(state.previous())
+    }
+
+    func testPeekNextSongPrioritizesPlayNextThenAlbumThenUserQueue() {
+        var state = makeQueueState(
+            queue: [testSong("album-1"), testSong("album-2")],
+            currentIndex: 0,
+            playNextQueue: [testSong("next-1")],
+            userQueue: [testSong("user-1")]
+        )
+
+        XCTAssertEqual(state.peekNextSong()?.id, "next-1")
+
+        state.playNextQueue = []
+        XCTAssertEqual(state.peekNextSong()?.id, "album-2")
+
+        state.currentIndex = 1
+        XCTAssertEqual(state.peekNextSong()?.id, "user-1")
+
+        state.userQueue = []
+        XCTAssertNil(state.peekNextSong())
+    }
+
+    func testAdvancePreparedQueueStateConsumesVisiblePlayNextOnly() {
+        var state = makeQueueState(
+            queue: [testSong("album-1")],
+            currentIndex: 0,
+            playNextQueue: [testSong("next-1"), testSong("next-2")],
+            truthPlayNextQueue: [testSong("next-1"), testSong("next-2")]
+        )
+
+        state.advancePreparedQueueState(repeatMode: .off)
+
+        XCTAssertEqual(state.playNextQueue.map(\.id), ["next-2"])
+        XCTAssertEqual(state.truthPlayNextQueue.map(\.id), ["next-1", "next-2"])
+        XCTAssertEqual(state.currentIndex, 0)
+    }
+
+    func testAdvancePreparedQueueStateAdvancesAlbumQueue() {
+        var state = makeQueueState(
+            queue: [testSong("album-1"), testSong("album-2")],
+            currentIndex: 0
+        )
+
+        state.advancePreparedQueueState(repeatMode: .off)
+
+        XCTAssertEqual(state.currentIndex, 1)
+    }
+
+    func testAdvancePreparedQueueStateAppendsUserQueueAtAlbumEnd() {
+        var state = makeQueueState(
+            queue: [testSong("album-1")],
+            currentIndex: 0,
+            userQueue: [testSong("user-1")]
+        )
+
+        state.advancePreparedQueueState(repeatMode: .off)
+
+        XCTAssertEqual(state.queue.map(\.id), ["album-1", "user-1"])
+        XCTAssertEqual(state.userQueue.map(\.id), [])
+        XCTAssertEqual(state.currentIndex, 1)
+    }
+
+    func testAdvancePreparedQueueStateWrapsAlbumQueueForRepeatAll() {
+        var state = makeQueueState(
+            queue: [testSong("album-1"), testSong("album-2")],
+            currentIndex: 1
+        )
+
+        state.advancePreparedQueueState(repeatMode: .all)
+
+        XCTAssertEqual(state.currentIndex, 0)
+    }
 }
 
 private func testSong(_ id: String) -> Song {
