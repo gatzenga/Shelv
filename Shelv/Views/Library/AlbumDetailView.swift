@@ -47,7 +47,7 @@ struct AlbumDetailView: View {
             return ($0.track ?? 0) < ($1.track ?? 0)
         }
         let grouped = Dictionary(grouping: sorted) { $0.discNumber ?? 1 }
-        return grouped.keys.sorted().map { disc in (disc: disc, songs: grouped[disc]!) }
+        return grouped.keys.sorted().map { disc in (disc: disc, songs: grouped[disc, default: []]) }
     }
 
     private var useDiscGrouping: Bool {

@@ -122,7 +122,7 @@ struct LibraryView: View {
             if $1 == "#" { return false }
             return $0 < $1
         }
-        return letters.map { ($0, dict[$0]!) }
+        return letters.map { ($0, dict[$0, default: []]) }
     }
 
     @ViewBuilder

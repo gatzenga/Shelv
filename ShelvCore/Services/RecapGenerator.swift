@@ -149,7 +149,9 @@ extension RecapPeriod {
             return String(format: "%04d-W%02d", year, week)
         case .month:
             let comps = cal.dateComponents([.year, .month], from: start)
-            return String(format: "%04d-%02d", comps.year!, comps.month!)
+            let year = comps.year ?? cal.component(.year, from: start)
+            let month = comps.month ?? cal.component(.month, from: start)
+            return String(format: "%04d-%02d", year, month)
         case .year:
             let year = cal.component(.year, from: start)
             return String(format: "%04d", year)
