@@ -69,7 +69,6 @@ class AudioPlayerService: ObservableObject {
     }
     #endif
 
-    private var formatProbeTask: Task<Void, Never>?
     private var fastSeekTimer: Timer?
     private var currentStreamURL: URL?
     private var streamTimeOffset: Double = 0
@@ -93,6 +92,8 @@ class AudioPlayerService: ObservableObject {
 
     private let engine = PlayerEngine()
     private let nowPlaying = AudioPlayerNowPlayingController()
+    private let formatProbe = AudioPlayerFormatProbe()
+    private let lyricsAutoFetcher = AudioPlayerLyricsAutoFetcher()
     private var engineSubscriptions = Set<AnyCancellable>()
     private var bufferingShowTask: Task<Void, Never>?
     #if os(tvOS)
@@ -116,8 +117,6 @@ class AudioPlayerService: ObservableObject {
     private var streamCacheWindowTask: Task<Void, Never>?
     private var isEngineLoaded = false
     private var playbackGeneration: Int = 0
-    private var lyricsAutoFetchTask: Task<Void, Never>?
-
     private var networkMonitor = NWPathMonitor()
     private let networkMonitorQueue = DispatchQueue(label: "shelv.network", qos: .utility)
 
@@ -489,56 +488,8 @@ class AudioPlayerService: ObservableObject {
     #endif
 
     private func probeStreamFormat(for song: Song, url: URL) {
-        formatProbeTask?.cancel()
-        let songDuration = Double(song.duration ?? 0)
-
-        // 1) Sofortiger, provisorischer Wert — Bitrate exakt, Codec ggf. noch aus
-        //    Dateiendung/MIME geraten (kann ALAC nicht von AAC unterscheiden).
-        var initialBitrate: Int? = nil
-        if url.isFileURL {
-            let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.int64Value ?? 0
-            if size > 0, songDuration > 1 { initialBitrate = Int(Double(size) * 8 / songDuration / 1000) }
-            let ext = url.pathExtension.uppercased()
-            actualStreamFormat = ActualStreamFormat(codecLabel: ext.isEmpty ? "?" : ext, bitrateKbps: initialBitrate)
-        } else {
-            actualStreamFormat = nil
-        }
-
-        formatProbeTask = Task { [weak self] in
-            guard let self else { return }
-            var bitrate = initialBitrate
-
-            // 2) Remote: HEAD für exakte Bitrate (Content-Length) + provisorischer Codec.
-            if !url.isFileURL {
-                var req = URLRequest(url: url)
-                req.httpMethod = "HEAD"
-                req.timeoutInterval = 8
-                if let (_, response) = try? await URLSession.shared.data(for: req),
-                   let http = response as? HTTPURLResponse, http.statusCode == 200 {
-                    let codec = ActualStreamFormat.codecLabel(forMime: http.mimeType)
-                    let length = http.expectedContentLength
-                    if length > 0, songDuration > 1 { bitrate = Int(Double(length) * 8 / songDuration / 1000) }
-                    if Task.isCancelled { return }
-                    await MainActor.run { self.actualStreamFormat = ActualStreamFormat(codecLabel: codec, bitrateKbps: bitrate) }
-                }
-            }
-
-            // 3) Echten Codec aus dem geladenen Player-Track nachziehen (ALAC vs. AAC).
-            //    engine.play() kann nach diesem Probe kommen + der Track lädt async,
-            //    daher bis zu ~4s pollen. Bitrate bleibt die bewährte Rechnung;
-            //    der Player-Schätzwert dient nur als Fallback.
-            for _ in 0..<40 {
-                if Task.isCancelled { return }
-                if let real = await self.engine.currentAudioFormat(matching: url) {
-                    if Task.isCancelled { return }
-                    let finalBitrate = bitrate ?? real.bitrateKbps
-                    await MainActor.run {
-                        self.actualStreamFormat = ActualStreamFormat(codecLabel: real.codec, bitrateKbps: finalBitrate)
-                    }
-                    return
-                }
-                try? await Task.sleep(nanoseconds: 100_000_000)
-            }
+        formatProbe.probe(song: song, url: url, engine: engine) { [weak self] format in
+            self?.actualStreamFormat = format
         }
     }
 
@@ -553,18 +504,7 @@ class AudioPlayerService: ObservableObject {
     }
 
     private func scheduleLyricsAutoFetch(for song: Song?) {
-        lyricsAutoFetchTask?.cancel()
-        guard autoFetchLyrics,
-              !UserDefaults.standard.bool(forKey: "offlineModeEnabled"),
-              let song,
-              let serverId = SubsonicAPIService.shared.activeServer?.id.uuidString
-        else { return }
-
-        lyricsAutoFetchTask = Task(priority: .utility) { [song, serverId] in
-            await LyricsService.shared.setup()
-            guard !Task.isCancelled else { return }
-            _ = await LyricsService.shared.fetchAndSave(song: song, serverId: serverId)
-        }
+        lyricsAutoFetcher.schedule(song: song, enabled: autoFetchLyrics)
     }
 
     private func isTranscodedRemote(_ url: URL) -> Bool {
@@ -752,7 +692,7 @@ class AudioPlayerService: ObservableObject {
             self.gaplessPreloadTriggered = false
             self.gaplessPreloadSong = nil
             self.gaplessPreloadURL = nil
-            self.formatProbeTask?.cancel()
+            self.formatProbe.cancel()
             self.actualStreamFormat = nil
             self.currentSong = song
             self.trimManagedStreamCaches(keeping: self.currentStreamCacheKeepIds())
@@ -909,8 +849,8 @@ class AudioPlayerService: ObservableObject {
         networkResumeSong = nil
         networkResumeTime = 0
         infinityPendingSongIds.removeAll()
-        lyricsAutoFetchTask?.cancel()
-        formatProbeTask?.cancel()
+        lyricsAutoFetcher.cancel()
+        formatProbe.cancel()
         actualStreamFormat = nil
         nowPlaying.clear()
     }
