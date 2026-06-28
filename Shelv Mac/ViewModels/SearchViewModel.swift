@@ -1,0 +1,64 @@
+import Combine
+import Foundation
+
+@MainActor
+class SearchViewModel: ObservableObject {
+    @Published var query: String = ""
+    @Published var artists: [Artist] = []
+    @Published var albums: [Album] = []
+    @Published var songs: [Song] = []
+    @Published var isLoading: Bool = false
+
+    private let api = SubsonicAPIService.shared
+    private var searchTask: Task<Void, Never>?
+
+    var isEmpty: Bool { artists.isEmpty && albums.isEmpty && songs.isEmpty }
+
+    func search() async {
+        guard !query.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        searchTask?.cancel()
+        searchTask = Task {
+            isLoading = true
+            if OfflineModeService.shared.isOffline {
+                await searchOffline()
+            } else {
+                do {
+                    let result = try await api.search(query: query)
+                    guard !Task.isCancelled else { return }
+                    artists = (result.artist ?? []).filter { ($0.albumCount ?? 0) > 0 }
+                    albums = result.album ?? []
+                    songs = result.song ?? []
+                } catch {
+                    guard !Task.isCancelled else { return }
+                    NotificationCenter.default.post(name: .showToast, object: String(localized: "search_failed"))
+                }
+            }
+            isLoading = false
+        }
+        await searchTask?.value
+    }
+
+    private func searchOffline() async {
+        let stable = AppState.shared.serverStore.activeServer?.stableId ?? ""
+        guard !stable.isEmpty else { artists = []; albums = []; songs = []; return }
+        let records = await DownloadDatabase.shared.search(serverId: stable, query: query, limit: 100)
+        guard !Task.isCancelled else { return }
+        songs = records.map { $0.toDownloadedSong().asSong() }
+
+        let q = query.lowercased()
+
+        albums = DownloadStore.shared.albums
+            .filter { $0.title.lowercased().contains(q) || $0.artistName.lowercased().contains(q) }
+            .map { $0.asAlbum() }
+
+        artists = DownloadStore.shared.artists
+            .filter { $0.name.lowercased().contains(q) }
+            .map { $0.asArtist() }
+    }
+
+    func clearResults() {
+        artists = []
+        albums = []
+        songs = []
+    }
+}
