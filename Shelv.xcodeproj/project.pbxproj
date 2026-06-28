@@ -12,13 +12,29 @@
 		BC7B84A72FDB17F90058CB78 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC7B84A62FDB17F90058CB78 /* GRDB */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		BC10000A2FFE000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = BC9C59302F8E9FB000FF4D25 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = BC7B83F42FDB17700058CB78;
+			remoteInfo = "Shelv Mac";
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
+		BC1000012FFE000000000001 /* ShelvTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ShelvTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC5116112FDC8A690011CDE9 /* Shelv TV.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Shelv TV.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC7B83F52FDB17700058CB78 /* Shelv.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Shelv.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC9C59382F8E9FB000FF4D25 /* Shelv.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Shelv.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		BC1000022FFE000000000001 /* ShelvTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = ShelvTests;
+			sourceTree = "<group>";
+		};
 		BC5116122FDC8A690011CDE9 /* Shelv TV */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = "Shelv TV";
@@ -42,6 +58,13 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		BC1000032FFE000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		BC51160E2FDC8A690011CDE9 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -82,6 +105,7 @@
 				BC9C593A2F8E9FB000FF4D25 /* Shelv */,
 				BC7B83F62FDB17700058CB78 /* Shelv Mac */,
 				BCC0DE0000000000000000C0 /* ShelvCore */,
+				BC1000022FFE000000000001 /* ShelvTests */,
 				BC5116122FDC8A690011CDE9 /* Shelv TV */,
 				BC7B84A52FDB17F90058CB78 /* Frameworks */,
 				BC9C59392F8E9FB000FF4D25 /* Products */,
@@ -94,6 +118,7 @@
 				BC9C59382F8E9FB000FF4D25 /* Shelv.app */,
 				BC7B83F52FDB17700058CB78 /* Shelv.app */,
 				BC5116112FDC8A690011CDE9 /* Shelv TV.app */,
+				BC1000012FFE000000000001 /* ShelvTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -101,6 +126,29 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		BC1000062FFE000000000001 /* ShelvTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BC1000092FFE000000000001 /* Build configuration list for PBXNativeTarget "ShelvTests" */;
+			buildPhases = (
+				BC1000052FFE000000000001 /* Sources */,
+				BC1000032FFE000000000001 /* Frameworks */,
+				BC1000042FFE000000000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				BC10000B2FFE000000000001 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				BC1000022FFE000000000001 /* ShelvTests */,
+			);
+			name = ShelvTests;
+			packageProductDependencies = (
+			);
+			productName = ShelvTests;
+			productReference = BC1000012FFE000000000001 /* ShelvTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		BC5116102FDC8A690011CDE9 /* Shelv TV */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = BC51161B2FDC8A6A0011CDE9 /* Build configuration list for PBXNativeTarget "Shelv TV" */;
@@ -183,6 +231,10 @@
 				LastSwiftUpdateCheck = 2650;
 				LastUpgradeCheck = 2700;
 				TargetAttributes = {
+					BC1000062FFE000000000001 = {
+						CreatedOnToolsVersion = 26.5;
+						TestTargetID = BC7B83F42FDB17700058CB78;
+					};
 					BC5116102FDC8A690011CDE9 = {
 						CreatedOnToolsVersion = 26.5;
 					};
@@ -215,12 +267,20 @@
 			targets = (
 				BC9C59372F8E9FB000FF4D25 /* Shelv */,
 				BC7B83F42FDB17700058CB78 /* Shelv Mac */,
+				BC1000062FFE000000000001 /* ShelvTests */,
 				BC5116102FDC8A690011CDE9 /* Shelv TV */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		BC1000042FFE000000000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		BC51160F2FDC8A690011CDE9 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -245,6 +305,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		BC1000052FFE000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		BC51160D2FDC8A690011CDE9 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -268,7 +335,59 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		BC10000B2FFE000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = BC7B83F42FDB17700058CB78 /* Shelv Mac */;
+			targetProxy = BC10000A2FFE000000000001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		BC1000072FFE000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 7CZP946PWR;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.6;
+				PRODUCT_BUNDLE_IDENTIFIER = ch.vkugler.ShelvTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Shelv.app/Contents/MacOS/Shelv";
+			};
+			name = Debug;
+		};
+		BC1000082FFE000000000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 7CZP946PWR;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 15.6;
+				PRODUCT_BUNDLE_IDENTIFIER = ch.vkugler.ShelvTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Shelv.app/Contents/MacOS/Shelv";
+			};
+			name = Release;
+		};
 		BC5116192FDC8A6A0011CDE9 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -659,6 +778,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		BC1000092FFE000000000001 /* Build configuration list for PBXNativeTarget "ShelvTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BC1000072FFE000000000001 /* Debug */,
+				BC1000082FFE000000000001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		BC51161B2FDC8A6A0011CDE9 /* Build configuration list for PBXNativeTarget "Shelv TV" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
