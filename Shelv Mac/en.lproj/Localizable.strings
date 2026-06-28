@@ -416,6 +416,8 @@
 "queue_take_over" = "Take over";
 "queue_sync_log" = "Queue Sync Log";
 "infinity_mode" = "Infinity Mode";
+"infinity_mix" = "Infinity Mix";
+"infinity_mix_ahead_count" = "Songs to add";
 "what_to_sync" = "What to Sync";
 "play_history" = "Play History";
 "lyrics_server" = "Lyrics Server";

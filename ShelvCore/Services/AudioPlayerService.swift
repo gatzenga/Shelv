@@ -42,13 +42,14 @@ class AudioPlayerService: ObservableObject {
     @Published var currentSong: Song? {
         didSet {
             // Endlos-Modus: bei JEDEM Songwechsel (Skip, natürliches Ende, Gapless-Übergang)
-            // sicherstellen, dass wieder genau einer voraus bereitliegt. Deckt alle Pfade ab —
+            // sicherstellen, dass wieder genug Titel voraus bereitliegen. Deckt alle Pfade ab —
             // auch im Hintergrund, da dort die Wiedergabe weiterläuft.
             if currentSong?.id != oldValue?.id {
-                // Der zuvor vorgemerkte Infinity-Song ist jetzt nicht mehr "voraus" (gerade
-                // current geworden oder weggeskippt) → Marker zurücksetzen, bevor top-up einen
-                // frischen Titel nachlegt. Verhindert jede Stale-Situation.
-                infinityPendingSongId = nil
+                // Ist ein vorbereiteter Infinity-Song gerade current geworden, zählt er nicht
+                // mehr als vorausliegender Auto-Titel. Die übrigen Marker bleiben erhalten.
+                if let currentId = currentSong?.id {
+                    infinityPendingSongIds.removeAll { $0 == currentId }
+                }
                 topUpInfinityIfNeeded()
             }
         }
@@ -128,6 +129,7 @@ class AudioPlayerService: ObservableObject {
     @AppStorage("replayGainEnabled") private var replayGainEnabled = false
     @AppStorage("replayGainMode") private var replayGainMode = "track"
     @AppStorage("infinityModeEnabled") private var infinityModeEnabled = false
+    @AppStorage("infinityMixAheadCount") private var infinityMixAheadCount = 1
     private var gaplessPreloadTriggered = false
     private var gaplessPreloadSong: Song? = nil
     private var gaplessPreloadURL: URL? = nil
@@ -691,6 +693,7 @@ class AudioPlayerService: ObservableObject {
         truthAlbumQueue = songs
         truthPlayNextQueue = []
         truthUserQueue = []
+        infinityPendingSongIds.removeAll()
         guard songs.indices.contains(startIndex) else { return }
         resumeTime = 0
         startPlayback(song: songs[startIndex], seekTo: 0)
@@ -706,6 +709,7 @@ class AudioPlayerService: ObservableObject {
         truthAlbumQueue = [song]
         truthPlayNextQueue = []
         truthUserQueue = []
+        infinityPendingSongIds.removeAll()
         resumeTime = 0
         startPlayback(song: song, seekTo: 0)
         saveState()
@@ -727,6 +731,7 @@ class AudioPlayerService: ObservableObject {
         truthAlbumQueue = DemoContent.playerQueue
         truthPlayNextQueue = []
         truthUserQueue = []
+        infinityPendingSongIds.removeAll()
         currentSong = DemoContent.playerSong
         currentTime = DemoContent.playerCurrentTime
         duration = DemoContent.playerDuration
@@ -1163,6 +1168,7 @@ class AudioPlayerService: ObservableObject {
         streamTimeOffset = 0
         networkResumeSong = nil
         networkResumeTime = 0
+        infinityPendingSongIds.removeAll()
         lyricsAutoFetchTask?.cancel()
         formatProbeTask?.cancel()
         actualStreamFormat = nil
@@ -1252,6 +1258,7 @@ class AudioPlayerService: ObservableObject {
         truthAlbumQueue = []
         truthPlayNextQueue = []
         truthUserQueue = []
+        infinityPendingSongIds.removeAll()
         isShuffled = false
         clearSavedState()
     }
@@ -1268,6 +1275,7 @@ class AudioPlayerService: ObservableObject {
         truthAlbumQueue = songs
         truthPlayNextQueue = []
         truthUserQueue = []
+        infinityPendingSongIds.removeAll()
 
         resumeTime = 0
         startPlayback(song: shuffled[0])
@@ -1451,14 +1459,14 @@ class AudioPlayerService: ObservableObject {
     }
 
     func addPlayNext(_ song: Song) {
-        removePendingInfinitySong()
+        removePendingInfinitySongs()
         truthPlayNextQueue.append(song)
         playNextQueue.append(song)
         saveState()
     }
 
     func addPlayNext(_ songs: [Song]) {
-        removePendingInfinitySong()
+        removePendingInfinitySongs()
         truthPlayNextQueue.append(contentsOf: songs)
         playNextQueue.append(contentsOf: songs)
         saveState()
@@ -1475,7 +1483,7 @@ class AudioPlayerService: ObservableObject {
     }
 
     func addToQueue(_ song: Song) {
-        removePendingInfinitySong()
+        removePendingInfinitySongs()
         truthUserQueue.append(song)
         if isShuffled {
             insertRandomlyInShuffledQueue(song)
@@ -1489,64 +1497,146 @@ class AudioPlayerService: ObservableObject {
 
     private var infinityPool: [Song] = []
     private var infinityTopUpTask: Task<Void, Never>?
-    /// ID des einen Titels, den der Endlos-Modus vorausgelegt hat. Sobald der User selbst etwas
-    /// einreiht (Add to Queue / Play Next), wird genau dieser Song wieder entfernt — der bewusst
+    /// IDs der Titel, die der Endlos-Modus automatisch vorausgelegt hat. Sobald der User selbst
+    /// etwas einreiht (Add to Queue / Play Next), werden diese Songs wieder entfernt — der bewusst
     /// gewählte Inhalt kommt direkt dran, nicht hinter dem Radio-Auffüller.
-    private var infinityPendingSongId: String?
+    private var infinityPendingSongIds: [String] = []
 
-    /// Hält bei aktivem Endlos-Modus immer genau einen Zufallstitel bereit (Precache-freundlich).
+    private var clampedInfinityMixAheadCount: Int {
+        min(max(infinityMixAheadCount, 1), 5)
+    }
+
+    /// Hält bei aktivem Endlos-Modus die gewählte Anzahl Zufallstitel bereit.
     /// - `startIfIdle`: nur `true` beim manuellen Einschalten des Toggles — dann startet bei
     ///   nichts-läuft sofort ein Zufallstitel. Beim Songwechsel `false`, damit nach einem Stop
     ///   die Wiedergabe nicht ungewollt wieder anspringt.
     func topUpInfinityIfNeeded(startIfIdle: Bool = false) {
+        syncInfinityPendingSongIds()
+        trimInfinityPendingSongs(to: clampedInfinityMixAheadCount)
         guard infinityModeEnabled, infinityTopUpTask == nil else { return }
         // Bei aktivem Repeat NICHT nachfüllen: peekNextSong() liefert am Queue-Ende bewusst nil
         // (für den Wrap/Replay). Ohne diesen Guard würde stattdessen ein Zufallstitel angehängt.
         guard repeatMode == .off else { return }
-        // Schon etwas upcoming? Nichts tun.
-        if currentSong != nil, peekNextSong() != nil { return }
         // Nichts am Laufen und kein expliziter Start → nichts tun (kein Wiederbeleben nach Stop).
         if currentSong == nil, !startIfIdle { return }
+        if currentSong != nil {
+            guard !hasNonInfinityUpcomingSong else { return }
+            guard infinityPendingSongIds.count < clampedInfinityMixAheadCount else { return }
+        }
         infinityTopUpTask = Task { @MainActor [weak self] in
             guard let self else { return }
             defer { self.infinityTopUpTask = nil }
-            guard let song = await self.nextInfinitySong() else { return }
             guard self.infinityModeEnabled else { return }
             if self.currentSong == nil {
-                if startIfIdle { self.play(songs: [song]) }
-            } else if self.peekNextSong() == nil {
-                self.appendInfinitySong(song)
+                guard startIfIdle, let song = await self.nextInfinitySong() else { return }
+                guard self.infinityModeEnabled, self.currentSong == nil else { return }
+                self.play(songs: [song])
+                guard self.currentSong != nil else { return }
+            }
+
+            self.syncInfinityPendingSongIds()
+            self.trimInfinityPendingSongs(to: self.clampedInfinityMixAheadCount)
+            guard self.repeatMode == .off, !self.hasNonInfinityUpcomingSong else { return }
+
+            var appended = false
+            while self.infinityModeEnabled,
+                  self.currentSong != nil,
+                  self.repeatMode == .off,
+                  !self.hasNonInfinityUpcomingSong,
+                  self.infinityPendingSongIds.count < self.clampedInfinityMixAheadCount {
+                guard let song = await self.nextInfinitySong() else { break }
+                guard self.infinityModeEnabled,
+                      self.currentSong != nil,
+                      self.repeatMode == .off,
+                      !self.hasNonInfinityUpcomingSong else { break }
+                appended = self.appendInfinitySong(song, save: false) || appended
+            }
+            if appended {
+                self.saveState()
             }
         }
     }
 
+    func refreshInfinityMixWindow() {
+        syncInfinityPendingSongIds()
+        trimInfinityPendingSongs(to: clampedInfinityMixAheadCount)
+        guard infinityModeEnabled else { return }
+        topUpInfinityIfNeeded()
+    }
+
     /// Legt den vom Endlos-Modus gelieferten Titel ans Queue-Ende und merkt ihn als "pending"
     /// vor. Bewusst nicht über das öffentliche `addToQueue`, damit der eigene Auffüller nicht
-    /// sofort wieder durch `removePendingInfinitySong()` entfernt würde.
-    private func appendInfinitySong(_ song: Song) {
+    /// sofort wieder durch `removePendingInfinitySongs()` entfernt würde.
+    @discardableResult
+    private func appendInfinitySong(_ song: Song, save: Bool = true) -> Bool {
+        guard !infinityPendingSongIds.contains(song.id) else { return false }
+        guard isInfinityCandidateAllowed(song) else { return false }
         truthUserQueue.append(song)
         if isShuffled {
             insertRandomlyInShuffledQueue(song)
         } else {
             userQueue.append(song)
         }
-        infinityPendingSongId = song.id
-        saveState()
+        infinityPendingSongIds.append(song.id)
+        if save { saveState() }
+        return true
     }
 
-    /// Entfernt den einen vorgemerkten Infinity-Song aus der Queue (egal ob in `userQueue` oder
+    /// Entfernt alle vorgemerkten Infinity-Songs aus der Queue (egal ob in `userQueue` oder
     /// — im Shuffle — im `queue`-Tail). Wird vor jeder expliziten Nutzer-Einreihung aufgerufen.
-    private func removePendingInfinitySong() {
-        guard let id = infinityPendingSongId else { return }
-        infinityPendingSongId = nil
-        if let i = userQueue.firstIndex(where: { $0.id == id }) {
-            userQueue.remove(at: i)
-        } else if let i = queue.firstIndex(where: { $0.id == id }), i > currentIndex {
-            queue.remove(at: i)
+    private func removePendingInfinitySongs() {
+        syncInfinityPendingSongIds()
+        let ids = infinityPendingSongIds
+        guard !ids.isEmpty else { return }
+        infinityPendingSongIds.removeAll()
+        removeInfinitySongs(withIds: ids)
+    }
+
+    @discardableResult
+    private func trimInfinityPendingSongs(to limit: Int) -> Bool {
+        let safeLimit = max(0, limit)
+        guard infinityPendingSongIds.count > safeLimit else { return false }
+        let idsToRemove = Array(infinityPendingSongIds.dropFirst(safeLimit))
+        infinityPendingSongIds.removeSubrange(safeLimit...)
+        removeInfinitySongs(withIds: idsToRemove)
+        saveState()
+        return true
+    }
+
+    private func removeInfinitySongs(withIds ids: [String]) {
+        let removeIds = Set(ids)
+        guard !removeIds.isEmpty else { return }
+        userQueue.removeAll { removeIds.contains($0.id) }
+        truthUserQueue.removeAll { removeIds.contains($0.id) }
+        queue = queue.enumerated().compactMap { index, song in
+            index > currentIndex && removeIds.contains(song.id) ? nil : song
         }
-        if let i = truthUserQueue.firstIndex(where: { $0.id == id }) {
-            truthUserQueue.remove(at: i)
+    }
+
+    private func syncInfinityPendingSongIds() {
+        let upcomingIds = Set(upcomingSongs().map(\.id))
+        infinityPendingSongIds.removeAll { !upcomingIds.contains($0) }
+    }
+
+    private var hasNonInfinityUpcomingSong: Bool {
+        let infinityIds = Set(infinityPendingSongIds)
+        return upcomingSongs().contains { !infinityIds.contains($0.id) }
+    }
+
+    private func upcomingSongs() -> [Song] {
+        var songs = playNextQueue
+        let nextIndex = currentIndex + 1
+        if nextIndex < queue.count {
+            songs.append(contentsOf: queue[nextIndex...])
         }
+        songs.append(contentsOf: userQueue)
+        return songs
+    }
+
+    private func isInfinityCandidateAllowed(_ song: Song) -> Bool {
+        guard song.id != currentSong?.id else { return false }
+        guard !infinityPendingSongIds.contains(song.id) else { return false }
+        return !upcomingSongs().contains { $0.id == song.id }
     }
 
     @MainActor
@@ -1554,7 +1644,7 @@ class AudioPlayerService: ObservableObject {
         if infinityPool.isEmpty { await refillInfinityPool() }
         while !infinityPool.isEmpty {
             let song = infinityPool.removeFirst()
-            if song.id != currentSong?.id { return song }
+            if isInfinityCandidateAllowed(song) { return song }
         }
         return nil
     }
@@ -1588,7 +1678,7 @@ class AudioPlayerService: ObservableObject {
     }
 
     func addToQueue(_ songs: [Song]) {
-        removePendingInfinitySong()
+        removePendingInfinitySongs()
         truthUserQueue.append(contentsOf: songs)
         if isShuffled {
             songs.forEach { insertRandomlyInShuffledQueue($0) }
@@ -1609,15 +1699,18 @@ class AudioPlayerService: ObservableObject {
         guard userQueue.indices.contains(index) else { return }
         let songId = userQueue[index].id
         userQueue.remove(at: index)
+        infinityPendingSongIds.removeAll { $0 == songId }
         if let i = truthUserQueue.firstIndex(where: { $0.id == songId }) {
             truthUserQueue.remove(at: i)
         }
         saveState()
+        topUpInfinityIfNeeded()
     }
 
     func clearUserQueue() {
         userQueue = []
         truthUserQueue = []
+        syncInfinityPendingSongIds()
         saveState()
     }
 
@@ -1625,6 +1718,7 @@ class AudioPlayerService: ObservableObject {
         guard queue.indices.contains(index), index != currentIndex else { return }
         let songId = queue[index].id
         queue.remove(at: index)
+        infinityPendingSongIds.removeAll { $0 == songId }
         if index < currentIndex { currentIndex -= 1 }
         if let i = truthAlbumQueue.firstIndex(where: { $0.id == songId }) {
             truthAlbumQueue.remove(at: i)
@@ -1632,6 +1726,7 @@ class AudioPlayerService: ObservableObject {
             truthUserQueue.remove(at: i)
         }
         saveState()
+        topUpInfinityIfNeeded()
     }
 
     func clearUpcomingPlayQueue() {
@@ -1642,6 +1737,7 @@ class AudioPlayerService: ObservableObject {
         }
         truthPlayNextQueue = []
         truthUserQueue = []
+        infinityPendingSongIds.removeAll()
         let currentId = currentSong?.id
         if let cur = currentId {
             truthAlbumQueue = truthAlbumQueue.filter { $0.id == cur }

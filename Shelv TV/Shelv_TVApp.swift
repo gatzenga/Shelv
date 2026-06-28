@@ -10,6 +10,7 @@ struct Shelv_TVApp: App {
     init() {
         UserDefaults.standard.register(defaults: [
             "streamPreCacheAheadCount": 1,
+            "infinityMixAheadCount": 1,
         ])
     }
 

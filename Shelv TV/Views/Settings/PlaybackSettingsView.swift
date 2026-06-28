@@ -10,6 +10,7 @@ struct PlaybackSettingsView: View {
     @AppStorage("transcodingWifiCodec") private var streamCodec = "raw"
     @AppStorage("transcodingWifiBitrate") private var streamBitrate = 256
     @AppStorage("queueSyncMode") private var queueSyncMode = "off"
+    @AppStorage("infinityMixAheadCount") private var infinityMixAheadCount = 1
     @AppStorage("autoFetchLyrics") private var autoFetchLyrics = true
     @AppStorage("includeNavidromeLyrics") private var includeNavidromeLyrics = false
     @AppStorage("useCustomLrcLibServer") private var useCustomLrcLibServer = false
@@ -45,6 +46,11 @@ struct PlaybackSettingsView: View {
             TVSettingsChoiceOption(value: "subsonic", title: String(localized: "queue_sync_subsonic")),
             TVSettingsChoiceOption(value: "icloud", title: String(localized: "queue_sync_icloud")),
         ]
+    }
+    private var infinityMixAheadOptions: [TVSettingsChoiceOption<Int>] {
+        (1...5).map { count in
+            TVSettingsChoiceOption(value: count, title: "\(count)")
+        }
     }
 
     var body: some View {
@@ -127,6 +133,16 @@ struct PlaybackSettingsView: View {
                 }
                 NavigationLink(String(localized: "queue_sync_log")) {
                     QueueSyncLogView()
+                }
+            }
+
+            Section(String(localized: "infinity_mix")) {
+                TVSettingsChoiceRow(
+                    title: String(localized: "infinity_mix_ahead_count"),
+                    selection: $infinityMixAheadCount,
+                    options: infinityMixAheadOptions
+                ) { _ in
+                    AudioPlayerService.shared.refreshInfinityMixWindow()
                 }
             }
         }

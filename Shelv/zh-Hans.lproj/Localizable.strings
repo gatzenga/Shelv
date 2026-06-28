@@ -303,6 +303,8 @@
 "reset_lyrics_database" = "重置歌词数据库";
 "cache" = "缓存";
 "precache_original_file" = "预缓存原始文件";
+"precache_ahead_count" = "提前缓存曲目数";
+"precache_ready" = "已预缓存";
 "about_precache" = "关于预缓存";
 "precache" = "预缓存";
 "cache_size" = "缓存大小";
@@ -332,7 +334,7 @@
 "wifi" = "WiFi";
 "cellular" = "蜂窝网络";
 "about_transcoding" = "关于转码";
-"about_transcoding_details" = "选择服务器应转码的格式和比特率。\"原始音质\" 下载未修改的文件。如果服务器无法提供格式，将返回原始文件。\n\n转码歌曲本地缓存 — 稳定播放和无缝 gapless 过渡。第一首歌曲可能需要更长时间加载。\n\n• 播放前完全下载当前歌曲\n• 播放时，下一首歌曲在后台预加载\n• 从第二首歌曲起立即开始播放\n• 切换到下一首歌曲时删除缓存文件";
+"about_transcoding_details" = "选择服务器应转码的格式和比特率。\"原始音质\" 下载未修改的文件。如果服务器无法提供格式，将返回原始文件。\n\n转码歌曲会本地缓存，以获得稳定播放和无缝无间隙切换。第一首歌曲可能需要更长时间加载。\n\n• 播放前完整下载当前歌曲\n• 关闭预缓存时，保持 1 首后续转码歌曲可用\n• 开启预缓存时，使用所选数量\n• 移除当前窗口之外的缓存文件";
 "format" = "格式";
 "bitrate" = "比特率";
 "server_unreachable" = "服务器不可达";
@@ -353,7 +355,7 @@
 "these_playlists_will_be_permanently_deleted_from_n" = "这些播放列表将从 Navidrome 和 iCloud 永久删除。";
 "precache_original_file_recommendedntranscoded_stre" = "建议预缓存原始文件。\n转码流将自动预缓存。";
 "data_stays_local_multiple_devices_may_create_dupli" = "数据保留在本地。多个设备可能会创建重复的回顾播放列表。";
-"stable_networkindependent_playback_with_seamless_g" = "稳定、不依赖网络的播放，支持无缝无间隙切换。第一首歌加载可能稍慢。\n\n• 在当前歌曲播放前完整下载\n• 播放时在后台预取下一首\n• 后续每首歌即时开始\n• 下一首歌开始时清除已缓存文件\n\n仅在转码设置为原始或关闭时生效。";
+"stable_networkindependent_playback_with_seamless_g" = "稳定、不依赖网络的播放，支持无缝无间隙切换。第一首歌加载可能稍慢。\n\n• 在当前歌曲播放前完整下载\n• 在后台预缓存所选数量的后续歌曲\n• 播放推进时保持该缓存窗口\n• 移除当前窗口之外的缓存文件\n\n转码流始终会缓存当前歌曲。关闭预缓存时，会缓存 1 首后续转码歌曲；开启预缓存时，使用所选数量。";
 "shelv_is_an_unofficial_navidrome_client_and_has_no" = "Shelv 是非官方的 Navidrome 客户端，与 Navidrome 或其开发者无关。";
 "all_downloaded_lyrics_will_be_removed" = "所有已下载的歌词将被移除。";
 "this_will_remove_all_cached_images_and_library_dat" = "这将移除所有缓存的图像和音乐库数据。下次启动时将重新加载音乐库。";
@@ -392,6 +394,8 @@
 "queue_take_over" = "接续";
 "queue_sync_log" = "队列同步日志";
 "infinity_mode" = "无限模式";
+"infinity_mix" = "无限混合";
+"infinity_mix_ahead_count" = "添加歌曲数";
 "on" = "开";
 "off" = "关";
 "what_to_sync" = "同步内容";

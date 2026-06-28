@@ -39,6 +39,7 @@ struct Shelv_DesktopApp: App {
             "transcodingDownloadCodec": "raw",
             "transcodingDownloadBitrate": 192,
             "streamPreCacheAheadCount": 1,
+            "infinityMixAheadCount": 1,
         ])
     }
 

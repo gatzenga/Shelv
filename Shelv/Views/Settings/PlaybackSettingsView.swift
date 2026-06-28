@@ -8,9 +8,11 @@ struct PlaybackSettingsView: View {
     @AppStorage("replayGainMode") private var replayGainMode = "track"
     @AppStorage("recapThreshold") private var recapThreshold = 30
     @AppStorage("queueSyncMode") private var queueSyncMode = "off"
+    @AppStorage("infinityMixAheadCount") private var infinityMixAheadCount = 1
     @State private var showAboutQueueSync = false
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
+    private let infinityMixAheadOptions = Array(1...5)
 
     var body: some View {
         List {
@@ -119,6 +121,21 @@ struct PlaybackSettingsView: View {
                     Label { Text(String(localized: "logs")) } icon: {
                         Image(systemName: "doc.text").foregroundStyle(accentColor)
                     }
+                }
+            }
+
+            Section(String(localized: "infinity_mix")) {
+                Picker(selection: $infinityMixAheadCount) {
+                    ForEach(infinityMixAheadOptions, id: \.self) { count in
+                        Text("\(count)").tag(count)
+                    }
+                } label: {
+                    Label { Text(String(localized: "infinity_mix_ahead_count")) } icon: {
+                        Image(systemName: "infinity").foregroundStyle(accentColor)
+                    }
+                }
+                .onChange(of: infinityMixAheadCount) { _, _ in
+                    AudioPlayerService.shared.refreshInfinityMixWindow()
                 }
             }
 

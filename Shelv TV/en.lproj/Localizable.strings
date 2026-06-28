@@ -307,6 +307,8 @@
 "reset_lyrics_database" = "Reset lyrics database";
 "cache" = "Cache";
 "precache_original_file" = "Pre-cache original file";
+"precache_ahead_count" = "Songs ahead";
+"precache_ready" = "Pre-cached";
 "about_precache" = "About Pre-cache";
 "precache" = "Pre-cache";
 "cache_size" = "Cache Size";
@@ -335,7 +337,7 @@
 "wifi" = "WiFi";
 "cellular" = "Cellular";
 "about_transcoding" = "About Transcoding";
-"about_transcoding_details" = "Choose format and bitrate the server should transcode. \"Original\" downloads unmodified. If the server can't provide the format, the original file is returned.\n\nTranscoded songs are cached locally — stable playback with seamless gapless transitions. The first song may take longer to load.\n\n• Downloads the current song fully before playback\n• While it plays, the next song pre-fetches in the background\n• Every subsequent song starts instantly\n• Cached files are removed when the next song starts";
+"about_transcoding_details" = "Choose format and bitrate the server should transcode. \"Original\" downloads unmodified. If the server can't provide the format, the original file is returned.\n\nTranscoded songs are cached locally for stable playback and seamless gapless transitions. The first song may take longer to load.\n\n• Downloads the current song fully before playback\n• Keeps one upcoming transcoded song ready when Pre-cache is off\n• Uses the selected Pre-cache count when Pre-cache is on\n• Cached files outside the current window are removed";
 "format" = "Format";
 "bitrate" = "Bitrate";
 "server_unreachable" = "Server unreachable";
@@ -356,7 +358,7 @@
 "these_playlists_will_be_permanently_deleted_from_n" = "These playlists will be permanently deleted from Navidrome and iCloud.";
 "precache_original_file_recommendedntranscoded_stre" = "Pre-cache Original File recommended.\nTranscoded streams are pre-cached automatically.";
 "data_stays_local_multiple_devices_may_create_dupli" = "Data stays local. Multiple devices may create duplicate recap playlists.";
-"stable_networkindependent_playback_with_seamless_g" = "Stable, network-independent playback with seamless gapless transitions. The first song may take longer to load.\n\n• Downloads the current song fully before playback\n• While it plays, the next song pre-fetches in the background\n• Every subsequent song starts instantly\n• Cached files are removed when the next song starts\n\nOnly active when transcoding is set to Original or off.";
+"stable_networkindependent_playback_with_seamless_g" = "Stable, network-independent playback with seamless gapless transitions. The first song may take longer to load.\n\n• Downloads the current song fully before playback\n• Pre-caches the selected number of upcoming songs in the background\n• Keeps that window filled as playback advances\n• Cached files outside the current window are removed\n\nTranscoded streams always cache the current song. When Pre-cache is off, one upcoming transcoded song is cached; when Pre-cache is on, the selected amount applies.";
 "shelv_is_an_unofficial_navidrome_client_and_has_no" = "Shelv is an unofficial Navidrome client and has no affiliation with Navidrome or its developers.";
 "all_downloaded_lyrics_will_be_removed" = "All downloaded lyrics will be removed.";
 "this_will_remove_all_cached_images_and_library_dat" = "This will remove all cached images and library data. The library will need to reload on next launch.";
@@ -420,6 +422,8 @@
 "queue_take_over" = "Take over";
 "queue_sync_log" = "Queue Sync Log";
 "infinity_mode" = "Infinity Mode";
+"infinity_mix" = "Infinity Mix";
+"infinity_mix_ahead_count" = "Songs to add";
 "on" = "On";
 "off" = "Off";
 "what_to_sync" = "What to Sync";
