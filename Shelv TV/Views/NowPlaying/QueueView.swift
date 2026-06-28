@@ -79,7 +79,13 @@ struct QueueView: View {
     }
 
     private func row(_ song: Song, _ play: @escaping () -> Void) -> some View {
-        DetailSongRow(song: song, number: 0, showArtwork: true, showContextMenu: false) {
+        DetailSongRow(
+            song: song,
+            number: 0,
+            showArtwork: true,
+            showContextMenu: false,
+            showStreamCacheStatus: true
+        ) {
             play()
             keepFocusAfterPlay()
         }

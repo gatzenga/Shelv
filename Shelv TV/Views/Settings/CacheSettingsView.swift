@@ -2,7 +2,13 @@ import SwiftUI
 
 struct CacheSettingsView: View {
     @AppStorage("streamPreCacheEnabled") private var streamPreCacheEnabled = false
+    @AppStorage("streamPreCacheAheadCount") private var streamPreCacheAheadCount = 1
     @State private var coverCacheBytes = 0
+    private var preCacheAheadOptions: [TVSettingsChoiceOption<Int>] {
+        (1...5).map { count in
+            TVSettingsChoiceOption(value: count, title: "\(count)")
+        }
+    }
 
     var body: some View {
         Form {
@@ -13,6 +19,18 @@ struct CacheSettingsView: View {
             // Precache wie iOS/macOS — Logik liegt im geteilten AudioPlayerService/StreamCacheService.
             Section(String(localized: "precache")) {
                 Toggle(String(localized: "precache_original_file"), isOn: $streamPreCacheEnabled)
+                    .onChange(of: streamPreCacheEnabled) { _, _ in
+                        AudioPlayerService.shared.refreshStreamPreCacheWindow()
+                    }
+                if streamPreCacheEnabled {
+                    TVSettingsChoiceRow(
+                        title: String(localized: "precache_ahead_count"),
+                        selection: $streamPreCacheAheadCount,
+                        options: preCacheAheadOptions
+                    ) { _ in
+                        AudioPlayerService.shared.refreshStreamPreCacheWindow()
+                    }
+                }
                 NavigationLink {
                     ScrollView {
                         Text(String(localized: "stable_networkindependent_playback_with_seamless_g"))

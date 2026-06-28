@@ -38,6 +38,7 @@ struct Shelv_DesktopApp: App {
             "transcodingCellularBitrate": 128,
             "transcodingDownloadCodec": "raw",
             "transcodingDownloadBitrate": 192,
+            "streamPreCacheAheadCount": 1,
         ])
     }
 

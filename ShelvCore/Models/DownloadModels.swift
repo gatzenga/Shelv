@@ -122,7 +122,7 @@ nonisolated struct DownloadedArtist: Identifiable, Hashable {
     }
 }
 
-struct ActualStreamFormat: Equatable {
+nonisolated struct ActualStreamFormat: Equatable, Sendable {
     let codecLabel: String
     let bitrateKbps: Int?
 

@@ -2,22 +2,23 @@
 
 ## Overview
 
-Shelv preloads the next song in the background so it is ready immediately — either for a fast skip or a seamless transition (gapless). The logic runs in two phases, triggered every 0.5 s by the time observer in `AudioPlayerService`.
+Shelv preloads a sliding window of upcoming songs in the background so they are ready immediately — either for a fast skip or a seamless transition (gapless). The current song is cached before playback when required; upcoming songs are filled from the 5 s playback marker via the 0.5 s time observer in `AudioPlayerService`.
 
 ---
 
-## Prefetch — 5 s after song start
+## Prefetch Window
 
-5 seconds into a song, `checkGaplessTrigger` starts downloading the next song in the background via `StreamCacheService`. By the time the current song ends, the file is already on disk.
+Once the current song reaches the 5 s playback marker, `AudioPlayerService` fills a managed stream-cache window via `StreamCacheService`. Downloads outside the current window are cancelled and removed.
 
 | Situation | Behaviour |
 |-----------|-----------|
-| Transcoded remote stream | `StreamCacheService.prefetch()` starts immediately (no toggle needed) |
-| Raw remote stream + `streamPreCacheEnabled = true` | `StreamCacheService.prefetch()` starts |
-| Raw remote stream + `streamPreCacheEnabled = false` | Nothing — AVPlayer will stream directly later |
+| Transcoded remote stream + `streamPreCacheEnabled = false` | Current song is cached before playback; 1 upcoming transcoded song is cached after the 5 s marker |
+| Transcoded remote stream + `streamPreCacheEnabled = true` | Current song is cached before playback; the selected upcoming count is cached after the 5 s marker |
+| Raw remote stream + `streamPreCacheEnabled = true` | Current song is cached before playback; the selected upcoming count is cached after the 5 s marker |
+| Raw remote stream + `streamPreCacheEnabled = false` | No upcoming cache — AVPlayer will stream directly later |
 | Local file (downloaded) | Nothing needed — file already on disk |
 
-The `prefetchScheduled` flag prevents the prefetch from starting more than once per song. On track change (skip, stop) the cache for the no-longer-needed song is cancelled and the temp file deleted.
+The managed cache window prevents the same song from being started twice and keeps the current song plus the relevant upcoming songs alive. On track change (skip, stop) cache files outside the window are cancelled and deleted; newly needed upcoming songs are added when the new current song reaches the 5 s marker.
 
 Two conditions skip the entire block:
 - Song duration ≤ 11 s — too short to prefetch meaningfully
@@ -32,6 +33,7 @@ Two conditions skip the entire block:
 - File name: `shelv_stream_<songId>.<ext>` (e.g. `shelv_stream_abc123.opus`)
 - 3 download attempts with 1 s pause between them; no retry on timeout
 - Already running or completed caches are not started twice (`prefetch()` is idempotent)
+- Window preloads are run sequentially to avoid starting multiple full-song downloads at once
 - `cancel(songId:)` cancels the task and deletes the temp file
 - `cleanupOldFiles()` removes stale `shelv_stream_*` files on app launch
 
@@ -68,6 +70,7 @@ The same cache logic applies when starting the current song:
 |----------------|---------|--------|
 | `transcodingEnabled` | `false` | Enables server-side transcoding; pre-cache always runs in this mode |
 | `streamPreCacheEnabled` | `false` | Pre-cache for raw remote streams; required for reliable gapless without transcoding |
+| `streamPreCacheAheadCount` | `1` | Number of upcoming songs to keep cached when pre-cache is enabled (`1` through `5`) |
 | `gaplessEnabled` | `false` | Activates the gapless preload in Phase 2 |
 
 > **Gapless with RAW files:** `gaplessEnabled` alone is not enough. AVPlayer reinitialises internally for a remote URL and produces a small gap. With `streamPreCacheEnabled = true`, gapless waits for the completed local file and hands that to AVQueuePlayer — making the transition truly seamless.
@@ -76,11 +79,11 @@ The same cache logic applies when starting the current song:
 
 ## Trade-offs
 
-### Transcoded stream (pre-cache always active)
+### Transcoded stream (pre-cache always active for current song)
 
 | Pros | Cons |
 |------|------|
-| Gapless works reliably | Entire song downloaded before playback starts → higher initial latency |
+| Gapless works reliably | Entire current song downloaded before playback starts → higher initial latency |
 | Precise duration via `AVURLAsset.load(.duration)` | Higher data usage — full file downloaded upfront |
 | No AVPlayer buffer stall on slow connections | Requires free space in the temp directory |
 
@@ -102,6 +105,6 @@ The same cache logic applies when starting the current song:
 
 ## Critical Invariants
 
-- `prefetchScheduled` and `gaplessPreloadTriggered` are reset on every song start and stop — no state leaks between tracks.
-- `prefetchedSongId` ensures the correct cache is cancelled on skip.
+- `managedStreamCacheSongIds` and `gaplessPreloadTriggered` are reset or trimmed on every song start and stop — no state leaks between tracks.
+- The cache window ensures the correct cache files are retained or cancelled on skip.
 - The gapless swap only fires when `peekNextSong()?.id == gaplessPreloadSong?.id` — queue changes inside the preload window are handled correctly.

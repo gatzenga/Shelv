@@ -1,4 +1,33 @@
+import Combine
 import Foundation
+
+final class StreamCacheStatus: ObservableObject {
+    static let shared = StreamCacheStatus()
+
+    @Published private(set) var activeSongIds: Set<String> = []
+    @Published private(set) var cachedSongIds: Set<String> = []
+
+    private init() {}
+
+    func markActive(_ songId: String) {
+        activeSongIds.insert(songId)
+    }
+
+    func markCached(_ songId: String) {
+        activeSongIds.remove(songId)
+        cachedSongIds.insert(songId)
+    }
+
+    func remove(_ songId: String) {
+        activeSongIds.remove(songId)
+        cachedSongIds.remove(songId)
+    }
+
+    func removeAll() {
+        activeSongIds.removeAll()
+        cachedSongIds.removeAll()
+    }
+}
 
 actor StreamCacheService {
     static let shared = StreamCacheService()
@@ -75,9 +104,33 @@ actor StreamCacheService {
         StreamCacheLog.log(songId: songId, message: "Prefetch started (\(desc))")
         let format = ActualStreamFormat(codecLabel: codec.uppercased(), bitrateKbps: bitrate > 0 ? bitrate : nil)
         activeFormats[songId] = format
+        publishActive(songId: songId)
         activeTasks[songId] = Task {
             await downloadWithRetry(songId: songId, url: url, format: format, maxAttempts: 3)
         }
+    }
+
+    func prefetchAndWait(songId: String, url: URL, codec: String, bitrate: Int, songTitle: String = "") async {
+        if !songTitle.isEmpty { StreamCacheLog.register(songId: songId, title: songTitle) }
+        if cachedURLs[songId] != nil {
+            StreamCacheLog.log(songId: songId, message: "Already cached – skipped")
+            return
+        }
+        if let task = activeTasks[songId] {
+            StreamCacheLog.log(songId: songId, message: "Already downloading – waiting")
+            await task.value
+            return
+        }
+        let desc = bitrate > 0 ? "\(codec.uppercased()) · \(bitrate) kbps" : codec.uppercased()
+        StreamCacheLog.log(songId: songId, message: "Prefetch started (\(desc))")
+        let format = ActualStreamFormat(codecLabel: codec.uppercased(), bitrateKbps: bitrate > 0 ? bitrate : nil)
+        activeFormats[songId] = format
+        publishActive(songId: songId)
+        let task = Task {
+            await downloadWithRetry(songId: songId, url: url, format: format, maxAttempts: 3)
+        }
+        activeTasks[songId] = task
+        await task.value
     }
 
     func cancel(songId: String) {
@@ -91,6 +144,7 @@ actor StreamCacheService {
             try? FileManager.default.removeItem(at: url)
         }
         cachedFormats.removeValue(forKey: songId)
+        publishRemoved(songId: songId)
         if !ext.isEmpty {
             try? FileManager.default.removeItem(at: Self.tempURL(for: songId, ext: ext))
         }
@@ -109,6 +163,7 @@ actor StreamCacheService {
         }
         cachedURLs.removeAll()
         cachedFormats.removeAll()
+        publishRemovedAll()
     }
 
     func cleanupOldFiles() {
@@ -151,6 +206,7 @@ actor StreamCacheService {
                 cachedURLs[songId] = dest
                 activeFormats.removeValue(forKey: songId)
                 activeTasks.removeValue(forKey: songId)
+                publishCached(songId: songId)
                 if Self.didFormatChange(requested: format, delivered: delivered.format) {
                     StreamCacheLog.log(songId: songId, message: "Cached as \(delivered.format.displayString) (requested \(format.displayString))")
                 } else {
@@ -161,6 +217,7 @@ actor StreamCacheService {
                 StreamCacheLog.log(songId: songId, message: "Timeout – no retry")
                 activeFormats.removeValue(forKey: songId)
                 activeTasks.removeValue(forKey: songId)
+                publishRemoved(songId: songId)
                 return
             } catch {
                 guard !Task.isCancelled else { return }
@@ -170,6 +227,23 @@ actor StreamCacheService {
         }
         activeFormats.removeValue(forKey: songId)
         activeTasks.removeValue(forKey: songId)
+        publishRemoved(songId: songId)
         StreamCacheLog.log(songId: songId, message: "All attempts failed")
+    }
+
+    private func publishActive(songId: String) {
+        Task { @MainActor in StreamCacheStatus.shared.markActive(songId) }
+    }
+
+    private func publishCached(songId: String) {
+        Task { @MainActor in StreamCacheStatus.shared.markCached(songId) }
+    }
+
+    private func publishRemoved(songId: String) {
+        Task { @MainActor in StreamCacheStatus.shared.remove(songId) }
+    }
+
+    private func publishRemovedAll() {
+        Task { @MainActor in StreamCacheStatus.shared.removeAll() }
     }
 }

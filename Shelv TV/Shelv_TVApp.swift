@@ -7,6 +7,12 @@ struct Shelv_TVApp: App {
 
     @AppStorage("appAppearance") private var appAppearance = "system"
 
+    init() {
+        UserDefaults.standard.register(defaults: [
+            "streamPreCacheAheadCount": 1,
+        ])
+    }
+
     private var preferredScheme: ColorScheme? {
         switch appAppearance {
         case "light": return .light

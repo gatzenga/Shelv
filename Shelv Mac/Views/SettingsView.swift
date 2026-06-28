@@ -368,16 +368,31 @@ struct AppearanceTab: View {
 
 struct CacheTab: View {
     @AppStorage("streamPreCacheEnabled") private var streamPreCacheEnabled = false
+    @AppStorage("streamPreCacheAheadCount") private var streamPreCacheAheadCount = 1
     @Environment(\.themeColor) private var themeColor
     @State private var cacheSize = "–"
     @State private var showClearConfirm = false
     @State private var showInfo = false
     @State private var showCacheLog = false
+    private let preCacheAheadOptions = Array(1...5)
 
     var body: some View {
         Form {
             Section {
                 Toggle(String(localized: "precache_original_file"), isOn: $streamPreCacheEnabled)
+                    .onChange(of: streamPreCacheEnabled) { _, _ in
+                        AudioPlayerService.shared.refreshStreamPreCacheWindow()
+                    }
+                if streamPreCacheEnabled {
+                    Picker(String(localized: "precache_ahead_count"), selection: $streamPreCacheAheadCount) {
+                        ForEach(preCacheAheadOptions, id: \.self) { count in
+                            Text("\(count)").tag(count)
+                        }
+                    }
+                    .onChange(of: streamPreCacheAheadCount) { _, _ in
+                        AudioPlayerService.shared.refreshStreamPreCacheWindow()
+                    }
+                }
                 Button {
                     showInfo = true
                 } label: {

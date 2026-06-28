@@ -3,6 +3,7 @@ import SwiftUI
 struct CacheSettingsView: View {
     @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage("streamPreCacheEnabled") private var streamPreCacheEnabled = false
+    @AppStorage("streamPreCacheAheadCount") private var streamPreCacheAheadCount = 1
 
     @State private var showClearCacheConfirm = false
     @State private var showClearToast = false
@@ -10,6 +11,7 @@ struct CacheSettingsView: View {
     @State private var showPreCacheInfo = false
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
+    private let preCacheAheadOptions = Array(1...5)
 
     var body: some View {
         ZStack {
@@ -21,6 +23,24 @@ struct CacheSettingsView: View {
                         }
                     }
                     .tint(accentColor)
+                    .onChange(of: streamPreCacheEnabled) { _, _ in
+                        AudioPlayerService.shared.refreshStreamPreCacheWindow()
+                    }
+                    if streamPreCacheEnabled {
+                        Picker(selection: $streamPreCacheAheadCount) {
+                            ForEach(preCacheAheadOptions, id: \.self) { count in
+                                Text("\(count)").tag(count)
+                            }
+                        } label: {
+                            Label { Text(String(localized: "precache_ahead_count")) } icon: {
+                                Image(systemName: "text.line.first.and.arrowtriangle.forward")
+                                    .foregroundStyle(accentColor)
+                            }
+                        }
+                        .onChange(of: streamPreCacheAheadCount) { _, _ in
+                            AudioPlayerService.shared.refreshStreamPreCacheWindow()
+                        }
+                    }
                     Button {
                         showPreCacheInfo = true
                     } label: {

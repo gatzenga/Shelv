@@ -431,8 +431,10 @@ struct DetailSongRow: View {
     var playCount: Int? = nil
     /// In der Warteschlange kein Longpress-Menü (die Optionen sind dort sinnlos).
     var showContextMenu: Bool = true
+    var showStreamCacheStatus: Bool = false
     let onPlay: () -> Void
     @AppStorage("themeColor") private var themeColor = "violet"
+    @ObservedObject private var streamCacheStatus = StreamCacheStatus.shared
 
     var body: some View {
         HStack(spacing: 20) {
@@ -466,7 +468,25 @@ struct DetailSongRow: View {
                 .foregroundStyle(.secondary)
             }
             if let d = song.duration {
-                Text(formatDuration(d)).font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                HStack(spacing: 14) {
+                    if showStreamCacheStatus {
+                        Group {
+                            if streamCacheStatus.cachedSongIds.contains(song.id) {
+                                Image(systemName: "arrow.down.circle.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(AppTheme.color(for: themeColor))
+                                    .accessibilityLabel(String(localized: "precache_ready"))
+                            } else {
+                                Color.clear
+                            }
+                        }
+                        .frame(width: 18, height: 18)
+                    }
+                    Text(formatDuration(d))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
             }
         }
         .rowButton(action: onPlay)

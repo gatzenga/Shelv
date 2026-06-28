@@ -323,6 +323,8 @@
 "dark" = "Dark";
 "mode" = "Mode";
 "precache_original_file" = "Pre-cache original file";
+"precache_ahead_count" = "Songs ahead";
+"precache_ready" = "Pre-cached";
 "about_precache" = "About Pre-cache";
 "cache_size" = "Cache Size";
 "clear_cache" = "Clear Cache";
@@ -377,12 +379,12 @@
 "all_recap_playlists_match_the_database" = "All recap playlists match the database.";
 "switch_to_offline_mode_to_use_your_downloads" = "Switch to offline mode to use your downloads.";
 "all_cached_cover_images_will_be_deleted_and_reload" = "All cached cover images will be deleted and reloaded next time they are displayed.";
-"stable_networkindependent_playback_with_seamless_g" = "Stable, network-independent playback with seamless gapless transitions. The first song may take longer to load.\n\n• Downloads the current song fully before playback\n• While it plays, the next song pre-fetches in the background\n• Every subsequent song starts instantly\n• Cached files are removed when the next song starts\n\nOnly active when transcoding is set to Original or off.";
+"stable_networkindependent_playback_with_seamless_g" = "Stable, network-independent playback with seamless gapless transitions. The first song may take longer to load.\n\n• Downloads the current song fully before playback\n• Pre-caches the selected number of upcoming songs in the background\n• Keeps that window filled as playback advances\n• Cached files outside the current window are removed\n\nTranscoded streams always cache the current song. When Pre-cache is off, one upcoming transcoded song is cached; when Pre-cache is on, the selected amount applies.";
 "track_your_listening_history_and_generate_automati" = "Track your listening history and generate automatic playlists.";
 "data_stays_local_multiple_devices_may_create_dupli" = "Data stays local. Multiple devices may create duplicate recap playlists.";
 "these_playlists_will_be_permanently_deleted_from_n" = "These playlists will be permanently deleted from Navidrome and iCloud.";
 "server_transcodes_to_the_formatbitrate_below_u201c" = "Server transcodes to the format/bitrate below. \u{201C}Original\u{201D} requests unchanged source.";
-"transcoded_songs_play_from_a_local_copy_ensuring_s" = "Transcoded songs play from a local copy, ensuring stable playback and seamless gapless transitions. The first song may take longer to load.\n\n• The current song is fully downloaded before playback\n• While it plays, the next song pre-fetches in the background\n• Every subsequent song starts instantly\n• Cached files are removed when the next song starts";
+"transcoded_songs_play_from_a_local_copy_ensuring_s" = "Transcoded songs play from a local copy, ensuring stable playback and seamless gapless transitions. The first song may take longer to load.\n\n• The current song is fully downloaded before playback\n• Keeps one upcoming transcoded song ready when Pre-cache is off\n• Uses the selected Pre-cache count when Pre-cache is on\n• Cached files outside the current window are removed";
 "could_not_read_response_format" = "Could not read response: %@";
 "server_error_format" = "Server error: %@";
 "song_not_found_format" = "Song not found on server: %@";

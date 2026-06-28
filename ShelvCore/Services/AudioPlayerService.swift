@@ -123,6 +123,7 @@ class AudioPlayerService: ObservableObject {
     private var lastArtworkCoverArt: String? = nil
     @AppStorage("gaplessEnabled") private var gaplessEnabled = false
     @AppStorage("streamPreCacheEnabled") private var streamPreCacheEnabled = false
+    @AppStorage("streamPreCacheAheadCount") private var streamPreCacheAheadCount = 1
     @AppStorage("autoFetchLyrics") private var autoFetchLyrics = true
     @AppStorage("replayGainEnabled") private var replayGainEnabled = false
     @AppStorage("replayGainMode") private var replayGainMode = "track"
@@ -130,8 +131,9 @@ class AudioPlayerService: ObservableObject {
     private var gaplessPreloadTriggered = false
     private var gaplessPreloadSong: Song? = nil
     private var gaplessPreloadURL: URL? = nil
-    private var prefetchScheduled = false
-    private var prefetchedSongId: String? = nil
+    private var managedStreamCacheSongIds: Set<String> = []
+    private var streamCacheWindowSongIds: [String] = []
+    private var streamCacheWindowTask: Task<Void, Never>?
     private var isEngineLoaded = false
     private var playbackGeneration: Int = 0
     private var currentArtwork: MPMediaItemArtwork?
@@ -817,6 +819,158 @@ class AudioPlayerService: ObservableObject {
         return url.queryParam("format").map { $0 != "raw" } ?? false
     }
 
+    private struct StreamCacheJob: Sendable {
+        let songId: String
+        let title: String
+        let url: URL
+        let codec: String
+        let bitrate: Int
+    }
+
+    private var selectedStreamPreCacheAheadCount: Int {
+        min(max(streamPreCacheAheadCount, 1), 5)
+    }
+
+    private var backgroundStreamPreCacheLimit: Int {
+        if streamPreCacheEnabled { return selectedStreamPreCacheAheadCount }
+        return TranscodingPolicy.currentStreamFormat() == nil ? 0 : 1
+    }
+
+    private func isDownloadedLocally(_ song: Song) -> Bool {
+        let serverId = SubsonicAPIService.shared.activeServer?.stableId ?? ""
+        guard !serverId.isEmpty else { return false }
+        return LocalDownloadIndex.shared.url(songId: song.id, serverId: serverId) != nil
+    }
+
+    private func upcomingSongs(limit: Int) -> [Song] {
+        guard limit > 0 else { return [] }
+        var candidates = playNextQueue
+        let start = currentIndex + 1
+        if start < queue.count {
+            candidates.append(contentsOf: queue[start...])
+        }
+        candidates.append(contentsOf: userQueue)
+
+        var seen: Set<String> = []
+        let currentId = currentSong?.id
+        var result: [Song] = []
+        for song in candidates where song.id != currentId {
+            guard seen.insert(song.id).inserted else { continue }
+            result.append(song)
+            if result.count == limit { break }
+        }
+        return result
+    }
+
+    private func streamCacheJob(for song: Song) -> StreamCacheJob? {
+        guard !OfflineModeService.shared.isOffline,
+              !isDownloadedLocally(song),
+              let url = SubsonicAPIService.shared.streamURL(for: song.id),
+              !url.isFileURL
+        else { return nil }
+
+        if isTranscodedRemote(url), let fmt = TranscodingPolicy.currentStreamFormat() {
+            return StreamCacheJob(
+                songId: song.id,
+                title: song.title,
+                url: url,
+                codec: fmt.codec.rawValue,
+                bitrate: fmt.bitrate
+            )
+        }
+
+        guard streamPreCacheEnabled else { return nil }
+        return StreamCacheJob(
+            songId: song.id,
+            title: song.title,
+            url: url,
+            codec: song.suffix?.lowercased() ?? "audio",
+            bitrate: 0
+        )
+    }
+
+    private func desiredStreamCacheJobs() -> [StreamCacheJob] {
+        upcomingSongs(limit: backgroundStreamPreCacheLimit).compactMap { streamCacheJob(for: $0) }
+    }
+
+    private func currentStreamCacheKeepIds() -> Set<String> {
+        guard let currentSong else { return [] }
+        return Set(desiredStreamCacheJobs().map(\.songId)).union([currentSong.id])
+    }
+
+    private func trimManagedStreamCaches(keeping keepIds: Set<String>) {
+        streamCacheWindowTask?.cancel()
+        streamCacheWindowTask = nil
+        streamCacheWindowSongIds = []
+        let staleIds = managedStreamCacheSongIds.subtracting(keepIds)
+        managedStreamCacheSongIds.formIntersection(keepIds)
+        guard !staleIds.isEmpty else { return }
+        Task {
+            for songId in staleIds {
+                await StreamCacheService.shared.cancel(songId: songId)
+            }
+        }
+    }
+
+    private func cancelAllManagedStreamCaches() {
+        streamCacheWindowTask?.cancel()
+        streamCacheWindowTask = nil
+        streamCacheWindowSongIds = []
+        let staleIds = managedStreamCacheSongIds
+        managedStreamCacheSongIds.removeAll()
+        guard !staleIds.isEmpty else { return }
+        Task {
+            for songId in staleIds {
+                await StreamCacheService.shared.cancel(songId: songId)
+            }
+        }
+    }
+
+    func refreshStreamPreCacheWindow() {
+        guard currentSong != nil else {
+            cancelAllManagedStreamCaches()
+            return
+        }
+        trimManagedStreamCaches(keeping: currentStreamCacheKeepIds())
+        if currentTime >= 5 {
+            refreshStreamCacheWindow(force: true)
+        }
+    }
+
+    private func refreshStreamCacheWindow(force: Bool = false) {
+        guard let currentSong else {
+            cancelAllManagedStreamCaches()
+            return
+        }
+        let jobs = desiredStreamCacheJobs()
+        let keepIds = Set(jobs.map(\.songId)).union([currentSong.id])
+        let signature = [currentSong.id] + jobs.map(\.songId)
+        guard force || signature != streamCacheWindowSongIds else { return }
+
+        streamCacheWindowSongIds = signature
+        streamCacheWindowTask?.cancel()
+        streamCacheWindowTask = Task { @MainActor [weak self, jobs, keepIds] in
+            guard let self else { return }
+            let staleIds = self.managedStreamCacheSongIds.subtracting(keepIds)
+            self.managedStreamCacheSongIds.formIntersection(keepIds)
+            for songId in staleIds {
+                guard !Task.isCancelled else { return }
+                await StreamCacheService.shared.cancel(songId: songId)
+            }
+            for job in jobs {
+                guard !Task.isCancelled else { return }
+                self.managedStreamCacheSongIds.insert(job.songId)
+                await StreamCacheService.shared.prefetchAndWait(
+                    songId: job.songId,
+                    url: job.url,
+                    codec: job.codec,
+                    bitrate: job.bitrate,
+                    songTitle: job.title
+                )
+            }
+        }
+    }
+
     private func startPlayback(song: Song, seekTo: Double = 0) {
         stopFastSeeking()
         playbackGeneration += 1
@@ -832,13 +986,6 @@ class AudioPlayerService: ObservableObject {
             #endif
             self.networkResumeSong = nil
             self.isEngineLoaded = false
-            if let prev = self.currentSong, prev.id != song.id {
-                await StreamCacheService.shared.cancel(songId: prev.id)
-            }
-            if let prefId = self.prefetchedSongId, prefId != song.id {
-                await StreamCacheService.shared.cancel(songId: prefId)
-            }
-            self.prefetchedSongId = nil
             await NetworkStatus.shared.waitUntilReady()
 
             guard self.playbackGeneration == gen else { return }
@@ -860,10 +1007,10 @@ class AudioPlayerService: ObservableObject {
             self.gaplessPreloadTriggered = false
             self.gaplessPreloadSong = nil
             self.gaplessPreloadURL = nil
-            self.prefetchScheduled = false
             self.formatProbeTask?.cancel()
             self.actualStreamFormat = nil
             self.currentSong = song
+            self.trimManagedStreamCaches(keeping: self.currentStreamCacheKeepIds())
             self.scheduleLyricsAutoFetch(for: song)
             self.applyReplayGain(for: song)
             self.isBuffering = false
@@ -901,6 +1048,7 @@ class AudioPlayerService: ObservableObject {
                     bitrate: fmt.bitrate,
                     songTitle: song.title
                 )
+                self.managedStreamCacheSongIds.insert(songId)
                 #if os(iOS)
                 // Background-Task damit iOS den Download nicht einfriert wenn Handy gesperrt wird
                 // bevor der erste Song je gespielt hat (kein aktiver Audio-Kontext vorhanden)
@@ -958,6 +1106,7 @@ class AudioPlayerService: ObservableObject {
                     bitrate: 0,
                     songTitle: song.title
                 )
+                self.managedStreamCacheSongIds.insert(songId)
                 let deadline = Date().addingTimeInterval(60)
                 repeat {
                     try? await Task.sleep(nanoseconds: 200_000_000)
@@ -1000,6 +1149,7 @@ class AudioPlayerService: ObservableObject {
     }
 
     private func clearPlaybackState() {
+        cancelAllManagedStreamCaches()
         teardownPlayer()
         #if os(tvOS)
         resumeWatchdog?.cancel()
@@ -1570,6 +1720,7 @@ class AudioPlayerService: ObservableObject {
 
                 self.advanceQueueState()
                 self.currentSong = song
+                self.trimManagedStreamCaches(keeping: self.currentStreamCacheKeepIds())
                 self.scheduleLyricsAutoFetch(for: song)
                 self.applyReplayGain(for: song)
                 self.currentTime = 0
@@ -1577,8 +1728,6 @@ class AudioPlayerService: ObservableObject {
                 self.isEngineLoaded = true
                 self.isBuffering = false
                 self.streamTimeOffset = 0
-                self.prefetchScheduled = false
-                self.prefetchedSongId = nil
                 self.currentStreamURL = url
                 if let d = song.duration { self.duration = Double(d) }
                 self.engine.trustedDuration = Double(song.duration ?? 0)
@@ -1687,35 +1836,9 @@ class AudioPlayerService: ObservableObject {
         guard !(repeatMode == .one && playNextQueue.isEmpty) else { return }
         guard let nextSong = peekNextSong() else { return }
 
-        // Prefetch: 5s nach Songstart — früh genug damit bei Mid-Song-Skip der nächste sofort bereit ist
-        if currentTime >= 5, !prefetchScheduled,
-           let nextURL = SubsonicAPIService.shared.streamURL(for: nextSong.id) {
-            if isTranscodedRemote(nextURL), let fmt = TranscodingPolicy.currentStreamFormat() {
-                prefetchScheduled = true
-                prefetchedSongId = nextSong.id
-                Task {
-                    await StreamCacheService.shared.prefetch(
-                        songId: nextSong.id,
-                        url: nextURL,
-                        codec: fmt.codec.rawValue,
-                        bitrate: fmt.bitrate,
-                        songTitle: nextSong.title
-                    )
-                }
-            } else if !nextURL.isFileURL, streamPreCacheEnabled {
-                prefetchScheduled = true
-                prefetchedSongId = nextSong.id
-                let suffix = nextSong.suffix?.lowercased() ?? "audio"
-                Task {
-                    await StreamCacheService.shared.prefetch(
-                        songId: nextSong.id,
-                        url: nextURL,
-                        codec: suffix,
-                        bitrate: 0,
-                        songTitle: nextSong.title
-                    )
-                }
-            }
+        // Prefetch-Fenster erst nach der 5-Sekunden-Marke auffüllen.
+        if currentTime >= 5 {
+            refreshStreamCacheWindow()
         }
 
         // Gapless-Preload: 10s vor Ende (nur wenn Flag nicht gesetzt)

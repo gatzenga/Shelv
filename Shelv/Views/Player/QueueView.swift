@@ -2,6 +2,7 @@ import SwiftUI
 
 struct QueueView: View {
     @ObservedObject var player = AudioPlayerService.shared
+    @ObservedObject private var streamCacheStatus = StreamCacheStatus.shared
     @Environment(\.dismiss) var dismiss
     @AppStorage("themeColor") private var themeColorName = "violet"
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
@@ -267,10 +268,24 @@ struct QueueView: View {
                 }
             }
             Spacer()
-            Text(song.durationFormatted)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
+            HStack(spacing: 4) {
+                Group {
+                    if streamCacheStatus.cachedSongIds.contains(song.id) {
+                        Image(systemName: "arrow.down.circle.fill")
+                            .font(.caption2)
+                            .foregroundStyle(accentColor)
+                            .accessibilityLabel(String(localized: "precache_ready"))
+                    } else {
+                        Color.clear
+                    }
+                }
+                .frame(width: 14, height: 14)
+                Text(song.durationFormatted)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            .frame(minWidth: 54, alignment: .trailing)
         }
         .contentShape(Rectangle())
     }

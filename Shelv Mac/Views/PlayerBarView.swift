@@ -536,6 +536,7 @@ struct QueueSongRow: View {
     var onDelete: (() -> Void)? = nil
 
     @Environment(\.themeColor) private var themeColor
+    @ObservedObject private var streamCacheStatus = StreamCacheStatus.shared
     @State private var isHovered = false
 
     var body: some View {
@@ -566,7 +567,24 @@ struct QueueSongRow: View {
                     .font(.body)
                     .foregroundStyle(themeColor)
             } else {
-                Text(song.durationString).font(.caption2).foregroundStyle(.tertiary).monospacedDigit()
+                HStack(spacing: 4) {
+                    Group {
+                        if streamCacheStatus.cachedSongIds.contains(song.id) {
+                            Image(systemName: "arrow.down.circle.fill")
+                                .font(.caption2)
+                                .foregroundStyle(themeColor)
+                                .accessibilityLabel(String(localized: "precache_ready"))
+                        } else {
+                            Color.clear
+                        }
+                    }
+                    .frame(width: 14, height: 14)
+                    Text(song.durationString)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .monospacedDigit()
+                }
+                .frame(minWidth: 54, alignment: .trailing)
             }
         }
         .padding(.horizontal, 14)
