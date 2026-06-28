@@ -12,7 +12,7 @@ struct PlaybackSettingsView: View {
     @State private var showAboutQueueSync = false
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
-    private let infinityMixAheadOptions = Array(1...5)
+    private let infinityMixAheadOptions = Array(1...10)
 
     var body: some View {
         List {

@@ -48,7 +48,7 @@ struct PlaybackSettingsView: View {
         ]
     }
     private var infinityMixAheadOptions: [TVSettingsChoiceOption<Int>] {
-        (1...5).map { count in
+        (1...10).map { count in
             TVSettingsChoiceOption(value: count, title: "\(count)")
         }
     }

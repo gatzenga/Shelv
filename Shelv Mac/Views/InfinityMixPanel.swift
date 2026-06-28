@@ -3,7 +3,7 @@ import SwiftUI
 struct InfinityMixPanel: View {
     @AppStorage("infinityMixAheadCount") private var infinityMixAheadCount = 1
     @Environment(\.themeColor) private var themeColor
-    private let infinityMixAheadOptions = Array(1...5)
+    private let infinityMixAheadOptions = Array(1...10)
 
     var body: some View {
         Form {
