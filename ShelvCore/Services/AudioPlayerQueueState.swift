@@ -115,4 +115,29 @@ nonisolated struct AudioPlayerQueueState: Equatable {
             truthAlbumQueue = []
         }
     }
+
+    mutating func playFromQueue(index: Int) -> Song? {
+        guard queue.indices.contains(index) else { return nil }
+        currentIndex = index
+        return queue[index]
+    }
+
+    mutating func jumpToPlayNext(at index: Int) -> Song? {
+        removeFromPlayNextQueue(at: index)
+    }
+
+    mutating func jumpToQueueTrack(at queueIndex: Int) -> Song? {
+        guard queue.indices.contains(queueIndex), queueIndex > currentIndex else { return nil }
+        return queue.remove(at: queueIndex)
+    }
+
+    mutating func jumpToUserQueue(at index: Int) -> Song? {
+        guard userQueue.indices.contains(index) else { return nil }
+        return userQueue.remove(at: index)
+    }
+
+    mutating func addPlayNext(_ songs: [Song]) {
+        truthPlayNextQueue.append(contentsOf: songs)
+        playNextQueue.append(contentsOf: songs)
+    }
 }

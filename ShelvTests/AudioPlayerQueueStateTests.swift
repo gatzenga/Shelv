@@ -233,6 +233,78 @@ final class AudioPlayerQueueStateTests: XCTestCase {
         XCTAssertTrue(state.truthPlayNextQueue.isEmpty)
         XCTAssertTrue(state.truthUserQueue.isEmpty)
     }
+
+    func testPlayFromQueueUpdatesCurrentIndexAndReturnsSong() {
+        var state = makeQueueState(
+            queue: [testSong("album-1"), testSong("album-2"), testSong("album-3")],
+            currentIndex: 0
+        )
+
+        let song = state.playFromQueue(index: 2)
+
+        XCTAssertEqual(song?.id, "album-3")
+        XCTAssertEqual(state.currentIndex, 2)
+    }
+
+    func testJumpToPlayNextRemovesSelectedSongAndTruthEntry() {
+        var state = makeQueueState(
+            queue: [testSong("album-1")],
+            currentIndex: 0,
+            playNextQueue: [testSong("next-1"), testSong("next-2")],
+            truthPlayNextQueue: [testSong("next-1"), testSong("next-2")]
+        )
+
+        let song = state.jumpToPlayNext(at: 1)
+
+        XCTAssertEqual(song?.id, "next-2")
+        XCTAssertEqual(state.playNextQueue.map(\.id), ["next-1"])
+        XCTAssertEqual(state.truthPlayNextQueue.map(\.id), ["next-1"])
+    }
+
+    func testJumpToQueueTrackOnlyAllowsUpcomingAlbumTracks() {
+        var state = makeQueueState(
+            queue: [testSong("album-1"), testSong("album-2"), testSong("album-3")],
+            currentIndex: 1,
+            currentSong: testSong("album-2")
+        )
+
+        XCTAssertNil(state.jumpToQueueTrack(at: 1))
+
+        let song = state.jumpToQueueTrack(at: 2)
+
+        XCTAssertEqual(song?.id, "album-3")
+        XCTAssertEqual(state.queue.map(\.id), ["album-1", "album-2"])
+        XCTAssertEqual(state.currentIndex, 1)
+    }
+
+    func testJumpToUserQueueRemovesVisibleEntryButKeepsTruthQueue() {
+        var state = makeQueueState(
+            queue: [testSong("album-1")],
+            currentIndex: 0,
+            userQueue: [testSong("user-1"), testSong("user-2")],
+            truthUserQueue: [testSong("user-1"), testSong("user-2")]
+        )
+
+        let song = state.jumpToUserQueue(at: 0)
+
+        XCTAssertEqual(song?.id, "user-1")
+        XCTAssertEqual(state.userQueue.map(\.id), ["user-2"])
+        XCTAssertEqual(state.truthUserQueue.map(\.id), ["user-1", "user-2"])
+    }
+
+    func testAddPlayNextAppendsVisibleAndTruthEntries() {
+        var state = makeQueueState(
+            queue: [testSong("album-1")],
+            currentIndex: 0,
+            playNextQueue: [testSong("next-1")],
+            truthPlayNextQueue: [testSong("next-1")]
+        )
+
+        state.addPlayNext([testSong("next-2"), testSong("next-3")])
+
+        XCTAssertEqual(state.playNextQueue.map(\.id), ["next-1", "next-2", "next-3"])
+        XCTAssertEqual(state.truthPlayNextQueue.map(\.id), ["next-1", "next-2", "next-3"])
+    }
 }
 
 private func testSong(_ id: String) -> Song {

@@ -1115,47 +1115,46 @@ class AudioPlayerService: ObservableObject {
     }
 
     func playFromQueue(index: Int) {
-        guard queue.indices.contains(index) else { return }
-        currentIndex = index
-        startPlayback(song: queue[index])
+        var state = queueState
+        guard let song = state.playFromQueue(index: index) else { return }
+        applyQueueState(state)
+        startPlayback(song: song)
         saveState()
     }
 
     func jumpToPlayNext(at index: Int) {
-        guard playNextQueue.indices.contains(index) else { return }
-        let song = playNextQueue.remove(at: index)
-        if let i = truthPlayNextQueue.firstIndex(where: { $0.id == song.id }) {
-            truthPlayNextQueue.remove(at: i)
-        }
+        var state = queueState
+        guard let song = state.jumpToPlayNext(at: index) else { return }
+        applyQueueState(state)
         startPlayback(song: song)
         saveState()
     }
 
     func jumpToQueueTrack(at queueIndex: Int) {
-        guard queue.indices.contains(queueIndex), queueIndex > currentIndex else { return }
-        let song = queue.remove(at: queueIndex)
+        var state = queueState
+        guard let song = state.jumpToQueueTrack(at: queueIndex) else { return }
+        applyQueueState(state)
         startPlayback(song: song)
         saveState()
     }
 
     func jumpToUserQueue(at index: Int) {
-        guard userQueue.indices.contains(index) else { return }
-        let song = userQueue.remove(at: index)
+        var state = queueState
+        guard let song = state.jumpToUserQueue(at: index) else { return }
+        applyQueueState(state)
         startPlayback(song: song)
         saveState()
     }
 
     func addPlayNext(_ song: Song) {
-        removePendingInfinitySongs()
-        truthPlayNextQueue.append(song)
-        playNextQueue.append(song)
-        saveState()
+        addPlayNext([song])
     }
 
     func addPlayNext(_ songs: [Song]) {
         removePendingInfinitySongs()
-        truthPlayNextQueue.append(contentsOf: songs)
-        playNextQueue.append(contentsOf: songs)
+        var state = queueState
+        state.addPlayNext(songs)
+        applyQueueState(state)
         saveState()
     }
 
