@@ -40,10 +40,10 @@ class AudioPlayerService: ObservableObject {
     let timePublisher = PassthroughSubject<(time: Double, duration: Double), Never>()
     @Published var isSeeking: Bool = false
     @Published var isShuffled: Bool = false {
-        didSet { applyPlaybackModeToNowPlayingInfo() }
+        didSet { nowPlaying.applyPlaybackMode(isShuffled: isShuffled, repeatMode: repeatMode) }
     }
     @Published var repeatMode: RepeatMode = .off {
-        didSet { applyPlaybackModeToNowPlayingInfo() }
+        didSet { nowPlaying.applyPlaybackMode(isShuffled: isShuffled, repeatMode: repeatMode) }
     }
     @Published var isCarPlayActive: Bool = false {
         didSet {
@@ -92,6 +92,7 @@ class AudioPlayerService: ObservableObject {
     private var truthUserQueue: [Song] = []
 
     private let engine = PlayerEngine()
+    private let nowPlaying = AudioPlayerNowPlayingController()
     private var engineSubscriptions = Set<AnyCancellable>()
     private var bufferingShowTask: Task<Void, Never>?
     #if os(tvOS)
@@ -115,15 +116,12 @@ class AudioPlayerService: ObservableObject {
     private var streamCacheWindowTask: Task<Void, Never>?
     private var isEngineLoaded = false
     private var playbackGeneration: Int = 0
-    private var currentArtwork: MPMediaItemArtwork?
-    private var artworkTask: Task<Void, Never>?
     private var lyricsAutoFetchTask: Task<Void, Never>?
 
     private var networkMonitor = NWPathMonitor()
     private let networkMonitorQueue = DispatchQueue(label: "shelv.network", qos: .utility)
 
     private var resumeTime: Double = 0
-    private var lastReportedNowPlayingTime: Double = -1
 
     #if os(macOS)
     private var willTerminateObserver: NSObjectProtocol?
@@ -350,7 +348,7 @@ class AudioPlayerService: ObservableObject {
         volume = savedVolume > 0 ? Float(savedVolume) : 1.0
         #endif
 
-        if let song = currentSong { updateNowPlayingInfo(song: song) }
+        if let song = currentSong { nowPlaying.update(song: song, currentTime: currentTime) }
     }
 
     // MARK: - Queue-Sync (geräteübergreifend)
@@ -430,7 +428,7 @@ class AudioPlayerService: ObservableObject {
         resumeTime = 0
         currentTime = 0
         if let d = currentSong?.duration { duration = Double(d) }
-        if let song = currentSong { updateNowPlayingInfo(song: song) }
+        if let song = currentSong { nowPlaying.update(song: song, currentTime: currentTime) }
         saveState()
     }
 
@@ -866,7 +864,7 @@ class AudioPlayerService: ObservableObject {
                 self.lastArtworkCoverArt = song.coverArt
             }
             MPNowPlayingInfoCenter.default().playbackState = .playing
-            self.updateNowPlayingInfo(song: song)
+            self.nowPlaying.update(song: song, currentTime: self.currentTime)
             #if os(macOS)
             // Navidrome-„spielt gerade"-Anzeige (kein Play-Count): bisheriges Desktop-Verhalten.
             Task { try? await SubsonicAPIService.shared.scrobble(songId: song.id, submission: false) }
@@ -1007,12 +1005,11 @@ class AudioPlayerService: ObservableObject {
         lyricsAutoFetchTask?.cancel()
         formatProbeTask?.cancel()
         actualStreamFormat = nil
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+        nowPlaying.clear()
     }
 
     private func teardownPlayer() {
-        artworkTask?.cancel()
-        artworkTask = nil
+        nowPlaying.cancelArtwork()
         engine.stop()
         isEngineLoaded = false
     }
@@ -1026,7 +1023,7 @@ class AudioPlayerService: ObservableObject {
         engine.pause()
         isPlaying = false
         isBuffering = false
-        updateNowPlayingPlaybackRate(0)
+        nowPlaying.updatePlaybackRate(0, currentTime: currentTime)
         saveState()
     }
 
@@ -1058,7 +1055,7 @@ class AudioPlayerService: ObservableObject {
     private func resumeLoadedPlayback(song: Song) {
         engine.resume()
         isPlaying = true
-        updateNowPlayingPlaybackRate(1)
+        nowPlaying.updatePlaybackRate(1, currentTime: currentTime)
         MPNowPlayingInfoCenter.default().playbackState = .playing
 
         #if os(tvOS)
@@ -1211,8 +1208,7 @@ class AudioPlayerService: ObservableObject {
     func seek(to seconds: Double) {
         currentTime = seconds
         isSeeking = true
-        lastReportedNowPlayingTime = -1
-        updateNowPlayingTime(seconds)
+        nowPlaying.updateTime(seconds, force: true)
         // loadedTimeRanges fragen: ist die Zielposition im Buffer? Wenn nicht UND der Player
         // gerade spielt → aktiv pausieren und auf isPlaybackLikelyToKeepUp warten. Wenn der
         // User schon pausiert hat, NICHT pause-and-resume, sonst springt der Player gegen
@@ -1241,8 +1237,7 @@ class AudioPlayerService: ObservableObject {
                 // Observer unsere manuelle Position nicht überschreibt.
                 self.isSeeking = true
                 self.currentTime = newTime
-                self.lastReportedNowPlayingTime = -1
-                self.updateNowPlayingTime(newTime)
+                self.nowPlaying.updateTime(newTime, force: true)
                 // currentTime ist nicht @Published — die UI (In-App-Scrubber, Lock-Screen)
                 // hängt am timePublisher, daher hier explizit pushen.
                 self.timePublisher.send((time: newTime, duration: self.duration))
@@ -1662,7 +1657,7 @@ class AudioPlayerService: ObservableObject {
                 self.currentStreamURL = url
                 if let d = song.duration { self.duration = Double(d) }
                 self.engine.trustedDuration = Double(song.duration ?? 0)
-                self.updateNowPlayingInfo(song: song)
+                self.nowPlaying.update(song: song, currentTime: self.currentTime)
                 MPNowPlayingInfoCenter.default().playbackState = .playing
                 if let url {
                     self.probeStreamFormat(for: song, url: url)
@@ -1686,7 +1681,7 @@ class AudioPlayerService: ObservableObject {
                 let adjusted = time + self.streamTimeOffset
                 self.currentTime = adjusted
                 self.timePublisher.send((time: adjusted, duration: self.duration))
-                self.updateNowPlayingTime(adjusted)
+                self.nowPlaying.updateTime(adjusted)
                 self.checkGaplessTrigger(currentTime: adjusted)
             }
             .store(in: &engineSubscriptions)
@@ -1843,90 +1838,6 @@ class AudioPlayerService: ObservableObject {
         }
     }
 
-    private func updateNowPlayingInfo(song: Song) {
-        artworkTask?.cancel()
-        artworkTask = nil
-        var info: [String: Any] = [:]
-        info[MPMediaItemPropertyTitle] = song.title
-        info[MPMediaItemPropertyArtist] = song.artist ?? ""
-        info[MPMediaItemPropertyAlbumTitle] = song.album ?? ""
-        info[MPNowPlayingInfoPropertyIsLiveStream] = false
-        info[MPNowPlayingInfoPropertyPlaybackRate] = 1.0
-        info[MPNowPlayingInfoPropertyDefaultPlaybackRate] = 1.0
-        info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = currentTime
-        info[MPNowPlayingInfoPropertyMediaType] = MPNowPlayingInfoMediaType.audio.rawValue as NSNumber
-        if let d = song.duration { info[MPMediaItemPropertyPlaybackDuration] = Double(d) }
-
-        if let artId = song.coverArt,
-           let artURL = SubsonicAPIService.shared.coverArtURL(for: artId, size: 600) {
-            #if os(iOS)
-            let key = "\(artId)_600"
-            let isOffline = OfflineModeService.shared.isOffline
-            artworkTask = Task { [weak self] in
-                var img: UIImage?
-                if Task.isCancelled { return }
-                if let localPath = LocalArtworkIndex.shared.localPath(for: artId) {
-                    img = await Task.detached(priority: .medium) { UIImage(contentsOfFile: localPath) }.value
-                }
-                if img == nil {
-                    if isOffline {
-                        img = await ImageCacheService.shared.diskOnlyImage(key: key)
-                    } else {
-                        for attempt in 1...3 {
-                            if Task.isCancelled { return }
-                            img = await ImageCacheService.shared.image(url: artURL, key: key)
-                            if img != nil { break }
-                            if attempt < 3 { try? await Task.sleep(for: .milliseconds(500)) }
-                        }
-                    }
-                }
-                guard let img, !Task.isCancelled else { return }
-                await MainActor.run { [weak self] in
-                    guard let self else { return }
-                    let square = squareCropped(img)
-                    let artwork = MPMediaItemArtwork(boundsSize: square.size) { _ in square }
-                    self.currentArtwork = artwork
-                    var updated = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
-                    updated[MPMediaItemPropertyArtwork] = artwork
-                    MPNowPlayingInfoCenter.default().nowPlayingInfo = updated
-                }
-            }
-            #elseif os(macOS)
-            // macOS: schlanker NSImage-Load wie in der bisherigen Desktop-App.
-            artworkTask = Task.detached(priority: .utility) { [weak self] in
-                guard let (data, _) = try? await URLSession.shared.data(from: artURL),
-                      !Task.isCancelled,
-                      let nsImage = NSImage(data: data) else { return }
-                let artwork = MPMediaItemArtwork(boundsSize: CGSize(width: 600, height: 600)) { _ in nsImage }
-                await MainActor.run { [weak self] in
-                    guard let self else { return }
-                    self.currentArtwork = artwork
-                    var updated = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
-                    updated[MPMediaItemPropertyArtwork] = artwork
-                    MPNowPlayingInfoCenter.default().nowPlayingInfo = updated
-                }
-            }
-            #else
-            // tvOS: schlanker UIImage-Load (kein plattformeigener Bild-Cache wie iOS/macOS).
-            artworkTask = Task.detached(priority: .utility) { [weak self] in
-                guard let (data, _) = try? await URLSession.shared.data(from: artURL),
-                      !Task.isCancelled,
-                      let uiImage = UIImage(data: data) else { return }
-                let artwork = MPMediaItemArtwork(boundsSize: CGSize(width: 600, height: 600)) { _ in uiImage }
-                await MainActor.run { [weak self] in
-                    guard let self else { return }
-                    self.currentArtwork = artwork
-                    var updated = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
-                    updated[MPMediaItemPropertyArtwork] = artwork
-                    MPNowPlayingInfoCenter.default().nowPlayingInfo = updated
-                }
-            }
-            #endif
-        }
-
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
-    }
-
     /// Favoriten-Status des laufenden Songs spiegeln (macOS-PlayerBar nutzt das;
     /// plattformneutral, da nur Queue-State angefasst wird).
     func setCurrentSongStarred(_ starred: Bool) {
@@ -1936,32 +1847,6 @@ class AudioPlayerService: ObservableObject {
         if queue.indices.contains(currentIndex) {
             queue[currentIndex].starred = song.starred
         }
-    }
-
-
-    private func applyPlaybackModeToNowPlayingInfo() {
-        let cc = MPRemoteCommandCenter.shared()
-        cc.changeShuffleModeCommand.currentShuffleType = isShuffled ? .items : .off
-        switch repeatMode {
-        case .off: cc.changeRepeatModeCommand.currentRepeatType = .off
-        case .one: cc.changeRepeatModeCommand.currentRepeatType = .one
-        case .all: cc.changeRepeatModeCommand.currentRepeatType = .all
-        }
-    }
-
-    private func updateNowPlayingPlaybackRate(_ rate: Double) {
-        var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
-        info[MPNowPlayingInfoPropertyPlaybackRate] = rate
-        info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = currentTime
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
-    }
-
-    private func updateNowPlayingTime(_ time: Double) {
-        guard abs(time - lastReportedNowPlayingTime) >= 0.5 else { return }
-        lastReportedNowPlayingTime = time
-        var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
-        info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = time
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
     }
 
     private func applyReplayGain(for song: Song) {
