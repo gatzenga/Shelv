@@ -998,43 +998,45 @@ class AudioPlayerService: ObservableObject {
         saveState()
     }
 
-    func next(triggeredByUser: Bool = false) {
-        if repeatMode == .one && !triggeredByUser && playNextQueue.isEmpty {
-            guard let song = currentSong else { return }
-            startPlayback(song: song)
-            saveState()
-            return
-        }
+    private var queueState: AudioPlayerQueueState {
+        AudioPlayerQueueState(
+            queue: queue,
+            currentIndex: currentIndex,
+            playNextQueue: playNextQueue,
+            userQueue: userQueue,
+            truthAlbumQueue: truthAlbumQueue,
+            truthPlayNextQueue: truthPlayNextQueue,
+            truthUserQueue: truthUserQueue,
+            currentSong: currentSong
+        )
+    }
 
-        if !playNextQueue.isEmpty {
-            let song = playNextQueue.removeFirst()
-            if let i = truthPlayNextQueue.firstIndex(where: { $0.id == song.id }) {
-                truthPlayNextQueue.remove(at: i)
-            }
+    private func applyQueueState(_ state: AudioPlayerQueueState) {
+        queue = state.queue
+        currentIndex = state.currentIndex
+        playNextQueue = state.playNextQueue
+        userQueue = state.userQueue
+        truthAlbumQueue = state.truthAlbumQueue
+        truthPlayNextQueue = state.truthPlayNextQueue
+        truthUserQueue = state.truthUserQueue
+    }
+
+    func next(triggeredByUser: Bool = false) {
+        var state = queueState
+        let action = state.advance(
+            repeatMode: repeatMode,
+            isShuffled: isShuffled,
+            triggeredByUser: triggeredByUser
+        )
+        applyQueueState(state)
+
+        switch action {
+        case .play(let song):
             startPlayback(song: song)
-        } else {
-            let nextIndex = currentIndex + 1
-            if nextIndex < queue.count {
-                currentIndex = nextIndex
-                startPlayback(song: queue[nextIndex])
-            } else if !userQueue.isEmpty {
-                let song = userQueue.removeFirst()
-                queue.append(song)
-                currentIndex = queue.count - 1
-                startPlayback(song: song)
-            } else if repeatMode == .all && !(truthAlbumQueue.isEmpty && truthUserQueue.isEmpty) {
-                let fullTruth = truthAlbumQueue + truthUserQueue
-                truthAlbumQueue = fullTruth
-                truthUserQueue = []
-                truthPlayNextQueue = []
-                queue = isShuffled ? fullTruth.shuffled() : fullTruth
-                playNextQueue = []
-                userQueue = []
-                currentIndex = 0
-                if queue.isEmpty { clearPlaybackState() } else { startPlayback(song: queue[0]) }
-            } else {
-                clearPlaybackState()
-            }
+        case .clearPlayback:
+            clearPlaybackState()
+        case .none:
+            return
         }
         saveState()
     }
