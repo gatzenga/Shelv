@@ -119,6 +119,9 @@
 "add_to_playlist_2" = "添加到播放列表";
 "my_playlist" = "我的播放列表";
 "new_playlist_2" = "新建播放列表";
+"pin" = "置顶";
+"unpin" = "取消置顶";
+"playlist_name" = "播放列表名称";
 "create_add" = "创建并添加";
 "no_songs_in_this_playlist" = "此播放列表中没有歌曲。";
 "reorder_delete" = "排序 / 删除";
@@ -297,6 +300,7 @@
 "album_gain" = "专辑增益";
 "transcoding" = "转码";
 "gapless" = "无缝播放";
+"scrobble" = "Scrobble";
 "autofetch_on_playback" = "播放时自动获取";
 "cancel_download" = "取消下载";
 "download_all_lyrics" = "下载所有歌词";
@@ -359,6 +363,7 @@
 "all_downloaded_lyrics_will_be_removed" = "所有已下载的歌词将被移除。";
 "this_will_remove_all_cached_images_and_library_dat" = "这将移除所有缓存的图像和音乐库数据。下次启动时将重新加载音乐库。";
 "all_downloaded_songs_albums_and_artists_will_be_re" = "所有已下载的歌曲、专辑和艺术家将从本设备移除。";
+"choose_format_and_bitrate_the_server_should_transc" = "选择服务器应转码的格式和比特率。“原始音质”会请求未改动的源文件。如果服务器无法提供该格式，将返回原始文件。\n\n转码歌曲会本地缓存，以获得稳定播放和无缝无间隙切换。第一首歌曲可能需要更长时间加载。\n\n• 播放前完整下载当前歌曲\n• 关闭 Pre-cache 时，保持 1 首后续转码歌曲可用\n• 开启 Pre-cache 时，使用所选数量\n• 移除当前窗口之外的缓存文件";
 "switch_to_offline_mode_to_use_your_downloads" = "切换至离线模式以使用您的下载内容。";
 "show_all_count_format" = "显示全部（%d）";
 "song_not_found_format" = "服务器上未找到歌曲：%@";

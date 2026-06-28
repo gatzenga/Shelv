@@ -361,6 +361,7 @@
 "all_downloaded_lyrics_will_be_removed" = "All downloaded lyrics will be removed.";
 "this_will_remove_all_cached_images_and_library_dat" = "This will remove all cached images and library data. The library will need to reload on next launch.";
 "all_downloaded_songs_albums_and_artists_will_be_re" = "All downloaded songs, albums and artists will be removed from this device.";
+"choose_format_and_bitrate_the_server_should_transc" = "Choose format and bitrate the server should transcode. “Original” requests the unchanged source. If the server can't provide the format, the original file is returned.\n\nTranscoded songs are cached locally for stable playback and seamless gapless transitions. The first song may take longer to load.\n\n• The current song is fully downloaded before playback\n• Keeps one upcoming transcoded song ready when Pre-cache is off\n• Uses the selected Pre-cache count when Pre-cache is on\n• Cached files outside the current window are removed";
 "switch_to_offline_mode_to_use_your_downloads" = "Switch to offline mode to use your downloads.";
 "show_all_count_format" = "Show All (%d)";
 "song_not_found_format" = "Song not found on server: %@";
