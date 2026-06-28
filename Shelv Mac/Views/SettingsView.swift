@@ -17,20 +17,25 @@ struct SettingsView: View {
                     Image(systemName: "paintpalette")
                     Text(String(localized: "appearance"))
                 }
-            PlaybackTab()
-                .tabItem {
-                    Image(systemName: "play.circle")
-                    Text(String(localized: "playback"))
-                }
             RecapTab()
                 .tabItem {
                     Image(systemName: "calendar.badge.clock")
                     Text(String(localized: "recap"))
                 }
+            PlaybackTab()
+                .tabItem {
+                    Image(systemName: "play.circle")
+                    Text(String(localized: "playback"))
+                }
             DownloadsTab()
                 .tabItem {
                     Image(systemName: "arrow.down.circle")
                     Text(String(localized: "downloads"))
+                }
+            LyricsSettingsPanel()
+                .tabItem {
+                    Image(systemName: "text.bubble")
+                    Text(String(localized: "lyrics"))
                 }
             CacheTab()
                 .tabItem {
@@ -739,4 +744,5 @@ struct AboutTab: View {
 #Preview {
     SettingsView()
         .environmentObject(AppState.shared)
+        .environmentObject(LyricsStore.shared)
 }
