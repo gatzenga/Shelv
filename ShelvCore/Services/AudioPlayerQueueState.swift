@@ -62,4 +62,57 @@ nonisolated struct AudioPlayerQueueState: Equatable {
 
         return .clearPlayback
     }
+
+    @discardableResult
+    mutating func removeFromPlayNextQueue(at index: Int) -> Song? {
+        guard playNextQueue.indices.contains(index) else { return nil }
+        let song = playNextQueue.remove(at: index)
+        if let truthIndex = truthPlayNextQueue.firstIndex(where: { $0.id == song.id }) {
+            truthPlayNextQueue.remove(at: truthIndex)
+        }
+        return song
+    }
+
+    @discardableResult
+    mutating func removeFromUserQueue(at index: Int) -> Song? {
+        guard userQueue.indices.contains(index) else { return nil }
+        let song = userQueue.remove(at: index)
+        if let truthIndex = truthUserQueue.firstIndex(where: { $0.id == song.id }) {
+            truthUserQueue.remove(at: truthIndex)
+        }
+        return song
+    }
+
+    mutating func clearUserQueue() {
+        userQueue = []
+        truthUserQueue = []
+    }
+
+    @discardableResult
+    mutating func removeFromPlayQueue(at index: Int) -> Song? {
+        guard queue.indices.contains(index), index != currentIndex else { return nil }
+        let song = queue.remove(at: index)
+        if index < currentIndex { currentIndex -= 1 }
+        if let truthIndex = truthAlbumQueue.firstIndex(where: { $0.id == song.id }) {
+            truthAlbumQueue.remove(at: truthIndex)
+        } else if let truthIndex = truthUserQueue.firstIndex(where: { $0.id == song.id }) {
+            truthUserQueue.remove(at: truthIndex)
+        }
+        return song
+    }
+
+    mutating func clearUpcomingPlayQueue() {
+        playNextQueue = []
+        let start = currentIndex + 1
+        if start < queue.count {
+            queue.removeSubrange(start...)
+        }
+        truthPlayNextQueue = []
+        truthUserQueue = []
+        if let currentId = currentSong?.id {
+            truthAlbumQueue = truthAlbumQueue.filter { $0.id == currentId }
+        } else {
+            truthAlbumQueue = []
+        }
+    }
 }

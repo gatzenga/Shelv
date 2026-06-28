@@ -136,6 +136,103 @@ final class AudioPlayerQueueStateTests: XCTestCase {
         XCTAssertEqual(state.queue.map(\.id), ["album-1"])
         XCTAssertEqual(state.currentIndex, 0)
     }
+
+    func testRemoveFromPlayNextQueueRemovesVisibleAndTruthEntry() {
+        var state = makeQueueState(
+            queue: [testSong("album-1")],
+            currentIndex: 0,
+            playNextQueue: [testSong("next-1"), testSong("next-2")],
+            truthPlayNextQueue: [testSong("next-1"), testSong("next-2")]
+        )
+
+        let removed = state.removeFromPlayNextQueue(at: 0)
+
+        XCTAssertEqual(removed?.id, "next-1")
+        XCTAssertEqual(state.playNextQueue.map(\.id), ["next-2"])
+        XCTAssertEqual(state.truthPlayNextQueue.map(\.id), ["next-2"])
+    }
+
+    func testRemoveFromUserQueueRemovesVisibleAndTruthEntry() {
+        var state = makeQueueState(
+            queue: [testSong("album-1")],
+            currentIndex: 0,
+            userQueue: [testSong("user-1"), testSong("user-2")],
+            truthUserQueue: [testSong("user-1"), testSong("user-2")]
+        )
+
+        let removed = state.removeFromUserQueue(at: 1)
+
+        XCTAssertEqual(removed?.id, "user-2")
+        XCTAssertEqual(state.userQueue.map(\.id), ["user-1"])
+        XCTAssertEqual(state.truthUserQueue.map(\.id), ["user-1"])
+    }
+
+    func testRemoveFromPlayQueueBeforeCurrentShiftsCurrentIndexAndTruth() {
+        var state = makeQueueState(
+            queue: [testSong("album-1"), testSong("album-2"), testSong("album-3")],
+            currentIndex: 1,
+            truthAlbumQueue: [testSong("album-1"), testSong("album-2"), testSong("album-3")],
+            currentSong: testSong("album-2")
+        )
+
+        let removed = state.removeFromPlayQueue(at: 0)
+
+        XCTAssertEqual(removed?.id, "album-1")
+        XCTAssertEqual(state.queue.map(\.id), ["album-2", "album-3"])
+        XCTAssertEqual(state.currentIndex, 0)
+        XCTAssertEqual(state.truthAlbumQueue.map(\.id), ["album-2", "album-3"])
+    }
+
+    func testRemoveFromPlayQueueIgnoresCurrentSong() {
+        var state = makeQueueState(
+            queue: [testSong("album-1"), testSong("album-2")],
+            currentIndex: 0,
+            currentSong: testSong("album-1")
+        )
+
+        let removed = state.removeFromPlayQueue(at: 0)
+
+        XCTAssertNil(removed)
+        XCTAssertEqual(state.queue.map(\.id), ["album-1", "album-2"])
+        XCTAssertEqual(state.currentIndex, 0)
+    }
+
+    func testClearUserQueueRemovesVisibleAndTruthUserQueue() {
+        var state = makeQueueState(
+            queue: [testSong("album-1")],
+            currentIndex: 0,
+            userQueue: [testSong("user-1")],
+            truthUserQueue: [testSong("user-1")]
+        )
+
+        state.clearUserQueue()
+
+        XCTAssertTrue(state.userQueue.isEmpty)
+        XCTAssertTrue(state.truthUserQueue.isEmpty)
+    }
+
+    func testClearUpcomingPlayQueueKeepsCurrentSongTruthAndVisibleUserQueue() {
+        var state = makeQueueState(
+            queue: [testSong("album-1"), testSong("album-2"), testSong("album-3")],
+            currentIndex: 1,
+            playNextQueue: [testSong("next-1")],
+            userQueue: [testSong("user-1")],
+            truthAlbumQueue: [testSong("album-1"), testSong("album-2"), testSong("album-3")],
+            truthPlayNextQueue: [testSong("next-1")],
+            truthUserQueue: [testSong("user-1")],
+            currentSong: testSong("album-2")
+        )
+
+        state.clearUpcomingPlayQueue()
+
+        XCTAssertEqual(state.queue.map(\.id), ["album-1", "album-2"])
+        XCTAssertEqual(state.currentIndex, 1)
+        XCTAssertTrue(state.playNextQueue.isEmpty)
+        XCTAssertEqual(state.userQueue.map(\.id), ["user-1"])
+        XCTAssertEqual(state.truthAlbumQueue.map(\.id), ["album-2"])
+        XCTAssertTrue(state.truthPlayNextQueue.isEmpty)
+        XCTAssertTrue(state.truthUserQueue.isEmpty)
+    }
 }
 
 private func testSong(_ id: String) -> Song {

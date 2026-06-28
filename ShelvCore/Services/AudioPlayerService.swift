@@ -1160,12 +1160,9 @@ class AudioPlayerService: ObservableObject {
     }
 
     func removeFromPlayNextQueue(at index: Int) {
-        guard playNextQueue.indices.contains(index) else { return }
-        let songId = playNextQueue[index].id
-        playNextQueue.remove(at: index)
-        if let i = truthPlayNextQueue.firstIndex(where: { $0.id == songId }) {
-            truthPlayNextQueue.remove(at: i)
-        }
+        var state = queueState
+        guard state.removeFromPlayNextQueue(at: index) != nil else { return }
+        applyQueueState(state)
         saveState()
     }
 
@@ -1383,54 +1380,36 @@ class AudioPlayerService: ObservableObject {
     }
 
     func removeFromUserQueue(at index: Int) {
-        guard userQueue.indices.contains(index) else { return }
-        let songId = userQueue[index].id
-        userQueue.remove(at: index)
-        infinityPendingSongIds.removeAll { $0 == songId }
-        if let i = truthUserQueue.firstIndex(where: { $0.id == songId }) {
-            truthUserQueue.remove(at: i)
-        }
+        var state = queueState
+        guard let song = state.removeFromUserQueue(at: index) else { return }
+        applyQueueState(state)
+        infinityPendingSongIds.removeAll { $0 == song.id }
         saveState()
         topUpInfinityIfNeeded()
     }
 
     func clearUserQueue() {
-        userQueue = []
-        truthUserQueue = []
+        var state = queueState
+        state.clearUserQueue()
+        applyQueueState(state)
         syncInfinityPendingSongIds()
         saveState()
     }
 
     func removeFromPlayQueue(at index: Int) {
-        guard queue.indices.contains(index), index != currentIndex else { return }
-        let songId = queue[index].id
-        queue.remove(at: index)
-        infinityPendingSongIds.removeAll { $0 == songId }
-        if index < currentIndex { currentIndex -= 1 }
-        if let i = truthAlbumQueue.firstIndex(where: { $0.id == songId }) {
-            truthAlbumQueue.remove(at: i)
-        } else if let i = truthUserQueue.firstIndex(where: { $0.id == songId }) {
-            truthUserQueue.remove(at: i)
-        }
+        var state = queueState
+        guard let song = state.removeFromPlayQueue(at: index) else { return }
+        applyQueueState(state)
+        infinityPendingSongIds.removeAll { $0 == song.id }
         saveState()
         topUpInfinityIfNeeded()
     }
 
     func clearUpcomingPlayQueue() {
-        playNextQueue = []
-        let start = currentIndex + 1
-        if start < queue.count {
-            queue.removeSubrange(start...)
-        }
-        truthPlayNextQueue = []
-        truthUserQueue = []
+        var state = queueState
+        state.clearUpcomingPlayQueue()
+        applyQueueState(state)
         infinityPendingSongIds.removeAll()
-        let currentId = currentSong?.id
-        if let cur = currentId {
-            truthAlbumQueue = truthAlbumQueue.filter { $0.id == cur }
-        } else {
-            truthAlbumQueue = []
-        }
         saveState()
     }
 
