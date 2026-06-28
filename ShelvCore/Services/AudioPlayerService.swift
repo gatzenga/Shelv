@@ -432,99 +432,6 @@ class AudioPlayerService: ObservableObject {
         saveState()
     }
 
-    private func setupRemoteControls() {
-        let cc = MPRemoteCommandCenter.shared()
-
-        cc.playCommand.isEnabled = true
-        cc.playCommand.addTarget { [weak self] _ in
-            self?.resume(); return .success
-        }
-
-        cc.pauseCommand.isEnabled = true
-        cc.pauseCommand.addTarget { [weak self] _ in
-            self?.pause(); return .success
-        }
-
-        cc.togglePlayPauseCommand.isEnabled = true
-        cc.togglePlayPauseCommand.addTarget { [weak self] _ in
-            self?.togglePlayPause(); return .success
-        }
-
-        cc.nextTrackCommand.isEnabled = true
-        cc.nextTrackCommand.addTarget { [weak self] _ in
-            self?.next(triggeredByUser: true); return .success
-        }
-
-        cc.previousTrackCommand.isEnabled = true
-        cc.previousTrackCommand.addTarget { [weak self] _ in
-            self?.previous(); return .success
-        }
-
-        cc.changePlaybackPositionCommand.isEnabled = true
-        cc.changePlaybackPositionCommand.addTarget { [weak self] event in
-            guard let e = event as? MPChangePlaybackPositionCommandEvent else { return .commandFailed }
-            self?.seek(to: e.positionTime)
-            return .success
-        }
-
-        cc.seekForwardCommand.isEnabled = true
-        cc.seekForwardCommand.addTarget { [weak self] event in
-            guard let e = event as? MPSeekCommandEvent else { return .commandFailed }
-            Task { @MainActor in
-                switch e.type {
-                case .beginSeeking: self?.startFastSeeking(forward: true)
-                case .endSeeking:   self?.stopFastSeeking()
-                @unknown default:   break
-                }
-            }
-            return .success
-        }
-
-        cc.seekBackwardCommand.isEnabled = true
-        cc.seekBackwardCommand.addTarget { [weak self] event in
-            guard let e = event as? MPSeekCommandEvent else { return .commandFailed }
-            Task { @MainActor in
-                switch e.type {
-                case .beginSeeking: self?.startFastSeeking(forward: false)
-                case .endSeeking:   self?.stopFastSeeking()
-                @unknown default:   break
-                }
-            }
-            return .success
-        }
-
-        // Apple's CPNowPlayingRepeatButton / -ShuffleButton rendern den Selected-State
-        // nur konsistent, wenn die zugehörigen MPRemoteCommands aktiviert sind und ein
-        // Target haben. Ohne das wirkt der Button beim Wechsel zwischen .all → .one
-        // wie ein Aus-Sprung. Die Targets spiegeln Auto-/Siri-/Lock-Screen-Eingaben
-        // zurück in unsere App-Logik.
-        cc.changeRepeatModeCommand.isEnabled = true
-        cc.changeRepeatModeCommand.addTarget { [weak self] event in
-            guard let e = event as? MPChangeRepeatModeCommandEvent else { return .commandFailed }
-            let mode: RepeatMode = {
-                switch e.repeatType {
-                case .off:  return .off
-                case .one:  return .one
-                case .all:  return .all
-                @unknown default: return .off
-                }
-            }()
-            Task { @MainActor in self?.repeatMode = mode }
-            return .success
-        }
-
-        cc.changeShuffleModeCommand.isEnabled = true
-        cc.changeShuffleModeCommand.addTarget { [weak self] event in
-            guard let e = event as? MPChangeShuffleModeCommandEvent else { return .commandFailed }
-            let shouldShuffle = (e.shuffleType != .off)
-            Task { @MainActor in
-                guard let self else { return }
-                if shouldShuffle != self.isShuffled { self.toggleShuffle() }
-            }
-            return .success
-        }
-    }
-
     func play(songs: [Song], startIndex: Int = 0) {
         isShuffled = false
         queue = songs
@@ -1219,6 +1126,14 @@ class AudioPlayerService: ObservableObject {
         engine.seek(to: seconds, pauseUntilBuffered: shouldPauseAndWait) { [weak self] _ in
             Task { @MainActor [weak self] in self?.isSeeking = false }
         }
+    }
+
+    func beginRemoteFastSeek(forward: Bool) {
+        startFastSeeking(forward: forward)
+    }
+
+    func endRemoteFastSeek() {
+        stopFastSeeking()
     }
 
     private func startFastSeeking(forward: Bool) {
