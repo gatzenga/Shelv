@@ -9,29 +9,6 @@ import AppKit     // macOS
 import SwiftUI
 import Network
 
-extension URL {
-    func queryParam(_ name: String) -> String? {
-        URLComponents(url: self, resolvingAgainstBaseURL: false)?
-            .queryItems?.first(where: { $0.name == name })?.value
-    }
-}
-
-enum RepeatMode: String {
-    case off, all, one
-
-    var toggled: RepeatMode {
-        switch self {
-        case .off: return .all
-        case .all: return .one
-        case .one: return .off
-        }
-    }
-
-    var systemImage: String {
-        self == .one ? "repeat.1" : "repeat"
-    }
-}
-
 class AudioPlayerService: ObservableObject {
     static let shared = AudioPlayerService()
 
@@ -148,36 +125,6 @@ class AudioPlayerService: ObservableObject {
     private var resumeTime: Double = 0
     private var lastReportedNowPlayingTime: Double = -1
 
-    // Die alte Desktop-App persistierte unter shelv_mac_* (und einem anderen
-    // Resume-Time-Suffix) — die Keys bleiben pro Plattform erhalten, damit
-    // Bestands-Installationen ihre Queue/Position nicht verlieren.
-    private enum StateKey {
-        #if os(macOS)
-        static let queue          = "shelv_mac_queue"
-        static let index          = "shelv_mac_currentIndex"
-        static let playNextQueue  = "shelv_mac_playNextQueue"
-        static let userQueue      = "shelv_mac_userQueue"
-        static let resumeTime     = "shelv_mac_currentTime"
-        static let isShuffled     = "shelv_mac_isShuffled"
-        static let repeatMode     = "shelv_mac_repeatMode"
-        static let truthAlbum     = "shelv_mac_truthAlbum"
-        static let truthPlayNext  = "shelv_mac_truthPlayNext"
-        static let truthUserQueue = "shelv_mac_truthUserQueue"
-        static let volume         = "shelv_mac_volume"
-        #else
-        static let queue          = "shelv_player_queue"
-        static let index          = "shelv_player_currentIndex"
-        static let playNextQueue  = "shelv_player_playNextQueue"
-        static let userQueue      = "shelv_player_userQueue"
-        static let resumeTime     = "shelv_player_resumeTime"
-        static let isShuffled     = "shelv_player_isShuffled"
-        static let repeatMode     = "shelv_player_repeatMode"
-        static let truthAlbum     = "shelv_player_truthAlbum"
-        static let truthPlayNext  = "shelv_player_truthPlayNext"
-        static let truthUserQueue = "shelv_player_truthUserQueue"
-        #endif
-    }
-
     #if os(macOS)
     private var willTerminateObserver: NSObjectProtocol?
     #endif
@@ -253,20 +200,6 @@ class AudioPlayerService: ObservableObject {
     }
 
     #if os(tvOS)
-    /// tvOS-only: Queue-State wird in eine Datei persistiert statt in UserDefaults.
-    /// CFPreferences hat auf tvOS ein hartes Größenlimit und bricht die App bei großen
-    /// Shuffle-Queues per abort() ab. Caches genügt — wird der Eintrag bei einer
-    /// System-Bereinigung gelöscht, entfällt nur die Wiederherstellung nach Neustart
-    /// (kein Crash, keine Integritätsfrage; restoreState kehrt dann einfach früh zurück).
-    private struct PersistedQueueState: Codable {
-        var queue: [Song]
-        var playNextQueue: [Song]
-        var userQueue: [Song]
-        var truthAlbum: [Song]
-        var truthPlayNext: [Song]
-        var truthUserQueue: [Song]
-    }
-
     private var queueStateFileURL: URL? {
         guard let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else { return nil }
         return dir.appendingPathComponent("shelv_player_queue_state.json")
@@ -274,7 +207,7 @@ class AudioPlayerService: ObservableObject {
 
     private func writeQueueStateFile() {
         guard let url = queueStateFileURL else { return }
-        let state = PersistedQueueState(
+        let state = AudioPlayerPersistedQueueState(
             queue: queue,
             playNextQueue: playNextQueue,
             userQueue: userQueue,
@@ -286,10 +219,10 @@ class AudioPlayerService: ObservableObject {
         try? data.write(to: url, options: .atomic)
     }
 
-    private func readQueueStateFile() -> PersistedQueueState? {
+    private func readQueueStateFile() -> AudioPlayerPersistedQueueState? {
         guard let url = queueStateFileURL,
               let data = try? Data(contentsOf: url) else { return nil }
-        return try? JSONDecoder().decode(PersistedQueueState.self, from: data)
+        return try? JSONDecoder().decode(AudioPlayerPersistedQueueState.self, from: data)
     }
 
     private func deleteQueueStateFile() {
@@ -301,32 +234,32 @@ class AudioPlayerService: ObservableObject {
     private func saveState() {
         let defaults = UserDefaults.standard
         // Skalare (klein) — auf allen Plattformen in UserDefaults.
-        defaults.set(currentIndex, forKey: StateKey.index)
-        defaults.set(currentTime, forKey: StateKey.resumeTime)
-        defaults.set(isShuffled, forKey: StateKey.isShuffled)
-        defaults.set(repeatMode.rawValue, forKey: StateKey.repeatMode)
+        defaults.set(currentIndex, forKey: AudioPlayerStateKey.index)
+        defaults.set(currentTime, forKey: AudioPlayerStateKey.resumeTime)
+        defaults.set(isShuffled, forKey: AudioPlayerStateKey.isShuffled)
+        defaults.set(repeatMode.rawValue, forKey: AudioPlayerStateKey.repeatMode)
 
         // Große Song-Arrays.
         #if os(tvOS)
         writeQueueStateFile()
         // Etwaige Alt-Daten aus UserDefaults tilgen (z.B. nach Update von einer Build,
         // die noch in die Defaults schrieb) — so bleibt der Prefs-Container garantiert klein.
-        for key in [StateKey.queue, StateKey.playNextQueue, StateKey.userQueue,
-                    StateKey.truthAlbum, StateKey.truthPlayNext, StateKey.truthUserQueue] {
+        for key in [AudioPlayerStateKey.queue, AudioPlayerStateKey.playNextQueue, AudioPlayerStateKey.userQueue,
+                    AudioPlayerStateKey.truthAlbum, AudioPlayerStateKey.truthPlayNext, AudioPlayerStateKey.truthUserQueue] {
             defaults.removeObject(forKey: key)
         }
         #else
         let encoder = JSONEncoder()
-        if let data = try? encoder.encode(queue) { defaults.set(data, forKey: StateKey.queue) }
-        if let data = try? encoder.encode(playNextQueue) { defaults.set(data, forKey: StateKey.playNextQueue) }
-        if let data = try? encoder.encode(userQueue) { defaults.set(data, forKey: StateKey.userQueue) }
-        if let data = try? encoder.encode(truthAlbumQueue) { defaults.set(data, forKey: StateKey.truthAlbum) }
-        if let data = try? encoder.encode(truthPlayNextQueue) { defaults.set(data, forKey: StateKey.truthPlayNext) }
-        if let data = try? encoder.encode(truthUserQueue) { defaults.set(data, forKey: StateKey.truthUserQueue) }
+        if let data = try? encoder.encode(queue) { defaults.set(data, forKey: AudioPlayerStateKey.queue) }
+        if let data = try? encoder.encode(playNextQueue) { defaults.set(data, forKey: AudioPlayerStateKey.playNextQueue) }
+        if let data = try? encoder.encode(userQueue) { defaults.set(data, forKey: AudioPlayerStateKey.userQueue) }
+        if let data = try? encoder.encode(truthAlbumQueue) { defaults.set(data, forKey: AudioPlayerStateKey.truthAlbum) }
+        if let data = try? encoder.encode(truthPlayNextQueue) { defaults.set(data, forKey: AudioPlayerStateKey.truthPlayNext) }
+        if let data = try? encoder.encode(truthUserQueue) { defaults.set(data, forKey: AudioPlayerStateKey.truthUserQueue) }
         #endif
 
         #if os(macOS)
-        defaults.set(Double(volume), forKey: StateKey.volume)
+        defaults.set(Double(volume), forKey: AudioPlayerStateKey.volume)
         #endif
 
         // Geräteübergreifender Queue-Sync (debounced; No-Op wenn Modus = off).
@@ -337,18 +270,18 @@ class AudioPlayerService: ObservableObject {
 
     private func clearSavedState() {
         let defaults = UserDefaults.standard
-        defaults.removeObject(forKey: StateKey.queue)
-        defaults.removeObject(forKey: StateKey.index)
-        defaults.removeObject(forKey: StateKey.playNextQueue)
-        defaults.removeObject(forKey: StateKey.userQueue)
-        defaults.removeObject(forKey: StateKey.resumeTime)
-        defaults.removeObject(forKey: StateKey.isShuffled)
-        defaults.removeObject(forKey: StateKey.repeatMode)
-        defaults.removeObject(forKey: StateKey.truthAlbum)
-        defaults.removeObject(forKey: StateKey.truthPlayNext)
-        defaults.removeObject(forKey: StateKey.truthUserQueue)
+        defaults.removeObject(forKey: AudioPlayerStateKey.queue)
+        defaults.removeObject(forKey: AudioPlayerStateKey.index)
+        defaults.removeObject(forKey: AudioPlayerStateKey.playNextQueue)
+        defaults.removeObject(forKey: AudioPlayerStateKey.userQueue)
+        defaults.removeObject(forKey: AudioPlayerStateKey.resumeTime)
+        defaults.removeObject(forKey: AudioPlayerStateKey.isShuffled)
+        defaults.removeObject(forKey: AudioPlayerStateKey.repeatMode)
+        defaults.removeObject(forKey: AudioPlayerStateKey.truthAlbum)
+        defaults.removeObject(forKey: AudioPlayerStateKey.truthPlayNext)
+        defaults.removeObject(forKey: AudioPlayerStateKey.truthUserQueue)
         #if os(macOS)
-        defaults.removeObject(forKey: StateKey.volume)
+        defaults.removeObject(forKey: AudioPlayerStateKey.volume)
         #endif
         #if os(tvOS)
         deleteQueueStateFile()
@@ -366,17 +299,17 @@ class AudioPlayerService: ObservableObject {
         guard let fileState = readQueueStateFile(), !fileState.queue.isEmpty else { return }
         let restoredQueue = fileState.queue
         #else
-        guard let queueData = defaults.data(forKey: StateKey.queue),
+        guard let queueData = defaults.data(forKey: AudioPlayerStateKey.queue),
               let restoredQueue = try? decoder.decode([Song].self, from: queueData),
               !restoredQueue.isEmpty
         else { return }
         #endif
 
         queue = restoredQueue
-        let idx = defaults.integer(forKey: StateKey.index)
+        let idx = defaults.integer(forKey: AudioPlayerStateKey.index)
         currentIndex = min(max(idx, 0), restoredQueue.count - 1)
         currentSong = restoredQueue[currentIndex]
-        resumeTime = defaults.double(forKey: StateKey.resumeTime)
+        resumeTime = defaults.double(forKey: AudioPlayerStateKey.resumeTime)
         currentTime = resumeTime
         if let d = currentSong?.duration { duration = Double(d) }
 
@@ -384,18 +317,18 @@ class AudioPlayerService: ObservableObject {
         playNextQueue = fileState.playNextQueue
         userQueue = fileState.userQueue
         #else
-        if let pnData = defaults.data(forKey: StateKey.playNextQueue),
+        if let pnData = defaults.data(forKey: AudioPlayerStateKey.playNextQueue),
            let pn = try? decoder.decode([Song].self, from: pnData) {
             playNextQueue = pn
         }
-        if let uqData = defaults.data(forKey: StateKey.userQueue),
+        if let uqData = defaults.data(forKey: AudioPlayerStateKey.userQueue),
            let uq = try? decoder.decode([Song].self, from: uqData) {
             userQueue = uq
         }
         #endif
 
-        isShuffled = defaults.bool(forKey: StateKey.isShuffled)
-        if let raw = defaults.string(forKey: StateKey.repeatMode) {
+        isShuffled = defaults.bool(forKey: AudioPlayerStateKey.isShuffled)
+        if let raw = defaults.string(forKey: AudioPlayerStateKey.repeatMode) {
             repeatMode = RepeatMode(rawValue: raw) ?? .off
         }
 
@@ -404,16 +337,16 @@ class AudioPlayerService: ObservableObject {
         truthPlayNextQueue = fileState.truthPlayNext
         truthUserQueue = fileState.truthUserQueue
         #else
-        if let data = defaults.data(forKey: StateKey.truthAlbum),
+        if let data = defaults.data(forKey: AudioPlayerStateKey.truthAlbum),
            let t = try? decoder.decode([Song].self, from: data) { truthAlbumQueue = t }
-        if let data = defaults.data(forKey: StateKey.truthPlayNext),
+        if let data = defaults.data(forKey: AudioPlayerStateKey.truthPlayNext),
            let t = try? decoder.decode([Song].self, from: data) { truthPlayNextQueue = t }
-        if let data = defaults.data(forKey: StateKey.truthUserQueue),
+        if let data = defaults.data(forKey: AudioPlayerStateKey.truthUserQueue),
            let t = try? decoder.decode([Song].self, from: data) { truthUserQueue = t }
         #endif
 
         #if os(macOS)
-        let savedVolume = defaults.double(forKey: StateKey.volume)
+        let savedVolume = defaults.double(forKey: AudioPlayerStateKey.volume)
         volume = savedVolume > 0 ? Float(savedVolume) : 1.0
         #endif
 
@@ -500,96 +433,6 @@ class AudioPlayerService: ObservableObject {
         if let song = currentSong { updateNowPlayingInfo(song: song) }
         saveState()
     }
-
-    #if os(iOS) || os(tvOS)
-    private func setupAudioSession() {
-        Task.detached(priority: .utility) {
-            do {
-                try Self.configureAudioSession()
-            } catch {
-                print("[AudioSession] initial activate failed: \(error)")
-            }
-        }
-    }
-
-    /// Kategorie setzen + Session aktivieren. Wird vor jeder Wiedergabe aufgerufen, weil tvOS
-    /// die Session nach Pause/Stop/App-Wechsel deaktiviert und ein folgendes play() sonst stumm bleibt.
-    func activateSession() {
-        if Thread.isMainThread {
-            Task { await activateSessionAsync() }
-            return
-        }
-
-        do {
-            try Self.configureAudioSession()
-        } catch {
-            print("[AudioSession] activate failed: \(error)")
-        }
-    }
-
-    nonisolated private static func configureAudioSession() throws {
-        #if os(tvOS)
-        try AVAudioSession.sharedInstance().setCategory(.playback)
-        #else
-        try AVAudioSession.sharedInstance().setCategory(
-            .playback,
-            mode: .default,
-            options: [.allowAirPlay, .allowBluetoothHFP]
-        )
-        #endif
-        try AVAudioSession.sharedInstance().setActive(true)
-    }
-
-    @discardableResult
-    private func activateSessionAsync(logMessage: String = "activate failed") async -> Bool {
-        await Task.detached(priority: .userInitiated) {
-            do {
-                try Self.configureAudioSession()
-                return true
-            } catch {
-                print("[AudioSession] \(logMessage): \(error)")
-                return false
-            }
-        }.value
-    }
-
-    private func setupInterruptionObserver() {
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(handleAudioInterruption(_:)),
-            name: AVAudioSession.interruptionNotification,
-            object: nil
-        )
-    }
-
-    @objc private func handleAudioInterruption(_ notification: Notification) {
-        guard
-            let info = notification.userInfo,
-            let typeRaw = info[AVAudioSessionInterruptionTypeKey] as? UInt,
-            let type = AVAudioSession.InterruptionType(rawValue: typeRaw)
-        else { return }
-
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            switch type {
-            case .began:
-                if self.isPlaying { self.pause() }
-            case .ended:
-                if let optionsRaw = info[AVAudioSessionInterruptionOptionKey] as? UInt {
-                    let options = AVAudioSession.InterruptionOptions(rawValue: optionsRaw)
-                    if options.contains(.shouldResume), self.currentSong != nil {
-                        // Audio-Session vor Resume reaktivieren — iOS deaktiviert sie bei Interruption
-                        // (z.B. Anruf), und ohne explizites setActive(true) bleibt der Player lautlos
-                        // obwohl er "spielt".
-                        self.resume()
-                    }
-                }
-            @unknown default:
-                break
-            }
-        }
-    }
-    #endif
 
     private func setupRemoteControls() {
         let cc = MPRemoteCommandCenter.shared()
@@ -824,14 +667,6 @@ class AudioPlayerService: ObservableObject {
         return url.queryParam("format").map { $0 != "raw" } ?? false
     }
 
-    private struct StreamCacheJob: Sendable {
-        let songId: String
-        let title: String
-        let url: URL
-        let codec: String
-        let bitrate: Int
-    }
-
     private var selectedStreamPreCacheAheadCount: Int {
         min(max(streamPreCacheAheadCount, 1), 5)
     }
@@ -867,7 +702,7 @@ class AudioPlayerService: ObservableObject {
         return result
     }
 
-    private func streamCacheJob(for song: Song) -> StreamCacheJob? {
+    private func streamCacheJob(for song: Song) -> AudioPlayerStreamCacheJob? {
         guard !OfflineModeService.shared.isOffline,
               !isDownloadedLocally(song),
               let url = SubsonicAPIService.shared.streamURL(for: song.id),
@@ -875,7 +710,7 @@ class AudioPlayerService: ObservableObject {
         else { return nil }
 
         if isTranscodedRemote(url), let fmt = TranscodingPolicy.currentStreamFormat() {
-            return StreamCacheJob(
+            return AudioPlayerStreamCacheJob(
                 songId: song.id,
                 title: song.title,
                 url: url,
@@ -885,7 +720,7 @@ class AudioPlayerService: ObservableObject {
         }
 
         guard streamPreCacheEnabled else { return nil }
-        return StreamCacheJob(
+        return AudioPlayerStreamCacheJob(
             songId: song.id,
             title: song.title,
             url: url,
@@ -894,7 +729,7 @@ class AudioPlayerService: ObservableObject {
         )
     }
 
-    private func desiredStreamCacheJobs() -> [StreamCacheJob] {
+    private func desiredStreamCacheJobs() -> [AudioPlayerStreamCacheJob] {
         upcomingSongs(limit: backgroundStreamPreCacheLimit).compactMap { streamCacheJob(for: $0) }
     }
 
