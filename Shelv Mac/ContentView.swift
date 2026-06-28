@@ -23,14 +23,15 @@ struct ContentView: View {
 
 struct ToastView: View {
     let message: String
+    var isError = false
 
     var body: some View {
-        Label(message, systemImage: "checkmark")
+        Label(message, systemImage: isError ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
             .font(.callout.weight(.medium))
             .foregroundStyle(.white)
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
-            .background(.black.opacity(0.8), in: Capsule())
+            .background(isError ? Color.red : Color.black.opacity(0.8), in: Capsule())
             .allowsHitTesting(false)
     }
 }
@@ -45,6 +46,7 @@ struct MainWindowView: View {
     @State private var showAddToPlaylist = false
     @State private var playlistSongIds: [String] = []
     @State private var toastMessage: String?
+    @State private var toastIsError = false
     @State private var toastTask: Task<Void, Never>?
 
     var body: some View {
@@ -107,7 +109,7 @@ struct MainWindowView: View {
                 QueueSyncBanner()
                     .animation(.easeInOut, value: QueueSyncService.shared.pendingRemote != nil)
                 if let msg = toastMessage {
-                    ToastView(message: msg)
+                    ToastView(message: msg, isError: toastIsError)
                         .transition(.move(edge: .top).combined(with: .opacity))
                         .padding(.top, 12)
                 }
@@ -126,18 +128,27 @@ struct MainWindowView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .showToast)) { notification in
             if let msg = notification.object as? String {
-                toastMessage = msg
-                toastTask?.cancel()
-                toastTask = Task {
-                    try? await Task.sleep(for: .seconds(2))
-                    guard !Task.isCancelled else { return }
-                    toastMessage = nil
-                }
+                showToast(msg)
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .instantMixUnavailable)) { _ in
+            showToast(String(localized: "no_instant_mix_available"), isError: true)
         }
         .sheet(isPresented: $showAddToPlaylist) {
             AddToPlaylistPanel(songIds: playlistSongIds)
                 .environmentObject(libraryStore)
+        }
+    }
+
+    private func showToast(_ message: String, isError: Bool = false) {
+        toastMessage = message
+        toastIsError = isError
+        toastTask?.cancel()
+        toastTask = Task {
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            toastMessage = nil
+            toastIsError = false
         }
     }
 

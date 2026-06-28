@@ -136,16 +136,20 @@ struct NowPlayingView: View {
     private var trackLinks: some View {
         if let song = player.currentSong {
             if let artist = song.artist {
+                let libraryArtist = resolvedLibraryArtist(name: artist, id: song.artistId)
                 AccentTextLink(text: artist, font: .body) {
-                    ArtistDetailView(artist: resolvedLibraryArtist(name: artist, id: song.artistId))
+                    ArtistDetailView(artist: libraryArtist)
                 }
+                .artistContextMenu(libraryArtist)
             }
             if let album = song.album {
                 if let alid = song.albumId, !alid.isEmpty {
+                    let libraryAlbum = Album(id: alid, name: album, artist: song.artist,
+                                             artistId: song.artistId, coverArt: song.coverArt)
                     AccentTextLink(text: album, font: .callout) {
-                        AlbumDetailView(album: Album(id: alid, name: album, artist: song.artist,
-                                                     artistId: song.artistId, coverArt: song.coverArt))
+                        AlbumDetailView(album: libraryAlbum)
                     }
+                    .albumContextMenu(libraryAlbum)
                 } else {
                     Text(album).font(.callout).foregroundStyle(.tertiary).lineLimit(1)
                 }

@@ -4,9 +4,6 @@ struct SettingsView: View {
     @EnvironmentObject var serverStore: ServerStore
     @AppStorage("appAppearance") private var appAppearance = "system"
     @AppStorage("themeColor") private var themeColor = "violet"
-    @AppStorage("enablePlaylists") private var enablePlaylists = true
-    @AppStorage("enableFavorites") private var enableFavorites = true
-    @AppStorage("recapEnabled") private var recapEnabled = false
 
     private var isGerman: Bool { Locale.preferredLanguages.first?.hasPrefix("de") == true }
     private var appearanceOptions: [TVSettingsChoiceOption<String>] {
@@ -51,13 +48,8 @@ struct SettingsView: View {
                     )
                 }
 
-                Section(String(localized: "library")) {
-                    Toggle(String(localized: "playlists"), isOn: $enablePlaylists)
-                    Toggle(String(localized: "favorites"), isOn: $enableFavorites)
-                    Toggle(String(localized: "recaps"), isOn: $recapEnabled)
-                }
-
                 Section {
+                    NavigationLink(String(localized: "ui_customizations")) { TVUICustomizationsSettingsView() }
                     NavigationLink(String(localized: "playback")) { PlaybackSettingsView() }
                     NavigationLink(String(localized: "cache")) { CacheSettingsView() }
                     NavigationLink(String(localized: "database")) { DatabaseSettingsView() }
@@ -80,5 +72,24 @@ struct SettingsView: View {
                 }
             }
         }
+    }
+}
+
+private struct TVUICustomizationsSettingsView: View {
+    @AppStorage("enablePlaylists") private var enablePlaylists = true
+    @AppStorage("enableFavorites") private var enableFavorites = true
+    @AppStorage("recapEnabled") private var recapEnabled = false
+    @AppStorage("enableInstantMix") private var enableInstantMix = true
+
+    var body: some View {
+        Form {
+            Section(String(localized: "ui_customizations")) {
+                Toggle(String(localized: "playlists"), isOn: $enablePlaylists)
+                Toggle(String(localized: "favorites"), isOn: $enableFavorites)
+                Toggle(String(localized: "recaps"), isOn: $recapEnabled)
+                Toggle(String(localized: "instant_mix"), isOn: $enableInstantMix)
+            }
+        }
+        .navigationTitle(String(localized: "ui_customizations"))
     }
 }

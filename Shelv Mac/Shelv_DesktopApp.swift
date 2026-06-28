@@ -16,6 +16,7 @@ struct Shelv_DesktopApp: App {
     @AppStorage("themeColor") private var themeColorName: String = "violet"
     @AppStorage("enableFavorites") private var enableFavorites = true
     @AppStorage("enablePlaylists") private var enablePlaylists = true
+    @AppStorage("enableInstantMix") private var enableInstantMix = true
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
@@ -40,6 +41,7 @@ struct Shelv_DesktopApp: App {
             "transcodingDownloadBitrate": 192,
             "streamPreCacheAheadCount": 1,
             "infinityMixAheadCount": 1,
+            "enableInstantMix": true,
         ])
     }
 
@@ -175,6 +177,9 @@ struct Shelv_DesktopApp: App {
                 }
                 Toggle(isOn: Binding(get: { enablePlaylists }, set: { enablePlaylists = $0 })) {
                     Text(String(localized: "show_playlists"))
+                }
+                Toggle(isOn: Binding(get: { enableInstantMix }, set: { enableInstantMix = $0 })) {
+                    Text(String(localized: "show_instant_mix"))
                 }
             }
         }

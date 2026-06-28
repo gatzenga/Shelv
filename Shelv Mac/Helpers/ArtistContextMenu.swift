@@ -8,6 +8,7 @@ struct ArtistContextMenuModifier: ViewModifier {
     @ObservedObject private var offlineMode = OfflineModeService.shared
     @AppStorage("enableFavorites") private var enableFavorites = true
     @AppStorage("enablePlaylists") private var enablePlaylists = true
+    @AppStorage("enableInstantMix") private var enableInstantMix = true
     @AppStorage("enableDownloads") private var enableDownloads = false
     @State private var showDeleteConfirm = false
 
@@ -33,6 +34,11 @@ struct ArtistContextMenuModifier: ViewModifier {
                     } catch {
                         NotificationCenter.default.post(name: .showToast, object: String(localized: "playback_failed"))
                     }
+                }
+            }
+            if enableInstantMix && !offlineMode.isOffline {
+                Button(String(localized: "instant_mix")) {
+                    playInstantMix()
                 }
             }
             Divider()
@@ -118,6 +124,10 @@ struct ArtistContextMenuModifier: ViewModifier {
         } message: {
             Text(String(localized: "the_downloads_will_be_removed_from_this_device"))
         }
+    }
+
+    private func playInstantMix() {
+        InstantMixService.playArtistMix(for: artist)
     }
 
     private func fetchSongs() async throws -> [Song] {

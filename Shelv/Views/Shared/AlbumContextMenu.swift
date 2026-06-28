@@ -8,6 +8,7 @@ struct AlbumContextMenuModifier: ViewModifier {
     @ObservedObject var offlineMode = OfflineModeService.shared
     @AppStorage("enableFavorites") private var enableFavorites = true
     @AppStorage("enablePlaylists") private var enablePlaylists = true
+    @AppStorage("enableInstantMix") private var enableInstantMix = true
     @AppStorage("enableDownloads") private var enableDownloads = false
     @AppStorage("themeColor") private var themeColorName = "violet"
 
@@ -73,6 +74,14 @@ struct AlbumContextMenuModifier: ViewModifier {
             }
         } label: {
             Label(String(localized: "shuffle"), systemImage: "shuffle")
+        }
+
+        if enableInstantMix && !offlineMode.isOffline {
+            Button {
+                InstantMixService.playAlbumMix(for: album)
+            } label: {
+                Label(String(localized: "instant_mix"), systemImage: "sparkles")
+            }
         }
 
         Divider()

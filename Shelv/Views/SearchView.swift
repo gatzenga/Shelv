@@ -11,6 +11,7 @@ struct SearchView: View {
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
     @AppStorage("enableFavorites") private var enableFavorites = true
     @AppStorage("enablePlaylists") private var enablePlaylists = true
+    @AppStorage("enableInstantMix") private var enableInstantMix = true
     @AppStorage("enableDownloads") private var enableDownloads = false
     @ObservedObject var downloadStore = DownloadStore.shared
 
@@ -139,6 +140,9 @@ struct SearchView: View {
                                             }
                                         }
                                     }
+                                    .contextMenu {
+                                        artistInstantMixMenuItem(artist)
+                                    }
                                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                         Button { haptic(); queueArtist(artist) } label: { Image(systemName: "text.badge.plus") }
                                             .tint(accentColor)
@@ -208,6 +212,7 @@ struct SearchView: View {
                                             AlbumDownloadBadge(albumId: album.id)
                                         }
                                     }
+                                    .albumContextMenu(album, showPreview: false)
                                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                         Button { haptic(); queueAlbum(album) } label: { Image(systemName: "text.badge.plus") }
                                             .tint(accentColor)
@@ -489,6 +494,9 @@ struct SearchView: View {
                                                 .font(.caption2).foregroundStyle(.pink)
                                         }
                                     }
+                                    .contextMenu {
+                                        artistInstantMixMenuItem(artist)
+                                    }
                                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                         Button { haptic(); queueArtist(artist) } label: { Image(systemName: "text.badge.plus") }
                                             .tint(accentColor)
@@ -513,6 +521,7 @@ struct SearchView: View {
                                                 .font(.caption2).foregroundStyle(.pink)
                                         }
                                     }
+                                    .albumContextMenu(album, showPreview: false)
                                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                         Button { haptic(); queueAlbum(album) } label: { Image(systemName: "text.badge.plus") }
                                             .tint(accentColor)
@@ -652,6 +661,21 @@ struct SearchView: View {
             player.addPlayNext(songs)
             currentToast = ShelveToast(message: String(localized: "plays_next"))
         }
+    }
+
+    @ViewBuilder
+    private func artistInstantMixMenuItem(_ artist: Artist) -> some View {
+        if enableInstantMix && !offlineMode.isOffline {
+            Button {
+                playInstantMix(artist: artist)
+            } label: {
+                Label(String(localized: "instant_mix"), systemImage: "sparkles")
+            }
+        }
+    }
+
+    private func playInstantMix(artist: Artist) {
+        InstantMixService.playArtistMix(for: artist, player: player)
     }
 
     private func queueAlbum(_ album: Album) {

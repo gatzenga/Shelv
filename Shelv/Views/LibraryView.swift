@@ -55,6 +55,7 @@ struct LibraryView: View {
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
     @AppStorage("enableFavorites") private var enableFavorites = true
     @AppStorage("enablePlaylists") private var enablePlaylists = true
+    @AppStorage("enableInstantMix") private var enableInstantMix = true
     @AppStorage("enableDownloads") private var enableDownloads = false
 
     @State private var segment: LibrarySegment = .albums
@@ -494,6 +495,10 @@ struct LibraryView: View {
         }
     }
 
+    private func playInstantMix(album: Album) {
+        InstantMixService.playAlbumMix(for: album, player: player)
+    }
+
     private func addAlbumToPlaylist(_ album: Album) {
         Task {
             let songs = await songsForAlbum(album)
@@ -518,6 +523,10 @@ struct LibraryView: View {
             player.addPlayNext(songs)
             currentToast = ShelveToast(message: String(localized: "plays_next"))
         }
+    }
+
+    private func playInstantMix(artist: Artist) {
+        InstantMixService.playArtistMix(for: artist, player: player)
     }
 
     private func indexedScrollView<Content: View>(
@@ -952,6 +961,11 @@ struct LibraryView: View {
         Button { shuffleAlbum(album) } label: {
             Label(String(localized: "shuffle"), systemImage: "shuffle")
         }
+        if enableInstantMix && !offlineMode.isOffline {
+            Button { playInstantMix(album: album) } label: {
+                Label(String(localized: "instant_mix"), systemImage: "sparkles")
+            }
+        }
         Divider()
         Button { playNextAlbum(album) } label: {
             Label(String(localized: "play_next"), systemImage: "text.insert")
@@ -1065,6 +1079,12 @@ struct LibraryView: View {
                 player.playShuffled(songs: songs)
             }
         } label: { Label(String(localized: "shuffle"), systemImage: "shuffle") }
+
+        if enableInstantMix && !offlineMode.isOffline {
+            Button { playInstantMix(artist: artist) } label: {
+                Label(String(localized: "instant_mix"), systemImage: "sparkles")
+            }
+        }
 
         Divider()
 

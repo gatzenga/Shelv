@@ -59,10 +59,12 @@ struct InsightsView: View {
                         switch segment {
                         case .artists:
                             ForEach(Array(topArtists.enumerated()), id: \.element.id) { i, e in
-                                InsightsRow { navArtist = libraryArtist(for: e) } content: {
+                                let artist = libraryArtist(for: e)
+                                InsightsRow { navArtist = artist } content: {
                                     row(rank: i + 1, url: artistCoverURL(for: e),
                                         isCircle: true, title: e.name, subtitle: nil, plays: e.totalPlayCount)
                                 }
+                                .artistContextMenu(artist)
                             }
                         case .albums:
                             ForEach(Array(topAlbums.enumerated()), id: \.element.id) { i, e in
@@ -70,6 +72,7 @@ struct InsightsView: View {
                                     row(rank: i + 1, url: e.album.coverURL(200), isCircle: false,
                                         title: e.album.name, subtitle: e.album.artist, plays: e.playCount)
                                 }
+                                .albumContextMenu(e.album)
                             }
                         case .songs:
                             ForEach(Array(topSongs.enumerated()), id: \.element.id) { i, song in

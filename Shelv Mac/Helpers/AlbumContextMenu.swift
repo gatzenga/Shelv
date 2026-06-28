@@ -7,6 +7,7 @@ struct AlbumContextMenuModifier: ViewModifier {
     @ObservedObject private var offlineMode = OfflineModeService.shared
     @AppStorage("enableFavorites") private var enableFavorites = true
     @AppStorage("enablePlaylists") private var enablePlaylists = true
+    @AppStorage("enableInstantMix") private var enableInstantMix = true
     @AppStorage("enableDownloads") private var enableDownloads = false
     @State private var showDeleteConfirm = false
 
@@ -20,6 +21,11 @@ struct AlbumContextMenuModifier: ViewModifier {
             Button(String(localized: "shuffle")) {
                 withAlbumSongs(errorMsg: String(localized: "playback_failed")) { songs in
                     AudioPlayerService.shared.playShuffled(songs: songs)
+                }
+            }
+            if enableInstantMix && !offlineMode.isOffline {
+                Button(String(localized: "instant_mix")) {
+                    playInstantMix()
                 }
             }
             Divider()
@@ -83,6 +89,10 @@ struct AlbumContextMenuModifier: ViewModifier {
         } message: {
             Text(String(localized: "the_downloads_will_be_removed_from_this_device"))
         }
+    }
+
+    private func playInstantMix() {
+        InstantMixService.playAlbumMix(for: album)
     }
 
     private func withAlbumSongs(errorMsg: String, _ action: @MainActor @escaping ([Song]) -> Void) {

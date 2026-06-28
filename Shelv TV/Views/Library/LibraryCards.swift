@@ -79,6 +79,7 @@ struct AlbumCard: View {
             }
         }
         .frame(width: size)
+        .albumContextMenu(album)
     }
 }
 
@@ -108,6 +109,7 @@ struct ArtistCard: View {
                 .foregroundStyle(focused ? .primary : .secondary)
         }
         .frame(width: size)
+        .artistContextMenu(artist)
     }
 }
 
@@ -270,7 +272,9 @@ private struct AlbumContextMenuModifier: ViewModifier {
     let album: Album
     @AppStorage("enableFavorites") private var enableFavorites = true
     @AppStorage("enablePlaylists") private var enablePlaylists = true
+    @AppStorage("enableInstantMix") private var enableInstantMix = true
     @ObservedObject private var library = LibraryStore.shared
+    @ObservedObject private var offlineMode = OfflineModeService.shared
     @State private var addSongIds: [String] = []
     @State private var showAddToPlaylist = false
 
@@ -283,6 +287,11 @@ private struct AlbumContextMenuModifier: ViewModifier {
                 }
                 Button { Task { let s = await library.albumSongs(album); player.playShuffled(songs: s) } } label: {
                     Label(String(localized: "shuffle"), systemImage: "shuffle")
+                }
+                if enableInstantMix && !offlineMode.isOffline {
+                    Button { InstantMixService.playAlbumMix(for: album, player: player) } label: {
+                        Label(String(localized: "instant_mix"), systemImage: "sparkles")
+                    }
                 }
                 Button { Task { let s = await library.albumSongs(album); player.addPlayNext(s) } } label: {
                     Label(String(localized: "play_next"), systemImage: "text.line.first.and.arrowtriangle.forward")
@@ -354,7 +363,9 @@ struct AddToPlaylistView: View {
 private struct ArtistContextMenuModifier: ViewModifier {
     let artist: Artist
     @AppStorage("enableFavorites") private var enableFavorites = true
+    @AppStorage("enableInstantMix") private var enableInstantMix = true
     @ObservedObject private var library = LibraryStore.shared
+    @ObservedObject private var offlineMode = OfflineModeService.shared
 
     func body(content: Content) -> some View {
         content.contextMenu {
@@ -364,6 +375,11 @@ private struct ArtistContextMenuModifier: ViewModifier {
             }
             Button { Task { let s = await library.artistSongs(artist); player.playShuffled(songs: s) } } label: {
                 Label(String(localized: "shuffle"), systemImage: "shuffle")
+            }
+            if enableInstantMix && !offlineMode.isOffline {
+                Button { InstantMixService.playArtistMix(for: artist, player: player) } label: {
+                    Label(String(localized: "instant_mix"), systemImage: "sparkles")
+                }
             }
             if enableFavorites {
                 let starred = library.isArtistStarred(artist)

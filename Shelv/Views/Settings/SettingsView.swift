@@ -5,8 +5,6 @@ struct SettingsView: View {
     @EnvironmentObject var lyricsStore: LyricsStore
     @AppStorage("appAppearance") private var appAppearance = "system"
     @AppStorage("themeColor") private var themeColorName = "violet"
-    @AppStorage("enableFavorites") private var enableFavorites = true
-    @AppStorage("enablePlaylists") private var enablePlaylists = true
     @AppStorage("recapEnabled") private var recapEnabled = false
     @Environment(\.openURL) private var openURL
 
@@ -54,21 +52,6 @@ struct SettingsView: View {
                     .id(themeColorName)
                 }
 
-                Section(String(localized: "playlists_favorites")) {
-                    Toggle(isOn: $enableFavorites) {
-                        Label { Text(String(localized: "favorites")) } icon: {
-                            Image(systemName: "heart").foregroundStyle(accentColor)
-                        }
-                    }
-                    .tint(accentColor)
-                    Toggle(isOn: $enablePlaylists) {
-                        Label { Text(String(localized: "playlists")) } icon: {
-                            Image(systemName: "music.note.list").foregroundStyle(accentColor)
-                        }
-                    }
-                    .tint(accentColor)
-                }
-
                 Section(String(localized: "recap")) {
                     Toggle(isOn: $recapEnabled) {
                         Label { Text(String(localized: "recap")) } icon: {
@@ -90,6 +73,11 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    NavigationLink(destination: UICustomizationsSettingsView()) {
+                        Label { Text(String(localized: "ui_customizations")) } icon: {
+                            Image(systemName: "slider.horizontal.2.square").foregroundStyle(accentColor)
+                        }
+                    }
                     NavigationLink(destination: PlaybackSettingsView()) {
                         Label { Text(String(localized: "playback")) } icon: {
                             Image(systemName: "waveform.path").foregroundStyle(accentColor)
@@ -327,4 +315,42 @@ struct SettingsView: View {
         }
     }
 
+}
+
+private struct UICustomizationsSettingsView: View {
+    @AppStorage("themeColor") private var themeColorName = "violet"
+    @AppStorage("enableFavorites") private var enableFavorites = true
+    @AppStorage("enablePlaylists") private var enablePlaylists = true
+    @AppStorage("enableInstantMix") private var enableInstantMix = true
+
+    private var accentColor: Color { AppTheme.color(for: themeColorName) }
+
+    var body: some View {
+        List {
+            Section {
+                Toggle(isOn: $enableFavorites) {
+                    Label { Text(String(localized: "favorites")) } icon: {
+                        Image(systemName: "heart").foregroundStyle(accentColor)
+                    }
+                }
+                .tint(accentColor)
+
+                Toggle(isOn: $enablePlaylists) {
+                    Label { Text(String(localized: "playlists")) } icon: {
+                        Image(systemName: "music.note.list").foregroundStyle(accentColor)
+                    }
+                }
+                .tint(accentColor)
+
+                Toggle(isOn: $enableInstantMix) {
+                    Label { Text(String(localized: "instant_mix")) } icon: {
+                        Image(systemName: "sparkles").foregroundStyle(accentColor)
+                    }
+                }
+                .tint(accentColor)
+            }
+        }
+        .navigationTitle(String(localized: "ui_customizations"))
+        .navigationBarTitleDisplayMode(.inline)
+    }
 }

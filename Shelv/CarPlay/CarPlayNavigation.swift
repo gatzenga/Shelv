@@ -92,32 +92,43 @@ enum CarPlayNavigation {
         func makeActionsSection() -> CPListSection {
             let enableFavorites = UserDefaults.standard.bool(forKey: "enableFavorites")
                 && !OfflineModeService.shared.isOffline
+            let enableInstantMix = UserDefaults.standard.bool(forKey: "enableInstantMix")
+                && !OfflineModeService.shared.isOffline
             let starred = LibraryStore.shared.isAlbumStarred(album)
 
             var actions: [(icon: String, label: String, handler: () -> Void)] = [
-                ("play.fill",   String(localized: "play"), {
+                (icon: "play.fill", label: String(localized: "play"), handler: {
                     AudioPlayerService.shared.play(songs: songs, startIndex: 0)
                     presentNowPlaying(on: ic)
                     rebuildActionsAsync()
                 }),
-                ("shuffle",     String(localized: "shuffle"), {
+                (icon: "shuffle", label: String(localized: "shuffle"), handler: {
                     AudioPlayerService.shared.playShuffled(songs: songs)
                     presentNowPlaying(on: ic)
                     rebuildActionsAsync()
                 }),
-                ("text.insert", String(localized: "play_next"), {
+            ]
+            if enableInstantMix {
+                actions.append((icon: "sparkles", label: String(localized: "instant_mix"), handler: {
+                    InstantMixService.playAlbumMix(for: album)
+                    presentNowPlaying(on: ic)
+                    rebuildActionsAsync()
+                }))
+            }
+            actions.append(contentsOf: [
+                (icon: "text.insert", label: String(localized: "play_next"), handler: {
                     AudioPlayerService.shared.addPlayNext(songs)
                     rebuildActionsAsync()
                 }),
-                ("text.append", String(localized: "add_to_queue"), {
+                (icon: "text.append", label: String(localized: "add_to_queue"), handler: {
                     AudioPlayerService.shared.addToQueue(songs)
                     rebuildActionsAsync()
                 }),
-            ]
+            ])
             if enableFavorites {
                 let icon = starred ? "heart.fill" : "heart"
                 let label = starred ? String(localized: "unfavorite") : String(localized: "favorite")
-                actions.append((icon, label, {
+                actions.append((icon: icon, label: label, handler: {
                     Task { await LibraryStore.shared.toggleStarAlbum(album) }
                 }))
             }
@@ -156,12 +167,18 @@ enum CarPlayNavigation {
 
         Task { @MainActor [weak template] in
             var lastEnabled = UserDefaults.standard.bool(forKey: "enableFavorites")
+            var lastInstantMix = UserDefaults.standard.bool(forKey: "enableInstantMix")
             var lastTheme   = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
             for await _ in NotificationCenter.default.notifications(named: UserDefaults.didChangeNotification) {
                 let currentEnabled = UserDefaults.standard.bool(forKey: "enableFavorites")
+                let currentInstantMix = UserDefaults.standard.bool(forKey: "enableInstantMix")
                 let currentTheme   = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
-                guard currentEnabled != lastEnabled || currentTheme != lastTheme else { continue }
+                guard currentEnabled != lastEnabled
+                        || currentInstantMix != lastInstantMix
+                        || currentTheme != lastTheme
+                else { continue }
                 lastEnabled = currentEnabled
+                lastInstantMix = currentInstantMix
                 lastTheme   = currentTheme
                 guard let t = template else { return }
                 let snap = t.sections
@@ -230,6 +247,8 @@ enum CarPlayNavigation {
         func makeActionsSection() -> CPListSection {
             let enableFavorites = UserDefaults.standard.bool(forKey: "enableFavorites")
                 && !OfflineModeService.shared.isOffline
+            let enableInstantMix = UserDefaults.standard.bool(forKey: "enableInstantMix")
+                && !OfflineModeService.shared.isOffline
             let starred = LibraryStore.shared.isArtistStarred(artist)
 
             func playAction(_ op: @escaping ([Song]) -> Void, navigateToPlayer: Bool = false) -> () -> Void {
@@ -245,15 +264,24 @@ enum CarPlayNavigation {
             }
 
             var actions: [(icon: String, label: String, handler: () -> Void)] = [
-                ("play.fill",   String(localized: "play"),         playAction({ AudioPlayerService.shared.play(songs: $0, startIndex: 0) }, navigateToPlayer: true)),
-                ("shuffle",     String(localized: "shuffle"),          playAction({ AudioPlayerService.shared.playShuffled(songs: $0) }, navigateToPlayer: true)),
-                ("text.insert", String(localized: "play_next"),      playAction({ AudioPlayerService.shared.addPlayNext($0) })),
-                ("text.append", String(localized: "add_to_queue"), playAction({ AudioPlayerService.shared.addToQueue($0) })),
+                (icon: "play.fill", label: String(localized: "play"), handler: playAction({ AudioPlayerService.shared.play(songs: $0, startIndex: 0) }, navigateToPlayer: true)),
+                (icon: "shuffle", label: String(localized: "shuffle"), handler: playAction({ AudioPlayerService.shared.playShuffled(songs: $0) }, navigateToPlayer: true)),
             ]
+            if enableInstantMix {
+                actions.append((icon: "sparkles", label: String(localized: "instant_mix"), handler: {
+                    InstantMixService.playArtistMix(for: artist)
+                    presentNowPlaying(on: ic)
+                    rebuildActionsAsync()
+                }))
+            }
+            actions.append(contentsOf: [
+                (icon: "text.insert", label: String(localized: "play_next"), handler: playAction({ AudioPlayerService.shared.addPlayNext($0) })),
+                (icon: "text.append", label: String(localized: "add_to_queue"), handler: playAction({ AudioPlayerService.shared.addToQueue($0) })),
+            ])
             if enableFavorites {
                 let icon = starred ? "heart.fill" : "heart"
                 let label = starred ? String(localized: "unfavorite") : String(localized: "favorite")
-                actions.append((icon, label, {
+                actions.append((icon: icon, label: label, handler: {
                     Task { await LibraryStore.shared.toggleStarArtist(artist) }
                 }))
             }
@@ -295,12 +323,18 @@ enum CarPlayNavigation {
 
         Task { @MainActor [weak template] in
             var lastEnabled = UserDefaults.standard.bool(forKey: "enableFavorites")
+            var lastInstantMix = UserDefaults.standard.bool(forKey: "enableInstantMix")
             var lastTheme   = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
             for await _ in NotificationCenter.default.notifications(named: UserDefaults.didChangeNotification) {
                 let currentEnabled = UserDefaults.standard.bool(forKey: "enableFavorites")
+                let currentInstantMix = UserDefaults.standard.bool(forKey: "enableInstantMix")
                 let currentTheme   = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
-                guard currentEnabled != lastEnabled || currentTheme != lastTheme else { continue }
+                guard currentEnabled != lastEnabled
+                        || currentInstantMix != lastInstantMix
+                        || currentTheme != lastTheme
+                else { continue }
                 lastEnabled = currentEnabled
+                lastInstantMix = currentInstantMix
                 lastTheme   = currentTheme
                 guard let t = template else { return }
                 let snap = t.sections

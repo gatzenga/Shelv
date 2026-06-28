@@ -398,6 +398,10 @@
 "infinity_mode" = "无限模式";
 "infinity_mix" = "无限混合";
 "infinity_mix_ahead_count" = "添加歌曲数";
+"instant_mix" = "即时混音";
+"no_instant_mix_available" = "没有可用的即时混音";
+"show_instant_mix" = "显示即时混音";
+"ui_customizations" = "界面自定义";
 "on" = "开";
 "off" = "关";
 "what_to_sync" = "同步内容";

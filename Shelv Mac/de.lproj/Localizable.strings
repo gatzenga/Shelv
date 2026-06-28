@@ -418,6 +418,10 @@
 "infinity_mode" = "Endlos-Modus";
 "infinity_mix" = "Infinity Mix";
 "infinity_mix_ahead_count" = "Titel hinzufügen";
+"instant_mix" = "Instant Mix";
+"no_instant_mix_available" = "Kein Instant Mix verfügbar";
+"show_instant_mix" = "Instant Mix anzeigen";
+"ui_customizations" = "UI-Anpassungen";
 "what_to_sync" = "Was synchronisiert wird";
 "play_history" = "Wiedergabehistorie";
 "lyrics_server" = "Lyrics-Server";

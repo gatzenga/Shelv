@@ -418,6 +418,10 @@
 "infinity_mode" = "Infinity Mode";
 "infinity_mix" = "Infinity Mix";
 "infinity_mix_ahead_count" = "Songs to add";
+"instant_mix" = "Instant Mix";
+"no_instant_mix_available" = "No Instant Mix Available";
+"show_instant_mix" = "Show Instant Mix";
+"ui_customizations" = "UI Customizations";
 "what_to_sync" = "What to Sync";
 "play_history" = "Play History";
 "lyrics_server" = "Lyrics Server";

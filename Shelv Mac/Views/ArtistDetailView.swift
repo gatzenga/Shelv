@@ -10,6 +10,7 @@ struct ArtistDetailView: View {
     @ObservedObject var downloadStore = DownloadStore.shared
     @ObservedObject private var offlineMode = OfflineModeService.shared
     @AppStorage("enableFavorites") private var enableFavorites = true
+    @AppStorage("enableInstantMix") private var enableInstantMix = true
     @AppStorage("enableDownloads") private var enableDownloads = false
     @AppStorage("artistDetailAlbumSort") private var sortRaw: String = LibrarySortOption.recentlyAdded.rawValue
     @AppStorage("artistDetailAlbumDirection") private var directionRaw: String = SortDirection.descending.rawValue
@@ -77,86 +78,9 @@ struct ArtistDetailView: View {
 
                                 Spacer(minLength: 8)
 
-                                HStack(spacing: 10) {
-                                    Button {
-                                        Task { await vm.playAll(player: appState.player, albums: displayAlbums, shuffle: false) }
-                                    } label: {
-                                        Group {
-                                            if vm.isLoadingSongs {
-                                                ProgressView().controlSize(.small).tint(.white)
-                                            } else {
-                                                Label(String(localized: "play"), systemImage: "play.fill")
-                                                    .frame(minWidth: 100)
-                                            }
-                                        }
-                                    }
-                                    .buttonStyle(.borderedProminent)
-                                    .tint(themeColor)
-                                    .controlSize(.large)
-                                    .disabled(displayAlbums.isEmpty || vm.isLoadingSongs)
-
-                                    Button {
-                                        Task { await vm.playAll(player: appState.player, albums: displayAlbums, shuffle: true) }
-                                    } label: {
-                                        Label(String(localized: "shuffle"), systemImage: "shuffle")
-                                            .frame(minWidth: 100)
-                                    }
-                                    .buttonStyle(.bordered)
-                                    .controlSize(.large)
-                                    .disabled(displayAlbums.isEmpty || vm.isLoadingSongs)
-
-                                    Button {
-                                        Task {
-                                            let songs = await vm.fetchSongs(albums: displayAlbums)
-                                            guard !songs.isEmpty else { return }
-                                            appState.player.addPlayNext(songs)
-                                            NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_play_next"))
-                                        }
-                                    } label: {
-                                        Label(String(localized: "play_next"), systemImage: "text.insert")
-                                    }
-                                    .buttonStyle(.bordered)
-                                    .controlSize(.large)
-                                    .disabled(displayAlbums.isEmpty || vm.isLoadingSongs)
-
-                                    Button {
-                                        Task {
-                                            let songs = await vm.fetchSongs(albums: displayAlbums)
-                                            guard !songs.isEmpty else { return }
-                                            appState.player.addToQueue(songs)
-                                            NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_queue"))
-                                        }
-                                    } label: {
-                                        Label(String(localized: "add_to_queue"), systemImage: "text.badge.plus")
-                                    }
-                                    .buttonStyle(.bordered)
-                                    .controlSize(.large)
-                                    .disabled(displayAlbums.isEmpty || vm.isLoadingSongs)
-
-                                    if enableDownloads, let detail = vm.artist {
-                                        artistDownloadButton(for: detail)
-                                    }
-
-                                    if enableFavorites, let detail = vm.artist {
-                                        let isStarred = libraryStore.starredArtists.contains { $0.id == detail.id }
-                                        Button {
-                                            Task {
-                                                await libraryStore.toggleStarArtist(
-                                                    Artist(id: detail.id, name: detail.name,
-                                                           albumCount: detail.albumCount, coverArt: detail.coverArt,
-                                                           starred: isStarred ? Date() : nil)
-                                                )
-                                            }
-                                        } label: {
-                                            Image(systemName: isStarred ? "heart.fill" : "heart")
-                                                .font(.title2)
-                                                .foregroundStyle(isStarred ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
-                                        }
-                                        .buttonStyle(.plain)
-                                        .help(isStarred
-                                            ? String(localized: "remove_from_favorites")
-                                            : String(localized: "add_to_favorites"))
-                                    }
+                                ViewThatFits(in: .horizontal) {
+                                    actionButtons(iconOnly: false)
+                                    actionButtons(iconOnly: true)
                                 }
                             }
 
@@ -267,6 +191,119 @@ struct ArtistDetailView: View {
         return SubsonicAPIService.shared.coverArtURL(id: id, size: 240)
     }
 
+    private var instantMixArtist: Artist {
+        guard let detail = vm.artist else {
+            return Artist(id: artistId, name: artistName)
+        }
+        return Artist(id: detail.id,
+                      name: detail.name,
+                      albumCount: detail.albumCount,
+                      coverArt: detail.coverArt)
+    }
+
+    @ViewBuilder
+    private func actionButtons(iconOnly: Bool) -> some View {
+        HStack(spacing: 10) {
+            Button {
+                Task { await vm.playAll(player: appState.player, albums: displayAlbums, shuffle: false) }
+            } label: {
+                Group {
+                    if vm.isLoadingSongs {
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(iconOnly ? themeColor : .white)
+                    } else {
+                        Label(String(localized: "play"), systemImage: "play.fill")
+                            .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
+                            .frame(minWidth: iconOnly ? nil : 100)
+                    }
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(themeColor)
+            .controlSize(.large)
+            .disabled(displayAlbums.isEmpty || vm.isLoadingSongs)
+
+            Button {
+                Task { await vm.playAll(player: appState.player, albums: displayAlbums, shuffle: true) }
+            } label: {
+                Label(String(localized: "shuffle"), systemImage: "shuffle")
+                    .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
+                    .frame(minWidth: iconOnly ? nil : 100)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+            .disabled(displayAlbums.isEmpty || vm.isLoadingSongs)
+
+            if enableInstantMix && !offlineMode.isOffline {
+                Button {
+                    InstantMixService.playArtistMix(for: instantMixArtist, player: appState.player)
+                } label: {
+                    Label(String(localized: "instant_mix"), systemImage: "sparkles")
+                        .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .disabled(vm.isLoading)
+            }
+
+            Button {
+                Task {
+                    let songs = await vm.fetchSongs(albums: displayAlbums)
+                    guard !songs.isEmpty else { return }
+                    appState.player.addPlayNext(songs)
+                    NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_play_next"))
+                }
+            } label: {
+                Label(String(localized: "play_next"), systemImage: "text.insert")
+                    .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+            .disabled(displayAlbums.isEmpty || vm.isLoadingSongs)
+
+            Button {
+                Task {
+                    let songs = await vm.fetchSongs(albums: displayAlbums)
+                    guard !songs.isEmpty else { return }
+                    appState.player.addToQueue(songs)
+                    NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_queue"))
+                }
+            } label: {
+                Label(String(localized: "add_to_queue"), systemImage: "text.badge.plus")
+                    .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+            .disabled(displayAlbums.isEmpty || vm.isLoadingSongs)
+
+            if enableDownloads, let detail = vm.artist {
+                artistDownloadButton(for: detail, iconOnly: iconOnly)
+            }
+
+            if enableFavorites, let detail = vm.artist {
+                let isStarred = libraryStore.starredArtists.contains { $0.id == detail.id }
+                Button {
+                    Task {
+                        await libraryStore.toggleStarArtist(
+                            Artist(id: detail.id, name: detail.name,
+                                   albumCount: detail.albumCount, coverArt: detail.coverArt,
+                                   starred: isStarred ? Date() : nil)
+                        )
+                    }
+                } label: {
+                    Image(systemName: isStarred ? "heart.fill" : "heart")
+                        .font(.title3)
+                        .foregroundStyle(isStarred ? AnyShapeStyle(.red) : AnyShapeStyle(.secondary))
+                }
+                .buttonStyle(.plain)
+                .help(isStarred
+                    ? String(localized: "remove_from_favorites")
+                    : String(localized: "add_to_favorites"))
+            }
+        }
+    }
+
     private var artistDownloadStatus: AlbumDownloadStatus {
         let albums = vm.albums
         guard !albums.isEmpty else { return .none }
@@ -289,7 +326,7 @@ struct ArtistDetailView: View {
     }
 
     @ViewBuilder
-    private func artistDownloadButton(for detail: ArtistDetail) -> some View {
+    private func artistDownloadButton(for detail: ArtistDetail, iconOnly: Bool) -> some View {
         let artistModel = Artist(id: detail.id, name: detail.name,
                                  albumCount: detail.albumCount, coverArt: detail.coverArt,
                                  starred: nil)
@@ -300,6 +337,7 @@ struct ArtistDetailView: View {
                     downloadStore.enqueueArtist(artistModel)
                 } label: {
                     Label(String(localized: "download"), systemImage: "arrow.down.circle")
+                        .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.large)
@@ -310,6 +348,7 @@ struct ArtistDetailView: View {
                     downloadStore.enqueueArtist(artistModel)
                 } label: {
                     Label("Rest (\(tot - done))", systemImage: "arrow.down.circle")
+                        .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.large)
@@ -318,6 +357,7 @@ struct ArtistDetailView: View {
                 showDeleteDownloadConfirm = true
             } label: {
                 Label(String(localized: "delete_downloads"), systemImage: "arrow.down.circle")
+                    .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
                     .foregroundStyle(.red)
             }
             .buttonStyle(.bordered)
@@ -327,6 +367,7 @@ struct ArtistDetailView: View {
                 showDeleteDownloadConfirm = true
             } label: {
                 Label(String(localized: "delete_downloads"), systemImage: "arrow.down.circle")
+                    .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
                     .foregroundStyle(.red)
             }
             .buttonStyle(.bordered)

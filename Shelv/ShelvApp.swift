@@ -66,6 +66,7 @@ struct ShelvApp: App {
             "transcodingDownloadBitrate": 192,
             "streamPreCacheAheadCount": 1,
             "infinityMixAheadCount": 1,
+            "enableInstantMix": true,
         ])
     }
 

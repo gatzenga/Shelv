@@ -77,6 +77,9 @@ struct ContentView: View {
         .onReceive(NotificationCenter.default.publisher(for: .offlinePlaybackBlocked)) { _ in
             offlineToast = ShelveToast(message: String(localized: "not_available_offline"), isError: true)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .instantMixUnavailable)) { _ in
+            offlineToast = ShelveToast(message: String(localized: "no_instant_mix_available"), isError: true)
+        }
         .onReceive(NotificationCenter.default.publisher(for: .shelvShortcutDestinationRequested)) { note in
             guard let rawValue = note.object as? String,
                   let destination = ShelvShortcutDestination(rawValue: rawValue)

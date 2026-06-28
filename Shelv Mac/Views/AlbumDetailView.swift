@@ -13,6 +13,7 @@ struct AlbumDetailView: View {
     @ObservedObject private var player = AudioPlayerService.shared
     @AppStorage("enableFavorites") private var enableFavorites = true
     @AppStorage("enablePlaylists") private var enablePlaylists = true
+    @AppStorage("enableInstantMix") private var enableInstantMix = true
     @AppStorage("enableDownloads") private var enableDownloads = false
     @AppStorage("downloadsOnlyFilter") private var showDownloadsOnly: Bool = false
     @Environment(\.themeColor) private var themeColor
@@ -34,6 +35,23 @@ struct AlbumDetailView: View {
         }
     }
 
+    private var instantMixAlbum: Album {
+        guard let album = vm.album else {
+            return Album(id: albumId, name: albumName, coverArt: initialCoverArtId, songs: vm.songs)
+        }
+        return Album(id: album.id,
+                     name: album.name,
+                     artist: album.artist,
+                     artistId: album.artistId,
+                     coverArt: album.coverArt,
+                     songCount: album.songCount,
+                     duration: album.duration,
+                     year: album.year,
+                     genre: album.genre,
+                     starred: album.starred,
+                     songs: vm.songs)
+    }
+
     private var discGroups: [(disc: Int, songs: [Song])] {
         let discNumbers = Set(displaySongs.compactMap(\.discNumber))
         guard discNumbers.count >= 2 else { return [] }
@@ -52,45 +70,37 @@ struct AlbumDetailView: View {
     }
 
     var body: some View {
-        List {
-            Section {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
                 headerView
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-            }
 
-            if vm.isLoading {
-                ProgressView(String(localized: "loading_tracks"))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 60)
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-            } else if useDiscGrouping {
-                ForEach(discGroups, id: \.disc) { group in
-                    discHeaderRow(group.disc)
-                    ForEach(group.songs, id: \.id) { song in
-                        albumTrackRow(song: song, playIndex: displaySongs.firstIndex(where: { $0.id == song.id }) ?? 0)
+                if vm.isLoading {
+                    ProgressView(String(localized: "loading_tracks"))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 60)
+                } else if useDiscGrouping {
+                    ForEach(discGroups, id: \.disc) { group in
+                        discHeaderRow(group.disc)
+                        ForEach(group.songs, id: \.id) { song in
+                            albumTrackRow(song: song, playIndex: displaySongs.firstIndex(where: { $0.id == song.id }) ?? 0)
+                        }
+                    }
+                } else {
+                    ForEach(Array(displaySongs.enumerated()), id: \.element.id) { index, song in
+                        albumTrackRow(song: song, playIndex: index)
                     }
                 }
-            } else {
-                ForEach(Array(displaySongs.enumerated()), id: \.element.id) { index, song in
-                    albumTrackRow(song: song, playIndex: index)
+
+                if let err = vm.errorMessage {
+                    Label(err, systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(.red)
+                        .padding(28)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-
-            if let err = vm.errorMessage {
-                Label(err, systemImage: "exclamationmark.triangle")
-                    .foregroundStyle(.red)
-                    .padding(28)
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
+        .background(Color(NSColor.windowBackgroundColor))
         .navigationTitle(vm.album?.name ?? albumName)
         .searchable(text: $searchQuery, prompt: String(localized: "search_songs"))
         .task(id: albumId) {
@@ -201,6 +211,18 @@ struct AlbumDetailView: View {
             .controlSize(.large)
             .disabled(vm.isLoading || displaySongs.isEmpty)
 
+            if enableInstantMix && !offlineMode.isOffline {
+                Button {
+                    InstantMixService.playAlbumMix(for: instantMixAlbum, player: appState.player)
+                } label: {
+                    Label(String(localized: "instant_mix"), systemImage: "sparkles")
+                        .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .disabled(vm.isLoading)
+            }
+
             Button {
                 appState.player.addPlayNext(displaySongs)
                 NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_play_next"))
@@ -264,9 +286,6 @@ struct AlbumDetailView: View {
             Divider()
                 .padding(.horizontal, 28)
         }
-        .listRowInsets(EdgeInsets())
-        .listRowBackground(Color.clear)
-        .listRowSeparator(.hidden)
     }
 
     @ViewBuilder
@@ -290,9 +309,6 @@ struct AlbumDetailView: View {
         } onAddToPlaylist: {
             NotificationCenter.default.post(name: .addSongsToPlaylist, object: [song.id])
         }
-        .listRowInsets(EdgeInsets())
-        .listRowBackground(Color.clear)
-        .listRowSeparator(.hidden)
     }
 
     private var coverURL: URL? {
@@ -450,6 +466,7 @@ struct TrackRow: View {
             }
         }
         .contentShape(Rectangle())
+        .focusable(false)
         .onHover { isHovered = $0 }
         .gesture(TapGesture(count: 2).onEnded { onPlay() })
         .contextMenu {

@@ -10,6 +10,7 @@ struct AlbumDetailView: View {
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
     @AppStorage("enableFavorites") private var enableFavorites = true
     @AppStorage("enablePlaylists") private var enablePlaylists = true
+    @AppStorage("enableInstantMix") private var enableInstantMix = true
     @AppStorage("enableDownloads") private var enableDownloads = false
 
     @State private var detail: AlbumDetail?
@@ -136,6 +137,16 @@ struct AlbumDetailView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
+                    if enableInstantMix && !offlineMode.isOffline {
+                        Button {
+                            playInstantMix()
+                        } label: {
+                            Label(String(localized: "instant_mix"), systemImage: "sparkles")
+                        }
+
+                        Divider()
+                    }
+
                     Button {
                         if let songs = detail?.song, !songs.isEmpty {
                             player.addPlayNext(songs)
@@ -447,6 +458,10 @@ struct AlbumDetailView: View {
                 }
             }
         }
+    }
+
+    private func playInstantMix() {
+        InstantMixService.playAlbumMix(for: album, player: player)
     }
 
     private func loadDetail() async {

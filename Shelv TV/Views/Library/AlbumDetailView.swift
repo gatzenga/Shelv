@@ -5,7 +5,9 @@ import SwiftUI
 struct AlbumDetailView: View {
     let album: Album
     @AppStorage("enableFavorites") private var enableFavorites = true
+    @AppStorage("enableInstantMix") private var enableInstantMix = true
     @ObservedObject private var library = LibraryStore.shared
+    @ObservedObject private var offlineMode = OfflineModeService.shared
     private let player = AudioPlayerService.shared
 
     @State private var songs: [Song] = []
@@ -41,7 +43,14 @@ struct AlbumDetailView: View {
             }
             VStack(spacing: 12) {
                 actionButton(String(localized: "play"), "play.fill") { player.play(songs: songs, startIndex: 0) }
+                    .disabled(songs.isEmpty)
                 actionButton(String(localized: "shuffle"), "shuffle") { player.playShuffled(songs: songs) }
+                    .disabled(songs.isEmpty)
+                if enableInstantMix && !offlineMode.isOffline {
+                    actionButton(String(localized: "instant_mix"), "sparkles") {
+                        InstantMixService.playAlbumMix(for: album, player: player)
+                    }
+                }
                 HStack(spacing: 12) {
                     iconButton("text.line.first.and.arrowtriangle.forward") { player.addPlayNext(songs) }
                     iconButton("text.append") { player.addToQueue(songs) }
@@ -51,8 +60,8 @@ struct AlbumDetailView: View {
                         }
                     }
                 }
+                .disabled(songs.isEmpty)
             }
-            .disabled(songs.isEmpty)
         }
     }
 
@@ -73,9 +82,11 @@ struct AlbumDetailView: View {
     @ViewBuilder
     private var artistLink: some View {
         if let artistName = album.artist {
+            let artist = resolvedLibraryArtist(name: artistName, id: album.artistId)
             AccentTextLink(text: artistName, font: .body) {
-                ArtistDetailView(artist: resolvedLibraryArtist(name: artistName, id: album.artistId))
+                ArtistDetailView(artist: artist)
             }
+            .artistContextMenu(artist)
         }
     }
 

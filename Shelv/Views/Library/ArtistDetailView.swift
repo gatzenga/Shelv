@@ -11,6 +11,7 @@ struct ArtistDetailView: View {
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
     @AppStorage("enableFavorites") private var enableFavorites = true
     @AppStorage("enablePlaylists") private var enablePlaylists = true
+    @AppStorage("enableInstantMix") private var enableInstantMix = true
     @AppStorage("enableDownloads") private var enableDownloads = false
 
     private func serverStableId() -> String { serverStore.activeServer?.stableId ?? "" }
@@ -446,6 +447,16 @@ struct ArtistDetailView: View {
 
     private var artistMenu: some View {
         Menu {
+            if enableInstantMix && !offlineMode.isOffline {
+                Button {
+                    playInstantMix()
+                } label: {
+                    Label(String(localized: "instant_mix"), systemImage: "sparkles")
+                }
+
+                Divider()
+            }
+
             Button {
                 let albums = sortedAlbums
                 guard !albums.isEmpty else { return }
@@ -523,6 +534,10 @@ struct ArtistDetailView: View {
             Image(systemName: "ellipsis.circle")
                 .foregroundStyle(accentColor)
         }
+    }
+
+    private func playInstantMix() {
+        InstantMixService.playArtistMix(for: artist, player: player)
     }
 
     private func loadDetail() async {
