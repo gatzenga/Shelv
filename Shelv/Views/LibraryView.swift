@@ -1,51 +1,5 @@
 import SwiftUI
 
-enum AlbumSortOption: String, CaseIterable {
-    case alphabetical = "alphabeticalByName"
-    case frequent     = "frequent"
-    case newest       = "newest"
-    case year         = "year"
-
-    var label: String {
-        switch self {
-        case .alphabetical: return String(localized: "name")
-        case .frequent:     return String(localized: "most_played")
-        case .newest:       return String(localized: "recently_added")
-        case .year:         return String(localized: "year")
-        }
-    }
-
-    var requiresServer: Bool { self == .frequent || self == .newest }
-}
-
-enum ArtistSortOption: String, CaseIterable {
-    case alphabetical, frequent
-
-    var label: String {
-        switch self {
-        case .alphabetical: return String(localized: "name")
-        case .frequent:     return String(localized: "most_played")
-        }
-    }
-
-    var requiresServer: Bool { self == .frequent }
-}
-
-enum SortDirection: String, CaseIterable {
-    case ascending, descending
-
-    var label: String {
-        switch self {
-        case .ascending:  return String(localized: "ascending")
-        case .descending: return String(localized: "descending")
-        }
-    }
-}
-
-enum LibrarySegment: Int {
-    case albums, artists, favorites
-}
-
 struct LibraryView: View {
     @ObservedObject var libraryStore = LibraryStore.shared
     @ObservedObject var offlineMode = OfflineModeService.shared
@@ -86,45 +40,6 @@ struct LibraryView: View {
 
     private let columns = [GridItem(.adaptive(minimum: 150, maximum: 200), spacing: 14)]
 
-    private nonisolated static let sortArticles: [String] = [
-        "the ", "an ", "a ",
-        "der ", "die ", "das ", "dem ", "den ", "des ",
-        "eine ", "einer ", "einem ", "einen ", "ein ",
-        "les ", "le ", "la ", "l\u{2019}", "l'",
-        "une ", "des ", "un ",
-        "los ", "las ", "el ", "una ", "un ",
-        "gli ", "uno ", "una ", "il ", "lo ", "un ",
-        "umas ", "uma ", "uns ", "um ", "os ", "as ",
-        "het ", "een ", "de ",
-    ]
-
-    private nonisolated static func sortKey(for name: String) -> String {
-        let lower = name.lowercased()
-        for article in sortArticles {
-            if lower.hasPrefix(article) {
-                return String(name.dropFirst(article.count))
-            }
-        }
-        return name
-    }
-
-    private nonisolated static func groupByFirstLetter<T>(_ items: [T], name: KeyPath<T, String>) -> [(letter: String, items: [T])] {
-        var dict: [String: [T]] = [:]
-        for item in items {
-            let key = sortKey(for: item[keyPath: name])
-            let raw = String(key.prefix(1))
-            let base = raw.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current).uppercased()
-            let letter = (base.first?.isLetter == true) ? String(base.prefix(1)) : "#"
-            dict[letter, default: []].append(item)
-        }
-        let letters = dict.keys.sorted {
-            if $0 == "#" { return true }
-            if $1 == "#" { return false }
-            return $0 < $1
-        }
-        return letters.map { ($0, dict[$0, default: []]) }
-    }
-
     @ViewBuilder
     private var segmentContent: some View {
         switch segment {
@@ -134,7 +49,7 @@ struct LibraryView: View {
                 ProgressView()
                 Spacer()
             } else if albumIsGrid {
-                indexedScrollView(
+                IndexedScrollView(
                     letters: albumGroups.map(\.letter).filter { !$0.isEmpty },
                     idPrefix: "alb",
                     scrollID: $albumScrollID
@@ -148,7 +63,7 @@ struct LibraryView: View {
                 ProgressView()
                 Spacer()
             } else if artistIsGrid {
-                indexedScrollView(
+                IndexedScrollView(
                     letters: artistGroups.map(\.letter).filter { !$0.isEmpty },
                     idPrefix: "art",
                     scrollID: $artistScrollID
@@ -179,25 +94,34 @@ struct LibraryView: View {
 
     @ViewBuilder
     private var segmentPicker: some View {
-        Picker("", selection: $segment) {
-            Text(String(localized: "albums")).tag(LibrarySegment.albums)
-            Text(String(localized: "artists")).tag(LibrarySegment.artists)
-            if enableFavorites {
-                Text(String(localized: "favorites")).tag(LibrarySegment.favorites)
-            }
-        }
-        .pickerStyle(.segmented)
-        .padding(.horizontal)
-        .padding(.vertical, 10)
+        LibrarySegmentPicker(selection: $segment, enableFavorites: enableFavorites)
     }
 
     @ToolbarContentBuilder
     private var libraryToolbar: some ToolbarContent {
         if segment == .albums || segment == .artists {
-            ToolbarItem(placement: .topBarTrailing) { sortMenu }
+            ToolbarItem(placement: .topBarTrailing) {
+                LibrarySortMenu(
+                    segment: segment,
+                    albumSortRaw: $sortOptionRaw,
+                    albumDirectionRaw: $albumDirectionRaw,
+                    artistSortRaw: $artistSortRaw,
+                    artistDirectionRaw: $artistDirectionRaw,
+                    isOffline: offlineMode.isOffline,
+                    onAlbumSortChanged: { newValue in
+                        Task { await libraryStore.loadAlbums(sortBy: newValue) }
+                    }
+                )
+            }
         }
         if segment != .favorites {
-            ToolbarItem(placement: .topBarTrailing) { viewToggleButton }
+            ToolbarItem(placement: .topBarTrailing) {
+                LibraryViewToggleButton(
+                    segment: segment,
+                    albumIsGrid: $albumIsGrid,
+                    artistIsGrid: $artistIsGrid
+                )
+            }
         }
     }
 
@@ -274,7 +198,7 @@ struct LibraryView: View {
             // 1. Alben im Hintergrund gruppieren
             let calculatedAlbumGroups: [(letter: String, items: [Album])]
             if sortOpt == .alphabetical {
-                calculatedAlbumGroups = Self.groupByFirstLetter(albumsSource, name: \.name)
+                calculatedAlbumGroups = LibraryGrouping.groupByFirstLetter(albumsSource, name: \.name)
             } else {
                 let items = albumDir == .descending
                     ? albumsSource
@@ -298,7 +222,7 @@ struct LibraryView: View {
             // 3. Künstler im Hintergrund gruppieren
             let calculatedArtistGroups: [(letter: String, items: [Artist])]
             if artistSort == .alphabetical {
-                calculatedArtistGroups = Self.groupByFirstLetter(sortedArtists, name: \.name)
+                calculatedArtistGroups = LibraryGrouping.groupByFirstLetter(sortedArtists, name: \.name)
             } else {
                 let items = artistDir == .descending
                     ? sortedArtists
@@ -384,18 +308,6 @@ struct LibraryView: View {
                 by: { $0.artistId ?? "" }
             ).mapValues { $0.compactMap { $0.playCount }.reduce(0, +) }
             return source.sorted { (counts[$0.id] ?? 0) > (counts[$1.id] ?? 0) }
-        }
-    }
-
-    private func applyDirection<T>(
-        _ groups: [(letter: String, items: [T])],
-        direction: SortDirection
-    ) -> [(letter: String, items: [T])] {
-        switch direction {
-        case .ascending:
-            return groups
-        case .descending:
-            return groups.reversed().map { ($0.letter, Array($0.items.reversed())) }
         }
     }
 
@@ -529,32 +441,6 @@ struct LibraryView: View {
         InstantMixService.playArtistMix(for: artist, player: player)
     }
 
-    private func indexedScrollView<Content: View>(
-        letters: [String],
-        idPrefix: String,
-        scrollID: Binding<String?>,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        ScrollView {
-            content()
-                .padding(.trailing, letters.isEmpty ? 0 : 16)
-        }
-        .scrollPosition(id: scrollID)
-        .scrollIndicators(.hidden)
-        .overlay(alignment: .trailing) {
-            if !letters.isEmpty {
-                AlphabetIndexBar(letters: letters) { letter in
-                    withAnimation(.none) {
-                        scrollID.wrappedValue = "\(idPrefix)-\(letter)"
-                    }
-                }
-                .frame(width: 14)
-                .padding(.vertical, 16)
-                .padding(.trailing, 2)
-            }
-        }
-    }
-
     @ViewBuilder
     private var albumContent: some View {
         if albumIsGrid {
@@ -574,11 +460,11 @@ struct LibraryView: View {
                         .padding(.bottom, 14)
                     } header: {
                         if !group.letter.isEmpty {
-                            letterHeader(group.letter, id: "alb-\(group.letter)")
+                            LibraryLetterHeader(letter: group.letter, id: "alb-\(group.letter)")
                         }
                     }
                 }
-                bottomSpacer
+                PlayerBottomSpacer()
             }
         } else {
             ScrollViewReader { proxy in
@@ -595,7 +481,7 @@ struct LibraryView: View {
                         }
                         ForEach(group.items) { album in
                             Button { navigateToAlbum = album } label: {
-                                albumListRowContent(album)
+                                LibraryAlbumListRow(album: album)
                             }
                             .buttonStyle(.plain)
                             .contextMenu { albumContextMenuItems(album) }
@@ -660,7 +546,11 @@ struct LibraryView: View {
                     LazyVGrid(columns: columns, spacing: 14) {
                         ForEach(group.items) { artist in
                             NavigationLink(destination: ArtistDetailView(artist: artist)) {
-                                artistGridCell(artist)
+                                LibraryArtistGridCell(
+                                    artist: artist,
+                                    isDownloaded: downloadedArtistBadgeNames.contains(artist.name),
+                                    accentColor: accentColor
+                                )
                             }
                             .buttonStyle(.plain)
                             .contextMenu { artistContextMenuItems(artist) }
@@ -671,11 +561,11 @@ struct LibraryView: View {
                     .padding(.bottom, 14)
                 } header: {
                     if !group.letter.isEmpty {
-                        letterHeader(group.letter, id: "art-\(group.letter)")
+                        LibraryLetterHeader(letter: group.letter, id: "art-\(group.letter)")
                     }
                 }
             }
-            bottomSpacer
+            PlayerBottomSpacer()
         }
     }
 
@@ -695,7 +585,12 @@ struct LibraryView: View {
                     }
                     ForEach(group.items) { artist in
                         Button { navigateToArtist = artist } label: {
-                            artistListRow(artist)
+                            LibraryArtistListRow(
+                                artist: artist,
+                                localAlbumCount: displayAlbums.filter { $0.artistId == artist.id }.count,
+                                isDownloaded: downloadedArtistBadgeNames.contains(artist.name),
+                                accentColor: accentColor
+                            )
                         }
                         .buttonStyle(.plain)
                         .contextMenu { artistContextMenuItems(artist) }
@@ -757,61 +652,6 @@ struct LibraryView: View {
         }
     }
 
-    private func artistGridCell(_ artist: Artist) -> some View {
-        VStack(spacing: 8) {
-            ZStack(alignment: .bottomTrailing) {
-                AlbumArtView(coverArtId: artist.coverArt, size: 300, isCircle: true)
-                    .aspectRatio(1, contentMode: .fit)
-                if downloadedArtistBadgeNames.contains(artist.name) {
-                    Image(systemName: "arrow.down.circle.fill")
-                        .font(.caption)
-                        .foregroundStyle(.white)
-                        .padding(4)
-                        .background(accentColor, in: Circle())
-                        .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
-                        .padding(6)
-                }
-            }
-            Text(artist.name)
-                .font(.caption)
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
-        }
-    }
-
-    private func artistListRow(_ artist: Artist) -> some View {
-        HStack(spacing: 12) {
-            AlbumArtView(coverArtId: artist.coverArt, size: 150, isCircle: true)
-                .frame(width: 52, height: 52)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(artist.name)
-                    .font(.body)
-                    .lineLimit(1)
-                    .foregroundStyle(.primary)
-                let localCount = displayAlbums.filter { $0.artistId == artist.id }.count
-                if localCount > 0 {
-                    Text("\(localCount) \(String(localized: "albums"))")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            Spacer()
-            if downloadedArtistBadgeNames.contains(artist.name) {
-                Image(systemName: "arrow.down.circle.fill")
-                    .font(.caption)
-                    .foregroundStyle(.white)
-                    .padding(4)
-                    .background(accentColor, in: Circle())
-            }
-            Image(systemName: "chevron.right")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-        }
-        .padding(.horizontal)
-        .padding(.vertical, 9)
-        .contentShape(Rectangle())
-    }
-
     private var displayStarredSongs: [Song] {
         guard offlineMode.isOffline else { return libraryStore.starredSongs }
         return libraryStore.starredSongs.filter { downloadedSongIds.contains($0.id) }
@@ -845,7 +685,11 @@ struct LibraryView: View {
                     Section(String(localized: "artists")) {
                         ForEach(displayStarredArtists) { artist in
                             NavigationLink(destination: ArtistDetailView(artist: artist)) {
-                                favArtistRow(artist)
+                                LibraryFavoriteArtistRow(
+                                    artist: artist,
+                                    isDownloaded: downloadedArtistBadgeNames.contains(artist.name),
+                                    accentColor: accentColor
+                                )
                             }
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                 Button { haptic(); queueArtist(artist) } label: { Image(systemName: "text.badge.plus") }
@@ -879,7 +723,7 @@ struct LibraryView: View {
                     Section(String(localized: "albums")) {
                         ForEach(displayStarredAlbums) { album in
                             NavigationLink(destination: AlbumDetailView(album: album)) {
-                                favAlbumRow(album)
+                                LibraryFavoriteAlbumRow(album: album)
                             }
                             .contextMenu {
                                 albumContextMenuItems(album)
@@ -910,7 +754,7 @@ struct LibraryView: View {
                     Section(String(localized: "songs")) {
                         ForEach(displayStarredSongs) { song in
                             Button { player.playSong(song) } label: {
-                                starredSongRow(song)
+                                LibraryStarredSongRow(song: song)
                             }
                             .buttonStyle(.plain)
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
@@ -1139,188 +983,4 @@ struct LibraryView: View {
         }
     }
 
-    private func albumListRowContent(_ album: Album) -> some View {
-        HStack(spacing: 12) {
-            AlbumArtView(coverArtId: album.coverArt, size: 150, cornerRadius: 8)
-                .frame(width: 44, height: 44)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(album.name)
-                    .font(.body).lineLimit(1).foregroundStyle(.primary)
-                HStack(spacing: 6) {
-                    if let artist = album.artist {
-                        Text(artist).font(.caption).foregroundStyle(.secondary)
-                    }
-                    if let year = album.year {
-                        Text("·").font(.caption).foregroundStyle(.tertiary)
-                        Text(String(year)).font(.caption).foregroundStyle(.tertiary)
-                    }
-                }
-            }
-            Spacer()
-            AlbumDownloadBadge(albumId: album.id)
-        }
-        .padding(.vertical, 4)
-        .contentShape(Rectangle())
-    }
-
-    private func favArtistRow(_ artist: Artist) -> some View {
-        HStack(spacing: 12) {
-            AlbumArtView(coverArtId: artist.coverArt, size: 150, isCircle: true)
-                .frame(width: 44, height: 44)
-            Text(artist.name).font(.body).lineLimit(1)
-            Spacer()
-            if downloadedArtistBadgeNames.contains(artist.name) {
-                Image(systemName: "arrow.down.circle.fill")
-                    .font(.caption)
-                    .foregroundStyle(.white)
-                    .padding(4)
-                    .background(accentColor, in: Circle())
-                    .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
-            }
-        }
-        .padding(.vertical, 4)
-        .contentShape(Rectangle())
-    }
-
-    private func favAlbumRow(_ album: Album) -> some View {
-        HStack(spacing: 12) {
-            AlbumArtView(coverArtId: album.coverArt, size: 150, cornerRadius: 8)
-                .frame(width: 44, height: 44)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(album.name).font(.body).lineLimit(1)
-                if let artist = album.artist {
-                    Text(artist).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                }
-            }
-            Spacer()
-            AlbumDownloadBadge(albumId: album.id)
-        }
-        .padding(.vertical, 4)
-        .contentShape(Rectangle())
-    }
-
-    private func starredSongRow(_ song: Song) -> some View {
-        HStack(spacing: 12) {
-            AlbumArtView(coverArtId: song.coverArt, size: 150, cornerRadius: 8)
-                .frame(width: 44, height: 44)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(song.title)
-                    .font(.body).lineLimit(1).foregroundStyle(.primary)
-                if let artist = song.artist {
-                    Text(artist).font(.caption).foregroundStyle(.secondary)
-                }
-            }
-            Spacer()
-            DownloadStatusIcon(songId: song.id)
-            Text(song.durationFormatted)
-                .font(.caption2).foregroundStyle(.secondary).monospacedDigit()
-        }
-        .padding(.vertical, 4)
-        .contentShape(Rectangle())
-    }
-
-    private var viewToggleButton: some View {
-        Button {
-            withAnimation(.easeInOut(duration: 0.2)) {
-                if segment == .albums { albumIsGrid.toggle() }
-                else { artistIsGrid.toggle() }
-            }
-        } label: {
-            Image(systemName: (segment == .albums ? albumIsGrid : artistIsGrid)
-                  ? "list.bullet"
-                  : "square.grid.2x2")
-        }
-    }
-
-    @ViewBuilder
-    private var sortMenu: some View {
-        switch segment {
-        case .albums:
-            albumSortMenu
-        case .artists:
-            artistSortMenu
-        case .favorites:
-            EmptyView()
-        }
-    }
-
-    private var albumSortMenu: some View {
-        Menu {
-            Picker(selection: Binding(
-                get: { sortOptionRaw },
-                set: { newValue in
-                    sortOptionRaw = newValue
-                    Task { await libraryStore.loadAlbums(sortBy: newValue) }
-                }
-            )) {
-                ForEach(AlbumSortOption.allCases.filter { !offlineMode.isOffline || !$0.requiresServer }, id: \.rawValue) { option in
-                    Text(option.label).tag(option.rawValue)
-                }
-            } label: {
-                Label(String(localized: "sort"), systemImage: "arrow.up.arrow.down")
-            }
-
-            if sortOption != .alphabetical {
-                Picker(selection: $albumDirectionRaw) {
-                    ForEach(SortDirection.allCases, id: \.rawValue) { dir in
-                        Text(dir.label).tag(dir.rawValue)
-                    }
-                } label: {
-                    Label(String(localized: "direction"), systemImage: "arrow.up.and.down")
-                }
-            }
-        } label: {
-            Image(systemName: "arrow.up.arrow.down")
-        }
-    }
-
-    private var artistSortMenu: some View {
-        Menu {
-            Picker(selection: $artistSortRaw) {
-                ForEach(ArtistSortOption.allCases.filter { !offlineMode.isOffline || !$0.requiresServer }, id: \.rawValue) { option in
-                    Text(option.label).tag(option.rawValue)
-                }
-            } label: {
-                Label(String(localized: "sort"), systemImage: "arrow.up.arrow.down")
-            }
-
-            if artistSortOption != .alphabetical {
-                Picker(selection: $artistDirectionRaw) {
-                    ForEach(SortDirection.allCases, id: \.rawValue) { dir in
-                        Text(dir.label).tag(dir.rawValue)
-                    }
-                } label: {
-                    Label(String(localized: "direction"), systemImage: "arrow.up.and.down")
-                }
-            }
-        } label: {
-            Image(systemName: "arrow.up.arrow.down")
-        }
-    }
-
-    private func letterHeader(_ letter: String, id: String) -> some View {
-        Text(letter)
-            .font(.title2.weight(.bold))
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 16)
-            .padding(.top, 24)
-            .padding(.bottom, 10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background {
-                LinearGradient(
-                    stops: [
-                        .init(color: Color(UIColor.systemBackground),              location: 0.0),
-                        .init(color: Color(UIColor.systemBackground),              location: 0.65),
-                        .init(color: Color(UIColor.systemBackground).opacity(0),   location: 1.0),
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            }
-            .id(id)
-    }
-
-    private var bottomSpacer: some View {
-        PlayerBottomSpacer()
-    }
 }
