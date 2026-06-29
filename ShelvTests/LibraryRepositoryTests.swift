@@ -54,9 +54,9 @@ final class LibraryRepositoryTests: XCTestCase {
 
     func testRefreshAlbumsFailureKeepsPreviousGenerationVisible() async throws {
         let database = try await makeDatabase()
-        try await seedAlbums([album(id: "old", name: "Old")], database: database, generation: "old-generation")
+        try await seedAlbums([album(id: "shared", name: "Old")], database: database, generation: "old-generation")
         let api = FakeLibraryAPIClient(
-            albumPages: [[album(id: "new", name: "New")]],
+            albumPages: [[album(id: "shared", name: "New")]],
             failureAfterAlbumRequestCount: 1
         )
         let repository = LibraryRepository(database: database, api: api, pageSize: 1)
@@ -65,9 +65,9 @@ final class LibraryRepositoryTests: XCTestCase {
             _ = try await repository.refreshAlbums(serverKey: "server-a", stableId: "stable-a")
             XCTFail("Expected refresh to throw")
         } catch {
-            let cachedAlbumIds = try await database.albums(serverKey: "server-a").map(\.id)
+            let cachedAlbumNames = try await database.albums(serverKey: "server-a").map(\.name)
             let state = try await database.syncState(serverKey: "server-a", entity: .albums)
-            XCTAssertEqual(cachedAlbumIds, ["old"])
+            XCTAssertEqual(cachedAlbumNames, ["Old"])
             XCTAssertEqual(state?.status, "failed")
             XCTAssertEqual(state?.syncGeneration, "old-generation")
         }

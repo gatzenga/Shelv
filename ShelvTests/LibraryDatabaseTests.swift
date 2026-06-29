@@ -1,4 +1,5 @@
 import XCTest
+import GRDB
 
 final class LibraryDatabaseTests: XCTestCase {
     private var tempDir: URL!
@@ -101,16 +102,106 @@ final class LibraryDatabaseTests: XCTestCase {
     func testUnfinishedGenerationDoesNotReplaceVisibleLibrary() async throws {
         let database = try await makeDatabase()
 
-        try await writeAlbums([album(id: "old", name: "Old")], to: database, serverKey: "server-a", generation: "g1")
+        try await writeAlbums([album(id: "shared", name: "Old")], to: database, serverKey: "server-a", generation: "g1")
         try await database.beginGeneration(entity: .albums, serverKey: "server-a")
-        try await database.upsertAlbums([album(id: "new", name: "New")], serverKey: "server-a", stableId: nil, generation: "g2")
+        try await database.upsertAlbums([album(id: "shared", name: "New")], serverKey: "server-a", stableId: nil, generation: "g2")
 
-        let visibleDuringRefresh = try await database.albums(serverKey: "server-a").map(\.id)
-        XCTAssertEqual(visibleDuringRefresh, ["old"])
+        let visibleDuringRefresh = try await database.albums(serverKey: "server-a").map(\.name)
+        XCTAssertEqual(visibleDuringRefresh, ["Old"])
 
         try await database.finishGeneration(entity: .albums, serverKey: "server-a", generation: "g2")
-        let visibleAfterFinish = try await database.albums(serverKey: "server-a").map(\.id)
-        XCTAssertEqual(visibleAfterFinish, ["new"])
+        let visibleAfterFinish = try await database.albums(serverKey: "server-a").map(\.name)
+        XCTAssertEqual(visibleAfterFinish, ["New"])
+    }
+
+    func testFailedAlbumGenerationKeepsPreviousRecordWhenIDsOverlap() async throws {
+        let database = try await makeDatabase()
+
+        try await writeAlbums([album(id: "shared", name: "Old")], to: database, serverKey: "server-a", generation: "g1")
+        try await database.beginGeneration(entity: .albums, serverKey: "server-a")
+        try await database.upsertAlbums([album(id: "shared", name: "New")], serverKey: "server-a", stableId: nil, generation: "g2")
+        try await database.recordFailure(entity: .albums, serverKey: "server-a", error: TestLibraryError.refreshFailed)
+
+        let visibleAfterFailure = try await database.albums(serverKey: "server-a").map(\.name)
+        let state = try await database.syncState(serverKey: "server-a", entity: .albums)
+        XCTAssertEqual(visibleAfterFailure, ["Old"])
+        XCTAssertEqual(state?.status, "failed")
+        XCTAssertEqual(state?.syncGeneration, "g1")
+    }
+
+    func testFailedArtistGenerationKeepsPreviousRecordWhenIDsOverlap() async throws {
+        let database = try await makeDatabase()
+
+        try await writeArtists([artist(id: "shared", name: "Old Artist")], to: database, serverKey: "server-a", generation: "g1")
+        try await database.beginGeneration(entity: .artists, serverKey: "server-a")
+        try await database.upsertArtists([artist(id: "shared", name: "New Artist")], serverKey: "server-a", stableId: nil, generation: "g2")
+        try await database.recordFailure(entity: .artists, serverKey: "server-a", error: TestLibraryError.refreshFailed)
+
+        let visibleAfterFailure = try await database.artists(serverKey: "server-a").map(\.name)
+        let state = try await database.syncState(serverKey: "server-a", entity: .artists)
+        XCTAssertEqual(visibleAfterFailure, ["Old Artist"])
+        XCTAssertEqual(state?.status, "failed")
+        XCTAssertEqual(state?.syncGeneration, "g1")
+    }
+
+    func testSuccessfulEmptyGenerationClearsVisibleLibrary() async throws {
+        let database = try await makeDatabase()
+
+        try await writeAlbums([album(id: "old", name: "Old")], to: database, serverKey: "server-a", generation: "g1")
+        try await database.beginGeneration(entity: .albums, serverKey: "server-a")
+        try await database.finishGeneration(entity: .albums, serverKey: "server-a", generation: "empty")
+
+        let fetched = try await database.albums(serverKey: "server-a")
+        let state = try await database.syncState(serverKey: "server-a", entity: .albums)
+        XCTAssertTrue(fetched.isEmpty)
+        XCTAssertEqual(state?.status, "completed")
+        XCTAssertEqual(state?.syncGeneration, "empty")
+        XCTAssertEqual(state?.rowCount, 0)
+    }
+
+    func testSameAlbumIDCanExistOnDifferentServers() async throws {
+        let database = try await makeDatabase()
+
+        try await writeAlbums([album(id: "shared", name: "Server A")], to: database, serverKey: "server-a", generation: "g1")
+        try await writeAlbums([album(id: "shared", name: "Server B")], to: database, serverKey: "server-b", generation: "g1")
+
+        let serverAAlbums = try await database.albums(serverKey: "server-a").map(\.name)
+        let serverBAlbums = try await database.albums(serverKey: "server-b").map(\.name)
+        XCTAssertEqual(serverAAlbums, ["Server A"])
+        XCTAssertEqual(serverBAlbums, ["Server B"])
+    }
+
+    func testMigratesLegacyPrimaryKeySchemaToGenerationSafeKeys() async throws {
+        let databaseURL = tempDir.appendingPathComponent("legacy-library.db")
+        try createLegacyV1Database(at: databaseURL)
+        let database = LibraryDatabase(databaseURL: databaseURL)
+
+        try await database.setup()
+        let migratedAlbumNames = try await database.albums(serverKey: "server-a").map(\.name)
+        let migratedArtistNames = try await database.artists(serverKey: "server-a").map(\.name)
+        XCTAssertEqual(migratedAlbumNames, ["Old Album"])
+        XCTAssertEqual(migratedArtistNames, ["Old Artist"])
+
+        try await database.beginGeneration(entity: .albums, serverKey: "server-a")
+        try await database.upsertAlbums([album(id: "shared", name: "New Album")], serverKey: "server-a", stableId: "stable-a", generation: "g2")
+        try await database.beginGeneration(entity: .artists, serverKey: "server-a")
+        try await database.upsertArtists([artist(id: "shared", name: "New Artist")], serverKey: "server-a", stableId: "stable-a", generation: "g2")
+
+        let visibleAlbumNamesDuringRefresh = try await database.albums(serverKey: "server-a").map(\.name)
+        let visibleArtistNamesDuringRefresh = try await database.artists(serverKey: "server-a").map(\.name)
+        XCTAssertEqual(visibleAlbumNamesDuringRefresh, ["Old Album"])
+        XCTAssertEqual(visibleArtistNamesDuringRefresh, ["Old Artist"])
+
+        try await database.recordFailure(entity: .albums, serverKey: "server-a", error: TestLibraryError.refreshFailed)
+        try await database.recordFailure(entity: .artists, serverKey: "server-a", error: TestLibraryError.refreshFailed)
+        let visibleAlbumNamesAfterFailure = try await database.albums(serverKey: "server-a").map(\.name)
+        let visibleArtistNamesAfterFailure = try await database.artists(serverKey: "server-a").map(\.name)
+        let albumStateAfterFailure = try await database.syncState(serverKey: "server-a", entity: .albums)
+        let artistStateAfterFailure = try await database.syncState(serverKey: "server-a", entity: .artists)
+        XCTAssertEqual(visibleAlbumNamesAfterFailure, ["Old Album"])
+        XCTAssertEqual(visibleArtistNamesAfterFailure, ["Old Artist"])
+        XCTAssertEqual(albumStateAfterFailure?.syncGeneration, "g1")
+        XCTAssertEqual(artistStateAfterFailure?.syncGeneration, "g1")
     }
 
     func testClearOnlyDeletesSelectedServer() async throws {
@@ -158,6 +249,126 @@ final class LibraryDatabaseTests: XCTestCase {
         return database
     }
 
+    private func createLegacyV1Database(at url: URL) throws {
+        var migrator = DatabaseMigrator()
+        migrator.registerMigration("v1_create_library_cache") { db in
+            try Self.createLegacyLibraryAlbumsTable(db)
+            try Self.createLegacyLibraryArtistsTable(db)
+            try Self.createLegacyLibrarySyncStateTable(db)
+            try Self.insertLegacyVisibleAlbum(db)
+            try Self.insertLegacyVisibleArtist(db)
+        }
+        try migrator.migrate(DatabaseQueue(path: url.path))
+    }
+
+    nonisolated private static func createLegacyLibraryAlbumsTable(_ db: Database) throws {
+        try db.create(table: "library_albums") { t in
+            t.column("serverKey", .text).notNull()
+            t.column("stableId", .text)
+            t.column("id", .text).notNull()
+            t.column("name", .text).notNull()
+            t.column("sortName", .text).notNull()
+            t.column("artist", .text)
+            t.column("artistId", .text)
+            t.column("coverArt", .text)
+            t.column("songCount", .integer)
+            t.column("duration", .integer)
+            t.column("year", .integer)
+            t.column("genre", .text)
+            t.column("playCount", .integer)
+            t.column("starred", .double)
+            t.column("created", .double)
+            t.column("syncGeneration", .text).notNull()
+            t.column("updatedAt", .double).notNull()
+            t.primaryKey(["serverKey", "id"])
+        }
+        try db.create(index: "idx_library_albums_sortName", on: "library_albums", columns: ["serverKey", "sortName"])
+        try db.create(index: "idx_library_albums_artistId", on: "library_albums", columns: ["serverKey", "artistId"])
+        try db.create(index: "idx_library_albums_year", on: "library_albums", columns: ["serverKey", "year"])
+        try db.create(index: "idx_library_albums_playCount", on: "library_albums", columns: ["serverKey", "playCount"])
+        try db.create(index: "idx_library_albums_created", on: "library_albums", columns: ["serverKey", "created"])
+        try db.create(index: "idx_library_albums_artist_sortName", on: "library_albums", columns: ["serverKey", "artist", "sortName"])
+    }
+
+    nonisolated private static func createLegacyLibraryArtistsTable(_ db: Database) throws {
+        try db.create(table: "library_artists") { t in
+            t.column("serverKey", .text).notNull()
+            t.column("stableId", .text)
+            t.column("id", .text).notNull()
+            t.column("name", .text).notNull()
+            t.column("sortName", .text).notNull()
+            t.column("albumCount", .integer)
+            t.column("coverArt", .text)
+            t.column("starred", .double)
+            t.column("syncGeneration", .text).notNull()
+            t.column("updatedAt", .double).notNull()
+            t.primaryKey(["serverKey", "id"])
+        }
+        try db.create(index: "idx_library_artists_sortName", on: "library_artists", columns: ["serverKey", "sortName"])
+        try db.create(index: "idx_library_artists_albumCount", on: "library_artists", columns: ["serverKey", "albumCount"])
+    }
+
+    nonisolated private static func createLegacyLibrarySyncStateTable(_ db: Database) throws {
+        try db.create(table: "library_sync_state") { t in
+            t.column("serverKey", .text).notNull()
+            t.column("entity", .text).notNull()
+            t.column("status", .text).notNull()
+            t.column("startedAt", .double)
+            t.column("completedAt", .double)
+            t.column("syncGeneration", .text)
+            t.column("rowCount", .integer)
+            t.column("lastError", .text)
+            t.primaryKey(["serverKey", "entity"])
+        }
+    }
+
+    nonisolated private static func insertLegacyVisibleAlbum(_ db: Database) throws {
+        try db.execute(
+            sql: """
+            INSERT INTO library_albums (
+                serverKey, stableId, id, name, sortName, artist, artistId, coverArt,
+                songCount, duration, year, genre, playCount, starred, created, syncGeneration, updatedAt
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            arguments: [
+                "server-a", "stable-a", "shared", "Old Album", "old album", "Old Artist", "shared",
+                "cover-a", 1, 60, 2020, "Rock", 7, 1_700_000_000.0, 1_700_000_001.0, "g1", 1_700_000_002.0,
+            ]
+        )
+        try db.execute(
+            sql: """
+            INSERT INTO library_sync_state
+                (serverKey, entity, status, startedAt, completedAt, syncGeneration, rowCount, lastError)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            arguments: ["server-a", "albums", "completed", 1.0, 2.0, "g1", 1, nil]
+        )
+    }
+
+    nonisolated private static func insertLegacyVisibleArtist(_ db: Database) throws {
+        try db.execute(
+            sql: """
+            INSERT INTO library_artists (
+                serverKey, stableId, id, name, sortName, albumCount, coverArt, starred, syncGeneration, updatedAt
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            arguments: [
+                "server-a", "stable-a", "shared", "Old Artist", "old artist", 1, "cover-a",
+                1_700_000_000.0, "g1", 1_700_000_002.0,
+            ]
+        )
+        try db.execute(
+            sql: """
+            INSERT INTO library_sync_state
+                (serverKey, entity, status, startedAt, completedAt, syncGeneration, rowCount, lastError)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            arguments: ["server-a", "artists", "completed", 1.0, 2.0, "g1", 1, nil]
+        )
+    }
+
     private func writeAlbums(
         _ albums: [Album],
         to database: LibraryDatabase,
@@ -199,4 +410,12 @@ final class LibraryDatabaseTests: XCTestCase {
             created: created.map(Date.init(timeIntervalSince1970:))
         )
     }
+
+    private func artist(id: String, name: String) -> Artist {
+        Artist(id: id, name: name)
+    }
+}
+
+private enum TestLibraryError: Error {
+    case refreshFailed
 }

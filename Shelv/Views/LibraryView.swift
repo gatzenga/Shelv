@@ -157,10 +157,10 @@ struct LibraryView: View {
     private var stackContent: some View {
         stackBase
         .onAppear { rebuildGroups() }
-        .onChange(of: libraryStore.albums) { _, _ in rebuildGroups() }
-        .onChange(of: libraryStore.artists) { _, _ in rebuildGroups() }
-        .onChange(of: downloadStore.albums) { _, _ in rebuildGroups() }
-        .onChange(of: downloadStore.artists) { _, _ in rebuildGroups() }
+        .onReceive(libraryStore.$albums) { _ in Task { @MainActor in rebuildGroups() } }
+        .onReceive(libraryStore.$artists) { _ in Task { @MainActor in rebuildGroups() } }
+        .onReceive(downloadStore.$albums) { _ in Task { @MainActor in rebuildGroups() } }
+        .onReceive(downloadStore.$artists) { _ in Task { @MainActor in rebuildGroups() } }
         .onChange(of: offlineMode.isOffline) { _, isOffline in
             if isOffline {
                 if let cont = refreshContinuation {
@@ -207,12 +207,15 @@ struct LibraryView: View {
                 calculatedAlbumGroups = items.isEmpty ? [] : [(letter: "", items: items)]
             }
 
-            var calculatedAlbumCountByArtist: [String: Int] = [:]
-            calculatedAlbumCountByArtist.reserveCapacity(min(albumsSource.count, artistsSource.count))
-            for album in albumsSource {
-                guard let artistId = album.artistId, !artistId.isEmpty else { continue }
-                calculatedAlbumCountByArtist[artistId, default: 0] += 1
-            }
+            let calculatedAlbumCountByArtist: [String: Int] = {
+                var counts: [String: Int] = [:]
+                counts.reserveCapacity(min(albumsSource.count, artistsSource.count))
+                for album in albumsSource {
+                    guard let artistId = album.artistId, !artistId.isEmpty else { continue }
+                    counts[artistId, default: 0] += 1
+                }
+                return counts
+            }()
 
             // 2. Künstler im Hintergrund sortieren
             let sortedArtists: [Artist]

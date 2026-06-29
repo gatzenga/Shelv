@@ -274,6 +274,16 @@ actor LibraryDatabase {
     func recordFailure(entity: LibraryEntity, serverKey: String, error: Error) throws {
         try ensurePool().write { db in
             let message = error.localizedDescription
+            let table = Self.tableName(for: entity)
+            if let visibleGeneration = try visibleGeneration(db: db, serverKey: serverKey, entity: entity) {
+                try db.execute(
+                    sql: "DELETE FROM \(table) WHERE serverKey = ? AND syncGeneration != ?",
+                    arguments: [serverKey, visibleGeneration]
+                )
+            } else {
+                try db.execute(sql: "DELETE FROM \(table) WHERE serverKey = ?", arguments: [serverKey])
+            }
+
             let exists = try Int.fetchOne(
                 db,
                 sql: "SELECT COUNT(*) FROM library_sync_state WHERE serverKey = ? AND entity = ?",
@@ -515,14 +525,9 @@ actor LibraryDatabase {
                 t.column("created", .double)
                 t.column("syncGeneration", .text).notNull()
                 t.column("updatedAt", .double).notNull()
-                t.primaryKey(["serverKey", "id"])
+                t.primaryKey(["serverKey", "syncGeneration", "id"])
             }
-            try db.create(index: "idx_library_albums_sortName", on: "library_albums", columns: ["serverKey", "sortName"], ifNotExists: true)
-            try db.create(index: "idx_library_albums_artistId", on: "library_albums", columns: ["serverKey", "artistId"], ifNotExists: true)
-            try db.create(index: "idx_library_albums_year", on: "library_albums", columns: ["serverKey", "year"], ifNotExists: true)
-            try db.create(index: "idx_library_albums_playCount", on: "library_albums", columns: ["serverKey", "playCount"], ifNotExists: true)
-            try db.create(index: "idx_library_albums_created", on: "library_albums", columns: ["serverKey", "created"], ifNotExists: true)
-            try db.create(index: "idx_library_albums_artist_sortName", on: "library_albums", columns: ["serverKey", "artist", "sortName"], ifNotExists: true)
+            try Self.createLibraryAlbumIndexes(db)
 
             try db.create(table: "library_artists", ifNotExists: true) { t in
                 t.column("serverKey", .text).notNull()
@@ -535,10 +540,9 @@ actor LibraryDatabase {
                 t.column("starred", .double)
                 t.column("syncGeneration", .text).notNull()
                 t.column("updatedAt", .double).notNull()
-                t.primaryKey(["serverKey", "id"])
+                t.primaryKey(["serverKey", "syncGeneration", "id"])
             }
-            try db.create(index: "idx_library_artists_sortName", on: "library_artists", columns: ["serverKey", "sortName"], ifNotExists: true)
-            try db.create(index: "idx_library_artists_albumCount", on: "library_artists", columns: ["serverKey", "albumCount"], ifNotExists: true)
+            try Self.createLibraryArtistIndexes(db)
 
             try db.create(table: "library_sync_state", ifNotExists: true) { t in
                 t.column("serverKey", .text).notNull()
@@ -552,8 +556,140 @@ actor LibraryDatabase {
                 t.primaryKey(["serverKey", "entity"])
             }
         }
+        migrator.registerMigration("v2_generation_primary_keys") { db in
+            try Self.rekeyLibraryTableIfNeeded(
+                db,
+                table: "library_albums",
+                temporaryTable: "library_albums_v1",
+                dropIndexes: Self.dropLibraryAlbumIndexes,
+                createTable: Self.createLibraryAlbumsTable,
+                createIndexes: Self.createLibraryAlbumIndexes
+            )
+            try Self.rekeyLibraryTableIfNeeded(
+                db,
+                table: "library_artists",
+                temporaryTable: "library_artists_v1",
+                dropIndexes: Self.dropLibraryArtistIndexes,
+                createTable: Self.createLibraryArtistsTable,
+                createIndexes: Self.createLibraryArtistIndexes
+            )
+        }
         try migrator.migrate(pool)
         return pool
+    }
+
+    private static func createLibraryAlbumsTable(_ db: Database) throws {
+        try db.create(table: "library_albums") { t in
+            t.column("serverKey", .text).notNull()
+            t.column("stableId", .text)
+            t.column("id", .text).notNull()
+            t.column("name", .text).notNull()
+            t.column("sortName", .text).notNull()
+            t.column("artist", .text)
+            t.column("artistId", .text)
+            t.column("coverArt", .text)
+            t.column("songCount", .integer)
+            t.column("duration", .integer)
+            t.column("year", .integer)
+            t.column("genre", .text)
+            t.column("playCount", .integer)
+            t.column("starred", .double)
+            t.column("created", .double)
+            t.column("syncGeneration", .text).notNull()
+            t.column("updatedAt", .double).notNull()
+            t.primaryKey(["serverKey", "syncGeneration", "id"])
+        }
+    }
+
+    private static func createLibraryArtistsTable(_ db: Database) throws {
+        try db.create(table: "library_artists") { t in
+            t.column("serverKey", .text).notNull()
+            t.column("stableId", .text)
+            t.column("id", .text).notNull()
+            t.column("name", .text).notNull()
+            t.column("sortName", .text).notNull()
+            t.column("albumCount", .integer)
+            t.column("coverArt", .text)
+            t.column("starred", .double)
+            t.column("syncGeneration", .text).notNull()
+            t.column("updatedAt", .double).notNull()
+            t.primaryKey(["serverKey", "syncGeneration", "id"])
+        }
+    }
+
+    private static func createLibraryAlbumIndexes(_ db: Database) throws {
+        try db.create(index: "idx_library_albums_sortName", on: "library_albums", columns: ["serverKey", "syncGeneration", "sortName"], ifNotExists: true)
+        try db.create(index: "idx_library_albums_artistId", on: "library_albums", columns: ["serverKey", "syncGeneration", "artistId"], ifNotExists: true)
+        try db.create(index: "idx_library_albums_year", on: "library_albums", columns: ["serverKey", "syncGeneration", "year"], ifNotExists: true)
+        try db.create(index: "idx_library_albums_playCount", on: "library_albums", columns: ["serverKey", "syncGeneration", "playCount"], ifNotExists: true)
+        try db.create(index: "idx_library_albums_created", on: "library_albums", columns: ["serverKey", "syncGeneration", "created"], ifNotExists: true)
+        try db.create(index: "idx_library_albums_artist_sortName", on: "library_albums", columns: ["serverKey", "syncGeneration", "artist", "sortName"], ifNotExists: true)
+    }
+
+    private static func createLibraryArtistIndexes(_ db: Database) throws {
+        try db.create(index: "idx_library_artists_sortName", on: "library_artists", columns: ["serverKey", "syncGeneration", "sortName"], ifNotExists: true)
+        try db.create(index: "idx_library_artists_albumCount", on: "library_artists", columns: ["serverKey", "syncGeneration", "albumCount"], ifNotExists: true)
+    }
+
+    private static func dropLibraryAlbumIndexes(_ db: Database) throws {
+        for name in [
+            "idx_library_albums_sortName",
+            "idx_library_albums_artistId",
+            "idx_library_albums_year",
+            "idx_library_albums_playCount",
+            "idx_library_albums_created",
+            "idx_library_albums_artist_sortName",
+        ] {
+            try db.execute(sql: "DROP INDEX IF EXISTS \(name)")
+        }
+    }
+
+    private static func dropLibraryArtistIndexes(_ db: Database) throws {
+        for name in [
+            "idx_library_artists_sortName",
+            "idx_library_artists_albumCount",
+        ] {
+            try db.execute(sql: "DROP INDEX IF EXISTS \(name)")
+        }
+    }
+
+    private static func rekeyLibraryTableIfNeeded(
+        _ db: Database,
+        table: String,
+        temporaryTable: String,
+        dropIndexes: (Database) throws -> Void,
+        createTable: (Database) throws -> Void,
+        createIndexes: (Database) throws -> Void
+    ) throws {
+        let primaryKey = try primaryKeyColumns(db: db, table: table)
+        guard primaryKey != ["serverKey", "syncGeneration", "id"] else {
+            try createIndexes(db)
+            return
+        }
+
+        try dropIndexes(db)
+        try db.execute(sql: "DROP TABLE IF EXISTS \(temporaryTable)")
+        try db.execute(sql: "ALTER TABLE \(table) RENAME TO \(temporaryTable)")
+        try createTable(db)
+        try db.execute(
+            sql: """
+            INSERT INTO \(table)
+            SELECT * FROM \(temporaryTable)
+            """
+        )
+        try db.execute(sql: "DROP TABLE \(temporaryTable)")
+        try createIndexes(db)
+    }
+
+    private static func primaryKeyColumns(db: Database, table: String) throws -> [String] {
+        let rows = try Row.fetchAll(db, sql: "PRAGMA table_info(\(table))")
+        return rows.compactMap { row -> (Int, String)? in
+            let sequence: Int = row["pk"]
+            guard sequence > 0 else { return nil }
+            return (sequence, row["name"])
+        }
+        .sorted { $0.0 < $1.0 }
+        .map(\.1)
     }
 
     private func visibleGeneration(db: Database, serverKey: String, entity: LibraryEntity) throws -> String? {

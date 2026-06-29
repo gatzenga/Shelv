@@ -32,6 +32,10 @@ struct LibraryView: View {
 
     @State private var segment = 0   // 0 = Albums, 1 = Artists, 2 = Favorites
     @State private var path = NavigationPath()
+    @State private var derivedAlbums: [Album] = []
+    @State private var derivedArtists: [Artist] = []
+    @State private var derivedAlbumCountByArtist: [String: Int] = [:]
+    @State private var derivedRebuildTask: Task<Void, Never>?
     private let player = AudioPlayerService.shared
 
     private var albumSort: AlbumSortOption { AlbumSortOption(rawValue: albumSortRaw) ?? .alphabetical }
@@ -40,27 +44,6 @@ struct LibraryView: View {
 
     /// "year" wird client-seitig sortiert → der Server liefert dafür die alphabetische Liste.
     private var albumServerType: String { albumSort == .year ? "alphabeticalByName" : albumSort.rawValue }
-
-    private var displayAlbums: [Album] {
-        var result = store.albums
-        if albumSort == .year { result.sort { ($0.year ?? 0) < ($1.year ?? 0) } }
-        if albumDir == .descending { result.reverse() }
-        return result
-    }
-
-    private var displayArtists: [Artist] {
-        artistDir == .descending ? store.artists.reversed() : store.artists
-    }
-
-    private var albumCountByArtist: [String: Int] {
-        var counts: [String: Int] = [:]
-        counts.reserveCapacity(store.artists.count)
-        for album in store.albums {
-            guard let artistId = album.artistId, !artistId.isEmpty else { continue }
-            counts[artistId, default: 0] += 1
-        }
-        return counts
-    }
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -84,11 +67,11 @@ struct LibraryView: View {
                 Group {
                     switch segment {
                     case 0:
-                        if albumIsGrid { coverGrid(displayAlbums) { AlbumCard(album: $0) } }
-                        else { albumList }
+                        if albumIsGrid { coverGrid(derivedAlbums) { AlbumCard(album: $0) } }
+                        else { albumList(derivedAlbums) }
                     case 1:
-                        if artistIsGrid { coverGrid(displayArtists) { ArtistCard(artist: $0) } }
-                        else { artistList }
+                        if artistIsGrid { coverGrid(derivedArtists) { ArtistCard(artist: $0) } }
+                        else { artistList(derivedArtists, counts: derivedAlbumCountByArtist) }
                     default:
                         favoritesList
                     }
@@ -100,6 +83,60 @@ struct LibraryView: View {
             .task(id: "\(store.reloadID)|\(albumServerType)") { await store.loadAlbums(sortBy: albumServerType) }
             .task(id: store.reloadID) { await store.loadArtists() }
             .task(id: "\(store.reloadID)|\(enableFavorites)") { if enableFavorites { await store.loadStarred() } }
+            .onAppear { rebuildDerivedLibraryState() }
+            .onReceive(store.$albums) { _ in Task { @MainActor in rebuildDerivedLibraryState() } }
+            .onReceive(store.$artists) { _ in Task { @MainActor in rebuildDerivedLibraryState() } }
+            .onChange(of: albumSortRaw) { _, _ in rebuildDerivedLibraryState() }
+            .onChange(of: albumDirRaw) { _, _ in rebuildDerivedLibraryState() }
+            .onChange(of: artistDirRaw) { _, _ in rebuildDerivedLibraryState() }
+            .onDisappear {
+                derivedRebuildTask?.cancel()
+                derivedRebuildTask = nil
+            }
+        }
+    }
+
+    private func rebuildDerivedLibraryState() {
+        derivedRebuildTask?.cancel()
+
+        let albums = store.albums
+        let artists = store.artists
+        let sort = albumSort
+        let albumDirection = albumDir
+        let artistDirection = artistDir
+
+        derivedRebuildTask = Task.detached(priority: .userInitiated) {
+            let nextAlbums: [Album] = {
+                var result = albums
+                if sort == .year {
+                    result.sort { ($0.year ?? 0) < ($1.year ?? 0) }
+                }
+                if albumDirection == .descending {
+                    result.reverse()
+                }
+                return result
+            }()
+
+            let nextArtists: [Artist] = artistDirection == .descending
+                ? Array(artists.reversed())
+                : artists
+
+            let nextAlbumCountByArtist: [String: Int] = {
+                var counts: [String: Int] = [:]
+                counts.reserveCapacity(artists.count)
+                for album in albums {
+                    guard let artistId = album.artistId, !artistId.isEmpty else { continue }
+                    counts[artistId, default: 0] += 1
+                }
+                return counts
+            }()
+
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                derivedAlbums = nextAlbums
+                derivedArtists = nextArtists
+                derivedAlbumCountByArtist = nextAlbumCountByArtist
+            }
         }
     }
 
@@ -158,10 +195,10 @@ struct LibraryView: View {
 
     // MARK: - Listen-Ansicht (Alben / Künstler)
 
-    private var albumList: some View {
+    private func albumList(_ albums: [Album]) -> some View {
         ScrollView {
             LazyVStack(spacing: 4) {
-                ForEach(displayAlbums) { album in
+                ForEach(albums) { album in
                     AlbumListRow(album: album) { path.append(album) }
                 }
             }
@@ -170,12 +207,10 @@ struct LibraryView: View {
         .scrollIndicators(.hidden)
     }
 
-    private var artistList: some View {
-        let counts = albumCountByArtist
-
-        return ScrollView {
+    private func artistList(_ artists: [Artist], counts: [String: Int]) -> some View {
+        ScrollView {
             LazyVStack(spacing: 4) {
-                ForEach(displayArtists) { artist in
+                ForEach(artists) { artist in
                     ArtistListRow(artist: artist,
                                   albumCount: counts[artist.id] ?? artist.albumCount ?? 0) {
                         path.append(artist)

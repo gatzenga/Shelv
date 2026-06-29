@@ -29,6 +29,9 @@ struct ArtistsView: View {
     }
 
     var body: some View {
+        let displayArtists = self.displayArtists
+        let lastArtistID = displayArtists.last?.id
+
         VStack(spacing: 0) {
             HStack {
                 TextField(String(localized: "filter"), text: $searchText)
@@ -95,7 +98,7 @@ struct ArtistsView: View {
                             }
                             .buttonStyle(.plain)
                             .artistContextMenu(artist)
-                            if artist.id != displayArtists.last?.id {
+                            if artist.id != lastArtistID {
                                 Divider().padding(.leading, 76)
                             }
                         }

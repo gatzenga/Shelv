@@ -32,6 +32,9 @@ struct AlbumsView: View {
     }
 
     var body: some View {
+        let displayAlbums = self.displayAlbums
+        let lastAlbumID = displayAlbums.last?.id
+
         VStack(spacing: 0) {
             HStack {
                 TextField(String(localized: "filter"), text: $searchText)
@@ -101,7 +104,7 @@ struct AlbumsView: View {
                             }
                             .buttonStyle(.plain)
                             .albumContextMenu(album)
-                            if album.id != displayAlbums.last?.id {
+                            if album.id != lastAlbumID {
                                 Divider().padding(.leading, 76)
                             }
                         }

@@ -5,35 +5,57 @@ import Combine
 class LibraryViewModel: ObservableObject {
     static let shared = LibraryViewModel()
 
-    @Published var albums: [Album] = []
-    @Published var artists: [Artist] = []
-    @Published var sortOption: LibrarySortOption = .name
-    @Published var albumSortDirection: SortDirection = .ascending
-    @Published var artistSortOption: ArtistSortOption = .name
-    @Published var artistSortDirection: SortDirection = .ascending
+    @Published var albums: [Album] = [] {
+        didSet {
+            rebuildSortedAlbums()
+            rebuildSortedArtists()
+        }
+    }
+    @Published var artists: [Artist] = [] {
+        didSet { rebuildSortedArtists() }
+    }
+    @Published var sortOption: LibrarySortOption = .name {
+        didSet { rebuildSortedAlbums() }
+    }
+    @Published var albumSortDirection: SortDirection = .ascending {
+        didSet { rebuildSortedAlbums() }
+    }
+    @Published var artistSortOption: ArtistSortOption = .name {
+        didSet { rebuildSortedArtists() }
+    }
+    @Published var artistSortDirection: SortDirection = .ascending {
+        didSet { rebuildSortedArtists() }
+    }
+    @Published private(set) var sortedAlbums: [Album] = []
+    @Published private(set) var sortedArtists: [Artist] = []
     @Published var isLoadingAlbums: Bool = false
     @Published var isLoadingArtists: Bool = false
     @Published var errorMessage: String?
 
-    var sortedAlbums: [Album] {
-        // Name immer A-Z, unabhängig von direction
-        if sortOption == .name { return albums }
-        return albumSortDirection == sortOption.naturalDirection
+    private func rebuildSortedAlbums() {
+        // Name immer A-Z, unabhängig von direction.
+        if sortOption == .name {
+            sortedAlbums = albums
+            return
+        }
+        sortedAlbums = albumSortDirection == sortOption.naturalDirection
             ? albums
             : Array(albums.reversed())
     }
 
-    var sortedArtists: [Artist] {
+    private func rebuildSortedArtists() {
         let base: [Artist]
         switch artistSortOption {
         case .name:
-            return artists.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            sortedArtists = artists
+                .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            return
         case .mostPlayed:
             let counts = Dictionary(grouping: albums, by: { $0.artistId ?? "" })
                 .mapValues { $0.compactMap { $0.playCount }.reduce(0, +) }
             base = artists.sorted { (counts[$0.id] ?? 0) > (counts[$1.id] ?? 0) }
         }
-        return artistSortDirection == artistSortOption.naturalDirection
+        sortedArtists = artistSortDirection == artistSortOption.naturalDirection
             ? base
             : Array(base.reversed())
     }
@@ -154,19 +176,6 @@ class LibraryViewModel: ObservableObject {
             errorMessage = error.localizedDescription
         }
         isLoadingArtists = false
-    }
-
-    func applySortToAlbums() {
-        switch sortOption {
-        case .name:
-            albums = albums.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-        case .mostPlayed:
-            albums = albums.sorted { ($0.playCount ?? 0) > ($1.playCount ?? 0) }
-        case .recentlyAdded:
-            break // already sorted by server
-        case .year:
-            albums = albums.sorted { ($0.year ?? 0) > ($1.year ?? 0) }
-        }
     }
 
     private static func subsonicSortKey(for option: LibrarySortOption) -> String {
@@ -360,12 +369,6 @@ class LibraryViewModel: ObservableObject {
         FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("shelv_library_cache")
-    }
-
-    nonisolated private static func saveLibraryCache<T: Encodable>(_ value: T, name: String, serverId: String) {
-        let dir = libraryCacheDir
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        try? JSONEncoder().encode(value).write(to: dir.appendingPathComponent("\(name)_\(serverId).json"))
     }
 
     nonisolated private static func loadLibraryCache<T: Decodable>(_ type: T.Type, name: String, serverId: String) -> T? {
