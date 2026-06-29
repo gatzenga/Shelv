@@ -56,12 +56,19 @@ final class QueueSyncService: ObservableObject {
 
     private func knownKey(_ serverId: String) -> String { "shelv_queuesync_known_\(serverId)" }
     private func dismissedKey(_ serverId: String) -> String { "shelv_queuesync_dismissed_\(serverId)" }
+    private func uploadFingerprintKey(_ serverId: String) -> String { "shelv_queuesync_uploadfp_\(serverId)" }
 
     private func lastKnownSignature(_ serverId: String) -> String? {
         UserDefaults.standard.string(forKey: knownKey(serverId))
     }
     private func setLastKnownSignature(_ sig: String, serverId: String) {
         UserDefaults.standard.set(sig, forKey: knownKey(serverId))
+    }
+    private func lastUploadFingerprint(_ serverId: String) -> String? {
+        UserDefaults.standard.string(forKey: uploadFingerprintKey(serverId))
+    }
+    private func setLastUploadFingerprint(_ fingerprint: String, serverId: String) {
+        UserDefaults.standard.set(fingerprint, forKey: uploadFingerprintKey(serverId))
     }
     private func lastDismissedSignature(_ serverId: String) -> String? {
         UserDefaults.standard.string(forKey: dismissedKey(serverId))
@@ -100,12 +107,12 @@ final class QueueSyncService: ObservableObject {
         guard pendingRemote == nil else { return }
         guard let snapshot = AudioPlayerService.shared.makeSnapshot(serverId: serverId) else { return }
 
-        // Signatur, die hochgeladen würde. Hat sich der Inhalt seit dem letzten Upload/der
-        // letzten Übernahme NICHT geändert, nicht erneut hochladen. Verhindert, dass ein
-        // spurious Upload (z.B. beim Foreground/Resume, wo saveState ebenfalls feuert) eine
-        // NEUERE Remote-Queue eines anderen Geräts überschreibt (last-write-wins).
+        // Fingerprint, die hochgeladen würde. iCloud berücksichtigt zusätzlich Metadata
+        // (Repeat/Shuffle/Truth-Queues), Subsonic bleibt bei der flachen Signatur.
+        // Verhindert spurious Uploads (z.B. beim Foreground/Resume, wo saveState ebenfalls feuert).
         let outgoingSig = (m == .subsonic) ? snapshot.flattenedForSubsonic().signature : snapshot.signature
-        if outgoingSig == lastKnownSignature(serverId) { return }
+        let outgoingFingerprint = (m == .icloud) ? snapshot.uploadFingerprint : outgoingSig
+        if outgoingFingerprint == lastUploadFingerprint(serverId) { return }
 
         switch m {
         case .off:
@@ -122,6 +129,7 @@ final class QueueSyncService: ObservableObject {
             // „eigen", der nie in iCloud landete.
             if ok {
                 setLastKnownSignature(snapshot.signature, serverId: serverId)
+                setLastUploadFingerprint(snapshot.uploadFingerprint, serverId: serverId)
                 appendLog("Uploaded to iCloud (\(snapshot.queue.count) songs)")
             } else {
                 appendLog("iCloud upload failed")
@@ -138,6 +146,7 @@ final class QueueSyncService: ObservableObject {
                     positionMs: 0
                 )
                 setLastKnownSignature(flat.signature, serverId: serverId)
+                setLastUploadFingerprint(flat.signature, serverId: serverId)
                 appendLog("Uploaded to Subsonic (\(flat.queue.count) songs)")
             } catch {
                 // Nicht schlimm — der nächste Mutations-Upload versucht es erneut.
@@ -240,6 +249,8 @@ final class QueueSyncService: ObservableObject {
         guard let snap = pendingRemote else { return }
         AudioPlayerService.shared.apply(snap)
         setLastKnownSignature(snap.signature, serverId: snap.serverId)
+        let fingerprint = (mode == .icloud) ? snap.uploadFingerprint : snap.flattenedForSubsonic().signature
+        setLastUploadFingerprint(fingerprint, serverId: snap.serverId)
         appendLog("Took over remote queue (\(snap.queue.count) songs)")
         pendingRemote = nil
     }

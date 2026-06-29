@@ -58,6 +58,30 @@ final class QueueSnapshotTests: XCTestCase {
         XCTAssertEqual(first.signature, second.signature)
     }
 
+    func testUploadFingerprintTracksPlaybackMetadata() {
+        let first = makeSnapshot(
+            queue: [song("a"), song("b")],
+            currentIndex: 0,
+            playNextQueue: [song("next")],
+            userQueue: [song("user")],
+            currentSongId: "a",
+            isShuffled: false,
+            repeatMode: RepeatMode.off.rawValue
+        )
+        let second = makeSnapshot(
+            queue: [song("a"), song("b")],
+            currentIndex: 0,
+            playNextQueue: [song("next")],
+            userQueue: [song("user")],
+            currentSongId: "a",
+            isShuffled: true,
+            repeatMode: RepeatMode.all.rawValue
+        )
+
+        XCTAssertEqual(first.signature, second.signature)
+        XCTAssertNotEqual(first.uploadFingerprint, second.uploadFingerprint)
+    }
+
     func testSignatureChangesWhenPlaybackContentChanges() {
         let base = makeSnapshot(
             queue: [song("a"), song("b")],

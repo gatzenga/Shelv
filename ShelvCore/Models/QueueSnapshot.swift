@@ -62,6 +62,26 @@ struct QueueSnapshot: Codable, Equatable {
         return digest.map { String(format: "%02x", $0) }.joined()
     }
 
+    /// Upload-Dedupe für iCloud: umfasst auch Playback-Metadaten, die im Prompt-Vergleich
+    /// bewusst ignoriert werden. Dadurch können Repeat/Shuffle/Truth-Queue-Änderungen
+    /// gespeichert werden, ohne reine Metadatenänderungen als fremde Queue anzubieten.
+    var uploadFingerprint: String {
+        let parts = [
+            queue.map(\.id).joined(separator: ","),
+            String(currentIndex),
+            playNextQueue.map(\.id).joined(separator: ","),
+            userQueue.map(\.id).joined(separator: ","),
+            truthAlbumQueue.map(\.id).joined(separator: ","),
+            truthPlayNextQueue.map(\.id).joined(separator: ","),
+            truthUserQueue.map(\.id).joined(separator: ","),
+            currentSongId ?? "",
+            isShuffled ? "1" : "0",
+            repeatMode
+        ]
+        let digest = SHA256.hash(data: Data(parts.joined(separator: "#").utf8))
+        return digest.map { String(format: "%02x", $0) }.joined()
+    }
+
     /// Ob überhaupt ein wiederherstellbarer Inhalt vorliegt.
     var isEmpty: Bool {
         queue.isEmpty && playNextQueue.isEmpty && userQueue.isEmpty

@@ -101,8 +101,7 @@ struct ContentView: View {
                 // Demo-Server aktiv → festes Player-Standbild setzen (nach stop(), sonst würde
                 // es sofort wieder gelöscht) und Recap-Anzeige aktivieren.
                 if SubsonicAPIService.shared.isDemoActive {
-                    AudioPlayerService.shared.loadDemoStandby()
-                    UserDefaults.standard.set(true, forKey: "recapEnabled")
+                    AudioPlayerService.shared.ensureDemoStandby(force: true)
                 }
                 #endif
             }
@@ -111,6 +110,9 @@ struct ContentView: View {
             }
             .onChange(of: scenePhase) { _, phase in
                 guard phase == .active else { return }
+                #if DEBUG
+                AudioPlayerService.shared.ensureDemoStandby()
+                #endif
                 handlePendingShortcutDestination()
             }
             .onAppear {
@@ -118,6 +120,7 @@ struct ContentView: View {
                 if DemoContent.isLargeLibraryFixtureEnabled {
                     selectedTab = 1
                 }
+                AudioPlayerService.shared.ensureDemoStandby()
                 #endif
                 if serverStore.servers.isEmpty {
                     showAddServer = true
@@ -447,7 +450,7 @@ private struct NativeMiniPlayerAccessory: View {
     }
 
     private var playbackControls: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 10) {
             if showsSkipButtons {
                 Button {
                     player.previous()

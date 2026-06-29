@@ -224,6 +224,15 @@ final class DownloadStore: ObservableObject {
         LocalArtworkIndex.shared.update(paths: artPaths)
         DownloadStatusCache.shared.rebuild(albumIds: Set(newRecordsByAlbumId.keys))
 
+        // Orphan-Playlist-Marker aufräumen: wenn keine Songs einer markierten Playlist
+        // mehr lokal sind, darf sie im Offline-Modus nicht als Geist-Eintrag bleiben.
+        let orphanedPlaylistIds = downloadedPlaylistIds.filter { id in
+            guard !protectedPlaylistIds.contains(id) else { return false }
+            guard let ids = playlistSongIds[id], !ids.isEmpty else { return true }
+            return !ids.contains { newSongById[$0] != nil }
+        }
+        for id in orphanedPlaylistIds { unmarkPlaylistDownloaded(id: id) }
+
         isLoading = false
         if pendingReload {
             pendingReload = false
@@ -378,9 +387,21 @@ final class DownloadStore: ObservableObject {
         }
 
         LocalDownloadIndex.shared.setPath(songId: songId, serverId: songServerId, path: nil)
+
+        let affectedPlaylists = playlistSongIds.compactMap { (id, ids) in
+            ids.contains(songId) ? id : nil
+        }
+        for playlistId in affectedPlaylists where downloadedCount(for: playlistId) == 0 {
+            unmarkPlaylistDownloaded(id: playlistId)
+        }
     }
 
     // MARK: - Lookups
+
+    func downloadedCount(for playlistId: String) -> Int {
+        guard let ids = playlistSongIds[playlistId] else { return 0 }
+        return ids.filter { isDownloaded(songId: $0) }.count
+    }
 
     func isDownloaded(songId: String) -> Bool {
         songById[songId] != nil
@@ -450,6 +471,10 @@ final class DownloadStore: ObservableObject {
     }
 
     func deleteAll() {
+        downloadedPlaylistIds = []
+        playlistSongIds = [:]
+        protectedPlaylistIds = []
+        UserDefaults.standard.removeObject(forKey: "shelv_mac_playlist_song_ids_\(serverId)")
         Task { await DownloadService.shared.deleteAll() }
     }
 

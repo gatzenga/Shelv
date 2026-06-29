@@ -16,7 +16,12 @@ struct ContentView: View {
         }
         .tint(AppTheme.color(for: themeColorName))
         .environment(\.themeColor, AppTheme.color(for: themeColorName))
-        .onAppear { NSApp.appearance = storedColorScheme.nsAppearance }
+        .onAppear {
+            NSApp.appearance = storedColorScheme.nsAppearance
+            #if DEBUG
+            appState.player.ensureDemoStandby()
+            #endif
+        }
         .onChange(of: storedColorScheme) { _, new in NSApp.appearance = new.nsAppearance }
     }
 }
@@ -80,8 +85,7 @@ struct MainWindowView: View {
                     // Demo-Server aktiv → festes Player-Standbild (nach stop(), sonst sofort
                     // wieder gelöscht) + Recap-Anzeige aktivieren. Wie iOS-ContentView.
                     if SubsonicAPIService.shared.isDemoActive {
-                        appState.player.loadDemoStandby()
-                        UserDefaults.standard.set(true, forKey: "recapEnabled")
+                        appState.player.ensureDemoStandby(force: true)
                     }
                     #endif
                 }

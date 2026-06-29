@@ -35,6 +35,9 @@ struct Shelv_TVApp: App {
                 // Pro aktivem Server: Tracking-DB + Recap-Registry (NUR laden, nie generieren) + Pins.
                 .task(id: serverStore.activeServerID) {
                     guard let server = serverStore.activeServer else { return }
+                    #if DEBUG
+                    AudioPlayerService.shared.ensureDemoStandby()
+                    #endif
                     await PlayLogService.shared.setup()
                     await RecapStore.shared.loadEntries(serverId: server.stableId)
                     PinnedPlaylistStore.shared.setActiveServer(server.stableId)
@@ -71,9 +74,8 @@ struct Shelv_TVApp: App {
                     if SubsonicAPIService.shared.isDemoActive {
                         // Demo: kein stop() (kein echter alter Stream) — würde nur den festen
                         // Standby-Eintrag wieder wegwischen. Nur Standby setzen + Views neu laden.
-                        AudioPlayerService.shared.loadDemoStandby()
+                        AudioPlayerService.shared.ensureDemoStandby(force: true)
                         LibraryStore.shared.resetInMemory()
-                        UserDefaults.standard.set(true, forKey: "recapEnabled")
                         return
                     }
                     #endif
@@ -84,6 +86,9 @@ struct Shelv_TVApp: App {
                 }
                 .onChange(of: scenePhase) { _, phase in
                     guard phase == .active else { return }
+                    #if DEBUG
+                    AudioPlayerService.shared.ensureDemoStandby()
+                    #endif
                     // syncNow prüft die Remote-Queue automatisch mit.
                     Task { await CloudKitSyncService.shared.syncNow() }
                 }

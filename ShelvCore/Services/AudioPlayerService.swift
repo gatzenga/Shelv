@@ -57,6 +57,7 @@ class AudioPlayerService: ObservableObject {
         } else {
             repeatMode = repeatMode.toggled
         }
+        saveState()
     }
 
     @Published var actualStreamFormat: ActualStreamFormat?
@@ -484,6 +485,14 @@ class AudioPlayerService: ObservableObject {
         duration = DemoContent.playerDuration
         isPlaying = false
         actualStreamFormat = ActualStreamFormat(codecLabel: "MP3", bitrateKbps: 369)
+    }
+
+    func ensureDemoStandby(force: Bool = false) {
+        guard SubsonicAPIService.shared.isDemoActive else { return }
+        UserDefaults.standard.set(true, forKey: "recapEnabled")
+        let hasDemoSong = currentSong?.id.hasPrefix("demo-") == true
+        guard force || !hasDemoSong else { return }
+        loadDemoStandby()
     }
     #endif
 

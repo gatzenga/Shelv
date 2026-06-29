@@ -71,8 +71,7 @@ class AppState: ObservableObject {
         player.stop()
         #if DEBUG
         if api.isDemoActive {
-            UserDefaults.standard.set(true, forKey: "recapEnabled")
-            player.loadDemoStandby()
+            player.ensureDemoStandby(force: true)
         }
         #endif
     }
