@@ -110,7 +110,7 @@ struct LibraryView: View {
                     artistDirectionRaw: $artistDirectionRaw,
                     isOffline: offlineMode.isOffline,
                     onAlbumSortChanged: { newValue in
-                        Task { await libraryStore.loadAlbums(sortBy: newValue) }
+                        Task { await libraryStore.applyAlbumSort(sortBy: newValue) }
                     }
                 )
             }
@@ -197,14 +197,20 @@ struct LibraryView: View {
 
         rebuildTask = Task.detached(priority: .userInitiated) {
             // 1. Alben im Hintergrund gruppieren
+            let albumCacheSort = LibraryRepository.albumCacheSort(for: sortOpt.rawValue)
+            let requestedAlbumDirection: LibraryDatabaseSortDirection = sortOpt == .alphabetical
+                ? .ascending
+                : (albumDir == .ascending ? .ascending : .descending)
+            let sortedAlbums = LibraryRepository.locallySortedAlbums(
+                albumsSource,
+                sort: albumCacheSort.0,
+                direction: requestedAlbumDirection
+            )
             let calculatedAlbumGroups: [(letter: String, items: [Album])]
             if sortOpt == .alphabetical {
-                calculatedAlbumGroups = LibraryGrouping.groupByFirstLetter(albumsSource, name: \.name)
+                calculatedAlbumGroups = LibraryGrouping.groupByFirstLetter(sortedAlbums, name: \.name)
             } else {
-                let items = albumDir == .descending
-                    ? albumsSource
-                    : Array(albumsSource.reversed())
-                calculatedAlbumGroups = items.isEmpty ? [] : [(letter: "", items: items)]
+                calculatedAlbumGroups = sortedAlbums.isEmpty ? [] : [(letter: "", items: sortedAlbums)]
             }
 
             let calculatedAlbumCountByArtist: [String: Int] = {
@@ -223,10 +229,12 @@ struct LibraryView: View {
             case .alphabetical:
                 sortedArtists = artistsSource
             case .frequent:
-                let counts = Dictionary(
-                    grouping: libraryAlbums,
-                    by: { $0.artistId ?? "" }
-                ).mapValues { $0.compactMap { $0.playCount }.reduce(0, +) }
+                var counts: [String: Int] = [:]
+                counts.reserveCapacity(artistsSource.count)
+                for album in libraryAlbums {
+                    guard let artistId = album.artistId, !artistId.isEmpty else { continue }
+                    counts[artistId, default: 0] += album.playCount ?? 0
+                }
                 sortedArtists = artistsSource.sorted { (counts[$0.id] ?? 0) > (counts[$1.id] ?? 0) }
             }
 
@@ -307,20 +315,6 @@ struct LibraryView: View {
             .filter { !coveredNames.contains($0.name) }
             .map { $0.asArtist() }
         return fromLibrary + extras
-    }
-
-    private func sortedArtists() -> [Artist] {
-        let source = displayArtists
-        switch artistSortOption {
-        case .alphabetical:
-            return source
-        case .frequent:
-            let counts = Dictionary(
-                grouping: libraryStore.albums,
-                by: { $0.artistId ?? "" }
-            ).mapValues { $0.compactMap { $0.playCount }.reduce(0, +) }
-            return source.sorted { (counts[$0.id] ?? 0) > (counts[$1.id] ?? 0) }
-        }
     }
 
     private var mainContent: some View {

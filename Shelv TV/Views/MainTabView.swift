@@ -8,7 +8,16 @@ struct MainTabView: View {
     @AppStorage("enablePlaylists") private var enablePlaylists = true
     @AppStorage("recapEnabled") private var recapEnabled = false
     @ObservedObject private var queueSync = QueueSyncService.shared
-    @State private var selection = "discover"
+    @State private var selection = MainTabView.initialSelection
+
+    private static var initialSelection: String {
+        #if DEBUG
+        if DemoContent.isLargeLibraryFixtureEnabled {
+            return "library"
+        }
+        #endif
+        return "discover"
+    }
 
     var body: some View {
         TabView(selection: $selection) {

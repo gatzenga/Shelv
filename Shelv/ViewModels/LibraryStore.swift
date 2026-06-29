@@ -70,6 +70,40 @@ class LibraryStore: ObservableObject {
         return (server.id.uuidString, stableId)
     }
 
+    #if DEBUG
+    private func applyLargeLibraryFixtureAlbums(count: Int, sortBy: String) async {
+        guard !isLoadingAlbums else { return }
+        isLoadingAlbums = albums.isEmpty
+        errorMessage = nil
+
+        let source: [Album]
+        if albums.count == count, albums.first?.id.hasPrefix("fixture-album-") == true {
+            source = albums
+        } else {
+            source = await Task.detached(priority: .userInitiated) {
+                DemoContent.largeLibraryAlbums(count: count)
+            }.value
+        }
+
+        albums = LibraryRepository.locallySortedAlbums(source, sortBy: sortBy)
+        isLoadingAlbums = false
+    }
+
+    private func applyLargeLibraryFixtureArtists(albumCount: Int) async {
+        guard !isLoadingArtists else { return }
+        isLoadingArtists = artists.isEmpty
+        errorMessage = nil
+
+        if artists.first?.id.hasPrefix("fixture-artist-") != true {
+            artists = await Task.detached(priority: .userInitiated) {
+                DemoContent.largeLibraryArtists(albumCount: albumCount)
+            }.value
+        }
+
+        isLoadingArtists = false
+    }
+    #endif
+
     func loadDiscover() async {
         guard !OfflineModeService.shared.isOffline else { return }
         isLoadingDiscover = true
@@ -100,6 +134,13 @@ class LibraryStore: ObservableObject {
     }
 
     func loadAlbums(sortBy: String = "alphabeticalByName") async {
+        #if DEBUG
+        if let count = DemoContent.largeLibraryFixtureAlbumCount {
+            await applyLargeLibraryFixtureAlbums(count: count, sortBy: sortBy)
+            return
+        }
+        #endif
+
         if albums.isEmpty, let keys = activeServerKeys {
             let cacheSort = LibraryRepository.albumCacheSort(for: sortBy)
             let cached = await libraryRepository.cachedAlbums(
@@ -151,7 +192,38 @@ class LibraryStore: ObservableObject {
         isLoadingAlbums = false
     }
 
+    func applyAlbumSort(sortBy: String) async {
+        let currentAlbums = albums
+        #if DEBUG
+        if DemoContent.isLargeLibraryFixtureEnabled {
+            albums = LibraryRepository.locallySortedAlbums(currentAlbums, sortBy: sortBy)
+            return
+        }
+        #endif
+
+        if let keys = activeServerKeys {
+            let cacheSort = LibraryRepository.albumCacheSort(for: sortBy)
+            let cached = await libraryRepository.cachedAlbums(
+                serverKey: keys.serverKey,
+                sort: cacheSort.0,
+                direction: cacheSort.1
+            )
+            if !cached.isEmpty || currentAlbums.isEmpty {
+                albums = cached
+                return
+            }
+        }
+        albums = LibraryRepository.locallySortedAlbums(currentAlbums, sortBy: sortBy)
+    }
+
     func loadArtists() async {
+        #if DEBUG
+        if let count = DemoContent.largeLibraryFixtureAlbumCount {
+            await applyLargeLibraryFixtureArtists(albumCount: count)
+            return
+        }
+        #endif
+
         if artists.isEmpty, let keys = activeServerKeys {
             let cached = await libraryRepository.cachedArtists(serverKey: keys.serverKey)
             if !cached.isEmpty {

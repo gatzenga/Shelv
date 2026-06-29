@@ -7,24 +7,24 @@ class LibraryViewModel: ObservableObject {
 
     @Published var albums: [Album] = [] {
         didSet {
-            rebuildSortedAlbums()
-            rebuildSortedArtists()
+            scheduleSortedAlbumsRebuild()
+            scheduleSortedArtistsRebuild()
         }
     }
     @Published var artists: [Artist] = [] {
-        didSet { rebuildSortedArtists() }
+        didSet { scheduleSortedArtistsRebuild() }
     }
     @Published var sortOption: LibrarySortOption = .name {
-        didSet { rebuildSortedAlbums() }
+        didSet { scheduleSortedAlbumsRebuild() }
     }
     @Published var albumSortDirection: SortDirection = .ascending {
-        didSet { rebuildSortedAlbums() }
+        didSet { scheduleSortedAlbumsRebuild() }
     }
     @Published var artistSortOption: ArtistSortOption = .name {
-        didSet { rebuildSortedArtists() }
+        didSet { scheduleSortedArtistsRebuild() }
     }
     @Published var artistSortDirection: SortDirection = .ascending {
-        didSet { rebuildSortedArtists() }
+        didSet { scheduleSortedArtistsRebuild() }
     }
     @Published private(set) var sortedAlbums: [Album] = []
     @Published private(set) var sortedArtists: [Artist] = []
@@ -32,32 +32,105 @@ class LibraryViewModel: ObservableObject {
     @Published var isLoadingArtists: Bool = false
     @Published var errorMessage: String?
 
-    private func rebuildSortedAlbums() {
-        // Name immer A-Z, unabhängig von direction.
-        if sortOption == .name {
-            sortedAlbums = albums
-            return
+    private var sortedAlbumsTask: Task<Void, Never>?
+    private var sortedArtistsTask: Task<Void, Never>?
+
+    private func scheduleSortedAlbumsRebuild() {
+        sortedAlbumsTask?.cancel()
+        let source = albums
+        let option = sortOption
+        let direction = albumSortDirection
+
+        sortedAlbumsTask = Task.detached(priority: .userInitiated) {
+            let sorted = Self.sortedAlbums(source, option: option, direction: direction)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                self.sortedAlbums = sorted
+            }
         }
-        sortedAlbums = albumSortDirection == sortOption.naturalDirection
-            ? albums
-            : Array(albums.reversed())
     }
 
-    private func rebuildSortedArtists() {
-        let base: [Artist]
-        switch artistSortOption {
-        case .name:
-            sortedArtists = artists
-                .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-            return
-        case .mostPlayed:
-            let counts = Dictionary(grouping: albums, by: { $0.artistId ?? "" })
-                .mapValues { $0.compactMap { $0.playCount }.reduce(0, +) }
-            base = artists.sorted { (counts[$0.id] ?? 0) > (counts[$1.id] ?? 0) }
+    private func scheduleSortedArtistsRebuild() {
+        sortedArtistsTask?.cancel()
+        let source = artists
+        let albumSource = albums
+        let option = artistSortOption
+        let direction = artistSortDirection
+
+        sortedArtistsTask = Task.detached(priority: .userInitiated) {
+            let sorted = Self.sortedArtists(
+                source,
+                albums: albumSource,
+                option: option,
+                direction: direction
+            )
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                self.sortedArtists = sorted
+            }
         }
-        sortedArtists = artistSortDirection == artistSortOption.naturalDirection
-            ? base
-            : Array(base.reversed())
+    }
+
+    nonisolated private static func sortedAlbums(
+        _ albums: [Album],
+        option: LibrarySortOption,
+        direction: SortDirection
+    ) -> [Album] {
+        let cacheSort = albumCacheSort(for: option)
+        let requestedDirection: LibraryDatabaseSortDirection = option == .name
+            ? .ascending
+            : (direction == .ascending ? .ascending : .descending)
+        return LibraryRepository.locallySortedAlbums(
+            albums,
+            sort: cacheSort.0,
+            direction: requestedDirection
+        )
+    }
+
+    nonisolated private static func sortedArtists(
+        _ artists: [Artist],
+        albums: [Album],
+        option: ArtistSortOption,
+        direction: SortDirection
+    ) -> [Artist] {
+        let natural: [Artist]
+        switch option {
+        case .name:
+            natural = artists.sorted { lhs, rhs in
+                compareStrings(lhs.name, rhs.name, lhs.id, rhs.id)
+            }
+        case .mostPlayed:
+            var counts: [String: Int] = [:]
+            counts.reserveCapacity(artists.count)
+            for album in albums {
+                guard let artistId = album.artistId, !artistId.isEmpty else { continue }
+                counts[artistId, default: 0] += album.playCount ?? 0
+            }
+            natural = artists.sorted { lhs, rhs in
+                let lhsCount = counts[lhs.id] ?? 0
+                let rhsCount = counts[rhs.id] ?? 0
+                if lhsCount != rhsCount {
+                    return direction == .descending
+                        ? lhsCount > rhsCount
+                        : lhsCount < rhsCount
+                }
+                return compareStrings(lhs.name, rhs.name, lhs.id, rhs.id)
+            }
+        }
+        return natural
+    }
+
+    nonisolated private static func compareStrings(_ lhs: String, _ rhs: String, _ lhsId: String, _ rhsId: String) -> Bool {
+        let lhsKey = normalizedSortKey(lhs)
+        let rhsKey = normalizedSortKey(rhs)
+        if lhsKey != rhsKey { return lhsKey < rhsKey }
+        return lhsId < rhsId
+    }
+
+    nonisolated private static func normalizedSortKey(_ value: String) -> String {
+        value
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .lowercased()
     }
 
     // MARK: - Favorites
@@ -79,6 +152,40 @@ class LibraryViewModel: ObservableObject {
         return (server.id.uuidString, stableId)
     }
 
+    #if DEBUG
+    private func applyLargeLibraryFixtureAlbums(count: Int) async {
+        guard !isLoadingAlbums else { return }
+        isLoadingAlbums = albums.isEmpty
+        errorMessage = nil
+
+        if albums.count == count, albums.first?.id.hasPrefix("fixture-album-") == true {
+            scheduleSortedAlbumsRebuild()
+        } else {
+            albums = await Task.detached(priority: .userInitiated) {
+                DemoContent.largeLibraryAlbums(count: count)
+            }.value
+        }
+
+        isLoadingAlbums = false
+    }
+
+    private func applyLargeLibraryFixtureArtists(albumCount: Int) async {
+        guard !isLoadingArtists else { return }
+        isLoadingArtists = artists.isEmpty
+        errorMessage = nil
+
+        if artists.first?.id.hasPrefix("fixture-artist-") == true {
+            scheduleSortedArtistsRebuild()
+        } else {
+            artists = await Task.detached(priority: .userInitiated) {
+                DemoContent.largeLibraryArtists(albumCount: albumCount)
+            }.value
+        }
+
+        isLoadingArtists = false
+    }
+    #endif
+
     // MARK: - Reset (bei Serverwechsel)
 
     func reset() {
@@ -94,6 +201,13 @@ class LibraryViewModel: ObservableObject {
     // MARK: - Albums
 
     func loadAlbums() async {
+        #if DEBUG
+        if let count = DemoContent.largeLibraryFixtureAlbumCount {
+            await applyLargeLibraryFixtureAlbums(count: count)
+            return
+        }
+        #endif
+
         guard !isLoadingAlbums else { return }
 
         if albums.isEmpty, let keys = activeServerKeys {
@@ -140,6 +254,13 @@ class LibraryViewModel: ObservableObject {
     // MARK: - Artists
 
     func loadArtists() async {
+        #if DEBUG
+        if let count = DemoContent.largeLibraryFixtureAlbumCount {
+            await applyLargeLibraryFixtureArtists(albumCount: count)
+            return
+        }
+        #endif
+
         guard !isLoadingArtists else { return }
 
         if artists.isEmpty, let keys = activeServerKeys {
@@ -178,7 +299,7 @@ class LibraryViewModel: ObservableObject {
         isLoadingArtists = false
     }
 
-    private static func subsonicSortKey(for option: LibrarySortOption) -> String {
+    nonisolated private static func subsonicSortKey(for option: LibrarySortOption) -> String {
         switch option {
         case .name:
             return "alphabeticalByName"
@@ -191,7 +312,7 @@ class LibraryViewModel: ObservableObject {
         }
     }
 
-    private static func albumCacheSort(for option: LibrarySortOption) -> (LibraryAlbumSort, LibraryDatabaseSortDirection) {
+    nonisolated private static func albumCacheSort(for option: LibrarySortOption) -> (LibraryAlbumSort, LibraryDatabaseSortDirection) {
         switch option {
         case .name:
             return (.name, .ascending)

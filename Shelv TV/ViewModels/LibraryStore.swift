@@ -32,6 +32,40 @@ final class LibraryStore: ObservableObject {
         return (server.id.uuidString, stableId)
     }
 
+    #if DEBUG
+    private func applyLargeLibraryFixtureAlbums(count: Int, sortBy: String) async {
+        guard !isLoadingAlbums else { return }
+        isLoadingAlbums = albums.isEmpty
+        errorMessage = nil
+
+        let source: [Album]
+        if albums.count == count, albums.first?.id.hasPrefix("fixture-album-") == true {
+            source = albums
+        } else {
+            source = await Task.detached(priority: .userInitiated) {
+                DemoContent.largeLibraryAlbums(count: count)
+            }.value
+        }
+
+        albums = LibraryRepository.locallySortedAlbums(source, sortBy: sortBy)
+        isLoadingAlbums = false
+    }
+
+    private func applyLargeLibraryFixtureArtists(albumCount: Int) async {
+        guard !isLoadingArtists else { return }
+        isLoadingArtists = artists.isEmpty
+        errorMessage = nil
+
+        if artists.first?.id.hasPrefix("fixture-artist-") != true {
+            artists = await Task.detached(priority: .userInitiated) {
+                DemoContent.largeLibraryArtists(albumCount: albumCount)
+            }.value
+        }
+
+        isLoadingArtists = false
+    }
+    #endif
+
     /// Alle In-Memory-Daten leeren + Reload anstoßen (wie iOS). Beim Server-Wechsel aufgerufen,
     /// nachdem der Player gestoppt wurde — sonst bleiben Alben/Favoriten/Playlists des alten Servers.
     func resetInMemory() {
@@ -45,6 +79,13 @@ final class LibraryStore: ObservableObject {
     }
 
     func loadAlbums(sortBy: String = "alphabeticalByName") async {
+        #if DEBUG
+        if let count = DemoContent.largeLibraryFixtureAlbumCount {
+            await applyLargeLibraryFixtureAlbums(count: count, sortBy: sortBy)
+            return
+        }
+        #endif
+
         guard !isLoadingAlbums else { return }
         isLoadingAlbums = true; defer { isLoadingAlbums = false }
 
@@ -73,6 +114,13 @@ final class LibraryStore: ObservableObject {
     }
 
     func loadArtists() async {
+        #if DEBUG
+        if let count = DemoContent.largeLibraryFixtureAlbumCount {
+            await applyLargeLibraryFixtureArtists(albumCount: count)
+            return
+        }
+        #endif
+
         isLoadingArtists = true; defer { isLoadingArtists = false }
         if artists.isEmpty, let keys = activeServerKeys {
             let cached = await libraryRepository.cachedArtists(serverKey: keys.serverKey)

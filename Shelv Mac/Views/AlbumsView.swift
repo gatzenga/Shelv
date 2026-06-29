@@ -8,26 +8,47 @@ struct AlbumsView: View {
     @AppStorage("albumViewIsGrid") private var isGrid: Bool = true
     @AppStorage("downloadsOnlyFilter") private var showDownloadsOnly: Bool = false
     @State private var searchText: String = ""
+    @State private var displayAlbums: [Album] = []
+    @State private var displayRebuildTask: Task<Void, Never>?
 
     private var effectiveShowDownloadsOnly: Bool {
         offlineMode.isOffline || showDownloadsOnly
     }
 
-    private var displayAlbums: [Album] {
-        // Im Offline-Modus + leerem Server-Cache: aus Downloads bauen
-        let baseAlbums: [Album]
-        if offlineMode.isOffline && vm.albums.isEmpty {
-            baseAlbums = downloadStore.albums.map { $0.asAlbum() }
-        } else if effectiveShowDownloadsOnly {
-            let downloadedIds = Set(downloadStore.albums.map { $0.albumId })
-            baseAlbums = vm.sortedAlbums.filter { downloadedIds.contains($0.id) }
-        } else {
-            baseAlbums = vm.sortedAlbums
-        }
-        if searchText.isEmpty { return baseAlbums }
-        return baseAlbums.filter {
-            $0.name.localizedCaseInsensitiveContains(searchText) ||
-            ($0.artist?.localizedCaseInsensitiveContains(searchText) ?? false)
+    private func rebuildDisplayAlbums() {
+        displayRebuildTask?.cancel()
+        let isOffline = offlineMode.isOffline
+        let downloadsOnly = effectiveShowDownloadsOnly
+        let sortedAlbums = vm.sortedAlbums.isEmpty && !vm.albums.isEmpty ? vm.albums : vm.sortedAlbums
+        let serverAlbumsEmpty = vm.albums.isEmpty
+        let downloadedAlbums = downloadStore.albums.map { $0.asAlbum() }
+        let downloadedIds = Set(downloadStore.albums.map { $0.albumId })
+        let query = searchText
+
+        displayRebuildTask = Task.detached(priority: .userInitiated) {
+            let baseAlbums: [Album]
+            if isOffline && serverAlbumsEmpty {
+                baseAlbums = downloadedAlbums
+            } else if downloadsOnly {
+                baseAlbums = sortedAlbums.filter { downloadedIds.contains($0.id) }
+            } else {
+                baseAlbums = sortedAlbums
+            }
+
+            let result: [Album]
+            if query.isEmpty {
+                result = baseAlbums
+            } else {
+                result = baseAlbums.filter {
+                    $0.name.localizedCaseInsensitiveContains(query) ||
+                    ($0.artist?.localizedCaseInsensitiveContains(query) ?? false)
+                }
+            }
+
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                displayAlbums = result
+            }
         }
     }
 
@@ -48,9 +69,6 @@ struct AlbumsView: View {
                 }
                 .pickerStyle(.menu)
                 .frame(width: 180)
-                .onChange(of: vm.sortOption) {
-                    Task { await vm.loadAlbums() }
-                }
                 if vm.sortOption != .name {
                     Button {
                         vm.albumSortDirection = vm.albumSortDirection == .ascending ? .descending : .ascending
@@ -125,10 +143,20 @@ struct AlbumsView: View {
             }
         }
         .navigationTitle(String(format: String(localized: "albums_count_format"), displayAlbums.count))
+        .onAppear { rebuildDisplayAlbums() }
+        .onReceive(vm.$sortedAlbums) { _ in rebuildDisplayAlbums() }
+        .onReceive(downloadStore.$albums) { _ in rebuildDisplayAlbums() }
+        .onChange(of: searchText) { _, _ in rebuildDisplayAlbums() }
+        .onChange(of: showDownloadsOnly) { _, _ in rebuildDisplayAlbums() }
         .onChange(of: offlineMode.isOffline) { _, isOffline in
             if isOffline && vm.sortOption.requiresServer {
                 vm.sortOption = .name
             }
+            rebuildDisplayAlbums()
+        }
+        .onDisappear {
+            displayRebuildTask?.cancel()
+            displayRebuildTask = nil
         }
         .task { await vm.loadAlbums() }
     }

@@ -7,25 +7,55 @@ struct ArtistsView: View {
     @AppStorage("artistViewIsGrid") private var isGrid: Bool = true
     @AppStorage("downloadsOnlyFilter") private var showDownloadsOnly: Bool = false
     @State private var searchText: String = ""
+    @State private var displayArtists: [Artist] = []
+    @State private var displayRebuildTask: Task<Void, Never>?
 
     private var effectiveShowDownloadsOnly: Bool {
         offlineMode.isOffline || showDownloadsOnly
     }
 
-    private var displayArtists: [Artist] {
-        let baseArtists: [Artist]
-        if offlineMode.isOffline && vm.artists.isEmpty {
-            baseArtists = downloadStore.artists.map { $0.asArtist() }
-        } else if effectiveShowDownloadsOnly {
-            let downloadedCountByName = Dictionary(uniqueKeysWithValues: downloadStore.artists.map { ($0.name, $0.albumCount) })
-            baseArtists = vm.sortedArtists
-                .filter { downloadedCountByName[$0.name] != nil }
-                .map { Artist(id: $0.id, name: $0.name, albumCount: downloadedCountByName[$0.name], coverArt: $0.coverArt, starred: $0.starred) }
-        } else {
-            baseArtists = vm.sortedArtists
+    private func rebuildDisplayArtists() {
+        displayRebuildTask?.cancel()
+        let isOffline = offlineMode.isOffline
+        let downloadsOnly = effectiveShowDownloadsOnly
+        let sortedArtists = vm.sortedArtists.isEmpty && !vm.artists.isEmpty ? vm.artists : vm.sortedArtists
+        let serverArtistsEmpty = vm.artists.isEmpty
+        let downloadedArtists = downloadStore.artists.map { $0.asArtist() }
+        let downloadedCountByName = Dictionary(
+            downloadStore.artists.map { ($0.name, $0.albumCount) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        let query = searchText
+
+        displayRebuildTask = Task.detached(priority: .userInitiated) {
+            let baseArtists: [Artist]
+            if isOffline && serverArtistsEmpty {
+                baseArtists = downloadedArtists
+            } else if downloadsOnly {
+                baseArtists = sortedArtists
+                    .filter { downloadedCountByName[$0.name] != nil }
+                    .map {
+                        Artist(
+                            id: $0.id,
+                            name: $0.name,
+                            albumCount: downloadedCountByName[$0.name],
+                            coverArt: $0.coverArt,
+                            starred: $0.starred
+                        )
+                    }
+            } else {
+                baseArtists = sortedArtists
+            }
+
+            let result = query.isEmpty
+                ? baseArtists
+                : baseArtists.filter { $0.name.localizedCaseInsensitiveContains(query) }
+
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                displayArtists = result
+            }
         }
-        if searchText.isEmpty { return baseArtists }
-        return baseArtists.filter { $0.name.localizedCaseInsensitiveContains(searchText) }
     }
 
     var body: some View {
@@ -119,10 +149,20 @@ struct ArtistsView: View {
             }
         }
         .navigationTitle(String(format: String(localized: "artists_count_format"), displayArtists.count))
+        .onAppear { rebuildDisplayArtists() }
+        .onReceive(vm.$sortedArtists) { _ in rebuildDisplayArtists() }
+        .onReceive(downloadStore.$artists) { _ in rebuildDisplayArtists() }
+        .onChange(of: searchText) { _, _ in rebuildDisplayArtists() }
+        .onChange(of: showDownloadsOnly) { _, _ in rebuildDisplayArtists() }
         .onChange(of: offlineMode.isOffline) { _, isOffline in
             if isOffline && vm.artistSortOption.requiresServer {
                 vm.artistSortOption = .name
             }
+            rebuildDisplayArtists()
+        }
+        .onDisappear {
+            displayRebuildTask?.cancel()
+            displayRebuildTask = nil
         }
         .task { await vm.loadArtists() }
     }

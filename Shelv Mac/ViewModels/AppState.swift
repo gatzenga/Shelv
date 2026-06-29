@@ -28,6 +28,13 @@ class AppState: ObservableObject {
     let serverStore = ServerStore()
 
     private init() {
+        #if DEBUG
+        if DemoContent.isLargeLibraryFixtureEnabled {
+            isLoggedIn = true
+            selectedSidebar = .albums
+            return
+        }
+        #endif
         isLoggedIn = api.hasConfig
     }
 

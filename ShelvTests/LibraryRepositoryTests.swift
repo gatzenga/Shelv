@@ -73,6 +73,27 @@ final class LibraryRepositoryTests: XCTestCase {
         }
     }
 
+    func testRefreshArtistsFailureKeepsPreviousGenerationVisible() async throws {
+        let database = try await makeDatabase()
+        try await seedArtists([Artist(id: "shared", name: "Old Artist")], database: database, generation: "old-generation")
+        let api = FakeLibraryAPIClient(
+            artists: [Artist(id: "shared", name: "New Artist")],
+            failArtists: true
+        )
+        let repository = LibraryRepository(database: database, api: api)
+
+        do {
+            _ = try await repository.refreshArtists(serverKey: "server-a", stableId: "stable-a")
+            XCTFail("Expected refresh to throw")
+        } catch {
+            let cachedArtistNames = try await database.artists(serverKey: "server-a").map(\.name)
+            let state = try await database.syncState(serverKey: "server-a", entity: .artists)
+            XCTAssertEqual(cachedArtistNames, ["Old Artist"])
+            XCTAssertEqual(state?.status, "failed")
+            XCTAssertEqual(state?.syncGeneration, "old-generation")
+        }
+    }
+
     func testRetryAfterFailedAlbumRefreshReplacesGeneration() async throws {
         let database = try await makeDatabase()
         try await seedAlbums([album(id: "old", name: "Old")], database: database, generation: "old-generation")
@@ -123,22 +144,31 @@ final class LibraryRepositoryTests: XCTestCase {
         try await database.upsertAlbums(albums, serverKey: "server-a", stableId: "stable-a", generation: generation)
         try await database.finishGeneration(entity: .albums, serverKey: "server-a", generation: generation)
     }
+
+    private func seedArtists(_ artists: [Artist], database: LibraryDatabase, generation: String) async throws {
+        try await database.beginGeneration(entity: .artists, serverKey: "server-a")
+        try await database.upsertArtists(artists, serverKey: "server-a", stableId: "stable-a", generation: generation)
+        try await database.finishGeneration(entity: .artists, serverKey: "server-a", generation: generation)
+    }
 }
 
 private final class FakeLibraryAPIClient: LibraryAPIClient {
     private let albumPages: [[Album]]
     private let artists: [Artist]
     private let failureAfterAlbumRequestCount: Int?
+    private let failArtists: Bool
     private(set) var albumRequests: [(type: String, size: Int, offset: Int)] = []
 
     init(
         albumPages: [[Album]] = [],
         artists: [Artist] = [],
-        failureAfterAlbumRequestCount: Int? = nil
+        failureAfterAlbumRequestCount: Int? = nil,
+        failArtists: Bool = false
     ) {
         self.albumPages = albumPages
         self.artists = artists
         self.failureAfterAlbumRequestCount = failureAfterAlbumRequestCount
+        self.failArtists = failArtists
     }
 
     func getAlbumList(type: String, size: Int, offset: Int) async throws -> [Album] {
@@ -152,7 +182,10 @@ private final class FakeLibraryAPIClient: LibraryAPIClient {
     }
 
     func getAllArtists() async throws -> [Artist] {
-        artists
+        if failArtists {
+            throw FakeLibraryAPIError.requestFailed
+        }
+        return artists
     }
 }
 

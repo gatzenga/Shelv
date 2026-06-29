@@ -80,7 +80,7 @@ struct LibraryView: View {
             }
             .navigationDestination(for: Album.self) { AlbumDetailView(album: $0) }
             .navigationDestination(for: Artist.self) { ArtistDetailView(artist: $0) }
-            .task(id: "\(store.reloadID)|\(albumServerType)") { await store.loadAlbums(sortBy: albumServerType) }
+            .task(id: store.reloadID) { await store.loadAlbums(sortBy: albumServerType) }
             .task(id: store.reloadID) { await store.loadArtists() }
             .task(id: "\(store.reloadID)|\(enableFavorites)") { if enableFavorites { await store.loadStarred() } }
             .onAppear { rebuildDerivedLibraryState() }
@@ -107,14 +107,15 @@ struct LibraryView: View {
 
         derivedRebuildTask = Task.detached(priority: .userInitiated) {
             let nextAlbums: [Album] = {
-                var result = albums
-                if sort == .year {
-                    result.sort { ($0.year ?? 0) < ($1.year ?? 0) }
-                }
-                if albumDirection == .descending {
-                    result.reverse()
-                }
-                return result
+                let cacheSort = LibraryRepository.albumCacheSort(for: sort.rawValue)
+                let requestedDirection: LibraryDatabaseSortDirection = albumDirection == .ascending
+                    ? .ascending
+                    : .descending
+                return LibraryRepository.locallySortedAlbums(
+                    albums,
+                    sort: cacheSort.0,
+                    direction: requestedDirection
+                )
             }()
 
             let nextArtists: [Artist] = artistDirection == .descending

@@ -111,6 +111,11 @@ struct ContentView: View {
             handlePendingShortcutDestination()
         }
         .onAppear {
+            #if DEBUG
+            if DemoContent.isLargeLibraryFixtureEnabled {
+                selectedTab = 1
+            }
+            #endif
             if serverStore.servers.isEmpty {
                 showAddServer = true
             }

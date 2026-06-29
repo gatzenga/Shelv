@@ -305,6 +305,103 @@ nonisolated enum DemoContent {
         }
     }
 
+    // MARK: - Large-Library-Stressmodus
+
+    static let largeLibraryFixtureArgument = "-shelvLargeLibraryFixture"
+
+    static var largeLibraryFixtureAlbumCount: Int? {
+        parsedLargeLibraryFixtureCount()
+    }
+
+    static var isLargeLibraryFixtureEnabled: Bool {
+        largeLibraryFixtureAlbumCount != nil
+    }
+
+    private static func parsedLargeLibraryFixtureCount() -> Int? {
+        let args = ProcessInfo.processInfo.arguments
+        for (index, arg) in args.enumerated() {
+            if arg == largeLibraryFixtureArgument,
+               index + 1 < args.count,
+               let count = Int(args[index + 1]) {
+                return boundedLargeLibraryFixtureCount(count)
+            }
+            let prefix = "\(largeLibraryFixtureArgument)="
+            if arg.hasPrefix(prefix),
+               let count = Int(String(arg.dropFirst(prefix.count))) {
+                return boundedLargeLibraryFixtureCount(count)
+            }
+        }
+
+        if let raw = ProcessInfo.processInfo.environment["SHELV_LARGE_LIBRARY_FIXTURE"],
+           let count = Int(raw) {
+            return boundedLargeLibraryFixtureCount(count)
+        }
+        return nil
+    }
+
+    private static func boundedLargeLibraryFixtureCount(_ count: Int) -> Int? {
+        guard count > 0 else { return nil }
+        return min(count, 100_000)
+    }
+
+    static func largeLibraryAlbums(count: Int) -> [Album] {
+        let albumCount = max(0, count)
+        let artistCount = largeLibraryArtistCount(albumCount: albumCount)
+        let baseCreated = Date(timeIntervalSince1970: 1_704_067_200) // 2024-01-01 UTC
+
+        return (0..<albumCount).map { index in
+            let number = index + 1
+            let artistNumber = (index % artistCount) + 1
+            return Album(
+                id: "fixture-album-\(padded(number, width: 6))",
+                name: "Album \(padded(number, width: 6))",
+                artist: "Fixture Artist \(padded(artistNumber, width: 5))",
+                artistId: "fixture-artist-\(padded(artistNumber, width: 5))",
+                coverArt: nil,
+                songCount: 10 + (index % 9),
+                duration: 1_800 + (index % 1_200),
+                year: 1960 + (index % 67),
+                genre: fixtureGenres[index % fixtureGenres.count],
+                playCount: (index * 37) % 10_000,
+                starred: nil,
+                created: baseCreated.addingTimeInterval(TimeInterval(index * 60))
+            )
+        }
+    }
+
+    static func largeLibraryArtists(albumCount: Int) -> [Artist] {
+        let safeAlbumCount = max(0, albumCount)
+        let artistCount = largeLibraryArtistCount(albumCount: safeAlbumCount)
+        guard artistCount > 0 else { return [] }
+
+        let baseAlbumCount = safeAlbumCount / artistCount
+        let remainder = safeAlbumCount % artistCount
+        return (0..<artistCount).map { index in
+            let number = index + 1
+            let albumsForArtist = baseAlbumCount + (index < remainder ? 1 : 0)
+            return Artist(
+                id: "fixture-artist-\(padded(number, width: 5))",
+                name: "Fixture Artist \(padded(number, width: 5))",
+                albumCount: albumsForArtist,
+                coverArt: nil,
+                starred: nil
+            )
+        }
+    }
+
+    private static func largeLibraryArtistCount(albumCount: Int) -> Int {
+        guard albumCount > 0 else { return 0 }
+        return min(10_000, max(1, albumCount / 10))
+    }
+
+    private static let fixtureGenres = [
+        "Ambient", "Electronic", "Post-Rock", "Jazz", "Classical", "Soundtrack", "Indie", "Metal"
+    ]
+
+    private static func padded(_ value: Int, width: Int) -> String {
+        String(format: "%0\(width)d", value)
+    }
+
     // MARK: - Player-Standbild
 
     /// Fester Player-Zustand: "The Last Signal" aus "Depth Unknown", pausiert bei 2:46 / 4:19.

@@ -1,6 +1,6 @@
 import Foundation
 
-nonisolated struct Playlist: Identifiable, Codable, Hashable {
+nonisolated struct Playlist: Identifiable, Codable, Hashable, Sendable {
     let id: String
     let name: String
     let comment: String?
