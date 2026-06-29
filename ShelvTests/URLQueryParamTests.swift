@@ -1,5 +1,4 @@
 import XCTest
-@testable import Shelv
 
 final class URLQueryParamTests: XCTestCase {
     func testReturnsRequestedQueryParameter() throws {

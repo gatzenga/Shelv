@@ -1,5 +1,4 @@
 import XCTest
-@testable import Shelv
 
 final class TranscodingPolicyTests: XCTestCase {
     func testExtensionForKnownAudioMimeTypes() {

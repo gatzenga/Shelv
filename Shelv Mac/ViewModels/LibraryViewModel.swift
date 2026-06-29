@@ -49,6 +49,13 @@ class LibraryViewModel: ObservableObject {
     @Published var isLoadingPlaylists: Bool = false
 
     private let api = SubsonicAPIService.shared
+    private let libraryRepository = LibraryRepository.shared
+
+    private var activeServerKeys: (serverKey: String, stableId: String?)? {
+        guard let server = AppState.shared.serverStore.activeServer else { return nil }
+        let stableId = server.stableId.isEmpty ? nil : server.stableId
+        return (server.id.uuidString, stableId)
+    }
 
     // MARK: - Reset (bei Serverwechsel)
 
@@ -66,46 +73,42 @@ class LibraryViewModel: ObservableObject {
 
     func loadAlbums() async {
         guard !isLoadingAlbums else { return }
-        guard !OfflineModeService.shared.isOffline else { isLoadingAlbums = false; return }
 
-        if albums.isEmpty, let sid = AppState.shared.serverStore.activeServer?.stableId, !sid.isEmpty {
-            let cached: [Album]? = await Task.detached(priority: .utility) {
-                LibraryViewModel.loadLibraryCache([Album].self, name: "albums", serverId: sid)
-            }.value
-            if let cached, !cached.isEmpty { albums = cached }
+        if albums.isEmpty, let keys = activeServerKeys {
+            let cacheSort = Self.albumCacheSort(for: sortOption)
+            let cached = await libraryRepository.cachedAlbums(
+                serverKey: keys.serverKey,
+                sort: cacheSort.0,
+                direction: cacheSort.1
+            )
+            if !cached.isEmpty {
+                albums = cached
+            } else if let sid = keys.stableId {
+                let legacyCached: [Album]? = await Task.detached(priority: .utility) {
+                    LibraryViewModel.loadLibraryCache([Album].self, name: "albums", serverId: sid)
+                }.value
+                if let legacyCached, !legacyCached.isEmpty {
+                    albums = legacyCached
+                    await libraryRepository.storeAlbums(legacyCached, serverKey: keys.serverKey, stableId: keys.stableId)
+                }
+            }
         }
+
+        guard !OfflineModeService.shared.isOffline else { isLoadingAlbums = false; return }
 
         isLoadingAlbums = albums.isEmpty
         errorMessage = nil
         do {
-            // "year" und "mostPlayed" client-seitig sortieren, damit auch Alben ohne
-            // Plays/Jahr in der Liste erscheinen. "recentlyAdded" bleibt serverseitig.
-            let type: AlbumListType
-            switch sortOption {
-            case .name, .year, .mostPlayed: type = .alphabeticalByName
-            case .recentlyAdded:            type = .newest
+            guard let keys = activeServerKeys else {
+                isLoadingAlbums = false
+                return
             }
-            var all: [Album] = []
-            let pageSize = 500
-            var offset = 0
-            while true {
-                let page = try await api.getAlbumList(type: type, size: pageSize, offset: offset)
-                all.append(contentsOf: page)
-                if page.count < pageSize { break }
-                offset += pageSize
-            }
+            let all = try await libraryRepository.refreshAlbums(
+                serverKey: keys.serverKey,
+                stableId: keys.stableId,
+                sortBy: Self.subsonicSortKey(for: sortOption)
+            )
             albums = all
-            if sortOption == .year {
-                albums = albums.sorted { ($0.year ?? 0) > ($1.year ?? 0) }
-            } else if sortOption == .mostPlayed {
-                albums = albums.sorted { ($0.playCount ?? 0) > ($1.playCount ?? 0) }
-            }
-            if let sid = AppState.shared.serverStore.activeServer?.stableId, !sid.isEmpty {
-                let toSave = all
-                Task.detached(priority: .utility) {
-                    LibraryViewModel.saveLibraryCache(toSave, name: "albums", serverId: sid)
-                }
-            }
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -116,26 +119,32 @@ class LibraryViewModel: ObservableObject {
 
     func loadArtists() async {
         guard !isLoadingArtists else { return }
-        guard !OfflineModeService.shared.isOffline else { isLoadingArtists = false; return }
 
-        if artists.isEmpty, let sid = AppState.shared.serverStore.activeServer?.stableId, !sid.isEmpty {
-            let cached: [Artist]? = await Task.detached(priority: .utility) {
-                LibraryViewModel.loadLibraryCache([Artist].self, name: "artists", serverId: sid)
-            }.value
-            if let cached, !cached.isEmpty { artists = cached }
+        if artists.isEmpty, let keys = activeServerKeys {
+            let cached = await libraryRepository.cachedArtists(serverKey: keys.serverKey)
+            if !cached.isEmpty {
+                artists = cached
+            } else if let sid = keys.stableId {
+                let legacyCached: [Artist]? = await Task.detached(priority: .utility) {
+                    LibraryViewModel.loadLibraryCache([Artist].self, name: "artists", serverId: sid)
+                }.value
+                if let legacyCached, !legacyCached.isEmpty {
+                    artists = legacyCached
+                    await libraryRepository.storeArtists(legacyCached, serverKey: keys.serverKey, stableId: keys.stableId)
+                }
+            }
         }
+
+        guard !OfflineModeService.shared.isOffline else { isLoadingArtists = false; return }
 
         isLoadingArtists = artists.isEmpty
         errorMessage = nil
         do {
-            artists = try await api.getAllArtists()
-            artists = artists.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-            if let sid = AppState.shared.serverStore.activeServer?.stableId, !sid.isEmpty {
-                let toSave = artists
-                Task.detached(priority: .utility) {
-                    LibraryViewModel.saveLibraryCache(toSave, name: "artists", serverId: sid)
-                }
+            guard let keys = activeServerKeys else {
+                isLoadingArtists = false
+                return
             }
+            artists = try await libraryRepository.refreshArtists(serverKey: keys.serverKey, stableId: keys.stableId)
             let map = Dictionary(artists.compactMap { artist -> (String, String)? in
                 guard let cover = artist.coverArt else { return nil }
                 return (artist.name, cover)
@@ -157,6 +166,32 @@ class LibraryViewModel: ObservableObject {
             break // already sorted by server
         case .year:
             albums = albums.sorted { ($0.year ?? 0) > ($1.year ?? 0) }
+        }
+    }
+
+    private static func subsonicSortKey(for option: LibrarySortOption) -> String {
+        switch option {
+        case .name:
+            return "alphabeticalByName"
+        case .year:
+            return "year"
+        case .mostPlayed:
+            return "frequent"
+        case .recentlyAdded:
+            return "newest"
+        }
+    }
+
+    private static func albumCacheSort(for option: LibrarySortOption) -> (LibraryAlbumSort, LibraryDatabaseSortDirection) {
+        switch option {
+        case .name:
+            return (.name, .ascending)
+        case .year:
+            return (.year, .descending)
+        case .mostPlayed:
+            return (.playCount, .descending)
+        case .recentlyAdded:
+            return (.created, .descending)
         }
     }
 

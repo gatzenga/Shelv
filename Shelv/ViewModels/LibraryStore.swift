@@ -30,6 +30,7 @@ class LibraryStore: ObservableObject {
     @Published var reloadID = UUID()
 
     private let api = SubsonicAPIService.shared
+    private let libraryRepository = LibraryRepository.shared
 
     nonisolated static var libraryDir: URL {
         FileManager.default
@@ -43,6 +44,7 @@ class LibraryStore: ObservableObject {
 
     nonisolated static func diskCacheSizeBytes() -> Int {
         FileManager.default.directorySize(at: libraryDir)
+            + FileManager.default.directorySize(at: LibraryDatabase.defaultDBURL.deletingLastPathComponent())
     }
 
     private func save<T: Encodable>(_ value: T, name: String, serverID: UUID) {
@@ -61,6 +63,12 @@ class LibraryStore: ObservableObject {
     }
 
     private var activeServerID: UUID? { api.activeServer?.id }
+
+    private var activeServerKeys: (serverKey: String, stableId: String?)? {
+        guard let server = api.activeServer else { return nil }
+        let stableId = server.stableId.isEmpty ? nil : server.stableId
+        return (server.id.uuidString, stableId)
+    }
 
     func loadDiscover() async {
         guard !OfflineModeService.shared.isOffline else { return }
@@ -92,7 +100,26 @@ class LibraryStore: ObservableObject {
     }
 
     func loadAlbums(sortBy: String = "alphabeticalByName") async {
-        if albums.isEmpty, let id = activeServerID {
+        if albums.isEmpty, let keys = activeServerKeys {
+            let cacheSort = LibraryRepository.albumCacheSort(for: sortBy)
+            let cached = await libraryRepository.cachedAlbums(
+                serverKey: keys.serverKey,
+                sort: cacheSort.0,
+                direction: cacheSort.1
+            )
+            if !cached.isEmpty {
+                albums = cached
+            } else if let id = activeServerID {
+                let serverID = id
+                let legacyCached: [Album]? = await Task.detached(priority: .utility) {
+                    Self.readFromDisk([Album].self, name: "albums", serverID: serverID)
+                }.value
+                if let legacyCached, !legacyCached.isEmpty {
+                    albums = legacyCached
+                    await libraryRepository.storeAlbums(legacyCached, serverKey: keys.serverKey, stableId: keys.stableId)
+                }
+            }
+        } else if albums.isEmpty, let id = activeServerID {
             let serverID = id
             let cached: [Album]? = await Task.detached(priority: .utility) {
                 Self.readFromDisk([Album].self, name: "albums", serverID: serverID)
@@ -105,27 +132,17 @@ class LibraryStore: ObservableObject {
         isLoadingAlbums = albums.isEmpty
 
         do {
-            var result: [Album] = []
-            var offset = 0
-            let pageSize = 500
-            // "year" und "frequent" client-seitig sortieren, damit auch Alben ohne Plays/Jahr
-            // in der Liste erscheinen. "newest" bleibt serverseitig (dateAdded).
-            let useClientSort = (sortBy == "year" || sortBy == "frequent")
-            let apiSortBy = useClientSort ? "alphabeticalByName" : sortBy
-            while true {
-                let page = try await api.getAllAlbums(size: pageSize, offset: offset, sortBy: apiSortBy)
-                result.append(contentsOf: page)
-                if page.count < pageSize { break }
-                offset += pageSize
+            guard let keys = activeServerKeys else {
+                isLoadingAlbums = false
+                return
             }
-            if sortBy == "year" {
-                result = result.sorted { ($0.year ?? 0) > ($1.year ?? 0) }
-            } else if sortBy == "frequent" {
-                result = result.sorted { ($0.playCount ?? 0) > ($1.playCount ?? 0) }
-            }
+            let result = try await libraryRepository.refreshAlbums(
+                serverKey: keys.serverKey,
+                stableId: keys.stableId,
+                sortBy: sortBy
+            )
             albums = result
             if let id = activeServerID {
-                save(result, name: "albums", serverID: id)
                 UserDefaults.standard.set(result.count, forKey: "shelv_albumCount_\(id)")
             }
         } catch {
@@ -135,7 +152,21 @@ class LibraryStore: ObservableObject {
     }
 
     func loadArtists() async {
-        if artists.isEmpty, let id = activeServerID {
+        if artists.isEmpty, let keys = activeServerKeys {
+            let cached = await libraryRepository.cachedArtists(serverKey: keys.serverKey)
+            if !cached.isEmpty {
+                artists = cached
+            } else if let id = activeServerID {
+                let serverID = id
+                let legacyCached: [Artist]? = await Task.detached(priority: .utility) {
+                    Self.readFromDisk([Artist].self, name: "artists", serverID: serverID)
+                }.value
+                if let legacyCached, !legacyCached.isEmpty {
+                    artists = legacyCached
+                    await libraryRepository.storeArtists(legacyCached, serverKey: keys.serverKey, stableId: keys.stableId)
+                }
+            }
+        } else if artists.isEmpty, let id = activeServerID {
             let serverID = id
             let cached: [Artist]? = await Task.detached(priority: .utility) {
                 Self.readFromDisk([Artist].self, name: "artists", serverID: serverID)
@@ -159,10 +190,16 @@ class LibraryStore: ObservableObject {
         isLoadingArtists = artists.isEmpty
 
         do {
-            let result = try await api.getAllArtists()
+            guard let keys = activeServerKeys else {
+                isLoadingArtists = false
+                return
+            }
+            let result = try await libraryRepository.refreshArtists(
+                serverKey: keys.serverKey,
+                stableId: keys.stableId
+            )
             artists = result
             if let id = activeServerID {
-                save(result, name: "artists", serverID: id)
                 UserDefaults.standard.set(result.count, forKey: "shelv_artistCount_\(id)")
             }
             let map = Dictionary(result.compactMap { artist -> (String, String)? in
@@ -193,6 +230,13 @@ class LibraryStore: ObservableObject {
     func clearCache() {
         resetInMemory()
         try? FileManager.default.removeItem(at: Self.libraryDir)
+        Task {
+            do {
+                try await LibraryDatabase.shared.removeAllFiles()
+            } catch {
+                DBErrorLog.logPlayLog("LibraryStore clearCache: \(error.localizedDescription)")
+            }
+        }
     }
 
     func fetchAlbumSongs(_ album: Album) async throws -> [Song] {

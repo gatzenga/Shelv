@@ -24,6 +24,13 @@ final class LibraryStore: ObservableObject {
     @Published var reloadID = UUID()
 
     private let api = SubsonicAPIService.shared
+    private let libraryRepository = LibraryRepository.shared
+
+    private var activeServerKeys: (serverKey: String, stableId: String?)? {
+        guard let server = api.activeServer else { return nil }
+        let stableId = server.stableId.isEmpty ? nil : server.stableId
+        return (server.id.uuidString, stableId)
+    }
 
     /// Alle In-Memory-Daten leeren + Reload anstoßen (wie iOS). Beim Server-Wechsel aufgerufen,
     /// nachdem der Player gestoppt wurde — sonst bleiben Alben/Favoriten/Playlists des alten Servers.
@@ -40,17 +47,26 @@ final class LibraryStore: ObservableObject {
     func loadAlbums(sortBy: String = "alphabeticalByName") async {
         guard !isLoadingAlbums else { return }
         isLoadingAlbums = true; defer { isLoadingAlbums = false }
-        var all: [Album] = []
-        let pageSize = 500
-        var offset = 0
+
+        if albums.isEmpty, let keys = activeServerKeys {
+            let cacheSort = LibraryRepository.albumCacheSort(for: sortBy)
+            let cached = await libraryRepository.cachedAlbums(
+                serverKey: keys.serverKey,
+                sort: cacheSort.0,
+                direction: cacheSort.1
+            )
+            if !cached.isEmpty { albums = cached }
+        }
+
+        guard !OfflineModeService.shared.isOffline else { return }
+
         do {
-            while true {
-                let page = try await api.getAlbumList(type: sortBy, size: pageSize, offset: offset)
-                all.append(contentsOf: page)
-                if page.count < pageSize { break }
-                offset += pageSize
-            }
-            albums = all
+            guard let keys = activeServerKeys else { return }
+            albums = try await libraryRepository.refreshAlbums(
+                serverKey: keys.serverKey,
+                stableId: keys.stableId,
+                sortBy: sortBy
+            )
         } catch {
             if !(error is CancellationError) { errorMessage = error.localizedDescription }
         }
@@ -58,7 +74,17 @@ final class LibraryStore: ObservableObject {
 
     func loadArtists() async {
         isLoadingArtists = true; defer { isLoadingArtists = false }
-        do { artists = try await api.getAllArtists() }
+        if artists.isEmpty, let keys = activeServerKeys {
+            let cached = await libraryRepository.cachedArtists(serverKey: keys.serverKey)
+            if !cached.isEmpty { artists = cached }
+        }
+
+        guard !OfflineModeService.shared.isOffline else { return }
+
+        do {
+            guard let keys = activeServerKeys else { return }
+            artists = try await libraryRepository.refreshArtists(serverKey: keys.serverKey, stableId: keys.stableId)
+        }
         catch { if !(error is CancellationError) { errorMessage = error.localizedDescription } }
     }
 

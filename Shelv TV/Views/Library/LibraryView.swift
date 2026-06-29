@@ -52,6 +52,16 @@ struct LibraryView: View {
         artistDir == .descending ? store.artists.reversed() : store.artists
     }
 
+    private var albumCountByArtist: [String: Int] {
+        var counts: [String: Int] = [:]
+        counts.reserveCapacity(store.artists.count)
+        for album in store.albums {
+            guard let artistId = album.artistId, !artistId.isEmpty else { continue }
+            counts[artistId, default: 0] += 1
+        }
+        return counts
+    }
+
     var body: some View {
         NavigationStack(path: $path) {
             VStack(spacing: 0) {
@@ -161,11 +171,13 @@ struct LibraryView: View {
     }
 
     private var artistList: some View {
-        ScrollView {
+        let counts = albumCountByArtist
+
+        return ScrollView {
             LazyVStack(spacing: 4) {
                 ForEach(displayArtists) { artist in
                     ArtistListRow(artist: artist,
-                                  albumCount: store.albums.filter { $0.artistId == artist.id }.count) {
+                                  albumCount: counts[artist.id] ?? artist.albumCount ?? 0) {
                         path.append(artist)
                     }
                 }

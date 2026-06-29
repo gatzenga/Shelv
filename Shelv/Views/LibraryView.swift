@@ -32,6 +32,7 @@ struct LibraryView: View {
     @State private var currentToast: ShelveToast?
     @State private var albumGroups: [(letter: String, items: [Album])] = []
     @State private var artistGroups: [(letter: String, items: [Artist])] = []
+    @State private var albumCountByArtist: [String: Int] = [:]
     @State private var refreshContinuation: CheckedContinuation<Void, Never>?
     @ObservedObject private var downloadStore = DownloadStore.shared
     @State private var albumToDeleteDownloads: Album?
@@ -206,6 +207,13 @@ struct LibraryView: View {
                 calculatedAlbumGroups = items.isEmpty ? [] : [(letter: "", items: items)]
             }
 
+            var calculatedAlbumCountByArtist: [String: Int] = [:]
+            calculatedAlbumCountByArtist.reserveCapacity(min(albumsSource.count, artistsSource.count))
+            for album in albumsSource {
+                guard let artistId = album.artistId, !artistId.isEmpty else { continue }
+                calculatedAlbumCountByArtist[artistId, default: 0] += 1
+            }
+
             // 2. Künstler im Hintergrund sortieren
             let sortedArtists: [Artist]
             switch artistSort {
@@ -235,6 +243,7 @@ struct LibraryView: View {
             await MainActor.run {
                 self.albumGroups = calculatedAlbumGroups
                 self.artistGroups = calculatedArtistGroups
+                self.albumCountByArtist = calculatedAlbumCountByArtist
             }
         }
     }
@@ -587,7 +596,7 @@ struct LibraryView: View {
                         Button { navigateToArtist = artist } label: {
                             LibraryArtistListRow(
                                 artist: artist,
-                                localAlbumCount: displayAlbums.filter { $0.artistId == artist.id }.count,
+                                localAlbumCount: albumCountByArtist[artist.id] ?? artist.albumCount ?? 0,
                                 isDownloaded: downloadedArtistBadgeNames.contains(artist.name),
                                 accentColor: accentColor
                             )

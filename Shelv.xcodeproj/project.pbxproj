@@ -7,23 +7,40 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		BC10000C2FFE000000000001 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC10000D2FFE000000000001 /* GRDB */; };
+		BC1001012FFE000000000001 /* Album.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001112FFE000000000001 /* Album.swift */; };
+		BC1001022FFE000000000001 /* Artist.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001122FFE000000000001 /* Artist.swift */; };
+		BC1001032FFE000000000001 /* Song.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001132FFE000000000001 /* Song.swift */; };
+		BC1001042FFE000000000001 /* FlexibleDate.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001142FFE000000000001 /* FlexibleDate.swift */; };
+		BC1001052FFE000000000001 /* RepeatMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001152FFE000000000001 /* RepeatMode.swift */; };
+		BC1001062FFE000000000001 /* QueueSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001162FFE000000000001 /* QueueSnapshot.swift */; };
+		BC1001072FFE000000000001 /* AudioPlayerQueueState.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001172FFE000000000001 /* AudioPlayerQueueState.swift */; };
+		BC1001082FFE000000000001 /* TranscodingPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001182FFE000000000001 /* TranscodingPolicy.swift */; };
+		BC1001092FFE000000000001 /* NetworkStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001192FFE000000000001 /* NetworkStatus.swift */; };
+		BC10010A2FFE000000000001 /* URL+QueryParam.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC10011A2FFE000000000001 /* URL+QueryParam.swift */; };
+		BC10010B2FFE000000000001 /* PathSafe.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC10011B2FFE000000000001 /* PathSafe.swift */; };
+		BC10010E2FFE000000000001 /* LibraryDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC10011E2FFE000000000001 /* LibraryDatabase.swift */; };
+		BC10010F2FFE000000000001 /* LibraryRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC10011F2FFE000000000001 /* LibraryRepository.swift */; };
 		BC1867E52F91A088006D96E2 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC1867E42F91A088006D96E2 /* GRDB */; };
 		BC51161D2FDC8A850011CDE9 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC51161C2FDC8A850011CDE9 /* GRDB */; };
 		BC7B84A72FDB17F90058CB78 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC7B84A62FDB17F90058CB78 /* GRDB */; };
 /* End PBXBuildFile section */
 
-/* Begin PBXContainerItemProxy section */
-		BC10000A2FFE000000000001 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = BC9C59302F8E9FB000FF4D25 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = BC7B83F42FDB17700058CB78;
-			remoteInfo = "Shelv Mac";
-		};
-/* End PBXContainerItemProxy section */
-
 /* Begin PBXFileReference section */
 		BC1000012FFE000000000001 /* ShelvTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ShelvTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		BC1001112FFE000000000001 /* Album.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Models/Album.swift; sourceTree = "<group>"; };
+		BC1001122FFE000000000001 /* Artist.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Models/Artist.swift; sourceTree = "<group>"; };
+		BC1001132FFE000000000001 /* Song.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Models/Song.swift; sourceTree = "<group>"; };
+		BC1001142FFE000000000001 /* FlexibleDate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Models/FlexibleDate.swift; sourceTree = "<group>"; };
+		BC1001152FFE000000000001 /* RepeatMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Models/RepeatMode.swift; sourceTree = "<group>"; };
+		BC1001162FFE000000000001 /* QueueSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Models/QueueSnapshot.swift; sourceTree = "<group>"; };
+		BC1001172FFE000000000001 /* AudioPlayerQueueState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/AudioPlayerQueueState.swift; sourceTree = "<group>"; };
+		BC1001182FFE000000000001 /* TranscodingPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/TranscodingPolicy.swift; sourceTree = "<group>"; };
+		BC1001192FFE000000000001 /* NetworkStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/NetworkStatus.swift; sourceTree = "<group>"; };
+		BC10011A2FFE000000000001 /* URL+QueryParam.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ShelvCore/Services/URL+QueryParam.swift"; sourceTree = "<group>"; };
+		BC10011B2FFE000000000001 /* PathSafe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Utilities/PathSafe.swift; sourceTree = "<group>"; };
+		BC10011E2FFE000000000001 /* LibraryDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/LibraryDatabase.swift; sourceTree = "<group>"; };
+		BC10011F2FFE000000000001 /* LibraryRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/LibraryRepository.swift; sourceTree = "<group>"; };
 		BC5116112FDC8A690011CDE9 /* Shelv TV.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Shelv TV.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC7B83F52FDB17700058CB78 /* Shelv.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Shelv.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC9C59382F8E9FB000FF4D25 /* Shelv.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Shelv.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -62,6 +79,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BC10000C2FFE000000000001 /* GRDB in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -92,6 +110,26 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		BC1001102FFE000000000001 /* ShelvCore Test Sources */ = {
+			isa = PBXGroup;
+			children = (
+				BC1001112FFE000000000001 /* Album.swift */,
+				BC1001122FFE000000000001 /* Artist.swift */,
+				BC1001132FFE000000000001 /* Song.swift */,
+				BC1001142FFE000000000001 /* FlexibleDate.swift */,
+				BC1001152FFE000000000001 /* RepeatMode.swift */,
+				BC1001162FFE000000000001 /* QueueSnapshot.swift */,
+				BC1001172FFE000000000001 /* AudioPlayerQueueState.swift */,
+				BC1001182FFE000000000001 /* TranscodingPolicy.swift */,
+				BC1001192FFE000000000001 /* NetworkStatus.swift */,
+				BC10011A2FFE000000000001 /* URL+QueryParam.swift */,
+				BC10011B2FFE000000000001 /* PathSafe.swift */,
+				BC10011E2FFE000000000001 /* LibraryDatabase.swift */,
+				BC10011F2FFE000000000001 /* LibraryRepository.swift */,
+			);
+			name = "ShelvCore Test Sources";
+			sourceTree = "<group>";
+		};
 		BC7B84A52FDB17F90058CB78 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
@@ -105,6 +143,7 @@
 				BC9C593A2F8E9FB000FF4D25 /* Shelv */,
 				BC7B83F62FDB17700058CB78 /* Shelv Mac */,
 				BCC0DE0000000000000000C0 /* ShelvCore */,
+				BC1001102FFE000000000001 /* ShelvCore Test Sources */,
 				BC1000022FFE000000000001 /* ShelvTests */,
 				BC5116122FDC8A690011CDE9 /* Shelv TV */,
 				BC7B84A52FDB17F90058CB78 /* Frameworks */,
@@ -137,13 +176,13 @@
 			buildRules = (
 			);
 			dependencies = (
-				BC10000B2FFE000000000001 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				BC1000022FFE000000000001 /* ShelvTests */,
 			);
 			name = ShelvTests;
 			packageProductDependencies = (
+				BC10000D2FFE000000000001 /* GRDB */,
 			);
 			productName = ShelvTests;
 			productReference = BC1000012FFE000000000001 /* ShelvTests.xctest */;
@@ -233,7 +272,6 @@
 				TargetAttributes = {
 					BC1000062FFE000000000001 = {
 						CreatedOnToolsVersion = 26.5;
-						TestTargetID = BC7B83F42FDB17700058CB78;
 					};
 					BC5116102FDC8A690011CDE9 = {
 						CreatedOnToolsVersion = 26.5;
@@ -309,6 +347,19 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BC1001012FFE000000000001 /* Album.swift in Sources */,
+				BC1001022FFE000000000001 /* Artist.swift in Sources */,
+				BC1001032FFE000000000001 /* Song.swift in Sources */,
+				BC1001042FFE000000000001 /* FlexibleDate.swift in Sources */,
+				BC1001052FFE000000000001 /* RepeatMode.swift in Sources */,
+				BC1001062FFE000000000001 /* QueueSnapshot.swift in Sources */,
+				BC1001072FFE000000000001 /* AudioPlayerQueueState.swift in Sources */,
+				BC1001082FFE000000000001 /* TranscodingPolicy.swift in Sources */,
+				BC1001092FFE000000000001 /* NetworkStatus.swift in Sources */,
+				BC10010A2FFE000000000001 /* URL+QueryParam.swift in Sources */,
+				BC10010B2FFE000000000001 /* PathSafe.swift in Sources */,
+				BC10010E2FFE000000000001 /* LibraryDatabase.swift in Sources */,
+				BC10010F2FFE000000000001 /* LibraryRepository.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -335,19 +386,10 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
-/* Begin PBXTargetDependency section */
-		BC10000B2FFE000000000001 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = BC7B83F42FDB17700058CB78 /* Shelv Mac */;
-			targetProxy = BC10000A2FFE000000000001 /* PBXContainerItemProxy */;
-		};
-/* End PBXTargetDependency section */
-
 /* Begin XCBuildConfiguration section */
 		BC1000072FFE000000000001 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 7CZP946PWR;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -360,16 +402,15 @@
 				PRODUCT_BUNDLE_IDENTIFIER = ch.vkugler.ShelvTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG SHELV_LOGIC_TESTS";
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Shelv.app/Contents/MacOS/Shelv";
 			};
 			name = Debug;
 		};
 		BC1000082FFE000000000001 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 7CZP946PWR;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -382,9 +423,9 @@
 				PRODUCT_BUNDLE_IDENTIFIER = ch.vkugler.ShelvTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = SHELV_LOGIC_TESTS;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Shelv.app/Contents/MacOS/Shelv";
 			};
 			name = Release;
 		};
@@ -837,6 +878,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		BC10000D2FFE000000000001 /* GRDB */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BC1867E32F91A088006D96E2 /* XCRemoteSwiftPackageReference "GRDB" */;
+			productName = GRDB;
+		};
 		BC1867E42F91A088006D96E2 /* GRDB */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = BC1867E32F91A088006D96E2 /* XCRemoteSwiftPackageReference "GRDB" */;
