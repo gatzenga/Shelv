@@ -220,7 +220,7 @@ class LibraryViewModel: ObservableObject {
             if !cached.isEmpty {
                 albums = cached
             } else if let sid = keys.stableId {
-                let legacyCached: [Album]? = await Task.detached(priority: .utility) {
+                let legacyCached: [Album]? = await Task.detached(priority: .userInitiated) {
                     LibraryViewModel.loadLibraryCache([Album].self, name: "albums", serverId: sid)
                 }.value
                 if let legacyCached, !legacyCached.isEmpty {
@@ -268,7 +268,7 @@ class LibraryViewModel: ObservableObject {
             if !cached.isEmpty {
                 artists = cached
             } else if let sid = keys.stableId {
-                let legacyCached: [Artist]? = await Task.detached(priority: .utility) {
+                let legacyCached: [Artist]? = await Task.detached(priority: .userInitiated) {
                     LibraryViewModel.loadLibraryCache([Artist].self, name: "artists", serverId: sid)
                 }.value
                 if let legacyCached, !legacyCached.isEmpty {
@@ -330,7 +330,7 @@ class LibraryViewModel: ObservableObject {
     func loadStarred() async {
         if let serverId = AppState.shared.serverStore.activeServer?.stableId, !serverId.isEmpty {
             let sid = serverId
-            let cached: Starred2Result? = await Task.detached(priority: .utility) {
+            let cached: Starred2Result? = await Task.detached(priority: .userInitiated) {
                 LibraryViewModel.loadStarredCache(serverId: sid)
             }.value
             if let cached {

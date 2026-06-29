@@ -152,7 +152,7 @@ class LibraryStore: ObservableObject {
                 albums = cached
             } else if let id = activeServerID {
                 let serverID = id
-                let legacyCached: [Album]? = await Task.detached(priority: .utility) {
+                let legacyCached: [Album]? = await Task.detached(priority: .userInitiated) {
                     Self.readFromDisk([Album].self, name: "albums", serverID: serverID)
                 }.value
                 if let legacyCached, !legacyCached.isEmpty {
@@ -162,7 +162,7 @@ class LibraryStore: ObservableObject {
             }
         } else if albums.isEmpty, let id = activeServerID {
             let serverID = id
-            let cached: [Album]? = await Task.detached(priority: .utility) {
+            let cached: [Album]? = await Task.detached(priority: .userInitiated) {
                 Self.readFromDisk([Album].self, name: "albums", serverID: serverID)
             }.value
             if let cached, !cached.isEmpty { albums = cached }
@@ -230,7 +230,7 @@ class LibraryStore: ObservableObject {
                 artists = cached
             } else if let id = activeServerID {
                 let serverID = id
-                let legacyCached: [Artist]? = await Task.detached(priority: .utility) {
+                let legacyCached: [Artist]? = await Task.detached(priority: .userInitiated) {
                     Self.readFromDisk([Artist].self, name: "artists", serverID: serverID)
                 }.value
                 if let legacyCached, !legacyCached.isEmpty {
@@ -240,7 +240,7 @@ class LibraryStore: ObservableObject {
             }
         } else if artists.isEmpty, let id = activeServerID {
             let serverID = id
-            let cached: [Artist]? = await Task.detached(priority: .utility) {
+            let cached: [Artist]? = await Task.detached(priority: .userInitiated) {
                 Self.readFromDisk([Artist].self, name: "artists", serverID: serverID)
             }.value
             if let cached, !cached.isEmpty { artists = cached }
@@ -345,7 +345,7 @@ class LibraryStore: ObservableObject {
     func loadStarred() async {
         if let id = activeServerID {
             let serverID = id
-            let cached: StarredResult? = await Task.detached(priority: .utility) {
+            let cached: StarredResult? = await Task.detached(priority: .userInitiated) {
                 guard let songs = Self.readFromDisk([Song].self, name: "starred_songs", serverID: serverID),
                       let albums = Self.readFromDisk([Album].self, name: "starred_albums", serverID: serverID),
                       let artists = Self.readFromDisk([Artist].self, name: "starred_artists", serverID: serverID) else { return nil }
@@ -469,7 +469,7 @@ class LibraryStore: ObservableObject {
     func loadPlaylists() async {
         if let id = activeServerID {
             let serverID = id
-            let cached: [Playlist]? = await Task.detached(priority: .utility) {
+            let cached: [Playlist]? = await Task.detached(priority: .userInitiated) {
                 Self.readFromDisk([Playlist].self, name: "playlists", serverID: serverID)
             }.value
             if let cached, !cached.isEmpty { playlists = cached }
@@ -491,10 +491,10 @@ class LibraryStore: ObservableObject {
     func loadPlaylistDetail(id: String) async -> Playlist? {
         if OfflineModeService.shared.isOffline {
             guard let serverID = activeServerID else { return nil }
-            var playlist = await Task.detached(priority: .utility) {
+            var playlist = await Task.detached(priority: .userInitiated) {
                 Self.readFromDisk(Playlist.self, name: "playlist_\(id)", serverID: serverID)
             }.value
-            let songs = await Task.detached(priority: .utility) {
+            let songs = await Task.detached(priority: .userInitiated) {
                 Self.readFromDisk([Song].self, name: "playlist_songs_\(id)", serverID: serverID)
             }.value
             playlist?.songs = songs
