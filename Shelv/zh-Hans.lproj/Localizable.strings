@@ -27,6 +27,9 @@
 "favorite_albums" = "收藏的专辑";
 "favorite_artists" = "收藏的艺术家";
 "play" = "播放";
+"pause" = "暂停";
+"previous" = "上一首";
+"next" = "下一首";
 "shuffle" = "随机播放";
 "play_next" = "下一首播放";
 "add_to_queue" = "添加到队列";
@@ -291,6 +294,7 @@
 "accent_color" = "强调色";
 "playlists_favorites" = "播放列表与收藏";
 "playback" = "播放";
+"playback_position" = "播放位置";
 "replay_gain" = "ReplayGain";
 "replay_gain_mode" = "模式";
 "track_gain" = "曲目增益";
@@ -402,12 +406,15 @@
 "no_instant_mix_available" = "没有可用的即时混音";
 "show_instant_mix" = "显示即时混音";
 "ui_customizations" = "界面自定义";
+"interface_style" = "界面";
+"mini_player" = "迷你播放器";
+"mini_player_shelv" = "Shelv";
+"mini_player_native" = "原生";
 "on" = "开";
 "off" = "关";
 "what_to_sync" = "同步内容";
 "play_history" = "播放历史";
 "lyrics_server" = "歌词服务器";
-"home" = "首页";
 "show_playlists" = "显示播放列表";
 "show_favorites" = "显示收藏";
 "show_playlists_in_tab_bar" = "在标签栏中显示播放列表";

@@ -5,12 +5,14 @@ import SwiftUI
 struct AlbumDetailView: View {
     let album: Album
     @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
+    @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
     @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     @ObservedObject private var library = LibraryStore.shared
     @ObservedObject private var offlineMode = OfflineModeService.shared
     private let player = AudioPlayerService.shared
 
     @State private var songs: [Song] = []
+    @State private var showAddToPlaylist = false
 
     private var discNumbers: [Int] { Array(Set(songs.map { $0.discNumber ?? 1 })).sorted() }
     private var hasMultipleDiscs: Bool { discNumbers.count > 1 }
@@ -23,6 +25,7 @@ struct AlbumDetailView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, 60)
         .toolbar(.hidden, for: .tabBar)
+        .addToPlaylistDialog(isPresented: $showAddToPlaylist, songIds: songs.map(\.id))
         .task {
             songs = await LibraryStore.shared.albumSongs(album)
         }
@@ -51,16 +54,7 @@ struct AlbumDetailView: View {
                         InstantMixService.playAlbumMix(for: album, player: player)
                     }
                 }
-                HStack(spacing: 12) {
-                    iconButton("text.line.first.and.arrowtriangle.forward") { player.addPlayNext(songs) }
-                    iconButton("text.append") { player.addToQueue(songs) }
-                    if showFavoriteActions {
-                        iconButton(library.isAlbumStarred(album) ? "heart.fill" : "heart") {
-                            Task { await library.toggleStarAlbum(album) }
-                        }
-                    }
-                }
-                .disabled(songs.isEmpty)
+                secondaryActionButtons
             }
         }
     }
@@ -72,11 +66,53 @@ struct AlbumDetailView: View {
         .buttonStyle(.bordered)
     }
 
-    private func iconButton(_ icon: String, action: @escaping () -> Void) -> some View {
+    private var secondaryActionButtons: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 12) {
+                iconButton(
+                    "text.line.first.and.arrowtriangle.forward",
+                    title: String(localized: "play_next")
+                ) {
+                    player.addPlayNext(songs)
+                }
+                iconButton("text.append", title: String(localized: "add_to_queue")) {
+                    player.addToQueue(songs)
+                }
+            }
+
+            if showFavoriteActions || showPlaylistActions {
+                HStack(spacing: 12) {
+                    if showFavoriteActions {
+                        iconButton(
+                            library.isAlbumStarred(album) ? "heart.fill" : "heart",
+                            title: library.isAlbumStarred(album)
+                                ? String(localized: "unfavorite")
+                                : String(localized: "favorite")
+                        ) {
+                            Task { await library.toggleStarAlbum(album) }
+                        }
+                    }
+                    if showPlaylistActions {
+                        iconButton("text.badge.plus", title: String(localized: "add_to_playlist")) {
+                            showAddToPlaylist = true
+                        }
+                    }
+                    if showFavoriteActions != showPlaylistActions {
+                        Color.clear
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+            }
+        }
+        .disabled(songs.isEmpty)
+    }
+
+    private func iconButton(_ icon: String, title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: icon).frame(maxWidth: .infinity)
         }
         .buttonStyle(.bordered)
+        .accessibilityLabel(title)
     }
 
     @ViewBuilder

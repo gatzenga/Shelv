@@ -264,7 +264,7 @@ private struct SongContextMenuModifier: ViewModifier {
                     }
                 }
             }
-            .sheet(isPresented: $showAddToPlaylist) { AddToPlaylistView(songIds: [song.id]) }
+            .addToPlaylistDialog(isPresented: $showAddToPlaylist, songIds: [song.id])
     }
 }
 
@@ -308,20 +308,27 @@ private struct AlbumContextMenuModifier: ViewModifier {
                 }
                 if showPlaylistActions {
                     Button {
-                        Task { addSongIds = (await library.albumSongs(album)).map(\.id); showAddToPlaylist = true }
+                        Task {
+                            let songs = await library.albumSongs(album)
+                            let ids = songs.map(\.id)
+                            await MainActor.run {
+                                addSongIds = ids
+                                showAddToPlaylist = true
+                            }
+                        }
                     } label: {
                         Label(String(localized: "add_to_playlist"), systemImage: "text.badge.plus")
                     }
                 }
             }
-            .sheet(isPresented: $showAddToPlaylist) { AddToPlaylistView(songIds: addSongIds) }
+            .addToPlaylistDialog(isPresented: $showAddToPlaylist, songIds: addSongIds)
     }
 }
 
-/// Sheet zum Hinzufügen von Songs zu einer bestehenden oder neuen Playlist.
-struct AddToPlaylistView: View {
+/// Native tvOS-Auswahl zum Hinzufügen von Songs zu einer bestehenden oder neuen Playlist.
+private struct AddToPlaylistDialogModifier: ViewModifier {
+    @Binding var isPresented: Bool
     let songIds: [String]
-    @Environment(\.dismiss) private var dismiss
     @ObservedObject private var store = LibraryStore.shared
     @ObservedObject private var recap = RecapStore.shared
     @State private var showCreate = false
@@ -330,65 +337,86 @@ struct AddToPlaylistView: View {
         store.playlists.filter { !recap.recapPlaylistIds.contains($0.id) }
     }
 
-    var body: some View {
-        NavigationStack {
-            List {
-                Button { showCreate = true } label: {
-                    Label(String(localized: "new_playlist_2"), systemImage: "plus")
+    func body(content: Content) -> some View {
+        content
+            .confirmationDialog(
+                String(localized: "add_to_playlist_2"),
+                isPresented: $isPresented,
+                titleVisibility: .visible
+            ) {
+                Button(String(localized: "new_playlist_2")) {
+                    showCreate = true
                 }
                 ForEach(playlists) { pl in
-                    Button {
-                        Task { await store.addSongs(songIds, toPlaylist: pl.id); dismiss() }
-                    } label: {
-                        HStack(spacing: 20) {
-                            CoverArtView(url: pl.coverURL(200), size: 60, cornerRadius: 6)
-                            Text(pl.name).lineLimit(1)
-                        }
+                    Button(pl.name) {
+                        let ids = songIds
+                        Task { await store.addSongs(ids, toPlaylist: pl.id) }
                     }
                 }
+                Button(String(localized: "cancel"), role: .cancel) {}
             }
-            .listStyle(.plain)
-            .navigationTitle(String(localized: "add_to_playlist_2"))
-            .task { await store.loadPlaylists() }
             .sheet(isPresented: $showCreate) {
                 PlaylistEditSheet(title: String(localized: "new_playlist_2"),
                                   initialName: "", initialComment: nil, showComment: false) { name, _ in
-                    Task { await store.createPlaylist(name: name, songIds: songIds); dismiss() }
+                    let ids = songIds
+                    Task { await store.createPlaylist(name: name, songIds: ids) }
                 }
             }
-        }
+            .onChange(of: isPresented) { _, presented in
+                guard presented else { return }
+                Task { await store.loadPlaylists() }
+            }
     }
 }
 
 private struct ArtistContextMenuModifier: ViewModifier {
     let artist: Artist
     @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
+    @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
     @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     @ObservedObject private var library = LibraryStore.shared
     @ObservedObject private var offlineMode = OfflineModeService.shared
+    @State private var addSongIds: [String] = []
+    @State private var showAddToPlaylist = false
 
     func body(content: Content) -> some View {
-        content.contextMenu {
-            let player = AudioPlayerService.shared
-            Button { Task { let s = await library.artistSongs(artist); player.play(songs: s, startIndex: 0) } } label: {
-                Label(String(localized: "play"), systemImage: "play.fill")
-            }
-            Button { Task { let s = await library.artistSongs(artist); player.playShuffled(songs: s) } } label: {
-                Label(String(localized: "shuffle"), systemImage: "shuffle")
-            }
-            if showInstantMixActions && !offlineMode.isOffline {
-                Button { InstantMixService.playArtistMix(for: artist, player: player) } label: {
-                    Label(String(localized: "instant_mix"), systemImage: "sparkles")
+        content
+            .contextMenu {
+                let player = AudioPlayerService.shared
+                Button { Task { let s = await library.artistSongs(artist); player.play(songs: s, startIndex: 0) } } label: {
+                    Label(String(localized: "play"), systemImage: "play.fill")
+                }
+                Button { Task { let s = await library.artistSongs(artist); player.playShuffled(songs: s) } } label: {
+                    Label(String(localized: "shuffle"), systemImage: "shuffle")
+                }
+                if showInstantMixActions && !offlineMode.isOffline {
+                    Button { InstantMixService.playArtistMix(for: artist, player: player) } label: {
+                        Label(String(localized: "instant_mix"), systemImage: "sparkles")
+                    }
+                }
+                if showFavoriteActions {
+                    let starred = library.isArtistStarred(artist)
+                    Button { Task { await library.toggleStarArtist(artist) } } label: {
+                        Label(starred ? String(localized: "unfavorite") : String(localized: "favorite"),
+                              systemImage: starred ? "heart.fill" : "heart")
+                    }
+                }
+                if showPlaylistActions {
+                    Button {
+                        Task {
+                            let songs = await library.artistSongs(artist)
+                            let ids = songs.map(\.id)
+                            await MainActor.run {
+                                addSongIds = ids
+                                showAddToPlaylist = true
+                            }
+                        }
+                    } label: {
+                        Label(String(localized: "add_to_playlist"), systemImage: "text.badge.plus")
+                    }
                 }
             }
-            if showFavoriteActions {
-                let starred = library.isArtistStarred(artist)
-                Button { Task { await library.toggleStarArtist(artist) } } label: {
-                    Label(starred ? String(localized: "unfavorite") : String(localized: "favorite"),
-                          systemImage: starred ? "heart.fill" : "heart")
-                }
-            }
-        }
+            .addToPlaylistDialog(isPresented: $showAddToPlaylist, songIds: addSongIds)
     }
 }
 
@@ -430,6 +458,9 @@ extension View {
     func albumContextMenu(_ album: Album) -> some View { modifier(AlbumContextMenuModifier(album: album)) }
     func artistContextMenu(_ artist: Artist) -> some View { modifier(ArtistContextMenuModifier(artist: artist)) }
     func playlistContextMenu(_ playlist: Playlist) -> some View { modifier(PlaylistContextMenuModifier(playlist: playlist)) }
+    func addToPlaylistDialog(isPresented: Binding<Bool>, songIds: [String]) -> some View {
+        modifier(AddToPlaylistDialogModifier(isPresented: isPresented, songIds: songIds))
+    }
 }
 
 /// Song-Zeile für die Zwei-Spalten-Detailansichten (Album/Playlist) im LazyVStack.

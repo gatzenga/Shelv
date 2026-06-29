@@ -3,6 +3,7 @@ import SwiftUI
 struct SearchView: View {
     /// Wird von ContentView bei jedem Tab-Wechsel zu Search erhöht → triggert Reset + Fokus.
     var resetToken: Int = 0
+    var searchPlacement: SearchFieldPlacement = .navigationBarDrawer(displayMode: .always)
     @ObservedObject var libraryStore = LibraryStore.shared
     @ObservedObject var offlineMode = OfflineModeService.shared
     @EnvironmentObject var serverStore: ServerStore
@@ -559,6 +560,7 @@ struct SearchView: View {
             .searchable(
                 text: $query,
                 isPresented: $searchFieldActive,
+                placement: searchPlacement,
                 prompt: String(localized: "artists_albums_songs")
             )
             .onAppear {

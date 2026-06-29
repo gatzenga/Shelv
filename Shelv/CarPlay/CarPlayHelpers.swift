@@ -232,9 +232,9 @@ func showAllListItem(title: String, handler: @escaping CPItemHandler) -> CPListI
 ///
 /// Reihenfolge der Quellen pro ID:
 /// 1. Memory-Cache (synchron, sofort)
-/// 2. Offline: `LocalArtworkIndex` (heruntergeladene Artwork-Pfade)
-/// 3. Offline: Disk-Cache mit Multi-Size-Fallback `[size, 150, 300, 600]`
-/// 4. Online: Disk → Network via `ImageCacheService`
+/// 2. `LocalArtworkIndex` (heruntergeladene Artwork-Pfade, falls vorhanden)
+/// 3. Disk-Cache mit Multi-Size-Fallback (z.B. iPhone hat 300px, CarPlay braucht 150px)
+/// 4. Online: Network via `ImageCacheService`
 @MainActor
 func loadCoversIncremental(
     coverArtIds ids: [String?],
@@ -242,11 +242,12 @@ func loadCoversIncremental(
     chunkSize: Int = 20,
     onChunk: @escaping ([String: UIImage]) -> Void
 ) async {
-    let unique = Array(Set(ids.compactMap { $0 }))
+    var seen = Set<String>()
+    let unique = ids.compactMap { $0 }.filter { seen.insert($0).inserted }
     guard !unique.isEmpty else { return }
 
     let isOffline = OfflineModeService.shared.isOffline
-    let sizeFallback = [size, 150, 300, 600]
+    let sizeFallback = uniqueCoverSizes([size, 150, 300, 600, 200, 120, 100, 80, 50])
 
     // 1) Memory-Cache synchron abfragen (immer Main Actor, In-Memory)
     var syncHits: [String: UIImage] = [:]
@@ -259,8 +260,8 @@ func loadCoversIncremental(
         }
     }
 
-    // 2) Offline: LocalArtworkIndex-Pfade auf Main Actor sammeln, UIImage-Reads in Background (FIX 7)
-    if isOffline && !misses.isEmpty {
+    // 2) LocalArtworkIndex-Pfade auf Main Actor sammeln, UIImage-Reads in Background.
+    if !misses.isEmpty {
         let pathsById: [String: String] = misses.reduce(into: [:]) { dict, id in
             if let path = LocalArtworkIndex.shared.localPath(for: id) { dict[id] = path }
         }
@@ -281,35 +282,43 @@ func loadCoversIncremental(
     if !syncHits.isEmpty { onChunk(syncHits.mapValues { squareCropped($0) }) }
     guard !misses.isEmpty else { return }
 
-    // 3) Async-Misses in Chunks laden — UI nach jedem Chunk updaten.
+    // 3) Disk-Fallback in sichtbarer Reihenfolge prüfen, bevor online neu geladen wird.
+    var diskMisses: [String] = []
     let chunks = stride(from: 0, to: misses.count, by: chunkSize).map {
         Array(misses[$0..<min($0 + chunkSize, misses.count)])
     }
     for chunk in chunks {
         if Task.isCancelled { return }
+        let diskHits = await loadDiskCoverHits(ids: chunk, sizes: sizeFallback)
+        if !diskHits.isEmpty { onChunk(diskHits.mapValues { squareCropped($0) }) }
+        diskMisses.append(contentsOf: chunk.filter { diskHits[$0] == nil })
+    }
+
+    misses = diskMisses
+    guard !misses.isEmpty, !isOffline else { return }
+
+    // 4) Online-Misses in Chunks laden — UI nach jedem Chunk updaten.
+    let onlineChunks = stride(from: 0, to: misses.count, by: chunkSize).map {
+        Array(misses[$0..<min($0 + chunkSize, misses.count)])
+    }
+    for chunk in onlineChunks {
+        if Task.isCancelled { return }
         var chunkResult: [String: UIImage] = [:]
         await withTaskGroup(of: (String, UIImage?).self) { group in
             for id in chunk {
-                if isOffline {
-                    group.addTask {
-                        // Disk-Cache Multi-Size-Fallback (Cover wurde mal vom iPhone gerendert).
-                        for s in sizeFallback {
-                            if let img = await ImageCacheService.shared.diskOnlyImage(key: "\(id)_\(s)") {
-                                return (id, img)
-                            }
-                        }
-                        return (id, nil)
-                    }
-                } else {
-                    guard let url = SubsonicAPIService.shared.coverArtURL(for: id, size: size) else { continue }
-                    let key = "\(id)_\(size)"
-                    group.addTask { (id, await ImageCacheService.shared.image(url: url, key: key)) }
-                }
+                guard let url = SubsonicAPIService.shared.coverArtURL(for: id, size: size) else { continue }
+                let key = "\(id)_\(size)"
+                group.addTask { (id, await ImageCacheService.shared.image(url: url, key: key)) }
             }
             for await (id, img) in group { if let img { chunkResult[id] = img } }
         }
         if !chunkResult.isEmpty { onChunk(chunkResult.mapValues { squareCropped($0) }) }
     }
+}
+
+private func uniqueCoverSizes(_ sizes: [Int]) -> [Int] {
+    var seen = Set<Int>()
+    return sizes.filter { seen.insert($0).inserted }
 }
 
 private func firstMemoryHit(id: String, sizes: [Int]) -> UIImage? {
@@ -321,11 +330,32 @@ private func firstMemoryHit(id: String, sizes: [Int]) -> UIImage? {
     return nil
 }
 
+private func loadDiskCoverHits(ids: [String], sizes: [Int]) async -> [String: UIImage] {
+    var hits: [String: UIImage] = [:]
+    await withTaskGroup(of: (String, UIImage?).self) { group in
+        for id in ids {
+            group.addTask {
+                if Task.isCancelled { return (id, nil) }
+                for size in sizes {
+                    if let image = await ImageCacheService.shared.diskOnlyImage(key: "\(id)_\(size)") {
+                        return (id, image)
+                    }
+                }
+                return (id, nil)
+            }
+        }
+        for await (id, img) in group {
+            if let img { hits[id] = img }
+        }
+    }
+    return hits
+}
+
 /// Füllt bereits im Memory-Cache vorhandene Covers synchron in neue Items —
 /// verhindert Placeholder-Flackern wenn Sections vor dem streamCovers-Task gesetzt werden.
 @MainActor
 func prefillCoversFromCache(_ itemsByCoverId: [String: [CPListItem]], size: Int = 150) {
-    let fallback = [size, 300, 150, 600]
+    let fallback = uniqueCoverSizes([size, 300, 150, 600, 200, 120, 100, 80, 50])
     for (id, items) in itemsByCoverId {
         for s in fallback {
             if let img = ImageCacheService.shared.cachedImage(key: "\(id)_\(s)") {
@@ -345,11 +375,14 @@ func prefillCoversFromCache(_ itemsByCoverId: [String: [CPListItem]], size: Int 
 @MainActor
 func streamCovers(
     into itemsByCoverId: [String: [CPListItem]],
+    orderedCoverArtIds: [String]? = nil,
     size: Int = 150,
-    chunkSize: Int = 20
+    chunkSize: Int = 8
 ) async {
     guard !itemsByCoverId.isEmpty else { return }
-    let ids: [String?] = itemsByCoverId.keys.map { $0 as String? }
+    let ids: [String?] = (orderedCoverArtIds ?? Array(itemsByCoverId.keys))
+        .filter { itemsByCoverId[$0] != nil }
+        .map { $0 as String? }
     await loadCoversIncremental(coverArtIds: ids, size: size, chunkSize: chunkSize) { chunk in
         for (id, img) in chunk {
             itemsByCoverId[id]?.forEach { $0.setImage(img) }

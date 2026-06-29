@@ -25,6 +25,10 @@ final class PersonalizationSettingsTests: XCTestCase {
         XCTAssertTrue(defaults.bool(forKey: PersonalizationPreferenceKey.showFavoritesInLibrary))
         XCTAssertTrue(defaults.bool(forKey: PersonalizationPreferenceKey.showFavoriteActions))
         XCTAssertTrue(defaults.bool(forKey: PersonalizationPreferenceKey.showInstantMixActions))
+        XCTAssertEqual(
+            defaults.string(forKey: PersonalizationPreferenceKey.miniPlayerStyle),
+            PersonalizationMiniPlayerStyle.shelv.rawValue
+        )
         XCTAssertEqual(PersonalizationSettings.swipeAction(for: .leftPrimary, in: defaults), .favorite)
         XCTAssertEqual(PersonalizationSettings.swipeAction(for: .leftSecondary, in: defaults), .addToPlaylist)
         XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightPrimary, in: defaults), .playNext)
@@ -68,23 +72,62 @@ final class PersonalizationSettingsTests: XCTestCase {
             [.discover, .library, .playlists, .settings, .search]
         )
         XCTAssertFalse(PersonalizationSettings.isAvailable(.addToPlaylist, in: defaults))
-        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .leftSecondary, in: defaults), .none)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .leftSecondary, in: defaults), .addToPlaylist)
+        XCTAssertEqual(PersonalizationSettings.visibleSwipeAction(for: .leftSecondary, in: defaults), .none)
     }
 
-    func testDisabledFeatureActionsNormalizeSwipeSlotsToNone() {
+    func testDisabledFeatureActionsKeepConfiguredSwipeSlotsHidden() {
         PersonalizationSettings.registerDefaults(in: defaults)
         defaults.set(false, forKey: PersonalizationPreferenceKey.showFavoriteActions)
         defaults.set(false, forKey: PersonalizationPreferenceKey.showPlaylistActions)
 
         PersonalizationSettings.normalizeSwipeActions(in: defaults)
 
-        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .leftPrimary, in: defaults), .none)
-        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .leftSecondary, in: defaults), .none)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .leftPrimary, in: defaults), .favorite)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .leftSecondary, in: defaults), .addToPlaylist)
         XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightPrimary, in: defaults), .playNext)
         XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightSecondary, in: defaults), .addToQueue)
+
+        XCTAssertEqual(PersonalizationSettings.visibleSwipeAction(for: .leftPrimary, in: defaults), .none)
+        XCTAssertEqual(PersonalizationSettings.visibleSwipeAction(for: .leftSecondary, in: defaults), .none)
+        XCTAssertEqual(PersonalizationSettings.visibleSwipeAction(for: .rightPrimary, in: defaults), .playNext)
+        XCTAssertEqual(PersonalizationSettings.visibleSwipeAction(for: .rightSecondary, in: defaults), .addToQueue)
     }
 
-    func testDuplicateSwipeActionsArePreventedExceptNone() {
+    func testReenabledFeatureRestoresConfiguredSwipeAction() {
+        PersonalizationSettings.registerDefaults(in: defaults)
+        defaults.set(false, forKey: PersonalizationPreferenceKey.showFavoriteActions)
+
+        PersonalizationSettings.normalizeSwipeActions(in: defaults)
+
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .leftPrimary, in: defaults), .favorite)
+        XCTAssertEqual(PersonalizationSettings.visibleSwipeAction(for: .leftPrimary, in: defaults), .none)
+
+        defaults.set(true, forKey: PersonalizationPreferenceKey.showFavoriteActions)
+        PersonalizationSettings.normalizeSwipeActions(in: defaults)
+
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .leftPrimary, in: defaults), .favorite)
+        XCTAssertEqual(PersonalizationSettings.visibleSwipeAction(for: .leftPrimary, in: defaults), .favorite)
+    }
+
+    func testHiddenFeatureActionCanStillBeAssignedAndLaterShown() {
+        PersonalizationSettings.registerDefaults(in: defaults)
+        defaults.set(false, forKey: PersonalizationPreferenceKey.showPlaylistActions)
+
+        PersonalizationSettings.setSwipeAction(.addToPlaylist, for: .leftPrimary, in: defaults)
+
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .leftPrimary, in: defaults), .addToPlaylist)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .leftSecondary, in: defaults), .none)
+        XCTAssertEqual(PersonalizationSettings.visibleSwipeAction(for: .leftPrimary, in: defaults), .none)
+
+        defaults.set(true, forKey: PersonalizationPreferenceKey.showPlaylistActions)
+        PersonalizationSettings.normalizeSwipeActions(in: defaults)
+
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .leftPrimary, in: defaults), .addToPlaylist)
+        XCTAssertEqual(PersonalizationSettings.visibleSwipeAction(for: .leftPrimary, in: defaults), .addToPlaylist)
+    }
+
+    func testDuplicateSwipeActionsMoveBetweenSlotsExceptNone() {
         PersonalizationSettings.registerDefaults(in: defaults)
 
         PersonalizationSettings.setSwipeAction(.none, for: .rightPrimary, in: defaults)
@@ -92,10 +135,21 @@ final class PersonalizationSettingsTests: XCTestCase {
         PersonalizationSettings.setSwipeAction(.playNext, for: .leftSecondary, in: defaults)
         PersonalizationSettings.setSwipeAction(.none, for: .rightSecondary, in: defaults)
 
-        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .leftPrimary, in: defaults), .playNext)
-        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .leftSecondary, in: defaults), .addToPlaylist)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .leftPrimary, in: defaults), .none)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .leftSecondary, in: defaults), .playNext)
         XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightPrimary, in: defaults), .none)
         XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightSecondary, in: defaults), .none)
+    }
+
+    func testSelectingUsedSwipeActionMovesItFromPreviousSlot() {
+        PersonalizationSettings.registerDefaults(in: defaults)
+
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightPrimary, in: defaults), .playNext)
+
+        PersonalizationSettings.setSwipeAction(.playNext, for: .leftPrimary, in: defaults)
+
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .leftPrimary, in: defaults), .playNext)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightPrimary, in: defaults), .none)
     }
 
     func testIPhoneTabOrderKeepsSettingsImmediatelyBeforeSearch() {

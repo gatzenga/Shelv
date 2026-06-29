@@ -6,6 +6,7 @@ struct ArtistDetailView: View {
     @ObservedObject private var library = LibraryStore.shared
     @ObservedObject private var offlineMode = OfflineModeService.shared
     @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
+    @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
     @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     @AppStorage("artistDetailAlbumSort") private var sortRaw = "newest"
     @AppStorage("artistDetailAlbumDirection") private var dirRaw = "descending"
@@ -15,6 +16,7 @@ struct ArtistDetailView: View {
     @State private var songs: [Song] = []
     @State private var isLoading = true
     @State private var navAlbum: Album?
+    @State private var showAddToPlaylist = false
 
     private var sort: AlbumSortOption { AlbumSortOption(rawValue: sortRaw) ?? .newest }
     private var dir: SortDirection { SortDirection(rawValue: dirRaw) ?? .descending }
@@ -53,6 +55,7 @@ struct ArtistDetailView: View {
         }
         .toolbar(.hidden, for: .tabBar)
         .navigationDestination(item: $navAlbum) { AlbumDetailView(album: $0) }
+        .addToPlaylistDialog(isPresented: $showAddToPlaylist, songIds: songs.map(\.id))
         .task {
             if let detail = await LibraryStore.shared.artistDetail(artist) {
                 albums = detail.album ?? []
@@ -90,6 +93,12 @@ struct ArtistDetailView: View {
                         Label(starred ? String(localized: "unfavorite") : String(localized: "favorite"),
                               systemImage: starred ? "heart.fill" : "heart")
                     }
+                }
+                if showPlaylistActions {
+                    Button { showAddToPlaylist = true } label: {
+                        Label(String(localized: "add_to_playlist"), systemImage: "text.badge.plus")
+                    }
+                    .disabled(songs.isEmpty)
                 }
             }
             .buttonStyle(.bordered)

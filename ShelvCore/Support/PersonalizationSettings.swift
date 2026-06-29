@@ -8,6 +8,7 @@ nonisolated enum PersonalizationPreferenceKey {
     static let showFavoritesInLibrary = "ui.showFavoritesInLibrary"
     static let showFavoriteActions = "ui.showFavoriteActions"
     static let showInstantMixActions = "ui.showInstantMixActions"
+    static let miniPlayerStyle = "ui.miniPlayerStyle"
 
     static let swipeLeftPrimary = "ui.swipe.leftPrimary"
     static let swipeLeftSecondary = "ui.swipe.leftSecondary"
@@ -80,6 +81,25 @@ nonisolated enum PersonalizationSwipeAction: String, CaseIterable {
     }
 }
 
+nonisolated enum PersonalizationMiniPlayerStyle: String, CaseIterable {
+    case shelv
+    case native
+
+    var titleKey: String {
+        switch self {
+        case .shelv: return "mini_player_shelv"
+        case .native: return "mini_player_native"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .shelv: return "play.rectangle"
+        case .native: return "apple.logo"
+        }
+    }
+}
+
 nonisolated enum PersonalizationSettings {
     static let currentMigrationVersion = 1
 
@@ -89,6 +109,7 @@ nonisolated enum PersonalizationSettings {
         PersonalizationPreferenceKey.showFavoritesInLibrary: true,
         PersonalizationPreferenceKey.showFavoriteActions: true,
         PersonalizationPreferenceKey.showInstantMixActions: true,
+        PersonalizationPreferenceKey.miniPlayerStyle: PersonalizationMiniPlayerStyle.shelv.rawValue,
         PersonalizationPreferenceKey.swipeLeftPrimary: PersonalizationSwipeAction.favorite.rawValue,
         PersonalizationPreferenceKey.swipeLeftSecondary: PersonalizationSwipeAction.addToPlaylist.rawValue,
         PersonalizationPreferenceKey.swipeRightPrimary: PersonalizationSwipeAction.playNext.rawValue,
@@ -135,12 +156,21 @@ nonisolated enum PersonalizationSettings {
 
     static func swipeAction(for slot: PersonalizationSwipeSlot, in defaults: UserDefaults = .standard) -> PersonalizationSwipeAction {
         let rawValue = defaults.string(forKey: slot.storageKey)
-        let action = rawValue.flatMap(PersonalizationSwipeAction.init(rawValue:)) ?? defaultAction(for: slot)
-        return normalized(action, in: defaults)
+        return rawValue.flatMap(PersonalizationSwipeAction.init(rawValue:)) ?? defaultAction(for: slot)
+    }
+
+    static func visibleSwipeAction(for slot: PersonalizationSwipeSlot, in defaults: UserDefaults = .standard) -> PersonalizationSwipeAction {
+        let action = swipeAction(for: slot, in: defaults)
+        return isAvailable(action, in: defaults) ? action : .none
     }
 
     static func setSwipeAction(_ action: PersonalizationSwipeAction, for slot: PersonalizationSwipeSlot, in defaults: UserDefaults = .standard) {
-        guard isSelectable(action, for: slot, in: defaults) else { return }
+        if action != .none {
+            for otherSlot in PersonalizationSwipeSlot.allCases where otherSlot != slot && swipeAction(for: otherSlot, in: defaults) == action {
+                defaults.set(PersonalizationSwipeAction.none.rawValue, forKey: otherSlot.storageKey)
+            }
+        }
+
         defaults.set(action.rawValue, forKey: slot.storageKey)
         normalizeSwipeActions(in: defaults)
     }
@@ -159,35 +189,18 @@ nonisolated enum PersonalizationSettings {
         for slot in PersonalizationSwipeSlot.allCases {
             let rawValue = defaults.string(forKey: slot.storageKey)
             let current = rawValue.flatMap(PersonalizationSwipeAction.init(rawValue:)) ?? defaultAction(for: slot)
-            let normalized = normalized(current, in: defaults)
 
-            if normalized == .none {
+            if current == .none {
                 defaults.set(PersonalizationSwipeAction.none.rawValue, forKey: slot.storageKey)
                 continue
             }
 
-            if used.contains(normalized) {
+            if used.contains(current) {
                 defaults.set(PersonalizationSwipeAction.none.rawValue, forKey: slot.storageKey)
             } else {
-                used.insert(normalized)
-                defaults.set(normalized.rawValue, forKey: slot.storageKey)
+                used.insert(current)
+                defaults.set(current.rawValue, forKey: slot.storageKey)
             }
-        }
-    }
-
-    static func isSelectable(_ action: PersonalizationSwipeAction, for slot: PersonalizationSwipeSlot, in defaults: UserDefaults = .standard) -> Bool {
-        guard isAvailable(action, in: defaults) else { return false }
-        guard action != .none else { return true }
-
-        return PersonalizationSwipeSlot.allCases.allSatisfy { otherSlot in
-            otherSlot == slot || swipeAction(for: otherSlot, in: defaults) != action
-        }
-    }
-
-    static func firstSlot(using action: PersonalizationSwipeAction, excluding slot: PersonalizationSwipeSlot, in defaults: UserDefaults = .standard) -> PersonalizationSwipeSlot? {
-        guard action != .none else { return nil }
-        return PersonalizationSwipeSlot.allCases.first { otherSlot in
-            otherSlot != slot && swipeAction(for: otherSlot, in: defaults) == action
         }
     }
 
@@ -211,7 +224,4 @@ nonisolated enum PersonalizationSettings {
         }
     }
 
-    private static func normalized(_ action: PersonalizationSwipeAction, in defaults: UserDefaults) -> PersonalizationSwipeAction {
-        isAvailable(action, in: defaults) ? action : .none
-    }
 }

@@ -1,5 +1,9 @@
 import SwiftUI
 
+private enum SettingsRoute: Hashable {
+    case uiCustomizations
+}
+
 struct SettingsView: View {
     @EnvironmentObject var serverStore: ServerStore
     @EnvironmentObject var lyricsStore: LyricsStore
@@ -13,11 +17,16 @@ struct SettingsView: View {
     @State private var managingServer: SubsonicServer?
     @State private var showDeleteConfirm = false
     @State private var serverToDelete: SubsonicServer?
+    @Binding private var path: NavigationPath
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
+    init(path: Binding<NavigationPath> = .constant(NavigationPath())) {
+        _path = path
+    }
+
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             List {
                 Section(String(localized: "servers")) {
                     ForEach(serverStore.servers) { server in
@@ -73,7 +82,7 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    NavigationLink(destination: UICustomizationsSettingsView()) {
+                    NavigationLink(value: SettingsRoute.uiCustomizations) {
                         Label { Text(String(localized: "ui_customizations")) } icon: {
                             Image(systemName: "slider.horizontal.2.square").foregroundStyle(accentColor)
                         }
@@ -221,6 +230,12 @@ struct SettingsView: View {
             .listStyle(.insetGrouped)
             .scrollIndicators(.hidden)
             .navigationTitle(String(localized: "settings"))
+            .navigationDestination(for: SettingsRoute.self) { route in
+                switch route {
+                case .uiCustomizations:
+                    UICustomizationsSettingsView()
+                }
+            }
             .sheet(isPresented: $showAddServer) {
                 AddServerView()
                     .environmentObject(serverStore)
@@ -320,6 +335,7 @@ struct SettingsView: View {
 private struct UICustomizationsSettingsView: View {
     @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
+    @AppStorage(PersonalizationPreferenceKey.miniPlayerStyle) private var miniPlayerStyleRaw = PersonalizationMiniPlayerStyle.shelv.rawValue
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
@@ -329,15 +345,17 @@ private struct UICustomizationsSettingsView: View {
                 NavigationLink {
                     UIPlaylistsSettingsView()
                 } label: {
-                    Label(String(localized: "playlists"), systemImage: "music.note.list")
-                        .foregroundStyle(accentColor)
+                    Label { Text(String(localized: "playlists")) } icon: {
+                        Image(systemName: "music.note.list").foregroundStyle(accentColor)
+                    }
                 }
 
                 NavigationLink {
                     UIFavoritesSettingsView()
                 } label: {
-                    Label(String(localized: "favorites"), systemImage: "heart")
-                        .foregroundStyle(accentColor)
+                    Label { Text(String(localized: "favorites")) } icon: {
+                        Image(systemName: "heart").foregroundStyle(accentColor)
+                    }
                 }
             }
 
@@ -351,14 +369,28 @@ private struct UICustomizationsSettingsView: View {
             }
 
             Section {
+                Picker(selection: $miniPlayerStyleRaw) {
+                    ForEach(PersonalizationMiniPlayerStyle.allCases, id: \.self) { style in
+                        Text(localized(style.titleKey)).tag(style.rawValue)
+                    }
+                } label: {
+                    Label { Text(String(localized: "interface_style")) } icon: {
+                        Image(systemName: "play.rectangle").foregroundStyle(accentColor)
+                    }
+                }
+
                 NavigationLink {
                     UISwipeActionsSettingsView()
                 } label: {
-                    Label(String(localized: "swipe_actions"), systemImage: "hand.draw")
-                        .foregroundStyle(accentColor)
+                    Label { Text(String(localized: "swipe_actions")) } icon: {
+                        Image(systemName: "hand.draw").foregroundStyle(accentColor)
+                    }
                 }
             }
         }
+        .tint(accentColor)
+        .listStyle(.insetGrouped)
+        .scrollIndicators(.hidden)
         .navigationTitle(String(localized: "ui_customizations"))
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -436,8 +468,11 @@ private struct UISwipeActionsSettingsView: View {
             }
 
             Section {
-                Button(String(localized: "reset_to_defaults")) {
+                Button {
                     PersonalizationSettings.resetSwipeActions()
+                    refreshStoredSlots()
+                } label: {
+                    Label(String(localized: "reset_to_defaults"), systemImage: "arrow.counterclockwise")
                 }
                 .foregroundStyle(accentColor)
             }
@@ -446,94 +481,201 @@ private struct UISwipeActionsSettingsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             PersonalizationSettings.normalizeSwipeActions()
+            refreshStoredSlots()
         }
         .onChange(of: showFavoriteActions) { _, _ in
             PersonalizationSettings.normalizeSwipeActions()
+            refreshStoredSlots()
         }
         .onChange(of: showPlaylistActions) { _, _ in
             PersonalizationSettings.normalizeSwipeActions()
+            refreshStoredSlots()
         }
         .onChange(of: leftPrimary) { _, _ in }
         .onChange(of: leftSecondary) { _, _ in }
         .onChange(of: rightPrimary) { _, _ in }
         .onChange(of: rightSecondary) { _, _ in }
+        .transaction { $0.animation = nil }
+    }
+
+    private func refreshStoredSlots() {
+        leftPrimary = UserDefaults.standard.string(forKey: PersonalizationPreferenceKey.swipeLeftPrimary)
+            ?? PersonalizationSwipeAction.favorite.rawValue
+        leftSecondary = UserDefaults.standard.string(forKey: PersonalizationPreferenceKey.swipeLeftSecondary)
+            ?? PersonalizationSwipeAction.addToPlaylist.rawValue
+        rightPrimary = UserDefaults.standard.string(forKey: PersonalizationPreferenceKey.swipeRightPrimary)
+            ?? PersonalizationSwipeAction.playNext.rawValue
+        rightSecondary = UserDefaults.standard.string(forKey: PersonalizationPreferenceKey.swipeRightSecondary)
+            ?? PersonalizationSwipeAction.addToQueue.rawValue
     }
 }
 
 private struct SwipeSlotNavigationRow: View {
     let slot: PersonalizationSwipeSlot
     let accentColor: Color
+    @AppStorage private var rawAction: String
+
+    init(slot: PersonalizationSwipeSlot, accentColor: Color) {
+        self.slot = slot
+        self.accentColor = accentColor
+        _rawAction = AppStorage(wrappedValue: slot.defaultAction.rawValue, slot.storageKey)
+    }
 
     var body: some View {
         NavigationLink {
             SwipeActionPickerView(slot: slot)
         } label: {
-            HStack {
+            LabeledContent {
+                SwipeActionInlineValue(action: action, accentColor: accentColor)
+            } label: {
                 Text(localized(slot.titleKey))
-                Spacer()
-                Label(localized(action.titleKey), systemImage: action.systemImage)
-                    .labelStyle(.titleAndIcon)
-                    .foregroundStyle(.secondary)
             }
         }
     }
 
     private var action: PersonalizationSwipeAction {
-        PersonalizationSettings.swipeAction(for: slot)
+        _ = rawAction
+        return PersonalizationSettings.swipeAction(for: slot)
     }
 }
 
 private struct SwipeActionPickerView: View {
     let slot: PersonalizationSwipeSlot
-    @State private var refreshToken = 0
+    @AppStorage("themeColor") private var themeColorName = "violet"
+    @AppStorage private var rawAction: String
+
+    init(slot: PersonalizationSwipeSlot) {
+        self.slot = slot
+        _rawAction = AppStorage(wrappedValue: slot.defaultAction.rawValue, slot.storageKey)
+    }
+
+    private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
     var body: some View {
         List {
             ForEach(PersonalizationSwipeAction.allCases, id: \.self) { action in
+                let reason = disabledReason(for: action)
                 Button {
                     PersonalizationSettings.setSwipeAction(action, for: slot)
-                    refreshToken += 1
+                    rawAction = UserDefaults.standard.string(forKey: slot.storageKey) ?? action.rawValue
                 } label: {
-                    HStack(spacing: 12) {
-                        Label(localized(action.titleKey), systemImage: action.systemImage)
-                        Spacer()
-                        if let reason = disabledReason(for: action) {
-                            Text(reason)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        if currentAction == action {
-                            Image(systemName: "checkmark")
-                                .font(.body.weight(.semibold))
-                        }
-                    }
+                    SwipeActionOptionRow(
+                        action: action,
+                        isSelected: currentAction == action,
+                        disabledReason: reason,
+                        accentColor: accentColor
+                    )
                 }
-                .disabled(disabledReason(for: action) != nil)
+                .buttonStyle(.plain)
+                .disabled(reason != nil)
             }
         }
-        .id(refreshToken)
         .navigationTitle(localized(slot.titleKey))
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             PersonalizationSettings.normalizeSwipeActions()
-            refreshToken += 1
+            rawAction = UserDefaults.standard.string(forKey: slot.storageKey) ?? slot.defaultAction.rawValue
         }
+        .transaction { $0.animation = nil }
     }
 
     private var currentAction: PersonalizationSwipeAction {
-        PersonalizationSettings.swipeAction(for: slot)
+        _ = rawAction
+        return PersonalizationSettings.swipeAction(for: slot)
     }
 
-    private func disabledReason(for action: PersonalizationSwipeAction) -> String? {
-        guard PersonalizationSettings.isAvailable(action) else {
-            return localized("unavailable")
-        }
-
-        if let usedSlot = PersonalizationSettings.firstSlot(using: action, excluding: slot) {
-            return String(format: localized("already_used_in_format"), localized(usedSlot.titleKey))
-        }
-
+    private func disabledReason(for _: PersonalizationSwipeAction) -> String? {
         return nil
+    }
+}
+
+private struct SwipeActionInlineValue: View {
+    let action: PersonalizationSwipeAction
+    let accentColor: Color
+
+    var body: some View {
+        HStack(spacing: 8) {
+            SwipeActionIcon(action: action, accentColor: accentColor, size: 24)
+            Text(localized(action.titleKey))
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(width: 176, alignment: .leading)
+        .foregroundStyle(.secondary)
+    }
+}
+
+private struct SwipeActionOptionRow: View {
+    let action: PersonalizationSwipeAction
+    let isSelected: Bool
+    let disabledReason: String?
+    let accentColor: Color
+
+    var body: some View {
+        HStack(spacing: 12) {
+            SwipeActionIcon(action: action, accentColor: accentColor, size: 30)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(localized(action.titleKey))
+                    .foregroundStyle(.primary)
+                if let disabledReason {
+                    Text(disabledReason)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Spacer()
+
+            if isSelected {
+                Image(systemName: "checkmark")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(accentColor)
+            }
+        }
+        .contentShape(Rectangle())
+        .opacity(disabledReason == nil ? 1 : 0.45)
+    }
+}
+
+private struct SwipeActionIcon: View {
+    let action: PersonalizationSwipeAction
+    let accentColor: Color
+    let size: CGFloat
+
+    var body: some View {
+        Image(systemName: action.systemImage)
+            .font(.body.weight(.semibold))
+            .symbolRenderingMode(.monochrome)
+            .foregroundStyle(action.displayColor(accentColor: accentColor))
+            .frame(width: size, height: 24, alignment: .center)
+    }
+}
+
+private extension PersonalizationSwipeSlot {
+    var defaultAction: PersonalizationSwipeAction {
+        switch self {
+        case .leftPrimary: return .favorite
+        case .leftSecondary: return .addToPlaylist
+        case .rightPrimary: return .playNext
+        case .rightSecondary: return .addToQueue
+        }
+    }
+}
+
+private extension PersonalizationSwipeAction {
+    func displayColor(accentColor: Color) -> Color {
+        switch self {
+        case .none:
+            return .secondary
+        case .favorite:
+            return .pink
+        case .addToPlaylist, .addToQueue:
+            return accentColor
+        case .playNext:
+            return .orange
+        }
     }
 }
 

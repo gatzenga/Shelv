@@ -27,6 +27,9 @@
 "favorite_albums" = "Favorite Albums";
 "favorite_artists" = "Favorite Artists";
 "play" = "Play";
+"pause" = "Pause";
+"previous" = "Previous";
+"next" = "Next";
 "shuffle" = "Shuffle";
 "play_next" = "Play Next";
 "add_to_queue" = "Add to Queue";
@@ -291,6 +294,7 @@
 "accent_color" = "Accent Color";
 "playlists_favorites" = "Playlists & Favorites";
 "playback" = "Playback";
+"playback_position" = "Playback position";
 "replay_gain" = "ReplayGain";
 "replay_gain_mode" = "Mode";
 "track_gain" = "Track Gain";
@@ -402,12 +406,15 @@
 "no_instant_mix_available" = "No Instant Mix Available";
 "show_instant_mix" = "Show Instant Mix";
 "ui_customizations" = "UI Customizations";
+"interface_style" = "Interface";
+"mini_player" = "Mini Player";
+"mini_player_shelv" = "Shelv";
+"mini_player_native" = "Native";
 "on" = "On";
 "off" = "Off";
 "what_to_sync" = "What to Sync";
 "play_history" = "Play History";
 "lyrics_server" = "Lyrics Server";
-"home" = "Home";
 "show_playlists" = "Show Playlists";
 "show_favorites" = "Show Favorites";
 "show_playlists_in_tab_bar" = "Show Playlists in Tab Bar";

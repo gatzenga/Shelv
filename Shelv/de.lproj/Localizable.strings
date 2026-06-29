@@ -27,6 +27,9 @@
 "favorite_albums" = "Lieblingsalben";
 "favorite_artists" = "Lieblingskünstler";
 "play" = "Abspielen";
+"pause" = "Pause";
+"previous" = "Zurück";
+"next" = "Weiter";
 "shuffle" = "Zufällig";
 "play_next" = "Als nächstes";
 "add_to_queue" = "Zur Warteschlange";
@@ -291,6 +294,7 @@
 "accent_color" = "Akzentfarbe";
 "playlists_favorites" = "Playlists & Favoriten";
 "playback" = "Wiedergabe";
+"playback_position" = "Wiedergabeposition";
 "replay_gain" = "ReplayGain";
 "replay_gain_mode" = "Modus";
 "track_gain" = "Track Gain";
@@ -402,12 +406,15 @@
 "no_instant_mix_available" = "Kein Instant Mix verfügbar";
 "show_instant_mix" = "Instant Mix anzeigen";
 "ui_customizations" = "UI-Anpassungen";
+"interface_style" = "Oberfläche";
+"mini_player" = "Mini Player";
+"mini_player_shelv" = "Shelv";
+"mini_player_native" = "Nativ";
 "on" = "An";
 "off" = "Aus";
 "what_to_sync" = "Was synchronisiert wird";
 "play_history" = "Wiedergabehistorie";
 "lyrics_server" = "Lyrics-Server";
-"home" = "Start";
 "show_playlists" = "Playlists anzeigen";
 "show_favorites" = "Favoriten anzeigen";
 "show_playlists_in_tab_bar" = "Playlists in der Tab-Leiste anzeigen";

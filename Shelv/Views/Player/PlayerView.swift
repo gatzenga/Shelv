@@ -10,6 +10,74 @@ private final class PlayerPaletteResult: NSObject {
     }
 }
 
+private struct NativePlayerProgressSlider: View {
+    @Binding var value: Double
+    let trackColor: Color
+    let fillColor: Color
+    let onEditingChanged: (Bool) -> Void
+
+    @State private var isDragging = false
+    @State private var dragValue: Double?
+
+    var body: some View {
+        GeometryReader { geometry in
+            let width = geometry.size.width
+
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(trackColor)
+
+                Capsule()
+                    .fill(fillColor)
+                    .frame(width: progressWidth(in: width))
+                    .animation(nil, value: value)
+            }
+            .frame(height: isDragging ? 12 : 5)
+            .animation(.spring(response: 0.3, dampingFraction: 0.72), value: isDragging)
+            .frame(maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { gesture in
+                        guard width > 0 else { return }
+                        if !isDragging {
+                            isDragging = true
+                            onEditingChanged(true)
+                        }
+                        let ratio = gesture.location.x / width
+                        let clamped = min(1, max(0, ratio))
+                        dragValue = clamped
+                        value = clamped
+                    }
+                    .onEnded { _ in
+                        isDragging = false
+                        dragValue = nil
+                        onEditingChanged(false)
+                    }
+            )
+        }
+        .frame(height: 32)
+        .accessibilityLabel(String(localized: "playback_position"))
+        .accessibilityValue("\(Int(value * 100))%")
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment:
+                value = min(value + 0.05, 1)
+            case .decrement:
+                value = max(value - 0.05, 0)
+            @unknown default:
+                break
+            }
+            onEditingChanged(false)
+        }
+    }
+
+    private func progressWidth(in width: CGFloat) -> CGFloat {
+        let displayedValue = dragValue ?? value
+        return width * min(1, max(0, displayedValue))
+    }
+}
+
 struct PlayerView: View {
     @ObservedObject var player = AudioPlayerService.shared
     @ObservedObject var libraryStore = LibraryStore.shared
@@ -19,6 +87,7 @@ struct PlayerView: View {
 
     @AppStorage("themeColor") private var themeColorName = "violet"
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
+    @AppStorage(PersonalizationPreferenceKey.miniPlayerStyle) private var interfaceStyleRaw = PersonalizationMiniPlayerStyle.shelv.rawValue
 
     @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
     @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
@@ -59,6 +128,18 @@ struct PlayerView: View {
     }
 
     private var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
+    private var usesNativeInterface: Bool {
+        PersonalizationMiniPlayerStyle(rawValue: interfaceStyleRaw) == .native
+    }
+    private var progressFraction: Binding<Double> {
+        Binding(
+            get: { displayDuration > 0 ? displayTime / displayDuration : 0 },
+            set: { seekValue = min(1, max(0, $0)) }
+        )
+    }
+    private var activeProgressFraction: Binding<Double> {
+        (isDragging || player.isSeeking) ? $seekValue : progressFraction
+    }
 
     // Track-Infos (Titel/Artist/Album) als eigene View — entlastet den Type-Checker
     // des großen body und hält die Marquee-Logik beisammen. Auf Slider-Breite begrenzt.
@@ -115,6 +196,38 @@ struct PlayerView: View {
         return h < 680 ? max(small * 0.5, 4) : small
     }
 
+    @ViewBuilder
+    private var playbackProgressControl: some View {
+        if usesNativeInterface {
+            NativePlayerProgressSlider(
+                value: activeProgressFraction,
+                trackColor: Color.primary.opacity(colorScheme == .dark ? 0.18 : 0.14),
+                fillColor: Color.primary.opacity(0.88),
+                onEditingChanged: handleSeekEditing
+            )
+        } else {
+            Slider(
+                value: activeProgressFraction,
+                in: 0...1
+            ) { editing in
+                handleSeekEditing(editing)
+            }
+            .tint(accentColor)
+        }
+    }
+
+    private func handleSeekEditing(_ editing: Bool) {
+        if editing {
+            isDragging = true
+            seekValue = displayDuration > 0 ? displayTime / displayDuration : 0
+        } else {
+            let seconds = seekValue * displayDuration
+            displayTime = seconds
+            player.seek(to: seconds)
+            isDragging = false
+        }
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -155,24 +268,7 @@ struct PlayerView: View {
                     Spacer(minLength: 0)
 
                     VStack(spacing: 4) {
-                        Slider(
-                            value: (isDragging || player.isSeeking) ? $seekValue : Binding(
-                                get: { displayDuration > 0 ? displayTime / displayDuration : 0 },
-                                set: { _ in }
-                            ),
-                            in: 0...1
-                        ) { editing in
-                            if editing {
-                                isDragging = true
-                                seekValue = displayDuration > 0 ? displayTime / displayDuration : 0
-                            } else {
-                                let seconds = seekValue * displayDuration
-                                displayTime = seconds
-                                player.seek(to: seconds)
-                                isDragging = false
-                            }
-                        }
-                        .tint(accentColor)
+                        playbackProgressControl
 
                         HStack {
                             Text(formatTime(isDragging ? seekValue * displayDuration : displayTime))
