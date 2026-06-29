@@ -5,9 +5,9 @@ struct AlbumContextMenuModifier: ViewModifier {
     @ObservedObject var libraryStore = LibraryViewModel.shared
     @ObservedObject private var downloadStore = DownloadStore.shared
     @ObservedObject private var offlineMode = OfflineModeService.shared
-    @AppStorage("enableFavorites") private var enableFavorites = true
-    @AppStorage("enablePlaylists") private var enablePlaylists = true
-    @AppStorage("enableInstantMix") private var enableInstantMix = true
+    @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
+    @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
+    @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     @AppStorage("enableDownloads") private var enableDownloads = false
     @State private var showDeleteConfirm = false
 
@@ -23,7 +23,7 @@ struct AlbumContextMenuModifier: ViewModifier {
                     AudioPlayerService.shared.playShuffled(songs: songs)
                 }
             }
-            if enableInstantMix && !offlineMode.isOffline {
+            if showInstantMixActions && !offlineMode.isOffline {
                 Button(String(localized: "instant_mix")) {
                     playInstantMix()
                 }
@@ -41,16 +41,16 @@ struct AlbumContextMenuModifier: ViewModifier {
                     NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_queue"))
                 }
             }
-            if enableFavorites || enablePlaylists {
+            if showFavoriteActions || showPlaylistActions {
                 Divider()
-                if enableFavorites {
+                if showFavoriteActions {
                     Button(libraryStore.isAlbumStarred(album)
                            ? String(localized: "remove_from_favorites")
                            : String(localized: "add_to_favorites")) {
                         Task { await libraryStore.toggleStarAlbum(album) }
                     }
                 }
-                if enablePlaylists {
+                if showPlaylistActions {
                     Button(String(localized: "add_to_playlist")) {
                         withAlbumSongs(errorMsg: String(localized: "action_failed")) { songs in
                             guard !songs.isEmpty else { return }

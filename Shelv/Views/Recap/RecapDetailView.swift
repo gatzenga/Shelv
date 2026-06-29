@@ -9,8 +9,8 @@ struct RecapDetailView: View {
     @ObservedObject private var downloadStore = DownloadStore.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
-    @AppStorage("enableFavorites") private var enableFavorites = true
-    @AppStorage("enablePlaylists") private var enablePlaylists = true
+    @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
+    @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
     @AppStorage("enableDownloads") private var enableDownloads = false
 
     @State private var songs: [SongWithCount] = []
@@ -117,42 +117,30 @@ struct RecapDetailView: View {
                             .listRowSeparator(.hidden)
                             .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
                             .listRowBackground(Color.clear)
-                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                Button {
-                                    haptic(); player.addToQueue(songEntry.song)
-                                    currentToast = ShelveToast(message: String(localized: "added_to_queue"))
-                                } label: {
-                                    Image(systemName: "text.badge.plus")
-                                }
-                                .tint(accentColor)
-
-                                Button {
-                                    haptic(); player.addPlayNext(songEntry.song)
+                            .personalizedSongSwipeActions(
+                                song: songEntry.song,
+                                isOffline: offlineMode.isOffline,
+                                isFavorite: libraryStore.isSongStarred(songEntry.song),
+                                accentColor: accentColor,
+                                onFavorite: {
+                                    haptic(.medium)
+                                    Task { await libraryStore.toggleStarSong(songEntry.song) }
+                                },
+                                onAddToPlaylist: {
+                                    addToPlaylistSongId = songEntry.song.id
+                                    showAddToPlaylist = true
+                                },
+                                onPlayNext: {
+                                    haptic()
+                                    player.addPlayNext(songEntry.song)
                                     currentToast = ShelveToast(message: String(localized: "plays_next"))
-                                } label: {
-                                    Image(systemName: "text.insert")
+                                },
+                                onAddToQueue: {
+                                    haptic()
+                                    player.addToQueue(songEntry.song)
+                                    currentToast = ShelveToast(message: String(localized: "added_to_queue"))
                                 }
-                                .tint(.orange)
-                            }
-                            .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                                if enableFavorites && !offlineMode.isOffline {
-                                    Button {
-                                        haptic(.medium); Task { await libraryStore.toggleStarSong(songEntry.song) }
-                                    } label: {
-                                        Image(systemName: libraryStore.isSongStarred(songEntry.song) ? "heart.slash" : "heart.fill")
-                                    }
-                                    .tint(.pink)
-                                }
-                                if enablePlaylists && !offlineMode.isOffline {
-                                    Button {
-                                        addToPlaylistSongId = songEntry.song.id
-                                        showAddToPlaylist = true
-                                    } label: {
-                                        Image(systemName: "music.note.list")
-                                    }
-                                    .tint(accentColor)
-                                }
-                            }
+                            )
                         }
                     }
 

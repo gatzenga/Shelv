@@ -99,6 +99,43 @@ final class LibraryDatabaseTests: XCTestCase {
         XCTAssertEqual(byArtist, ["a3", "a2", "a1"])
     }
 
+    func testAlbumPaginationAppliesAfterStableSort() async throws {
+        let database = try await makeDatabase()
+        let albums = [
+            album(id: "a1", name: "Alpha"),
+            album(id: "a2", name: "Beta"),
+            album(id: "a3", name: "Gamma"),
+            album(id: "a4", name: "Delta"),
+        ]
+
+        try await writeAlbums(albums, to: database, serverKey: "server-a", generation: "g1")
+
+        let page = try await database
+            .albums(serverKey: "server-a", sort: .name, limit: 2, offset: 1)
+            .map(\.id)
+        XCTAssertEqual(page, ["a2", "a4"])
+    }
+
+    func testArtistSortingByAlbumCountUsesDatabaseOrder() async throws {
+        let database = try await makeDatabase()
+        let artists = [
+            Artist(id: "artist-low", name: "Low", albumCount: 1),
+            Artist(id: "artist-none", name: "None", albumCount: nil),
+            Artist(id: "artist-high", name: "High", albumCount: 4),
+        ]
+
+        try await writeArtists(artists, to: database, serverKey: "server-a", generation: "g1")
+
+        let descending = try await database
+            .artists(serverKey: "server-a", sort: .albumCount, direction: .descending)
+            .map(\.id)
+        let ascending = try await database
+            .artists(serverKey: "server-a", sort: .albumCount, direction: .ascending)
+            .map(\.id)
+        XCTAssertEqual(descending, ["artist-high", "artist-low", "artist-none"])
+        XCTAssertEqual(ascending, ["artist-none", "artist-low", "artist-high"])
+    }
+
     func testUnfinishedGenerationDoesNotReplaceVisibleLibrary() async throws {
         let database = try await makeDatabase()
 

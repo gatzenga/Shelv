@@ -14,9 +14,6 @@ struct Shelv_DesktopApp: App {
     private let _playTracker = PlayTracker.shared
     @AppStorage("appColorScheme") private var storedColorScheme: AppColorScheme = .system
     @AppStorage("themeColor") private var themeColorName: String = "violet"
-    @AppStorage("enableFavorites") private var enableFavorites = true
-    @AppStorage("enablePlaylists") private var enablePlaylists = true
-    @AppStorage("enableInstantMix") private var enableInstantMix = true
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
@@ -25,6 +22,7 @@ struct Shelv_DesktopApp: App {
         if d.string(forKey: "transcodingWifiCodec") == "aac" { d.set("raw", forKey: "transcodingWifiCodec") }
         if d.string(forKey: "transcodingCellularCodec") == "aac" { d.set("raw", forKey: "transcodingCellularCodec") }
         if d.string(forKey: "transcodingDownloadCodec") == "aac" { d.set("raw", forKey: "transcodingDownloadCodec") }
+        PersonalizationSettings.registerDefaults()
         UserDefaults.standard.register(defaults: [
             "recapWeeklyEnabled": true,
             "recapMonthlyEnabled": true,
@@ -168,19 +166,6 @@ struct Shelv_DesktopApp: App {
                 DataSaverMenuItem()
                 Divider()
                 OfflineModeMenuItem()
-            }
-
-            CommandGroup(after: .sidebar) {
-                Divider()
-                Toggle(isOn: Binding(get: { enableFavorites }, set: { enableFavorites = $0 })) {
-                    Text(String(localized: "show_favorites"))
-                }
-                Toggle(isOn: Binding(get: { enablePlaylists }, set: { enablePlaylists = $0 })) {
-                    Text(String(localized: "show_playlists"))
-                }
-                Toggle(isOn: Binding(get: { enableInstantMix }, set: { enableInstantMix = $0 })) {
-                    Text(String(localized: "show_instant_mix"))
-                }
             }
         }
 

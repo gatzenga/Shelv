@@ -11,9 +11,9 @@ struct AlbumDetailView: View {
     @ObservedObject var downloadStore = DownloadStore.shared
     @ObservedObject var offlineMode = OfflineModeService.shared
     @ObservedObject private var player = AudioPlayerService.shared
-    @AppStorage("enableFavorites") private var enableFavorites = true
-    @AppStorage("enablePlaylists") private var enablePlaylists = true
-    @AppStorage("enableInstantMix") private var enableInstantMix = true
+    @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
+    @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
+    @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     @AppStorage("enableDownloads") private var enableDownloads = false
     @AppStorage("downloadsOnlyFilter") private var showDownloadsOnly: Bool = false
     @Environment(\.themeColor) private var themeColor
@@ -211,7 +211,7 @@ struct AlbumDetailView: View {
             .controlSize(.large)
             .disabled(vm.isLoading || displaySongs.isEmpty)
 
-            if enableInstantMix && !offlineMode.isOffline {
+            if showInstantMixActions && !offlineMode.isOffline {
                 Button {
                     InstantMixService.playAlbumMix(for: instantMixAlbum, player: appState.player)
                 } label: {
@@ -249,7 +249,7 @@ struct AlbumDetailView: View {
                 downloadHeaderButton(for: album, iconOnly: iconOnly)
             }
 
-            if enableFavorites && !offlineMode.isOffline, let album = vm.album {
+            if showFavoriteActions && !offlineMode.isOffline, let album = vm.album {
                 let albumModel = Album(id: album.id, name: album.name, artist: album.artist,
                                        artistId: album.artistId, coverArt: album.coverArt,
                                        songCount: album.songCount, duration: album.duration,
@@ -293,8 +293,8 @@ struct AlbumDetailView: View {
         TrackRow(
             song: song,
             isPlaying: player.currentSong?.id == song.id,
-            showFavorite: enableFavorites,
-            showPlaylist: enablePlaylists,
+            showFavorite: showFavoriteActions,
+            showPlaylist: showPlaylistActions,
             isStarred: libraryStore.isSongStarred(song)
         ) {
             appState.player.play(songs: displaySongs, startIndex: playIndex)

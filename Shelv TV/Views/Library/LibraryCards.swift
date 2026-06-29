@@ -236,8 +236,8 @@ func formatDuration(_ seconds: Int) -> String {
 
 private struct SongContextMenuModifier: ViewModifier {
     let song: Song
-    @AppStorage("enableFavorites") private var enableFavorites = true
-    @AppStorage("enablePlaylists") private var enablePlaylists = true
+    @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
+    @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
     @ObservedObject private var library = LibraryStore.shared
     @State private var showAddToPlaylist = false
 
@@ -251,14 +251,14 @@ private struct SongContextMenuModifier: ViewModifier {
                 Button { player.addToQueue(song) } label: {
                     Label(String(localized: "add_to_queue"), systemImage: "text.append")
                 }
-                if enableFavorites {
+                if showFavoriteActions {
                     let starred = library.isSongStarred(song)
                     Button { Task { await library.toggleStarSong(song) } } label: {
                         Label(starred ? String(localized: "unfavorite") : String(localized: "favorite"),
                               systemImage: starred ? "heart.fill" : "heart")
                     }
                 }
-                if enablePlaylists {
+                if showPlaylistActions {
                     Button { showAddToPlaylist = true } label: {
                         Label(String(localized: "add_to_playlist"), systemImage: "text.badge.plus")
                     }
@@ -270,9 +270,9 @@ private struct SongContextMenuModifier: ViewModifier {
 
 private struct AlbumContextMenuModifier: ViewModifier {
     let album: Album
-    @AppStorage("enableFavorites") private var enableFavorites = true
-    @AppStorage("enablePlaylists") private var enablePlaylists = true
-    @AppStorage("enableInstantMix") private var enableInstantMix = true
+    @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
+    @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
+    @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     @ObservedObject private var library = LibraryStore.shared
     @ObservedObject private var offlineMode = OfflineModeService.shared
     @State private var addSongIds: [String] = []
@@ -288,7 +288,7 @@ private struct AlbumContextMenuModifier: ViewModifier {
                 Button { Task { let s = await library.albumSongs(album); player.playShuffled(songs: s) } } label: {
                     Label(String(localized: "shuffle"), systemImage: "shuffle")
                 }
-                if enableInstantMix && !offlineMode.isOffline {
+                if showInstantMixActions && !offlineMode.isOffline {
                     Button { InstantMixService.playAlbumMix(for: album, player: player) } label: {
                         Label(String(localized: "instant_mix"), systemImage: "sparkles")
                     }
@@ -299,14 +299,14 @@ private struct AlbumContextMenuModifier: ViewModifier {
                 Button { Task { let s = await library.albumSongs(album); player.addToQueue(s) } } label: {
                     Label(String(localized: "add_to_queue"), systemImage: "text.append")
                 }
-                if enableFavorites {
+                if showFavoriteActions {
                     let starred = library.isAlbumStarred(album)
                     Button { Task { await library.toggleStarAlbum(album) } } label: {
                         Label(starred ? String(localized: "unfavorite") : String(localized: "favorite"),
                               systemImage: starred ? "heart.fill" : "heart")
                     }
                 }
-                if enablePlaylists {
+                if showPlaylistActions {
                     Button {
                         Task { addSongIds = (await library.albumSongs(album)).map(\.id); showAddToPlaylist = true }
                     } label: {
@@ -362,8 +362,8 @@ struct AddToPlaylistView: View {
 
 private struct ArtistContextMenuModifier: ViewModifier {
     let artist: Artist
-    @AppStorage("enableFavorites") private var enableFavorites = true
-    @AppStorage("enableInstantMix") private var enableInstantMix = true
+    @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
+    @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     @ObservedObject private var library = LibraryStore.shared
     @ObservedObject private var offlineMode = OfflineModeService.shared
 
@@ -376,12 +376,12 @@ private struct ArtistContextMenuModifier: ViewModifier {
             Button { Task { let s = await library.artistSongs(artist); player.playShuffled(songs: s) } } label: {
                 Label(String(localized: "shuffle"), systemImage: "shuffle")
             }
-            if enableInstantMix && !offlineMode.isOffline {
+            if showInstantMixActions && !offlineMode.isOffline {
                 Button { InstantMixService.playArtistMix(for: artist, player: player) } label: {
                     Label(String(localized: "instant_mix"), systemImage: "sparkles")
                 }
             }
-            if enableFavorites {
+            if showFavoriteActions {
                 let starred = library.isArtistStarred(artist)
                 Button { Task { await library.toggleStarArtist(artist) } } label: {
                     Label(starred ? String(localized: "unfavorite") : String(localized: "favorite"),

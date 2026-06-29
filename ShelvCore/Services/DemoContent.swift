@@ -14,7 +14,7 @@ import Foundation
 nonisolated enum DemoContent {
 
     static let serverBaseURL = "demo://shelv"
-    static let serverID = UUID(uuidString: "DEC0DE00-0000-0000-0000-000000000001")!
+    static let serverID = UUID(uuidString: "DEC0DE00-0000-0000-0000-000000000001") ?? UUID()
 
     /// Fester Demo-Server. Über JSON dekodiert, damit die `id` stabil bleibt
     /// (der normale `init` würde jedes Mal eine neue UUID erzeugen).
@@ -22,7 +22,8 @@ nonisolated enum DemoContent {
         let json = """
         {"id":"\(serverID.uuidString)","name":"Demo","baseURL":"\(serverBaseURL)","username":"demo"}
         """
-        return try! JSONDecoder().decode(SubsonicServer.self, from: Data(json.utf8))
+        return (try? JSONDecoder().decode(SubsonicServer.self, from: Data(json.utf8)))
+            ?? SubsonicServer(name: "Demo", baseURL: serverBaseURL, username: "demo")
     }()
 
     // MARK: - Album-Spezifikationen

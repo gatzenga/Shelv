@@ -33,6 +33,48 @@ final class LibraryRepositoryTests: XCTestCase {
         XCTAssertEqual(cachedAlbumIds, ["a1", "a2", "a3"])
     }
 
+    func testRefreshAlbumsSortsYearLocallyWithoutRequestingUnsupportedAPISort() async throws {
+        let database = try await makeDatabase()
+        let api = FakeLibraryAPIClient(albumPages: [[
+            album(id: "old", name: "Old", year: 1999),
+            album(id: "new", name: "New", year: 2025),
+            album(id: "middle", name: "Middle", year: 2010),
+        ]])
+        let repository = LibraryRepository(database: database, api: api)
+
+        let result = try await repository.refreshAlbums(
+            serverKey: "server-a",
+            stableId: "stable-a",
+            sortBy: "year"
+        )
+
+        XCTAssertEqual(api.albumRequests.map(\.type), ["alphabeticalByName"])
+        XCTAssertEqual(result.map(\.id), ["new", "middle", "old"])
+        let cachedAlbumIds = try await database
+            .albums(serverKey: "server-a", sort: .year, direction: .descending)
+            .map(\.id)
+        XCTAssertEqual(cachedAlbumIds, ["new", "middle", "old"])
+    }
+
+    func testRefreshAlbumsRecentlyAddedRequestsNewestAndSortsCreatedDescending() async throws {
+        let database = try await makeDatabase()
+        let api = FakeLibraryAPIClient(albumPages: [[
+            album(id: "older", name: "Older", created: 100),
+            album(id: "newer", name: "Newer", created: 300),
+            album(id: "middle", name: "Middle", created: 200),
+        ]])
+        let repository = LibraryRepository(database: database, api: api)
+
+        let result = try await repository.refreshAlbums(
+            serverKey: "server-a",
+            stableId: "stable-a",
+            sortBy: "recentlyAdded"
+        )
+
+        XCTAssertEqual(api.albumRequests.map(\.type), ["newest"])
+        XCTAssertEqual(result.map(\.id), ["newer", "middle", "older"])
+    }
+
     func testRefreshAlbumsHandlesHundredThousandGeneratedAlbums() async throws {
         let database = try await makeDatabase()
         let api = GeneratedLibraryAPIClient(totalAlbums: 100_000)
@@ -223,6 +265,16 @@ private final class GeneratedLibraryAPIClient: LibraryAPIClient {
     }
 }
 
-private func album(id: String, name: String) -> Album {
-    Album(id: id, name: name)
+private func album(
+    id: String,
+    name: String,
+    year: Int? = nil,
+    created: TimeInterval? = nil
+) -> Album {
+    Album(
+        id: id,
+        name: name,
+        year: year,
+        created: created.map(Date.init(timeIntervalSince1970:))
+    )
 }

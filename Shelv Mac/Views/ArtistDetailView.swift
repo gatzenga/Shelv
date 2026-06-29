@@ -9,8 +9,8 @@ struct ArtistDetailView: View {
     @ObservedObject var libraryStore = LibraryViewModel.shared
     @ObservedObject var downloadStore = DownloadStore.shared
     @ObservedObject private var offlineMode = OfflineModeService.shared
-    @AppStorage("enableFavorites") private var enableFavorites = true
-    @AppStorage("enableInstantMix") private var enableInstantMix = true
+    @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
+    @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     @AppStorage("enableDownloads") private var enableDownloads = false
     @AppStorage("artistDetailAlbumSort") private var sortRaw: String = LibrarySortOption.recentlyAdded.rawValue
     @AppStorage("artistDetailAlbumDirection") private var directionRaw: String = SortDirection.descending.rawValue
@@ -235,7 +235,7 @@ struct ArtistDetailView: View {
             .controlSize(.large)
             .disabled(displayAlbums.isEmpty || vm.isLoadingSongs)
 
-            if enableInstantMix && !offlineMode.isOffline {
+            if showInstantMixActions && !offlineMode.isOffline {
                 Button {
                     InstantMixService.playArtistMix(for: instantMixArtist, player: appState.player)
                 } label: {
@@ -281,7 +281,7 @@ struct ArtistDetailView: View {
                 artistDownloadButton(for: detail, iconOnly: iconOnly)
             }
 
-            if enableFavorites, let detail = vm.artist {
+            if showFavoriteActions, let detail = vm.artist {
                 let isStarred = libraryStore.starredArtists.contains { $0.id == detail.id }
                 Button {
                     Task {

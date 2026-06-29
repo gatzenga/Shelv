@@ -8,6 +8,7 @@ struct Shelv_TVApp: App {
     @AppStorage("appAppearance") private var appAppearance = "system"
 
     init() {
+        PersonalizationSettings.registerDefaults()
         UserDefaults.standard.register(defaults: [
             "streamPreCacheAheadCount": 1,
             "infinityMixAheadCount": 1,

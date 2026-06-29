@@ -9,9 +9,9 @@ struct ArtistDetailView: View {
     private let player = AudioPlayerService.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
-    @AppStorage("enableFavorites") private var enableFavorites = true
-    @AppStorage("enablePlaylists") private var enablePlaylists = true
-    @AppStorage("enableInstantMix") private var enableInstantMix = true
+    @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
+    @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
+    @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     @AppStorage("enableDownloads") private var enableDownloads = false
 
     private func serverStableId() -> String { serverStore.activeServer?.stableId ?? "" }
@@ -99,7 +99,7 @@ struct ArtistDetailView: View {
         .navigationTitle(artist.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if enableFavorites && !offlineMode.isOffline {
+            if showFavoriteActions && !offlineMode.isOffline {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         Task { await libraryStore.toggleStarArtist(artist) }
@@ -312,7 +312,7 @@ struct ArtistDetailView: View {
                         }
                         .swipeActions(edge: .leading, allowsFullSwipe: false) {
                             if !offlineMode.isOffline {
-                                if enableFavorites {
+                                if showFavoriteActions {
                                     Button {
                                         haptic(.medium); Task { await libraryStore.toggleStarAlbum(album) }
                                     } label: {
@@ -320,7 +320,7 @@ struct ArtistDetailView: View {
                                     }
                                     .tint(.pink)
                                 }
-                                if enablePlaylists {
+                                if showPlaylistActions {
                                     Button { addAlbumToPlaylist(album) } label: { Image(systemName: "music.note.list") }
                                         .tint(accentColor)
                                 }
@@ -447,7 +447,7 @@ struct ArtistDetailView: View {
 
     private var artistMenu: some View {
         Menu {
-            if enableInstantMix && !offlineMode.isOffline {
+            if showInstantMixActions && !offlineMode.isOffline {
                 Button {
                     playInstantMix()
                 } label: {
@@ -485,7 +485,7 @@ struct ArtistDetailView: View {
             }
             .disabled(isLoading)
 
-            if enablePlaylists && !offlineMode.isOffline {
+            if showPlaylistActions && !offlineMode.isOffline {
                 Button {
                     let albums = sortedAlbums
                     guard !albums.isEmpty else { return }

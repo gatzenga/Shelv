@@ -9,7 +9,7 @@ struct PlaylistsView: View {
     private let player = AudioPlayerService.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage("enableDownloads") private var enableDownloads = false
-    @AppStorage("enablePlaylists") private var enablePlaylists = true
+    @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
     @AppStorage("playlistSortOption") private var sortOptionRaw: String = PlaylistSortOption.alphabetical.rawValue
     private var sortOption: PlaylistSortOption { PlaylistSortOption(rawValue: sortOptionRaw) ?? .alphabetical }
     @AppStorage("playlistSortDirection") private var sortDirectionRaw: String = SortDirection.ascending.rawValue
@@ -300,7 +300,7 @@ struct PlaylistsView: View {
             }
         } label: { Label(String(localized: "add_to_queue"), systemImage: "text.badge.plus") }
 
-        if enablePlaylists {
+        if showPlaylistActions {
             Button {
                 Task {
                     if let loaded = await libraryStore.loadPlaylistDetail(id: playlist.id),

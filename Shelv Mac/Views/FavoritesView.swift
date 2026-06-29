@@ -5,7 +5,7 @@ struct FavoritesView: View {
     @EnvironmentObject var appState: AppState
     @ObservedObject var downloadStore = DownloadStore.shared
     @ObservedObject var offlineMode = OfflineModeService.shared
-    @AppStorage("enablePlaylists") private var enablePlaylists = true
+    @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
     @AppStorage("downloadsOnlyFilter") private var showDownloadsOnly: Bool = false
     @Environment(\.themeColor) private var themeColor
 
@@ -87,7 +87,7 @@ struct FavoritesView: View {
                                     FavoriteSongRow(
                                         song: song,
                                         isPlaying: appState.player.currentSong?.id == song.id,
-                                        showPlaylist: enablePlaylists,
+                                        showPlaylist: showPlaylistActions,
                                         themeColor: themeColor
                                     ) {
                                         appState.player.play(songs: visibleSongs, startIndex: index)

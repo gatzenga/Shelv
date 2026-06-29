@@ -20,8 +20,8 @@ struct PlayerView: View {
     @AppStorage("themeColor") private var themeColorName = "violet"
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
-    @AppStorage("enableFavorites") private var enableFavorites = true
-    @AppStorage("enablePlaylists") private var enablePlaylists = true
+    @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
+    @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
 
     @State private var seekValue: Double = 0
     @State private var isDragging: Bool = false
@@ -238,7 +238,7 @@ struct PlayerView: View {
 
                     // Sekundäre Buttons — Amperfy-Stil: grauer Kreis, .primary Icon
                     HStack {
-                        if enableFavorites && !offlineMode.isOffline, let song = player.currentSong {
+                        if showFavoriteActions && !offlineMode.isOffline, let song = player.currentSong {
                             Button {
                                 Task { await libraryStore.toggleStarSong(song) }
                             } label: {
@@ -264,7 +264,7 @@ struct PlayerView: View {
                         }
                         .buttonStyle(.plain)
 
-                        if enablePlaylists && !offlineMode.isOffline {
+                        if showPlaylistActions && !offlineMode.isOffline {
                             Spacer()
                             Button { showAddToPlaylist = true } label: {
                                 playerSecondaryButton(icon: "music.note.list", color: .primary, size: ctrl, isPad: isPad)

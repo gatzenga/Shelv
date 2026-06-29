@@ -4,8 +4,8 @@ import SwiftUI
 /// rechts die scrollende Trackliste mit eigenem Fokus-Highlight.
 struct AlbumDetailView: View {
     let album: Album
-    @AppStorage("enableFavorites") private var enableFavorites = true
-    @AppStorage("enableInstantMix") private var enableInstantMix = true
+    @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
+    @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     @ObservedObject private var library = LibraryStore.shared
     @ObservedObject private var offlineMode = OfflineModeService.shared
     private let player = AudioPlayerService.shared
@@ -46,7 +46,7 @@ struct AlbumDetailView: View {
                     .disabled(songs.isEmpty)
                 actionButton(String(localized: "shuffle"), "shuffle") { player.playShuffled(songs: songs) }
                     .disabled(songs.isEmpty)
-                if enableInstantMix && !offlineMode.isOffline {
+                if showInstantMixActions && !offlineMode.isOffline {
                     actionButton(String(localized: "instant_mix"), "sparkles") {
                         InstantMixService.playAlbumMix(for: album, player: player)
                     }
@@ -54,7 +54,7 @@ struct AlbumDetailView: View {
                 HStack(spacing: 12) {
                     iconButton("text.line.first.and.arrowtriangle.forward") { player.addPlayNext(songs) }
                     iconButton("text.append") { player.addToQueue(songs) }
-                    if enableFavorites {
+                    if showFavoriteActions {
                         iconButton(library.isAlbumStarred(album) ? "heart.fill" : "heart") {
                             Task { await library.toggleStarAlbum(album) }
                         }

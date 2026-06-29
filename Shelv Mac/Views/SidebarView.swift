@@ -10,8 +10,8 @@ struct SidebarView: View {
     @Binding var selection: SidebarItem?
     @Binding var selectedPlaylist: Playlist?
     @Environment(\.themeColor) private var themeColor
-    @AppStorage("enableFavorites") private var enableFavorites = true
-    @AppStorage("enablePlaylists") private var enablePlaylists = true
+    @AppStorage(PersonalizationPreferenceKey.showFavoritesInLibrary) private var showFavoritesInLibrary = true
+    @AppStorage(PersonalizationPreferenceKey.showPlaylistsTab) private var showPlaylistsInSidebar = true
     @AppStorage("enableDownloads") private var enableDownloads = false
     @AppStorage("downloadsOnlyFilter") private var showDownloadsOnly: Bool = false
     @AppStorage("playlistSortOption") private var sortOptionRaw: String = PlaylistSortOption.alphabetical.rawValue
@@ -76,7 +76,7 @@ struct SidebarView: View {
                 selectedPlaylist = nil
                 appState.navigationPath = NavigationPath()
             }
-            if enableFavorites {
+            if showFavoritesInLibrary {
                 SidebarRow(item: .favorites, isSelected: selection == .favorites && selectedPlaylist == nil, themeColor: themeColor) {
                     selection = .favorites
                     selectedPlaylist = nil
@@ -89,7 +89,7 @@ struct SidebarView: View {
                 appState.navigationPath = NavigationPath()
             }
 
-            if enablePlaylists {
+            if showPlaylistsInSidebar {
                 Divider()
                     .padding(.vertical, 8)
 
@@ -153,24 +153,24 @@ struct SidebarView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 290)
         .task {
-            if enableFavorites && libraryStore.starredAlbums.isEmpty {
+            if showFavoritesInLibrary && libraryStore.starredAlbums.isEmpty {
                 await libraryStore.loadStarred()
             }
-            if enablePlaylists && libraryStore.playlists.isEmpty {
+            if showPlaylistsInSidebar && libraryStore.playlists.isEmpty {
                 await libraryStore.loadPlaylists()
             }
         }
-        .onChange(of: enableFavorites) { _, new in
+        .onChange(of: showFavoritesInLibrary) { _, new in
             if new { Task { await libraryStore.loadStarred() } }
         }
-        .onChange(of: enablePlaylists) { _, new in
+        .onChange(of: showPlaylistsInSidebar) { _, new in
             if new { Task { await libraryStore.loadPlaylists() } }
         }
         .onChange(of: selection) { _, _ in
-            if enablePlaylists { Task { await libraryStore.loadPlaylists() } }
+            if showPlaylistsInSidebar { Task { await libraryStore.loadPlaylists() } }
         }
         .onChange(of: selectedPlaylist) { _, _ in
-            if enablePlaylists { Task { await libraryStore.loadPlaylists() } }
+            if showPlaylistsInSidebar { Task { await libraryStore.loadPlaylists() } }
         }
         .alert(String(localized: "new_playlist"), isPresented: $showCreatePlaylist) {
             TextField(String(localized: "name"), text: $newPlaylistName)

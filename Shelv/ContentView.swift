@@ -20,7 +20,7 @@ struct ContentView: View {
     @State private var playlistSongIds: [String]? = nil
     @State private var offlineToast: ShelveToast?
     @AppStorage("themeColor") private var themeColorName = "violet"
-    @AppStorage("enablePlaylists") private var enablePlaylists = true
+    @AppStorage(PersonalizationPreferenceKey.showPlaylistsTab) private var showPlaylistsTab = true
     @AppStorage("enableDownloads") private var enableDownloads = false
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
@@ -33,7 +33,13 @@ struct ContentView: View {
         }
         .ignoresSafeArea(.keyboard)
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            PlayerBarInset(isRegularWidth: isRegularWidth, showPlayer: $showPlayer)
+            FloatingBottomControls(
+                selection: tabSelection,
+                showPlaylistsTab: showPlaylistsTab,
+                isRegularWidth: isRegularWidth,
+                showPlayer: $showPlayer,
+                accentColor: accentColor
+            )
         }
         .onChange(of: libraryStore.errorMessage) { _, msg in
             guard let msg else { return }
@@ -103,7 +109,7 @@ struct ContentView: View {
             }
             #endif
         }
-        .onChange(of: enablePlaylists) { _, enabled in
+        .onChange(of: showPlaylistsTab) { _, enabled in
             if !enabled && selectedTab == 2 { selectedTab = 0 }
         }
         .onChange(of: scenePhase) { _, phase in
@@ -151,25 +157,20 @@ struct ContentView: View {
                         }
                     }
                     .tag(1)
-                if enablePlaylists {
+                if showPlaylistsTab {
                     PlaylistsView()
                         .tabItem { Label(String(localized: "playlists"), systemImage: "music.note.list") }
                         .tag(2)
                 }
-                SearchView(resetToken: searchResetToken)
-                    .tabItem { Label(String(localized: "search"), systemImage: "magnifyingglass") }
-                    .tag(4)
                 SettingsView()
                     .tabItem { Label(String(localized: "settings"), systemImage: "gearshape.fill") }
                     .tag(3)
+                SearchView(resetToken: searchResetToken)
+                    .tabItem { Label(String(localized: "search"), systemImage: "magnifyingglass") }
+                    .tag(4)
             }
             .tint(accentColor)
-
-            PlayerBarOverlay(
-                isRegularWidth: isRegularWidth,
-                safeAreaBottom: geometry.safeAreaInsets.bottom,
-                showPlayer: $showPlayer
-            )
+            .toolbar(.hidden, for: .tabBar)
 
             VStack {
                 ServerErrorBanner()
@@ -230,102 +231,190 @@ private struct IdentifiableStrings: Identifiable {
     let ids: [String]
 }
 
-/// Isoliertes PlayerBar-Overlay für iPhone — liest die echte Y-Position der Tab-Bar im Window,
-/// damit der Player IMMER mit gleichem Abstand zur Tab-Bar sitzt, egal ob die Tab-Bar am Rand
-/// klebt oder (wie in iOS 26 mit "Liquid Glass") schwebt.
-private struct PlayerBarOverlay: View {
+private struct FloatingBottomControls: View {
+    @Binding var selection: Int
+    let showPlaylistsTab: Bool
     let isRegularWidth: Bool
-    let safeAreaBottom: CGFloat
     @Binding var showPlayer: Bool
     @ObservedObject private var player = AudioPlayerService.shared
-    @State private var measuredOffset: CGFloat? = nil
+    @ObservedObject private var offlineMode = OfflineModeService.shared
+    @AppStorage("enableDownloads") private var enableDownloads = false
+    let accentColor: Color
 
-    /// Initialer Schätzwert basiert auf safeArea: Home-Indicator (>20pt) → modernes iPhone (83pt),
-    /// sonst SE-Style (49pt). Wird durch echte UIKit-Messung sofort ersetzt, sobald verfügbar.
-    private var bottomOffset: CGFloat {
-        measuredOffset ?? (safeAreaBottom > 20 ? 83 : 49)
+    private var maxWidth: CGFloat {
+        isRegularWidth ? 780 : .infinity
     }
 
     var body: some View {
-        if player.currentSong != nil && !isRegularWidth {
-            VStack {
-                Spacer()
+        VStack(spacing: 10) {
+            if player.currentSong != nil {
                 PlayerBarView()
                     .onTapGesture {
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                             showPlayer = true
                         }
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, bottomOffset + 3.5)
+                    .padding(.horizontal, isRegularWidth ? 24 : 18)
+                    .frame(maxWidth: isRegularWidth ? 760 : .infinity)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .ignoresSafeArea(edges: .bottom)
-            .onAppear { scheduleMeasurements() }
-            .onChange(of: player.currentSong?.id) { _, _ in scheduleMeasurements() }
-            .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { measureTabBar() }
+
+            HStack(spacing: isRegularWidth ? 14 : 10) {
+                FloatingMainTabBar(
+                    tabs: tabs,
+                    selection: $selection,
+                    accentColor: accentColor
+                )
+
+                FloatingSearchButton(
+                    isSelected: selection == 4,
+                    accentColor: accentColor,
+                    isRegularWidth: isRegularWidth
+                ) {
+                    selection = 4
+                }
             }
+            .frame(maxWidth: maxWidth)
+            .padding(.horizontal, isRegularWidth ? 24 : 12)
         }
+        .padding(.top, player.currentSong == nil ? 6 : 2)
+        .padding(.bottom, 8)
     }
 
-    /// Startet die Messung sofort und wiederholt sie mit Verzögerungen, falls UIKit beim
-    /// ersten Versuch noch nicht fertig layoutet ist (typisch bei App-Cold-Start mit Player).
-    private func scheduleMeasurements() {
-        measureTabBar()
-        DispatchQueue.main.async { measureTabBar() }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { measureTabBar() }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { measureTabBar() }
+    private var tabs: [FloatingTabItem] {
+        var items = [
+            FloatingTabItem(tag: 0, titleKey: "home", systemImage: "house.fill"),
+            FloatingTabItem(tag: 1, titleKey: libraryTitleKey, systemImage: librarySystemImage),
+        ]
+        if showPlaylistsTab {
+            items.append(FloatingTabItem(tag: 2, titleKey: "playlists", systemImage: "music.note.list"))
+        }
+        items.append(FloatingTabItem(tag: 3, titleKey: "settings", systemImage: "gearshape.fill"))
+        return items
     }
 
-    /// Misst die Distanz vom unteren Bildschirmrand bis zur Oberkante der Tab-Bar.
-    /// Funktioniert sowohl bei klassischen Tab-Bars (kleben am Rand) als auch bei
-    /// schwebenden Tab-Bars (iOS 26 Liquid Glass mit eigenem Bottom-Margin).
-    private func measureTabBar() {
-        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-        let scene = scenes.first(where: { $0.activationState == .foregroundActive })
-            ?? scenes.first(where: { $0.activationState == .foregroundInactive })
-            ?? scenes.first
-        guard let window = scene?.windows.first(where: { $0.isKeyWindow })
-                ?? scene?.windows.first(where: { !$0.isHidden })
-                ?? scene?.windows.first,
-              let tabBar = findTabBar(in: window.rootViewController)
-                ?? findTabBarInViews(window)
-        else { return }
-
-        let frameInWindow = tabBar.convert(tabBar.bounds, to: window)
-        let distance = window.bounds.height - frameInWindow.minY
-        if distance > 0 { measuredOffset = distance }
+    private var libraryTitleKey: String {
+        offlineMode.isOffline && enableDownloads ? "downloads" : "library"
     }
 
-    private func findTabBar(in vc: UIViewController?) -> UITabBar? {
-        guard let vc else { return nil }
-        if let tbc = vc as? UITabBarController { return tbc.tabBar }
-        return vc.children.lazy.compactMap { findTabBar(in: $0) }.first
-    }
-
-    private func findTabBarInViews(_ view: UIView) -> UITabBar? {
-        if let tabBar = view as? UITabBar { return tabBar }
-        return view.subviews.lazy.compactMap { findTabBarInViews($0) }.first
+    private var librarySystemImage: String {
+        offlineMode.isOffline && enableDownloads ? "arrow.down.circle.fill" : "books.vertical.fill"
     }
 }
 
-/// Isoliertes PlayerBar-Inset für iPad
-private struct PlayerBarInset: View {
-    let isRegularWidth: Bool
-    @Binding var showPlayer: Bool
-    @ObservedObject private var player = AudioPlayerService.shared
+private struct FloatingTabItem: Identifiable {
+    let tag: Int
+    let titleKey: String
+    let systemImage: String
+
+    var id: Int { tag }
+}
+
+private struct FloatingMainTabBar: View {
+    let tabs: [FloatingTabItem]
+    @Binding var selection: Int
+    let accentColor: Color
 
     var body: some View {
-        if player.currentSong != nil && isRegularWidth {
-            PlayerBarView()
-                .onTapGesture {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                        showPlayer = true
-                    }
+        HStack(spacing: 4) {
+            ForEach(tabs) { tab in
+                FloatingTabButton(
+                    tab: tab,
+                    isSelected: selection == tab.tag,
+                    accentColor: accentColor
+                ) {
+                    selection = tab.tag
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
+            }
         }
+        .padding(6)
+        .frame(height: 76)
+        .floatingGlass(in: Capsule(style: .continuous))
+    }
+}
+
+private struct FloatingTabButton: View {
+    let tab: FloatingTabItem
+    let isSelected: Bool
+    let accentColor: Color
+    let action: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var selectedFill: Color {
+        colorScheme == .dark ? Color.black.opacity(0.34) : Color.white.opacity(0.70)
+    }
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 3) {
+                Image(systemName: tab.systemImage)
+                    .font(.system(size: 25, weight: .semibold))
+                    .frame(height: 27)
+                Text(String(localized: String.LocalizationValue(tab.titleKey)))
+                    .font(.caption.weight(isSelected ? .semibold : .regular))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+            }
+            .foregroundStyle(isSelected ? accentColor : Color.primary)
+            .frame(maxWidth: .infinity, minHeight: 60)
+            .padding(.horizontal, 2)
+            .background {
+                if isSelected {
+                    Capsule(style: .continuous)
+                        .fill(selectedFill)
+                }
+            }
+            .contentShape(Capsule(style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text(String(localized: String.LocalizationValue(tab.titleKey))))
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+    }
+}
+
+private struct FloatingSearchButton: View {
+    let isSelected: Bool
+    let accentColor: Color
+    let isRegularWidth: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: isRegularWidth ? 34 : 32, weight: .semibold))
+                .foregroundStyle(isSelected ? accentColor : Color.primary)
+                .frame(width: size, height: size)
+        }
+        .buttonStyle(.plain)
+        .floatingGlass(in: Circle())
+        .accessibilityLabel(Text(String(localized: "search")))
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+    }
+
+    private var size: CGFloat {
+        isRegularWidth ? 76 : 72
+    }
+}
+
+private struct FloatingGlassBackground<S: Shape>: ViewModifier {
+    let shape: S
+
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content
+                .glassEffect(.regular, in: shape)
+        } else {
+            content
+                .background(.ultraThinMaterial, in: shape)
+                .overlay {
+                    shape.stroke(Color.primary.opacity(0.10), lineWidth: 0.5)
+                }
+                .shadow(color: .black.opacity(0.16), radius: 18, y: 8)
+        }
+    }
+}
+
+private extension View {
+    func floatingGlass<S: Shape>(in shape: S) -> some View {
+        modifier(FloatingGlassBackground(shape: shape))
     }
 }

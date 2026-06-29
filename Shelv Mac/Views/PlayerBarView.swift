@@ -10,8 +10,8 @@ struct PlayerBarView: View {
         player.actualStreamFormat?.displayString
     }
     @Environment(\.themeColor) private var themeColor
-    @AppStorage("enableFavorites") private var enableFavorites = true
-    @AppStorage("enablePlaylists") private var enablePlaylists = true
+    @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
+    @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
     @State private var isDragging: Bool = false
     @State private var dragValue: Double = 0
     // currentTime ist kein @Published → das Zeit-Label/der Slider werden über den
@@ -101,7 +101,7 @@ struct PlayerBarView: View {
                 VStack(spacing: 10) {
                     HStack(spacing: 22) {
                         Group {
-                            if enablePlaylists, let song = player.currentSong {
+                            if showPlaylistActions, let song = player.currentSong {
                                 Button {
                                     NotificationCenter.default.post(name: .addSongsToPlaylist, object: [song.id])
                                 } label: {
@@ -164,7 +164,7 @@ struct PlayerBarView: View {
                         .help(repeatHelpText)
 
                         Group {
-                            if enableFavorites, let song = player.currentSong {
+                            if showFavoriteActions, let song = player.currentSong {
                                 let isStarred = libraryStore.isSongStarred(song)
                                 Button {
                                     Task {

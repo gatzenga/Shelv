@@ -5,8 +5,8 @@ struct ArtistDetailView: View {
     private let player = AudioPlayerService.shared
     @ObservedObject private var library = LibraryStore.shared
     @ObservedObject private var offlineMode = OfflineModeService.shared
-    @AppStorage("enableFavorites") private var enableFavorites = true
-    @AppStorage("enableInstantMix") private var enableInstantMix = true
+    @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
+    @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     @AppStorage("artistDetailAlbumSort") private var sortRaw = "newest"
     @AppStorage("artistDetailAlbumDirection") private var dirRaw = "descending"
     @AppStorage("artistDetailAlbumIsGrid") private var isGrid = true
@@ -77,14 +77,14 @@ struct ArtistDetailView: View {
                     Label(String(localized: "shuffle"), systemImage: "shuffle")
                 }
                 .disabled(songs.isEmpty)
-                if enableInstantMix && !offlineMode.isOffline {
+                if showInstantMixActions && !offlineMode.isOffline {
                     Button {
                         InstantMixService.playArtistMix(for: artist, player: player)
                     } label: {
                         Label(String(localized: "instant_mix"), systemImage: "sparkles")
                     }
                 }
-                if enableFavorites {
+                if showFavoriteActions {
                     let starred = library.isArtistStarred(artist)
                     Button { Task { await library.toggleStarArtist(artist) } } label: {
                         Label(starred ? String(localized: "unfavorite") : String(localized: "favorite"),

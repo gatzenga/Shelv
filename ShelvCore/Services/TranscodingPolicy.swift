@@ -62,7 +62,12 @@ nonisolated struct TranscodingPolicy {
     /// genutzt damit ein Server-seitiger Fallback (z. B. Original liefern statt Transcoding)
     /// trotzdem mit der korrekten Extension landet.
     static func extensionFor(mimeType: String?) -> String? {
-        guard let mime = mimeType?.lowercased() else { return nil }
+        let mime = mimeType?
+            .components(separatedBy: ";")
+            .first?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard let mime, !mime.isEmpty else { return nil }
         switch mime {
         case "audio/mpeg", "audio/mp3":          return "mp3"
         case "audio/aac", "audio/aacp":          return "aac"

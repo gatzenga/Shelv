@@ -12,6 +12,11 @@ final class TranscodingPolicyTests: XCTestCase {
         XCTAssertEqual(TranscodingPolicy.extensionFor(mimeType: "audio/webm"), "webm")
     }
 
+    func testExtensionIgnoresContentTypeParametersAndWhitespace() {
+        XCTAssertEqual(TranscodingPolicy.extensionFor(mimeType: " audio/mpeg; charset=utf-8 "), "mp3")
+        XCTAssertEqual(TranscodingPolicy.extensionFor(mimeType: "audio/ogg; codecs=opus"), "opus")
+    }
+
     func testExtensionForUnknownOrMissingMimeTypeReturnsNil() {
         XCTAssertNil(TranscodingPolicy.extensionFor(mimeType: nil))
         XCTAssertNil(TranscodingPolicy.extensionFor(mimeType: "application/json"))

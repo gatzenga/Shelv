@@ -37,6 +37,10 @@ class ServerStore: ObservableObject {
         if !seen.contains(server.id.uuidString) {
             UserDefaults.standard.set(true, forKey: "enableFavorites")
             UserDefaults.standard.set(true, forKey: "enablePlaylists")
+            UserDefaults.standard.set(true, forKey: PersonalizationPreferenceKey.showFavoritesInLibrary)
+            UserDefaults.standard.set(true, forKey: PersonalizationPreferenceKey.showFavoriteActions)
+            UserDefaults.standard.set(true, forKey: PersonalizationPreferenceKey.showPlaylistsTab)
+            UserDefaults.standard.set(true, forKey: PersonalizationPreferenceKey.showPlaylistActions)
             seen.insert(server.id.uuidString)
             UserDefaults.standard.set(Array(seen), forKey: seenKey)
         }

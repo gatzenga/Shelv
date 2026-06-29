@@ -7,8 +7,8 @@ struct PlaylistDetailView: View {
     @ObservedObject var downloadStore = DownloadStore.shared
     @ObservedObject var offlineMode = OfflineModeService.shared
     @ObservedObject var pinStore = PinnedPlaylistStore.shared
-    @AppStorage("enableFavorites") private var enableFavorites = true
-    @AppStorage("enablePlaylists") private var enablePlaylists = true
+    @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
+    @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
     @AppStorage("enableDownloads") private var enableDownloads = false
 
     @ViewBuilder
@@ -149,8 +149,8 @@ struct PlaylistDetailView: View {
                 displaySongs: displayedSongs,
                 isLoading: isLoading,
                 isEditMode: isEditMode,
-                enableFavorites: enableFavorites,
-                enablePlaylists: enablePlaylists,
+                enableFavorites: showFavoriteActions,
+                enablePlaylists: showPlaylistActions,
                 themeColor: themeColor,
                 currentSongId: appState.player.currentSong?.id,
                 libraryStore: libraryStore,

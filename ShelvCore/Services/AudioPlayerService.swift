@@ -432,6 +432,7 @@ class AudioPlayerService: ObservableObject {
     }
 
     func play(songs: [Song], startIndex: Int = 0) {
+        guard songs.indices.contains(startIndex) else { return }
         isShuffled = false
         queue = songs
         currentIndex = startIndex
@@ -441,7 +442,6 @@ class AudioPlayerService: ObservableObject {
         truthPlayNextQueue = []
         truthUserQueue = []
         infinityPendingSongIds.removeAll()
-        guard songs.indices.contains(startIndex) else { return }
         resumeTime = 0
         startPlayback(song: songs[startIndex], seekTo: 0)
         saveState()
@@ -962,6 +962,12 @@ class AudioPlayerService: ObservableObject {
     }
 
     func toggleShuffle() {
+        guard !queue.isEmpty, queue.indices.contains(currentIndex) else {
+            isShuffled = false
+            saveState()
+            return
+        }
+
         let wasShuffled = isShuffled
         isShuffled = !wasShuffled
         if wasShuffled {
@@ -992,7 +998,7 @@ class AudioPlayerService: ObservableObject {
                 + userQueue
             let shuffled = upcoming.shuffled()
 
-            queue.replaceSubrange((currentIndex + 1)..., with: shuffled)
+            queue.replaceSubrange((currentIndex + 1)..<queue.endIndex, with: shuffled)
             userQueue = []
         }
         saveState()

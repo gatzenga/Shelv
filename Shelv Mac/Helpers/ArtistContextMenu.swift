@@ -6,9 +6,9 @@ struct ArtistContextMenuModifier: ViewModifier {
     @ObservedObject var downloadStore = DownloadStore.shared
     @EnvironmentObject var appState: AppState
     @ObservedObject private var offlineMode = OfflineModeService.shared
-    @AppStorage("enableFavorites") private var enableFavorites = true
-    @AppStorage("enablePlaylists") private var enablePlaylists = true
-    @AppStorage("enableInstantMix") private var enableInstantMix = true
+    @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
+    @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
+    @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     @AppStorage("enableDownloads") private var enableDownloads = false
     @State private var showDeleteConfirm = false
 
@@ -36,7 +36,7 @@ struct ArtistContextMenuModifier: ViewModifier {
                     }
                 }
             }
-            if enableInstantMix && !offlineMode.isOffline {
+            if showInstantMixActions && !offlineMode.isOffline {
                 Button(String(localized: "instant_mix")) {
                     playInstantMix()
                 }
@@ -70,16 +70,16 @@ struct ArtistContextMenuModifier: ViewModifier {
                     }
                 }
             }
-            if enableFavorites || enablePlaylists {
+            if showFavoriteActions || showPlaylistActions {
                 Divider()
-                if enableFavorites {
+                if showFavoriteActions {
                     Button(libraryStore.isArtistStarred(artist)
                            ? String(localized: "remove_from_favorites")
                            : String(localized: "add_to_favorites")) {
                         Task { await libraryStore.toggleStarArtist(artist) }
                     }
                 }
-                if enablePlaylists {
+                if showPlaylistActions {
                     Button(String(localized: "add_to_playlist")) {
                         Task {
                             do {

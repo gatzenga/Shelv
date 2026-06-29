@@ -1,0 +1,111 @@
+import XCTest
+
+final class PersonalizationSettingsTests: XCTestCase {
+    private var defaults: UserDefaults!
+    private var suiteName: String!
+
+    override func setUp() {
+        super.setUp()
+        suiteName = "PersonalizationSettingsTests.\(UUID().uuidString)"
+        defaults = UserDefaults(suiteName: suiteName)!
+    }
+
+    override func tearDown() {
+        defaults.removePersistentDomain(forName: suiteName)
+        defaults = nil
+        suiteName = nil
+        super.tearDown()
+    }
+
+    func testDefaultsMatchCurrentVisibleBehavior() {
+        PersonalizationSettings.registerDefaults(in: defaults)
+
+        XCTAssertTrue(defaults.bool(forKey: PersonalizationPreferenceKey.showPlaylistsTab))
+        XCTAssertTrue(defaults.bool(forKey: PersonalizationPreferenceKey.showPlaylistActions))
+        XCTAssertTrue(defaults.bool(forKey: PersonalizationPreferenceKey.showFavoritesInLibrary))
+        XCTAssertTrue(defaults.bool(forKey: PersonalizationPreferenceKey.showFavoriteActions))
+        XCTAssertTrue(defaults.bool(forKey: PersonalizationPreferenceKey.showInstantMixActions))
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .leftPrimary, in: defaults), .favorite)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .leftSecondary, in: defaults), .addToPlaylist)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightPrimary, in: defaults), .playNext)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightSecondary, in: defaults), .addToQueue)
+    }
+
+    func testLegacyDisabledKeysMigrateToSeparateVisibilityAndActionKeys() {
+        defaults.set(false, forKey: PersonalizationPreferenceKey.legacyEnablePlaylists)
+        defaults.set(false, forKey: PersonalizationPreferenceKey.legacyEnableFavorites)
+        defaults.set(false, forKey: PersonalizationPreferenceKey.legacyEnableInstantMix)
+
+        PersonalizationSettings.registerDefaults(in: defaults)
+
+        XCTAssertFalse(defaults.bool(forKey: PersonalizationPreferenceKey.showPlaylistsTab))
+        XCTAssertFalse(defaults.bool(forKey: PersonalizationPreferenceKey.showPlaylistActions))
+        XCTAssertFalse(defaults.bool(forKey: PersonalizationPreferenceKey.showFavoritesInLibrary))
+        XCTAssertFalse(defaults.bool(forKey: PersonalizationPreferenceKey.showFavoriteActions))
+        XCTAssertFalse(defaults.bool(forKey: PersonalizationPreferenceKey.showInstantMixActions))
+    }
+
+    func testPlaylistVisibilityAndActionsStayIndependent() {
+        PersonalizationSettings.registerDefaults(in: defaults)
+
+        defaults.set(false, forKey: PersonalizationPreferenceKey.showPlaylistsTab)
+        defaults.set(true, forKey: PersonalizationPreferenceKey.showPlaylistActions)
+
+        XCTAssertEqual(
+            PersonalizationSettings.tabOrder(showPlaylists: defaults.bool(forKey: PersonalizationPreferenceKey.showPlaylistsTab)),
+            [.discover, .library, .settings, .search]
+        )
+        XCTAssertTrue(PersonalizationSettings.isAvailable(.addToPlaylist, in: defaults))
+
+        defaults.set(true, forKey: PersonalizationPreferenceKey.showPlaylistsTab)
+        defaults.set(false, forKey: PersonalizationPreferenceKey.showPlaylistActions)
+        defaults.set(PersonalizationSwipeAction.addToPlaylist.rawValue, forKey: PersonalizationPreferenceKey.swipeLeftSecondary)
+
+        PersonalizationSettings.normalizeSwipeActions(in: defaults)
+
+        XCTAssertEqual(
+            PersonalizationSettings.tabOrder(showPlaylists: defaults.bool(forKey: PersonalizationPreferenceKey.showPlaylistsTab)),
+            [.discover, .library, .playlists, .settings, .search]
+        )
+        XCTAssertFalse(PersonalizationSettings.isAvailable(.addToPlaylist, in: defaults))
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .leftSecondary, in: defaults), .none)
+    }
+
+    func testDisabledFeatureActionsNormalizeSwipeSlotsToNone() {
+        PersonalizationSettings.registerDefaults(in: defaults)
+        defaults.set(false, forKey: PersonalizationPreferenceKey.showFavoriteActions)
+        defaults.set(false, forKey: PersonalizationPreferenceKey.showPlaylistActions)
+
+        PersonalizationSettings.normalizeSwipeActions(in: defaults)
+
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .leftPrimary, in: defaults), .none)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .leftSecondary, in: defaults), .none)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightPrimary, in: defaults), .playNext)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightSecondary, in: defaults), .addToQueue)
+    }
+
+    func testDuplicateSwipeActionsArePreventedExceptNone() {
+        PersonalizationSettings.registerDefaults(in: defaults)
+
+        PersonalizationSettings.setSwipeAction(.none, for: .rightPrimary, in: defaults)
+        PersonalizationSettings.setSwipeAction(.playNext, for: .leftPrimary, in: defaults)
+        PersonalizationSettings.setSwipeAction(.playNext, for: .leftSecondary, in: defaults)
+        PersonalizationSettings.setSwipeAction(.none, for: .rightSecondary, in: defaults)
+
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .leftPrimary, in: defaults), .playNext)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .leftSecondary, in: defaults), .addToPlaylist)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightPrimary, in: defaults), .none)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightSecondary, in: defaults), .none)
+    }
+
+    func testIPhoneTabOrderKeepsSettingsImmediatelyBeforeSearch() {
+        XCTAssertEqual(
+            PersonalizationSettings.tabOrder(showPlaylists: true),
+            [.discover, .library, .playlists, .settings, .search]
+        )
+        XCTAssertEqual(
+            PersonalizationSettings.tabOrder(showPlaylists: false),
+            [.discover, .library, .settings, .search]
+        )
+    }
+}

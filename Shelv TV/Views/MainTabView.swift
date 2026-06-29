@@ -5,7 +5,7 @@ import SwiftUI
 /// tabItem-API hatte auf tvOS kaputtes Menü-/Fokus-Verhalten (Tab-Bar unerreichbar,
 /// leerer Tab nach Feature-Toggle).
 struct MainTabView: View {
-    @AppStorage("enablePlaylists") private var enablePlaylists = true
+    @AppStorage(PersonalizationPreferenceKey.showPlaylistsTab) private var showPlaylistsTab = true
     @AppStorage("recapEnabled") private var recapEnabled = false
     @ObservedObject private var queueSync = QueueSyncService.shared
     @State private var selection = MainTabView.initialSelection
@@ -33,7 +33,7 @@ struct MainTabView: View {
                 LibraryView()
             }
 
-            if enablePlaylists {
+            if showPlaylistsTab {
                 Tab(String(localized: "playlists"), systemImage: "music.note.list", value: "playlists") {
                     PlaylistsView()
                 }
@@ -59,7 +59,7 @@ struct MainTabView: View {
             // Vordergrund nicht zuverlässig (Pause kommt an, Play nicht), daher hier abfangen.
             AudioPlayerService.shared.togglePlayPause()
         }
-        .onChange(of: enablePlaylists) { _, on in
+        .onChange(of: showPlaylistsTab) { _, on in
             if !on && selection == "playlists" { selection = "settings" }
         }
         .onChange(of: recapEnabled) { _, on in

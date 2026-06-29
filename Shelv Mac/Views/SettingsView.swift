@@ -16,6 +16,11 @@ struct SettingsView: View {
                     Image(systemName: "paintpalette")
                     Text(String(localized: "appearance"))
                 }
+            UICustomizationsTab()
+                .tabItem {
+                    Image(systemName: "slider.horizontal.3")
+                    Text(String(localized: "ui_customizations"))
+                }
             RecapTab()
                 .tabItem {
                     Image(systemName: "calendar.badge.clock")

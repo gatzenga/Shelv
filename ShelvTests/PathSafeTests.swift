@@ -14,4 +14,21 @@ final class PathSafeTests: XCTestCase {
         XCTAssertEqual("..".pathSafeComponent, "_")
         XCTAssertEqual("".pathSafeComponent, "_")
     }
+
+    func testFileNameCandidatesOnlyStripKnownFinalExtensions() {
+        let knownExtensions: Set<String> = ["flac", "mp3"]
+
+        XCTAssertEqual(
+            "song.v1.flac".pathSafeComponentFileNameCandidates(knownFileExtensions: knownExtensions),
+            ["song.v1.flac", "song.v1"]
+        )
+        XCTAssertEqual(
+            "song.v1".pathSafeComponentFileNameCandidates(knownFileExtensions: knownExtensions),
+            ["song.v1"]
+        )
+        XCTAssertEqual(
+            "song.custom".pathSafeComponentFileNameCandidates(knownFileExtensions: knownExtensions),
+            ["song.custom"]
+        )
+    }
 }

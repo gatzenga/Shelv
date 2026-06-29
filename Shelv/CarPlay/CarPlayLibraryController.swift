@@ -12,7 +12,7 @@ final class CarPlayLibraryController {
     private var albumCoverTask: Task<Void, Never>?
     private var artistCoverTask: Task<Void, Never>?
     private var coverLoadTask: Task<Void, Never>?
-    private var lastEnableFavorites: Bool = UserDefaults.standard.bool(forKey: "enableFavorites")
+    private var lastShowFavoritesInLibrary: Bool = UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showFavoritesInLibrary)
     private var lastThemeColor: String = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
     private weak var albumsTemplate: CPListTemplate?
     private weak var artistsTemplate: CPListTemplate?
@@ -48,10 +48,10 @@ final class CarPlayLibraryController {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self else { return }
-                let currentFav   = UserDefaults.standard.bool(forKey: "enableFavorites")
+                let currentFav   = UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showFavoritesInLibrary)
                 let currentTheme = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
-                if currentFav != self.lastEnableFavorites {
-                    self.lastEnableFavorites = currentFav
+                if currentFav != self.lastShowFavoritesInLibrary {
+                    self.lastShowFavoritesInLibrary = currentFav
                     self.buildMenu()
                 }
                 if currentTheme != self.lastThemeColor {
@@ -119,7 +119,7 @@ final class CarPlayLibraryController {
                 c(); self?.pushArtistsList()
             },
         ]
-        if UserDefaults.standard.bool(forKey: "enableFavorites") {
+        if UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showFavoritesInLibrary) {
             items.append(menuListItem(title: String(localized: "favorites"), systemImage: "heart") { [weak self] _, c in
                 c(); self?.pushFavorites()
             })

@@ -9,8 +9,8 @@ struct RecapDetailView: View {
     @ObservedObject private var offlineMode = OfflineModeService.shared
     @Environment(\.themeColor) private var themeColor
     @Environment(\.dismiss) private var dismiss
-    @AppStorage("enableFavorites") private var enableFavorites = true
-    @AppStorage("enablePlaylists") private var enablePlaylists = true
+    @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
+    @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
     @AppStorage("enableDownloads") private var enableDownloads = false
     @State private var songs: [SongWithCount] = []
     @State private var isLoading = true
@@ -113,14 +113,14 @@ struct RecapDetailView: View {
                                 AudioPlayerService.shared.addToQueue(entry.song)
                                 NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_queue"))
                             }
-                            if enableFavorites || enablePlaylists {
+                            if showFavoriteActions || showPlaylistActions {
                                 Divider()
-                                if enableFavorites {
+                                if showFavoriteActions {
                                     Button(String(localized: "add_to_favorites")) {
                                         Task { await libraryStore.toggleStarSong(entry.song) }
                                     }
                                 }
-                                if enablePlaylists {
+                                if showPlaylistActions {
                                     Button(String(localized: "add_to_playlist")) {
                                         NotificationCenter.default.post(name: .addSongsToPlaylist, object: [entry.song.id])
                                     }

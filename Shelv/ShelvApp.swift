@@ -50,6 +50,7 @@ struct ShelvApp: App {
         if d.string(forKey: "transcodingWifiCodec") == "aac" { d.set("raw", forKey: "transcodingWifiCodec") }
         if d.string(forKey: "transcodingCellularCodec") == "aac" { d.set("raw", forKey: "transcodingCellularCodec") }
         if d.string(forKey: "transcodingDownloadCodec") == "aac" { d.set("raw", forKey: "transcodingDownloadCodec") }
+        PersonalizationSettings.registerDefaults()
         UserDefaults.standard.register(defaults: [
             "recapWeeklyEnabled": true,
             "recapMonthlyEnabled": true,

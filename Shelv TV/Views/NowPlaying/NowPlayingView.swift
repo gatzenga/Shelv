@@ -6,7 +6,7 @@ struct NowPlayingView: View {
     @ObservedObject var player = AudioPlayerService.shared
     @ObservedObject private var library = LibraryStore.shared
     @AppStorage("themeColor") private var themeColor = "violet"
-    @AppStorage("enableFavorites") private var enableFavorites = true
+    @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
     @Environment(\.scenePhase) private var scenePhase
     private var accent: Color { AppTheme.color(for: themeColor) }
 
@@ -110,7 +110,7 @@ struct NowPlayingView: View {
 
             // Sekundär: Favorit · Lyrics · Queue · Stop
             HStack(spacing: 30) {
-                if enableFavorites, let song = player.currentSong {
+                if showFavoriteActions, let song = player.currentSong {
                     Button { Task { await library.toggleStarSong(song) } } label: {
                         Image(systemName: library.isSongStarred(song) ? "heart.fill" : "heart")
                             .foregroundStyle(library.isSongStarred(song) ? accent : Color.primary)

@@ -5,8 +5,8 @@ struct SearchView: View {
     @ObservedObject var libraryStore = LibraryViewModel.shared
     @StateObject private var vm = SearchViewModel()
     @FocusState private var isSearchFocused: Bool
-    @AppStorage("enableFavorites") private var enableFavorites = true
-    @AppStorage("enablePlaylists") private var enablePlaylists = true
+    @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
+    @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
     @State private var lyricsResults: [LyricsSearchResult] = []
     @State private var lyricsTask: Task<Void, Never>?
 
@@ -79,8 +79,8 @@ struct SearchView: View {
                                 ForEach(vm.songs) { song in
                                     SearchSongRow(
                                         song: song,
-                                        showFavorite: enableFavorites,
-                                        showPlaylist: enablePlaylists,
+                                        showFavorite: showFavoriteActions,
+                                        showPlaylist: showPlaylistActions,
                                         isStarred: libraryStore.isSongStarred(song)
                                     ) {
                                         let idx = vm.songs.firstIndex(where: { $0.id == song.id }) ?? 0
@@ -105,8 +105,8 @@ struct SearchView: View {
                                     LyricsSearchRow(
                                         item: item,
                                         query: vm.query,
-                                        showFavorite: enableFavorites,
-                                        showPlaylist: enablePlaylists,
+                                        showFavorite: showFavoriteActions,
+                                        showPlaylist: showPlaylistActions,
                                         onPlay: { playLyricsResult(item) },
                                         onPlayNext: {
                                             withLyricsSong(item) { song in

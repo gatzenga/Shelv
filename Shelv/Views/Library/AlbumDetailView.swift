@@ -8,9 +8,9 @@ struct AlbumDetailView: View {
     private let player = AudioPlayerService.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
-    @AppStorage("enableFavorites") private var enableFavorites = true
-    @AppStorage("enablePlaylists") private var enablePlaylists = true
-    @AppStorage("enableInstantMix") private var enableInstantMix = true
+    @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
+    @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
+    @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     @AppStorage("enableDownloads") private var enableDownloads = false
 
     @State private var detail: AlbumDetail?
@@ -125,7 +125,7 @@ struct AlbumDetailView: View {
         .navigationTitle(album.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if enableFavorites && !offlineMode.isOffline {
+            if showFavoriteActions && !offlineMode.isOffline {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         Task { await libraryStore.toggleStarAlbum(album) }
@@ -137,7 +137,7 @@ struct AlbumDetailView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
-                    if enableInstantMix && !offlineMode.isOffline {
+                    if showInstantMixActions && !offlineMode.isOffline {
                         Button {
                             playInstantMix()
                         } label: {
@@ -167,7 +167,7 @@ struct AlbumDetailView: View {
                     }
                     .disabled(detail == nil)
 
-                    if enablePlaylists && !offlineMode.isOffline {
+                    if showPlaylistActions && !offlineMode.isOffline {
                         Divider()
                         Button {
                             if let songs = detail?.song, !songs.isEmpty {
@@ -402,42 +402,29 @@ struct AlbumDetailView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            Button {
-                haptic(); player.addToQueue(song)
-                currentToast = ShelveToast(message: String(localized: "added_to_queue"))
-            } label: {
-                Image(systemName: "text.badge.plus")
-            }
-            .tint(accentColor)
-
-            Button {
-                haptic(); player.addPlayNext(song)
+        .personalizedSongSwipeActions(
+            song: song,
+            isOffline: offlineMode.isOffline,
+            isFavorite: libraryStore.isSongStarred(song),
+            accentColor: accentColor,
+            onFavorite: {
+                haptic(.medium)
+                Task { await libraryStore.toggleStarSong(song) }
+            },
+            onAddToPlaylist: {
+                albumPlaylistIds = AlbumPlaylistIds(ids: [song.id])
+            },
+            onPlayNext: {
+                haptic()
+                player.addPlayNext(song)
                 currentToast = ShelveToast(message: String(localized: "plays_next"))
-            } label: {
-                Image(systemName: "text.insert")
+            },
+            onAddToQueue: {
+                haptic()
+                player.addToQueue(song)
+                currentToast = ShelveToast(message: String(localized: "added_to_queue"))
             }
-            .tint(.orange)
-
-        }
-        .swipeActions(edge: .leading, allowsFullSwipe: false) {
-            if enableFavorites && !offlineMode.isOffline {
-                Button {
-                    haptic(.medium); Task { await libraryStore.toggleStarSong(song) }
-                } label: {
-                    Image(systemName: libraryStore.isSongStarred(song) ? "heart.slash" : "heart.fill")
-                }
-                .tint(.pink)
-            }
-            if enablePlaylists && !offlineMode.isOffline {
-                Button {
-                    albumPlaylistIds = AlbumPlaylistIds(ids: [song.id])
-                } label: {
-                    Image(systemName: "music.note.list")
-                }
-                .tint(accentColor)
-            }
-        }
+        )
     }
 
     private func resolveArtist(_ artistName: String) {

@@ -37,9 +37,13 @@ actor StreamCacheService {
     private var activeFormats: [String: ActualStreamFormat] = [:]
     private var cachedURLs: [String: URL] = [:]
     private var cachedFormats: [String: ActualStreamFormat] = [:]
+    private static let cacheFileExtensions: Set<String> = [
+        "aac", "aif", "aiff", "audio", "flac", "m4a", "mp3", "ogg", "opus", "wav", "webm"
+    ]
 
     private static func tempURL(for songId: String, ext: String = "") -> URL {
-        let name = ext.isEmpty ? "shelv_stream_\(songId)" : "shelv_stream_\(songId).\(ext)"
+        let safeSongId = songId.pathSafeComponent
+        let name = ext.isEmpty ? "shelv_stream_\(safeSongId)" : "shelv_stream_\(safeSongId).\(ext)"
         return FileManager.default.temporaryDirectory.appendingPathComponent(name)
     }
 
@@ -168,14 +172,15 @@ actor StreamCacheService {
 
     func cleanupOldFiles() {
         let tmp = FileManager.default.temporaryDirectory
-        let activeSongIds = Set(activeTasks.keys).union(cachedURLs.keys)
+        let activeSongIds = Set(activeTasks.keys.map(\.pathSafeComponent))
+            .union(cachedURLs.keys.map(\.pathSafeComponent))
         guard let files = try? FileManager.default.contentsOfDirectory(
             at: tmp, includingPropertiesForKeys: nil
         ) else { return }
         for file in files where file.lastPathComponent.hasPrefix("shelv_stream_") {
             let songId = String(file.lastPathComponent.dropFirst("shelv_stream_".count))
-            let baseSongId = songId.components(separatedBy: ".").first ?? songId
-            guard !activeSongIds.contains(baseSongId) else { continue }
+            let candidates = songId.pathSafeComponentFileNameCandidates(knownFileExtensions: Self.cacheFileExtensions)
+            guard activeSongIds.isDisjoint(with: candidates) else { continue }
             try? FileManager.default.removeItem(at: file)
         }
     }

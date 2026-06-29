@@ -90,9 +90,9 @@ enum CarPlayNavigation {
         }
 
         func makeActionsSection() -> CPListSection {
-            let enableFavorites = UserDefaults.standard.bool(forKey: "enableFavorites")
+            let enableFavorites = UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showFavoriteActions)
                 && !OfflineModeService.shared.isOffline
-            let enableInstantMix = UserDefaults.standard.bool(forKey: "enableInstantMix")
+            let enableInstantMix = UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showInstantMixActions)
                 && !OfflineModeService.shared.isOffline
             let starred = LibraryStore.shared.isAlbumStarred(album)
 
@@ -166,12 +166,12 @@ enum CarPlayNavigation {
         template.updateSections([makeActionsSection(), makeSongsSection()])
 
         Task { @MainActor [weak template] in
-            var lastEnabled = UserDefaults.standard.bool(forKey: "enableFavorites")
-            var lastInstantMix = UserDefaults.standard.bool(forKey: "enableInstantMix")
+            var lastEnabled = UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showFavoriteActions)
+            var lastInstantMix = UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showInstantMixActions)
             var lastTheme   = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
             for await _ in NotificationCenter.default.notifications(named: UserDefaults.didChangeNotification) {
-                let currentEnabled = UserDefaults.standard.bool(forKey: "enableFavorites")
-                let currentInstantMix = UserDefaults.standard.bool(forKey: "enableInstantMix")
+                let currentEnabled = UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showFavoriteActions)
+                let currentInstantMix = UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showInstantMixActions)
                 let currentTheme   = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
                 guard currentEnabled != lastEnabled
                         || currentInstantMix != lastInstantMix
@@ -245,9 +245,9 @@ enum CarPlayNavigation {
         }
 
         func makeActionsSection() -> CPListSection {
-            let enableFavorites = UserDefaults.standard.bool(forKey: "enableFavorites")
+            let enableFavorites = UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showFavoriteActions)
                 && !OfflineModeService.shared.isOffline
-            let enableInstantMix = UserDefaults.standard.bool(forKey: "enableInstantMix")
+            let enableInstantMix = UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showInstantMixActions)
                 && !OfflineModeService.shared.isOffline
             let starred = LibraryStore.shared.isArtistStarred(artist)
 
@@ -322,12 +322,12 @@ enum CarPlayNavigation {
         }
 
         Task { @MainActor [weak template] in
-            var lastEnabled = UserDefaults.standard.bool(forKey: "enableFavorites")
-            var lastInstantMix = UserDefaults.standard.bool(forKey: "enableInstantMix")
+            var lastEnabled = UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showFavoriteActions)
+            var lastInstantMix = UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showInstantMixActions)
             var lastTheme   = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
             for await _ in NotificationCenter.default.notifications(named: UserDefaults.didChangeNotification) {
-                let currentEnabled = UserDefaults.standard.bool(forKey: "enableFavorites")
-                let currentInstantMix = UserDefaults.standard.bool(forKey: "enableInstantMix")
+                let currentEnabled = UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showFavoriteActions)
+                let currentInstantMix = UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showInstantMixActions)
                 let currentTheme   = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
                 guard currentEnabled != lastEnabled
                         || currentInstantMix != lastInstantMix

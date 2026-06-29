@@ -15,4 +15,22 @@ extension String {
         while s.hasPrefix(".") { s.removeFirst() }   // ".." / versteckte Komponenten neutralisieren
         return s.isEmpty ? "_" : s
     }
+
+    /// Liefert sichere ID-Kandidaten fuer Dateinamen, die optional eine bekannte Dateiendung tragen.
+    nonisolated func pathSafeComponentFileNameCandidates(knownFileExtensions: Set<String>) -> Set<String> {
+        var candidates: Set<String> = [self]
+        guard let dotIndex = lastIndex(of: ".") else { return candidates }
+
+        let extensionStart = index(after: dotIndex)
+        guard extensionStart < endIndex else { return candidates }
+
+        let ext = String(self[extensionStart...]).lowercased()
+        guard knownFileExtensions.contains(ext) else { return candidates }
+
+        let stem = String(self[..<dotIndex])
+        if !stem.isEmpty {
+            candidates.insert(stem)
+        }
+        return candidates
+    }
 }

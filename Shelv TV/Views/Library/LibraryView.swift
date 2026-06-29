@@ -23,7 +23,7 @@ enum SortDirection: String, CaseIterable {
 
 struct LibraryView: View {
     @ObservedObject var store = LibraryStore.shared
-    @AppStorage("enableFavorites") private var enableFavorites = true
+    @AppStorage(PersonalizationPreferenceKey.showFavoritesInLibrary) private var showFavoritesInLibrary = true
     @AppStorage("albumSortOption") private var albumSortRaw = "alphabeticalByName"
     @AppStorage("albumSortDirection") private var albumDirRaw = "ascending"
     @AppStorage("artistSortDirection") private var artistDirRaw = "ascending"
@@ -51,7 +51,7 @@ struct LibraryView: View {
                 Picker("", selection: $segment) {
                     Text(String(localized: "albums")).tag(0)
                     Text(String(localized: "artists")).tag(1)
-                    if enableFavorites { Text(String(localized: "favorites")).tag(2) }
+                    if showFavoritesInLibrary { Text(String(localized: "favorites")).tag(2) }
                 }
                 .pickerStyle(.segmented)
                 .frame(maxWidth: 700)
@@ -82,13 +82,16 @@ struct LibraryView: View {
             .navigationDestination(for: Artist.self) { ArtistDetailView(artist: $0) }
             .task(id: store.reloadID) { await store.loadAlbums(sortBy: albumServerType) }
             .task(id: store.reloadID) { await store.loadArtists() }
-            .task(id: "\(store.reloadID)|\(enableFavorites)") { if enableFavorites { await store.loadStarred() } }
+            .task(id: "\(store.reloadID)|\(showFavoritesInLibrary)") { if showFavoritesInLibrary { await store.loadStarred() } }
             .onAppear { rebuildDerivedLibraryState() }
             .onReceive(store.$albums) { _ in Task { @MainActor in rebuildDerivedLibraryState() } }
             .onReceive(store.$artists) { _ in Task { @MainActor in rebuildDerivedLibraryState() } }
             .onChange(of: albumSortRaw) { _, _ in rebuildDerivedLibraryState() }
             .onChange(of: albumDirRaw) { _, _ in rebuildDerivedLibraryState() }
             .onChange(of: artistDirRaw) { _, _ in rebuildDerivedLibraryState() }
+            .onChange(of: showFavoritesInLibrary) { _, enabled in
+                if !enabled && segment == 2 { segment = 0 }
+            }
             .onDisappear {
                 derivedRebuildTask?.cancel()
                 derivedRebuildTask = nil

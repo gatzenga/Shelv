@@ -5,8 +5,8 @@ nonisolated enum InstantMixService {
 
     private static var isEnabled: Bool {
         let defaults = UserDefaults.standard
-        guard defaults.object(forKey: "enableInstantMix") != nil else { return true }
-        return defaults.bool(forKey: "enableInstantMix")
+        guard defaults.object(forKey: PersonalizationPreferenceKey.showInstantMixActions) != nil else { return true }
+        return defaults.bool(forKey: PersonalizationPreferenceKey.showInstantMixActions)
     }
 
     @MainActor

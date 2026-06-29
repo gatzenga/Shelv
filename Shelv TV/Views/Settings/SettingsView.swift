@@ -4,6 +4,7 @@ struct SettingsView: View {
     @EnvironmentObject var serverStore: ServerStore
     @AppStorage("appAppearance") private var appAppearance = "system"
     @AppStorage("themeColor") private var themeColor = "violet"
+    @AppStorage("recapEnabled") private var recapEnabled = false
 
     private var isGerman: Bool { Locale.preferredLanguages.first?.hasPrefix("de") == true }
     private var appearanceOptions: [TVSettingsChoiceOption<String>] {
@@ -49,6 +50,7 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    Toggle(String(localized: "recaps"), isOn: $recapEnabled)
                     NavigationLink(String(localized: "ui_customizations")) { TVUICustomizationsSettingsView() }
                     NavigationLink(String(localized: "playback")) { PlaybackSettingsView() }
                     NavigationLink(String(localized: "cache")) { CacheSettingsView() }
@@ -76,20 +78,50 @@ struct SettingsView: View {
 }
 
 private struct TVUICustomizationsSettingsView: View {
-    @AppStorage("enablePlaylists") private var enablePlaylists = true
-    @AppStorage("enableFavorites") private var enableFavorites = true
-    @AppStorage("recapEnabled") private var recapEnabled = false
-    @AppStorage("enableInstantMix") private var enableInstantMix = true
+    @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
 
     var body: some View {
         Form {
             Section(String(localized: "ui_customizations")) {
-                Toggle(String(localized: "playlists"), isOn: $enablePlaylists)
-                Toggle(String(localized: "favorites"), isOn: $enableFavorites)
-                Toggle(String(localized: "recaps"), isOn: $recapEnabled)
-                Toggle(String(localized: "instant_mix"), isOn: $enableInstantMix)
+                NavigationLink(String(localized: "playlists")) {
+                    TVPlaylistsPersonalizationView()
+                }
+                NavigationLink(String(localized: "favorites")) {
+                    TVFavoritesPersonalizationView()
+                }
+                Toggle(String(localized: "show_instant_mix_actions"), isOn: $showInstantMixActions)
             }
         }
         .navigationTitle(String(localized: "ui_customizations"))
+    }
+}
+
+private struct TVPlaylistsPersonalizationView: View {
+    @AppStorage(PersonalizationPreferenceKey.showPlaylistsTab) private var showPlaylists = true
+    @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
+
+    var body: some View {
+        Form {
+            Section(String(localized: "playlists")) {
+                Toggle(String(localized: "show_playlists"), isOn: $showPlaylists)
+                Toggle(String(localized: "show_add_to_playlist_actions"), isOn: $showPlaylistActions)
+            }
+        }
+        .navigationTitle(String(localized: "playlists"))
+    }
+}
+
+private struct TVFavoritesPersonalizationView: View {
+    @AppStorage(PersonalizationPreferenceKey.showFavoritesInLibrary) private var showFavorites = true
+    @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
+
+    var body: some View {
+        Form {
+            Section(String(localized: "favorites")) {
+                Toggle(String(localized: "show_favorites"), isOn: $showFavorites)
+                Toggle(String(localized: "show_favorite_actions"), isOn: $showFavoriteActions)
+            }
+        }
+        .navigationTitle(String(localized: "favorites"))
     }
 }

@@ -9,8 +9,8 @@ struct PlaylistDetailView: View {
     private let player = AudioPlayerService.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
-    @AppStorage("enableFavorites") private var enableFavorites = true
-    @AppStorage("enablePlaylists") private var enablePlaylists = true
+    @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
+    @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
     @AppStorage("enableDownloads") private var enableDownloads = false
 
     @State private var songs: [Song] = []
@@ -106,23 +106,31 @@ struct PlaylistDetailView: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            Button {
-                                haptic(); player.addToQueue(song)
-                                currentToast = ShelveToast(message: String(localized: "added_to_queue"))
-                            } label: {
-                                Image(systemName: "text.badge.plus")
-                            }
-                            .tint(accentColor)
-
-                            Button {
-                                haptic(); player.addPlayNext(song)
+                        .personalizedSongSwipeActions(
+                            song: song,
+                            isOffline: offlineMode.isOffline,
+                            isFavorite: libraryStore.isSongStarred(song),
+                            accentColor: accentColor,
+                            onFavorite: {
+                                haptic(.medium)
+                                Task { await libraryStore.toggleStarSong(song) }
+                            },
+                            onAddToPlaylist: {
+                                playlistSongIds = [song.id]
+                                showAddToPlaylist = true
+                            },
+                            onPlayNext: {
+                                haptic()
+                                player.addPlayNext(song)
                                 currentToast = ShelveToast(message: String(localized: "plays_next"))
-                            } label: {
-                                Image(systemName: "text.insert")
+                            },
+                            onAddToQueue: {
+                                haptic()
+                                player.addToQueue(song)
+                                currentToast = ShelveToast(message: String(localized: "added_to_queue"))
                             }
-                            .tint(.orange)
-
+                        )
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             if searchQuery.isEmpty {
                                 Button(role: .destructive) {
                                     haptic(); Task { await removeSong(at: songsIndex) }
@@ -130,25 +138,6 @@ struct PlaylistDetailView: View {
                                     Image(systemName: "trash")
                                 }
                                 .tint(.red)
-                            }
-                        }
-                        .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                            if enableFavorites && !offlineMode.isOffline {
-                                Button {
-                                    haptic(.medium); Task { await libraryStore.toggleStarSong(song) }
-                                } label: {
-                                    Image(systemName: libraryStore.isSongStarred(song) ? "heart.slash" : "heart.fill")
-                                }
-                                .tint(.pink)
-                            }
-                            if enablePlaylists && !offlineMode.isOffline {
-                                Button {
-                                    playlistSongIds = [song.id]
-                                    showAddToPlaylist = true
-                                } label: {
-                                    Image(systemName: "music.note.list")
-                                }
-                                .tint(accentColor)
                             }
                         }
                     }

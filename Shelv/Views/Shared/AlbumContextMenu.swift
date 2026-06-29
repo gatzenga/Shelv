@@ -6,9 +6,9 @@ struct AlbumContextMenuModifier: ViewModifier {
 
     @ObservedObject var libraryStore = LibraryStore.shared
     @ObservedObject var offlineMode = OfflineModeService.shared
-    @AppStorage("enableFavorites") private var enableFavorites = true
-    @AppStorage("enablePlaylists") private var enablePlaylists = true
-    @AppStorage("enableInstantMix") private var enableInstantMix = true
+    @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
+    @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
+    @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     @AppStorage("enableDownloads") private var enableDownloads = false
     @AppStorage("themeColor") private var themeColorName = "violet"
 
@@ -76,7 +76,7 @@ struct AlbumContextMenuModifier: ViewModifier {
             Label(String(localized: "shuffle"), systemImage: "shuffle")
         }
 
-        if enableInstantMix && !offlineMode.isOffline {
+        if showInstantMixActions && !offlineMode.isOffline {
             Button {
                 InstantMixService.playAlbumMix(for: album)
             } label: {
@@ -104,9 +104,9 @@ struct AlbumContextMenuModifier: ViewModifier {
             Label(String(localized: "add_to_queue"), systemImage: "text.badge.plus")
         }
 
-        if !offlineMode.isOffline && (enableFavorites || enablePlaylists) {
+        if !offlineMode.isOffline && (showFavoriteActions || showPlaylistActions) {
             Divider()
-            if enableFavorites {
+            if showFavoriteActions {
                 Button {
                     Task { await libraryStore.toggleStarAlbum(album) }
                 } label: {
@@ -118,7 +118,7 @@ struct AlbumContextMenuModifier: ViewModifier {
                     )
                 }
             }
-            if enablePlaylists {
+            if showPlaylistActions {
                 Button {
                     if let cached = cachedSongs, !cached.isEmpty {
                         pendingPlaylistIds = PendingPlaylistIds(ids: cached.map(\.id))

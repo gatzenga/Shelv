@@ -12,7 +12,7 @@ final class CarPlayRootController: NSObject {
     private var tabBar: CPTabBarTemplate?
     private var cancellables = Set<AnyCancellable>()
     private var lastRecapEnabled: Bool = UserDefaults.standard.bool(forKey: "recapEnabled")
-    private var lastEnablePlaylists: Bool = UserDefaults.standard.bool(forKey: "enablePlaylists")
+    private var lastShowPlaylistsTab: Bool = UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showPlaylistsTab)
     private var lastRecapTabVisible: Bool = false
 
     // Apple's System-Buttons. EINMAL gebaut und stabil geteilt — Apple liest deren Selected-State
@@ -123,7 +123,7 @@ final class CarPlayRootController: NSObject {
         var templates: [CPTemplate] = []
         if let t = discoverController?.rootTemplate  { templates.append(t) }
         if let t = libraryController?.rootTemplate   { templates.append(t) }
-        if UserDefaults.standard.bool(forKey: "enablePlaylists"),
+        if UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showPlaylistsTab),
            let t = playlistsController?.rootTemplate {
             templates.append(t)
         }
@@ -166,16 +166,16 @@ final class CarPlayRootController: NSObject {
             }
             .store(in: &cancellables)
 
-        // recapEnabled und enablePlaylists via UserDefaults — nur bei Änderung reagieren.
-        // lastRecapEnabled/lastEnablePlaylists werden ausschliesslich in refreshTabs() upgedated,
+        // recapEnabled und showPlaylistsTab via UserDefaults — nur bei Änderung reagieren.
+        // lastRecapEnabled/lastShowPlaylistsTab werden ausschliesslich in refreshTabs() upgedated,
         // damit der Vergleich dort funktioniert (sonst sind sie schon gleich, bevor refreshTabs läuft).
         NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self else { return }
                 let currentRecap = UserDefaults.standard.bool(forKey: "recapEnabled")
-                let currentPlaylists = UserDefaults.standard.bool(forKey: "enablePlaylists")
-                guard currentRecap != self.lastRecapEnabled || currentPlaylists != self.lastEnablePlaylists else { return }
+                let currentPlaylists = UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showPlaylistsTab)
+                guard currentRecap != self.lastRecapEnabled || currentPlaylists != self.lastShowPlaylistsTab else { return }
                 self.refreshTabs()
             }
             .store(in: &cancellables)
@@ -185,13 +185,13 @@ final class CarPlayRootController: NSObject {
         // Nur tatsächlichen Tab-Wechsel rendern — sonst unnötige IPC-Roundtrips zu CarPlay.
         let recapVisible = recapTabVisible
         let recapEnabled = UserDefaults.standard.bool(forKey: "recapEnabled")
-        let playlistsEnabled = UserDefaults.standard.bool(forKey: "enablePlaylists")
+        let playlistsEnabled = UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showPlaylistsTab)
         guard recapVisible != lastRecapTabVisible
               || recapEnabled != lastRecapEnabled
-              || playlistsEnabled != lastEnablePlaylists else { return }
+              || playlistsEnabled != lastShowPlaylistsTab else { return }
         lastRecapTabVisible = recapVisible
         lastRecapEnabled = recapEnabled
-        lastEnablePlaylists = playlistsEnabled
+        lastShowPlaylistsTab = playlistsEnabled
         tabBar?.updateTemplates(visibleTabTemplates())
     }
 
@@ -222,13 +222,13 @@ final class CarPlayRootController: NSObject {
         // (CPNowPlayingShuffle-/RepeatButton) lesen ihren Selected-State autonom vom
         // MPRemoteCommandCenter. Würden wir bei jedem State-Wechsel die Buttons neu
         // bauen, flackerte der Frame zwischen Tap-Highlight und Re-Erstellung.
-        // enableFavorites-Toggle. Filter auf den Key, sonst rauscht jeder Player-State-Save durch.
-        var lastEnableFav  = UserDefaults.standard.bool(forKey: "enableFavorites")
+        // showFavoriteActions-Toggle. Filter auf den Key, sonst rauscht jeder Player-State-Save durch.
+        var lastEnableFav  = UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showFavoriteActions)
         var lastThemeColor = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
         NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
-                let currentFav   = UserDefaults.standard.bool(forKey: "enableFavorites")
+                let currentFav   = UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showFavoriteActions)
                 let currentTheme = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
                 if currentFav != lastEnableFav {
                     lastEnableFav = currentFav
@@ -251,7 +251,7 @@ final class CarPlayRootController: NSObject {
         // bei Track-/Starred-Wechsel neu bauen). Shuffle/Repeat bleiben stabil.
         var buttons: [CPNowPlayingButton] = [cachedShuffleButton, cachedRepeatButton]
         if #available(iOS 16.0, *),
-           UserDefaults.standard.bool(forKey: "enableFavorites"),
+           UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showFavoriteActions),
            !OfflineModeService.shared.isOffline,
            let song {
             let icon = UIImage(systemName: starred ? "heart.fill" : "heart") ?? UIImage()
