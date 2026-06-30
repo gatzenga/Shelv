@@ -452,8 +452,6 @@
 "invalid_stream_url" = "无效的串流 URL";
 "stream_data" = "串流数据";
 "streaming_link" = "串流链接";
-"hls_recommended" = "（推荐 HLS）";
-"https_stream_recommendation" = "建议新电台使用 HTTPS，在 Apple 平台上通常更可靠。现有 HTTP 串流仍可能正常工作。";
 "azuracast" = "AzuraCast";
 "use_azuracast_api" = "使用 AzuraCast API";
 "api_url" = "API URL";
@@ -462,7 +460,6 @@
 "azuracast_api_format" = "AzuraCast API 格式：";
 "supported_formats" = "支持格式";
 "supported_formats_hls_mp3_aac" = "支持格式：HLS、MP3、AAC";
-"live_broadcast" = "现场直播";
 "live_stream" = "直播串流";
 "connecting" = "正在连接";
 "paused" = "已暂停";

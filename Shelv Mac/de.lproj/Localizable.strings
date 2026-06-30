@@ -456,8 +456,6 @@
 "invalid_stream_url" = "Ungültige Stream-URL";
 "stream_data" = "Stream-Daten";
 "streaming_link" = "Streaming-Link";
-"hls_recommended" = "(HLS empfohlen)";
-"https_stream_recommendation" = "HTTPS wird für neue Sender empfohlen und ist auf Apple-Plattformen meistens zuverlässiger. Bestehende HTTP-Streams können weiterhin funktionieren.";
 "azuracast" = "AzuraCast";
 "use_azuracast_api" = "AzuraCast API verwenden";
 "api_url" = "API-URL";

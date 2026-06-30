@@ -452,8 +452,6 @@
 "invalid_stream_url" = "Invalid stream URL";
 "stream_data" = "Stream Data";
 "streaming_link" = "Streaming Link";
-"hls_recommended" = "(HLS recommended)";
-"https_stream_recommendation" = "HTTPS is recommended for new stations and is usually more reliable on Apple platforms. Existing HTTP streams may still work.";
 "azuracast" = "AzuraCast";
 "use_azuracast_api" = "Use AzuraCast API";
 "api_url" = "API URL";
@@ -462,7 +460,6 @@
 "azuracast_api_format" = "AzuraCast API format:";
 "supported_formats" = "Supported formats";
 "supported_formats_hls_mp3_aac" = "Supported formats: HLS, MP3, AAC";
-"live_broadcast" = "Live Broadcast";
 "live_stream" = "Live Stream";
 "connecting" = "Connecting";
 "paused" = "Paused";
