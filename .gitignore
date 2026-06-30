@@ -2,3 +2,8 @@
 .DS_Store
 **/xcuserdata/
 *.xcuserstate
+build/
+DerivedData/
+*.xcresult
+*.xcactivitylog
+*.xcodeproj/-Xcc/
