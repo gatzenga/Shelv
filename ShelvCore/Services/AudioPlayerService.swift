@@ -9,6 +9,11 @@ import AppKit     // macOS
 import SwiftUI
 import Network
 
+enum AudioPlaybackMode: String {
+    case songs
+    case radio
+}
+
 class AudioPlayerService: ObservableObject {
     static let shared = AudioPlayerService()
 
@@ -35,6 +40,12 @@ class AudioPlayerService: ObservableObject {
     @Published var currentIndex: Int = 0
     @Published var playNextQueue: [Song] = []
     @Published var userQueue: [Song] = []
+    @Published var playbackMode: AudioPlaybackMode = .songs
+    @Published var currentRadioStation: RadioStationDisplayItem?
+    @Published var currentRadioMetadata: RadioNowPlayingMetadata?
+    @Published private(set) var radioMetadataIsConnecting = false
+    @Published private(set) var radioMetadataIsOnline = false
+    @Published var sleepTimerEnd: Date?
     var currentTime: Double = 0
     var duration: Double = 0
     let timePublisher = PassthroughSubject<(time: Double, duration: Double), Never>()
@@ -71,20 +82,80 @@ class AudioPlayerService: ObservableObject {
     #endif
 
     private var fastSeekTimer: Timer?
+    private var sleepCountdownTimer: Timer?
     private var currentStreamURL: URL?
     private var streamTimeOffset: Double = 0
     private var networkResumeSong: Song?
     private var networkResumeTime: Double = 0
 
     var hasNextTrack: Bool {
-        !playNextQueue.isEmpty ||
+        guard playbackMode == .songs else { return false }
+        return !playNextQueue.isEmpty ||
         currentIndex + 1 < queue.count ||
         !userQueue.isEmpty ||
         repeatMode == .all
     }
 
+    var isRadioPlayback: Bool {
+        playbackMode == .radio && currentRadioStation != nil
+    }
+
+    var hasActivePlayback: Bool {
+        currentSong != nil || currentRadioStation != nil
+    }
+
+    var isRadioConnecting: Bool {
+        isRadioPlayback && (isBuffering || radioMetadataIsConnecting || (isPlaying && !radioMetadataIsOnline))
+    }
+
+    var radioStatusText: String {
+        if isRadioConnecting { return String(localized: "connecting") }
+        if isPlaying { return String(localized: "live_stream") }
+        return String(localized: "paused")
+    }
+
     var displayTitle: String {
-        currentSong?.title ?? String(localized: "no_track")
+        if isRadioPlayback {
+            return radioDisplayTitle
+        }
+        return currentSong?.title ?? String(localized: "no_track")
+    }
+
+    var displaySubtitle: String {
+        if isRadioPlayback {
+            return radioDisplayArtist
+        }
+        return currentSong?.artist ?? currentSong?.album ?? ""
+    }
+
+    var displaySubtitleLine: String {
+        displaySubtitle.isEmpty ? " " : displaySubtitle
+    }
+
+    var radioDisplayTitle: String {
+        currentRadioMetadata?.displayTitle
+            ?? currentRadioStation?.name
+            ?? String(localized: "radio")
+    }
+
+    var radioDisplayArtist: String {
+        currentRadioMetadata?.displayArtist ?? ""
+    }
+
+    var radioDisplayArtistLine: String {
+        radioDisplayArtist.isEmpty ? " " : radioDisplayArtist
+    }
+
+    var radioDisplayStationName: String {
+        if let stationName = currentRadioStation?.name.trimmingCharacters(in: .whitespacesAndNewlines),
+           !stationName.isEmpty {
+            return stationName
+        }
+        if let metadataStationName = currentRadioMetadata?.stationName?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !metadataStationName.isEmpty {
+            return metadataStationName
+        }
+        return String(localized: "radio")
     }
 
     private var truthAlbumQueue: [Song] = []
@@ -93,10 +164,13 @@ class AudioPlayerService: ObservableObject {
 
     private let engine = PlayerEngine()
     private let nowPlaying = AudioPlayerNowPlayingController()
+    private let radioMetadata = RadioMetadataService.shared
     private let formatProbe = AudioPlayerFormatProbe()
     private let lyricsAutoFetcher = AudioPlayerLyricsAutoFetcher()
     private var engineSubscriptions = Set<AnyCancellable>()
     private var bufferingShowTask: Task<Void, Never>?
+    private var radioReconnectTask: Task<Void, Never>?
+    private var radioReconnectAttempts = 0
     #if os(tvOS)
     // tvOS: Watchdog der prüft, ob ein Resume wirklich losläuft (sonst Stream neu laden).
     private var resumeWatchdog: Task<Void, Never>?
@@ -160,6 +234,8 @@ class AudioPlayerService: ObservableObject {
 
     deinit {
         MainActor.assumeIsolated {
+            sleepCountdownTimer?.invalidate()
+            radioReconnectTask?.cancel()
             NotificationCenter.default.removeObserver(self)
             #if os(macOS)
             if let obs = willTerminateObserver {
@@ -268,6 +344,13 @@ class AudioPlayerService: ObservableObject {
 
     private func clearSavedState() {
         let defaults = UserDefaults.standard
+        clearSavedSongQueueState(defaults: defaults)
+        #if os(macOS)
+        defaults.removeObject(forKey: AudioPlayerStateKey.volume)
+        #endif
+    }
+
+    private func clearSavedSongQueueState(defaults: UserDefaults = .standard) {
         defaults.removeObject(forKey: AudioPlayerStateKey.queue)
         defaults.removeObject(forKey: AudioPlayerStateKey.index)
         defaults.removeObject(forKey: AudioPlayerStateKey.playNextQueue)
@@ -278,9 +361,6 @@ class AudioPlayerService: ObservableObject {
         defaults.removeObject(forKey: AudioPlayerStateKey.truthAlbum)
         defaults.removeObject(forKey: AudioPlayerStateKey.truthPlayNext)
         defaults.removeObject(forKey: AudioPlayerStateKey.truthUserQueue)
-        #if os(macOS)
-        defaults.removeObject(forKey: AudioPlayerStateKey.volume)
-        #endif
         #if os(tvOS)
         deleteQueueStateFile()
         #endif
@@ -356,6 +436,7 @@ class AudioPlayerService: ObservableObject {
     /// Baut den aktuellen Wiedergabe-Zustand als Snapshot. `nil`, wenn nichts
     /// Sinnvolles vorliegt (komplett leere Queue).
     func makeSnapshot(serverId: String) -> QueueSnapshot? {
+        guard !isRadioPlayback else { return nil }
         guard !(queue.isEmpty && playNextQueue.isEmpty && userQueue.isEmpty) else { return nil }
         return QueueSnapshot(
             queue: queue,
@@ -434,6 +515,7 @@ class AudioPlayerService: ObservableObject {
 
     func play(songs: [Song], startIndex: Int = 0) {
         guard songs.indices.contains(startIndex) else { return }
+        prepareForSongPlayback()
         isShuffled = false
         queue = songs
         currentIndex = startIndex
@@ -449,6 +531,7 @@ class AudioPlayerService: ObservableObject {
     }
 
     func playSong(_ song: Song) {
+        prepareForSongPlayback()
         isShuffled = false
         queue = [song]
         currentIndex = 0
@@ -461,6 +544,95 @@ class AudioPlayerService: ObservableObject {
         resumeTime = 0
         startPlayback(song: song, seekTo: 0)
         saveState()
+    }
+
+    func playRadioStation(_ item: RadioStationDisplayItem) {
+        playRadioStation(item, resetReconnectAttempts: true)
+    }
+
+    private func playRadioStation(_ item: RadioStationDisplayItem, resetReconnectAttempts: Bool) {
+        stopFastSeeking()
+        if resetReconnectAttempts {
+            radioReconnectAttempts = 0
+            cancelRadioReconnect()
+        }
+        playbackGeneration += 1
+        let gen = playbackGeneration
+        #if os(tvOS)
+        resumeWatchdog?.cancel()
+        #endif
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            #if os(iOS) || os(tvOS)
+            await self.activateSessionAsync()
+            guard self.playbackGeneration == gen else { return }
+            #endif
+            guard let url = URL(string: item.streamURL) else {
+                self.isPlaying = false
+                self.isBuffering = false
+                return
+            }
+
+            let isSameRadioStation = self.playbackMode == .radio
+                && self.currentRadioStation?.id == item.id
+
+            self.cancelAllManagedStreamCaches()
+            self.teardownPlayer()
+            self.formatProbe.cancel()
+            self.lyricsAutoFetcher.cancel()
+            self.infinityPendingSongIds.removeAll()
+            self.queue = []
+            self.currentIndex = 0
+            self.playNextQueue = []
+            self.userQueue = []
+            self.truthAlbumQueue = []
+            self.truthPlayNextQueue = []
+            self.truthUserQueue = []
+            self.clearSavedSongQueueState()
+            self.networkResumeSong = nil
+            self.networkResumeTime = 0
+            self.resumeTime = 0
+            self.streamTimeOffset = 0
+            self.gaplessPreloadTriggered = false
+            self.gaplessPreloadSong = nil
+            self.gaplessPreloadURL = nil
+            self.actualStreamFormat = nil
+
+            self.playbackMode = .radio
+            self.currentRadioStation = item
+            if !isSameRadioStation || self.currentRadioMetadata == nil {
+                self.currentRadioMetadata = RadioNowPlayingMetadata(stationName: item.name)
+            }
+            self.updateRemoteCommandAvailability()
+            self.currentSong = nil
+            self.currentStreamURL = url
+            self.currentTime = 0
+            self.duration = 0
+            self.isSeeking = false
+            self.isBuffering = true
+            self.isPlaying = true
+            self.timePublisher.send((time: 0, duration: 0))
+            self.nowPlaying.updateRadio(station: item, metadata: self.currentRadioMetadata, isPlaying: true)
+            MPNowPlayingInfoCenter.default().playbackState = .playing
+
+            self.engine.play(url: url)
+            self.engine.trustedDuration = 0
+            self.isEngineLoaded = true
+            self.radioMetadata.startPolling(station: item)
+        }
+    }
+
+    private func prepareForSongPlayback() {
+        guard playbackMode == .radio || currentRadioStation != nil || currentRadioMetadata != nil else { return }
+        cancelRadioReconnect()
+        radioMetadata.stopPolling()
+        currentRadioStation = nil
+        currentRadioMetadata = nil
+        radioMetadataIsConnecting = false
+        radioMetadataIsOnline = false
+        playbackMode = .songs
+        updateRemoteCommandAvailability()
     }
 
     #if DEBUG
@@ -666,6 +838,7 @@ class AudioPlayerService: ObservableObject {
     }
 
     private func startPlayback(song: Song, seekTo: Double = 0) {
+        prepareForSongPlayback()
         stopFastSeeking()
         playbackGeneration += 1
         let gen = playbackGeneration
@@ -844,13 +1017,21 @@ class AudioPlayerService: ObservableObject {
 
     private func clearPlaybackState() {
         cancelAllManagedStreamCaches()
+        cancelRadioReconnect()
         teardownPlayer()
+        radioMetadata.stopPolling()
         #if os(tvOS)
         resumeWatchdog?.cancel()
         #endif
         isPlaying = false
         isBuffering = false
         currentSong = nil
+        currentRadioStation = nil
+        currentRadioMetadata = nil
+        radioMetadataIsConnecting = false
+        radioMetadataIsOnline = false
+        playbackMode = .songs
+        updateRemoteCommandAvailability()
         currentTime = 0
         duration = 0
         currentStreamURL = nil
@@ -861,6 +1042,7 @@ class AudioPlayerService: ObservableObject {
         lyricsAutoFetcher.cancel()
         formatProbe.cancel()
         actualStreamFormat = nil
+        cancelSleepTimer()
         nowPlaying.clear()
     }
 
@@ -876,6 +1058,19 @@ class AudioPlayerService: ObservableObject {
         resumeWatchdog?.cancel()
         #endif
         MPNowPlayingInfoCenter.default().playbackState = .paused
+        if isRadioPlayback, let station = currentRadioStation {
+            cancelRadioReconnect()
+            engine.stop()
+            isEngineLoaded = false
+            isPlaying = false
+            isBuffering = false
+            currentTime = 0
+            duration = 0
+            timePublisher.send((time: 0, duration: 0))
+            nowPlaying.updateRadio(station: station, metadata: currentRadioMetadata, isPlaying: false)
+            saveState()
+            return
+        }
         engine.pause()
         isPlaying = false
         isBuffering = false
@@ -884,6 +1079,11 @@ class AudioPlayerService: ObservableObject {
     }
 
     func resume() {
+        if isRadioPlayback {
+            guard let station = currentRadioStation else { return }
+            playRadioStation(station)
+            return
+        }
         guard let song = currentSong else { return }
         if !isEngineLoaded {
             let seek = resumeTime
@@ -935,6 +1135,81 @@ class AudioPlayerService: ObservableObject {
         isPlaying ? pause() : resume()
     }
 
+    func setSleepTimer(minutes: Int) {
+        setSleepTimer(duration: TimeInterval(minutes) * 60)
+    }
+
+    private func setSleepTimer(duration: TimeInterval) {
+        sleepCountdownTimer?.invalidate()
+        let duration = max(0, duration)
+        sleepTimerEnd = Date().addingTimeInterval(duration)
+
+        guard duration > 0 else {
+            stop()
+            return
+        }
+
+        let tickInterval = min(max(duration, 0.1), 1)
+        sleepCountdownTimer = Timer.scheduledTimer(withTimeInterval: tickInterval, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            Task { @MainActor [weak self] in
+                guard let self, let end = self.sleepTimerEnd else { return }
+                if Date() >= end {
+                    self.stop()
+                }
+            }
+        }
+    }
+
+    #if DEBUG
+    func setSleepTimerForTesting(seconds: TimeInterval) {
+        setSleepTimer(duration: seconds)
+    }
+    #endif
+
+    func cancelSleepTimer() {
+        sleepCountdownTimer?.invalidate()
+        sleepCountdownTimer = nil
+        sleepTimerEnd = nil
+    }
+
+    private func scheduleRadioReconnect() {
+        guard isRadioPlayback, let station = currentRadioStation else { return }
+        guard radioReconnectTask == nil else { return }
+
+        guard radioReconnectAttempts < 5 else {
+            isBuffering = false
+            isPlaying = false
+            isEngineLoaded = false
+            nowPlaying.updateRadio(station: station, metadata: currentRadioMetadata, isPlaying: false)
+            MPNowPlayingInfoCenter.default().playbackState = .paused
+            return
+        }
+
+        isBuffering = true
+        let delay = min(pow(2.0, Double(radioReconnectAttempts)), 30.0)
+        let nanoseconds = UInt64(delay * 1_000_000_000)
+
+        radioReconnectTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: nanoseconds)
+            guard !Task.isCancelled,
+                  let self,
+                  self.isRadioPlayback,
+                  self.currentRadioStation?.id == station.id
+            else { return }
+
+            self.radioReconnectTask = nil
+            guard self.isBuffering || !self.isEngineLoaded else { return }
+            self.radioReconnectAttempts += 1
+            self.playRadioStation(station, resetReconnectAttempts: false)
+        }
+    }
+
+    private func cancelRadioReconnect() {
+        radioReconnectTask?.cancel()
+        radioReconnectTask = nil
+    }
+
     func stop() {
         stopFastSeeking()
         clearPlaybackState()
@@ -953,6 +1228,7 @@ class AudioPlayerService: ObservableObject {
 
     func playShuffled(songs: [Song]) {
         guard !songs.isEmpty else { return }
+        prepareForSongPlayback()
         let shuffled = songs.shuffled()
 
         playNextQueue = []
@@ -971,6 +1247,7 @@ class AudioPlayerService: ObservableObject {
     }
 
     func toggleShuffle() {
+        guard !isRadioPlayback else { return }
         guard !queue.isEmpty, queue.indices.contains(currentIndex) else {
             isShuffled = false
             saveState()
@@ -1037,6 +1314,7 @@ class AudioPlayerService: ObservableObject {
     }
 
     func next(triggeredByUser: Bool = false) {
+        guard !isRadioPlayback else { return }
         var state = queueState
         let action = state.advance(
             repeatMode: repeatMode,
@@ -1057,6 +1335,7 @@ class AudioPlayerService: ObservableObject {
     }
 
     func previous() {
+        guard !isRadioPlayback else { return }
         if currentTime > 3 {
             seek(to: 0)
             saveState()
@@ -1070,6 +1349,7 @@ class AudioPlayerService: ObservableObject {
     }
 
     func seek(to seconds: Double) {
+        guard !isRadioPlayback else { return }
         currentTime = seconds
         isSeeking = true
         nowPlaying.updateTime(seconds, force: true)
@@ -1086,6 +1366,7 @@ class AudioPlayerService: ObservableObject {
     }
 
     func beginRemoteFastSeek(forward: Bool) {
+        guard !isRadioPlayback else { return }
         startFastSeeking(forward: forward)
     }
 
@@ -1480,6 +1761,14 @@ class AudioPlayerService: ObservableObject {
     private func setupEngine() {
         engine.onTrackFinished = { [weak self] in
             guard let self else { return }
+            if self.isRadioPlayback {
+                self.isPlaying = false
+                self.isBuffering = false
+                if let station = self.currentRadioStation {
+                    self.nowPlaying.updateRadio(station: station, metadata: self.currentRadioMetadata, isPlaying: false)
+                }
+                return
+            }
             if self.gaplessPreloadTriggered, let song = self.gaplessPreloadSong, self.gaplessPreloadURL != nil {
                 let url = self.gaplessPreloadURL
                 self.gaplessPreloadTriggered = false
@@ -1528,6 +1817,12 @@ class AudioPlayerService: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] time in
                 guard let self, self.isEngineLoaded, !self.isSeeking else { return }
+                if self.isRadioPlayback {
+                    self.currentTime = 0
+                    self.duration = 0
+                    self.timePublisher.send((time: 0, duration: 0))
+                    return
+                }
                 let adjusted = time + self.streamTimeOffset
                 self.currentTime = adjusted
                 self.timePublisher.send((time: adjusted, duration: self.duration))
@@ -1540,6 +1835,11 @@ class AudioPlayerService: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] d in
                 guard let self, d > 0 else { return }
+                guard !self.isRadioPlayback else {
+                    self.duration = 0
+                    self.timePublisher.send((time: 0, duration: 0))
+                    return
+                }
                 self.duration = d
                 self.timePublisher.send((time: self.currentTime, duration: d))
             }
@@ -1550,18 +1850,57 @@ class AudioPlayerService: ObservableObject {
             .sink { [weak self] waiting in
                 guard let self, self.isEngineLoaded, self.isPlaying else { return }
                 self.isBuffering = waiting
+                if self.isRadioPlayback, !waiting {
+                    self.radioReconnectAttempts = 0
+                    self.cancelRadioReconnect()
+                }
             }
             .store(in: &engineSubscriptions)
+
+        engine.onPlaybackStalled = { [weak self] in
+            guard let self, self.isRadioPlayback, self.isPlaying else { return }
+            self.isBuffering = true
+            self.scheduleRadioReconnect()
+        }
 
         engine.onPlaybackFailed = { [weak self] in
             guard let self else { return }
             self.isEngineLoaded = false
             guard self.isPlaying else { return }
+            if self.isRadioPlayback {
+                self.isBuffering = true
+                self.scheduleRadioReconnect()
+                return
+            }
             self.networkResumeSong = self.currentSong
             self.networkResumeTime = self.currentTime
             self.resumeTime = self.currentTime
             self.isBuffering = true
         }
+
+        radioMetadata.$currentMetadata
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] metadata in
+                guard let self, self.isRadioPlayback, let station = self.currentRadioStation else { return }
+                self.currentRadioMetadata = metadata
+                self.artworkReloadToken = UUID()
+                self.nowPlaying.updateRadio(station: station, metadata: metadata, isPlaying: self.isPlaying)
+            }
+            .store(in: &engineSubscriptions)
+
+        radioMetadata.$isConnecting
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] isConnecting in
+                self?.radioMetadataIsConnecting = isConnecting
+            }
+            .store(in: &engineSubscriptions)
+
+        radioMetadata.$isOnline
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] isOnline in
+                self?.radioMetadataIsOnline = isOnline
+            }
+            .store(in: &engineSubscriptions)
 
         $isBuffering
             .removeDuplicates()

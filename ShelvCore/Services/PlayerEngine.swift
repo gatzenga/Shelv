@@ -14,6 +14,7 @@ final class PlayerEngine: ObservableObject {
     var trustedDuration: TimeInterval = 0
     var onTrackFinished: (() -> Void)?
     var onPlaybackFailed: (() -> Void)?
+    var onPlaybackStalled: (() -> Void)?
 
     /// Master-Volume (macOS-Lautstärkeregler). Auf iOS regelt die Hardware;
     /// ReplayGain nutzt dort `setVolume(_:)`.
@@ -131,6 +132,7 @@ final class PlayerEngine: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             guard let self, let currentItem = self.player.currentItem else { return }
+            self.onPlaybackStalled?()
             if currentItem.status == .failed {
                 Task { @MainActor in self.notifyFailure(for: url) }
             }

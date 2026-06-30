@@ -313,6 +313,16 @@ private nonisolated struct CreatePlaylistBody: Decodable {
     let playlist: PlaylistBody.PlaylistDetail?
 }
 
+private nonisolated struct InternetRadioStationsBody: Decodable {
+    let status: String
+    let error: StatusCheck.APIError?
+    let internetRadioStations: InternetRadioStationsContainer?
+
+    struct InternetRadioStationsContainer: Decodable {
+        let internetRadioStation: [RadioStation]?
+    }
+}
+
 nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
     nonisolated static let shared = SubsonicAPIService()
 
@@ -455,8 +465,10 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
             }
             do {
                 let (data, _) = try await session.data(from: url)
-                // Server hat geantwortet → Banner ausblenden, falls einer aktiv ist.
-                Task { @MainActor in OfflineModeService.shared.clearServerError() }
+                // Server hat geantwortet -> Banner ausblenden, falls einer aktiv ist.
+                await MainActor.run {
+                    OfflineModeService.shared.clearServerError()
+                }
                 return data
             } catch {
                 if Task.isCancelled || (error as? URLError)?.code == .cancelled {
@@ -469,7 +481,11 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
                 if !isRetryable || attempt == retries { break }
             }
         }
-        throw SubsonicAPIError.networkError(lastError ?? URLError(.unknown))
+        let networkError = SubsonicAPIError.networkError(lastError ?? URLError(.unknown))
+        await MainActor.run {
+            OfflineModeService.shared.notifyServerError(networkError.localizedDescription)
+        }
+        throw networkError
     }
 
     private func check(status: String, error: StatusCheck.APIError?) throws {
@@ -1016,6 +1032,58 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
 
     func deletePlaylist(id: String) async throws {
         let data = try await fetchData(path: "deletePlaylist", extra: [
+            URLQueryItem(name: "id", value: id)
+        ])
+        let body = try decoder.decode(Envelope<PingBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+    }
+
+    // MARK: - Internet Radio Stations
+
+    func getInternetRadioStations() async throws -> [RadioStation] {
+        #if DEBUG
+        if isDemoActive {
+            return [
+                RadioStation(id: "demo-radio-1", name: "Shelv Radio", streamURL: "https://example.com/listen/shelv/radio.mp3"),
+                RadioStation(id: "demo-radio-2", name: "Late Night Shelf", streamURL: "https://example.com/hls/late-night/live.m3u8")
+            ]
+        }
+        #endif
+        let data = try await fetchData(path: "getInternetRadioStations")
+        let body = try decoder.decode(Envelope<InternetRadioStationsBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+        return body.internetRadioStations?.internetRadioStation ?? []
+    }
+
+    func createInternetRadioStation(name: String, streamURL: String, homePageURL: String? = nil) async throws {
+        var extra = [
+            URLQueryItem(name: "name", value: name),
+            URLQueryItem(name: "streamUrl", value: streamURL)
+        ]
+        if let homePageURL, !homePageURL.isEmpty {
+            extra.append(URLQueryItem(name: "homePageUrl", value: homePageURL))
+        }
+        let data = try await fetchData(path: "createInternetRadioStation", extra: extra)
+        let body = try decoder.decode(Envelope<PingBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+    }
+
+    func updateInternetRadioStation(id: String, name: String, streamURL: String, homePageURL: String? = nil) async throws {
+        var extra = [
+            URLQueryItem(name: "id", value: id),
+            URLQueryItem(name: "name", value: name),
+            URLQueryItem(name: "streamUrl", value: streamURL)
+        ]
+        if let homePageURL, !homePageURL.isEmpty {
+            extra.append(URLQueryItem(name: "homePageUrl", value: homePageURL))
+        }
+        let data = try await fetchData(path: "updateInternetRadioStation", extra: extra)
+        let body = try decoder.decode(Envelope<PingBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+    }
+
+    func deleteInternetRadioStation(id: String) async throws {
+        let data = try await fetchData(path: "deleteInternetRadioStation", extra: [
             URLQueryItem(name: "id", value: id)
         ])
         let body = try decoder.decode(Envelope<PingBody>.self, from: data).response

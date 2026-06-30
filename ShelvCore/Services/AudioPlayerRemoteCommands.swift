@@ -90,5 +90,20 @@ extension AudioPlayerService {
             }
             return .success
         }
+
+        updateRemoteCommandAvailability()
+    }
+
+    func updateRemoteCommandAvailability() {
+        let cc = MPRemoteCommandCenter.shared()
+        let songControlsEnabled = !isRadioPlayback
+
+        cc.nextTrackCommand.isEnabled = songControlsEnabled
+        cc.previousTrackCommand.isEnabled = songControlsEnabled
+        cc.changePlaybackPositionCommand.isEnabled = songControlsEnabled
+        cc.seekForwardCommand.isEnabled = songControlsEnabled
+        cc.seekBackwardCommand.isEnabled = songControlsEnabled
+        cc.changeRepeatModeCommand.isEnabled = songControlsEnabled
+        cc.changeShuffleModeCommand.isEnabled = songControlsEnabled
     }
 }

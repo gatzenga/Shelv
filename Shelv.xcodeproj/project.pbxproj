@@ -14,6 +14,7 @@
 		BC1001042FFE000000000001 /* ShelvCore/Models/FlexibleDate.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001142FFE000000000001 /* ShelvCore/Models/FlexibleDate.swift */; };
 		BC1001052FFE000000000001 /* ShelvCore/Models/RepeatMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001152FFE000000000001 /* ShelvCore/Models/RepeatMode.swift */; };
 		BC1001062FFE000000000001 /* ShelvCore/Models/QueueSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001162FFE000000000001 /* ShelvCore/Models/QueueSnapshot.swift */; };
+		BC1001222FFE000000000001 /* ShelvCore/Models/RadioStation.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001232FFE000000000001 /* ShelvCore/Models/RadioStation.swift */; };
 		BC1001072FFE000000000001 /* ShelvCore/Services/AudioPlayerQueueState.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001172FFE000000000001 /* ShelvCore/Services/AudioPlayerQueueState.swift */; };
 		BC1001082FFE000000000001 /* ShelvCore/Services/TranscodingPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001182FFE000000000001 /* ShelvCore/Services/TranscodingPolicy.swift */; };
 		BC1001092FFE000000000001 /* ShelvCore/Services/NetworkStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001192FFE000000000001 /* ShelvCore/Services/NetworkStatus.swift */; };
@@ -35,6 +36,7 @@
 		BC1001142FFE000000000001 /* ShelvCore/Models/FlexibleDate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Models/FlexibleDate.swift; sourceTree = "<group>"; };
 		BC1001152FFE000000000001 /* ShelvCore/Models/RepeatMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Models/RepeatMode.swift; sourceTree = "<group>"; };
 		BC1001162FFE000000000001 /* ShelvCore/Models/QueueSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Models/QueueSnapshot.swift; sourceTree = "<group>"; };
+		BC1001232FFE000000000001 /* ShelvCore/Models/RadioStation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Models/RadioStation.swift; sourceTree = "<group>"; };
 		BC1001172FFE000000000001 /* ShelvCore/Services/AudioPlayerQueueState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/AudioPlayerQueueState.swift; sourceTree = "<group>"; };
 		BC1001182FFE000000000001 /* ShelvCore/Services/TranscodingPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/TranscodingPolicy.swift; sourceTree = "<group>"; };
 		BC1001192FFE000000000001 /* ShelvCore/Services/NetworkStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/NetworkStatus.swift; sourceTree = "<group>"; };
@@ -121,6 +123,7 @@
 				BC1001142FFE000000000001 /* ShelvCore/Models/FlexibleDate.swift */,
 				BC1001152FFE000000000001 /* ShelvCore/Models/RepeatMode.swift */,
 				BC1001162FFE000000000001 /* ShelvCore/Models/QueueSnapshot.swift */,
+				BC1001232FFE000000000001 /* ShelvCore/Models/RadioStation.swift */,
 				BC1001172FFE000000000001 /* ShelvCore/Services/AudioPlayerQueueState.swift */,
 				BC1001182FFE000000000001 /* ShelvCore/Services/TranscodingPolicy.swift */,
 				BC1001192FFE000000000001 /* ShelvCore/Services/NetworkStatus.swift */,
@@ -356,6 +359,7 @@
 				BC1001042FFE000000000001 /* ShelvCore/Models/FlexibleDate.swift in Sources */,
 				BC1001052FFE000000000001 /* ShelvCore/Models/RepeatMode.swift in Sources */,
 				BC1001062FFE000000000001 /* ShelvCore/Models/QueueSnapshot.swift in Sources */,
+				BC1001222FFE000000000001 /* ShelvCore/Models/RadioStation.swift in Sources */,
 				BC1001072FFE000000000001 /* ShelvCore/Services/AudioPlayerQueueState.swift in Sources */,
 				BC1001082FFE000000000001 /* ShelvCore/Services/TranscodingPolicy.swift in Sources */,
 				BC1001092FFE000000000001 /* ShelvCore/Services/NetworkStatus.swift in Sources */,

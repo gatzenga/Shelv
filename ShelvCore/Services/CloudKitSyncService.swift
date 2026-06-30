@@ -103,6 +103,7 @@ actor CloudKitSyncService {
     private let playHistorySyncEnabledKey = "iCloudSyncPlayHistoryEnabled"
     private let recapSyncEnabledKey = "iCloudSyncRecapEnabled"
     private let lyricsServerSyncEnabledKey = "iCloudSyncLyricsServerEnabled"
+    private let radioStationsSyncEnabledKey = "iCloudSyncRadioStationsEnabled"
     private let queueSyncModeKey = "queueSyncMode"
 
     // Geteilte Recap-Retention (eine Wahrheit über alle Geräte, statt lokalem @AppStorage).
@@ -143,6 +144,10 @@ actor CloudKitSyncService {
         UserDefaults.standard.bool(forKey: lyricsServerSyncEnabledKey)
     }
 
+    private var radioStationsSyncEnabled: Bool {
+        boolDefaultingToTrue(forKey: radioStationsSyncEnabledKey)
+    }
+
     private var offlineModeEnabled: Bool {
         UserDefaults.standard.bool(forKey: "offlineModeEnabled")
     }
@@ -175,6 +180,10 @@ actor CloudKitSyncService {
 
     private func canSync(_ category: CloudSyncCategory) -> Bool {
         canSyncBase && isEnabled(category)
+    }
+
+    private var canSyncRadioStations: Bool {
+        canSyncBase && radioStationsSyncEnabled
     }
     // NWPathMonitor lebt im actor – kein Lifecycle-Problem auf SwiftUI-Structs
     nonisolated(unsafe) private var pathMonitor: NWPathMonitor?
@@ -1140,6 +1149,90 @@ actor CloudKitSyncService {
         }
     }
 
+    // MARK: - Radio Metadata
+
+    private func radioMetadataRecordID(recordName: String) -> CKRecord.ID {
+        CKRecord.ID(recordName: recordName, zoneID: zoneID)
+    }
+
+    func fetchRadioMetadata(recordNames: [String]) async -> [RadioStationMetadata] {
+        guard canSyncRadioStations else { return [] }
+        guard await status.accountAvailable else { return [] }
+        guard !recordNames.isEmpty else { return [] }
+
+        do {
+            try await ensureZoneExists()
+        } catch {
+            debug("[CloudKitSync] Radio metadata fetch setup failed: \(error.localizedDescription)")
+            return []
+        }
+
+        var result: [RadioStationMetadata] = []
+        for name in Set(recordNames) {
+            do {
+                let record = try await db.record(for: radioMetadataRecordID(recordName: name))
+                if let metadata = Self.radioMetadata(from: record) {
+                    result.append(metadata)
+                }
+            } catch {
+                continue
+            }
+        }
+        return result
+    }
+
+    func saveRadioMetadata(_ metadata: RadioStationMetadata) async {
+        guard canSyncRadioStations else { return }
+        guard await status.accountAvailable else { return }
+        do {
+            try await ensureZoneExists()
+            let record = CKRecord(recordType: "RadioStationMetadata", recordID: radioMetadataRecordID(recordName: metadata.recordName))
+            record["serverId"] = metadata.serverId
+            record["stationId"] = metadata.stationId
+            record["streamURLKey"] = metadata.streamURLKey
+            record["useAzuraCastAPI"] = metadata.useAzuraCastAPI ? 1 : 0
+            record["azuraCastAPIURL"] = metadata.azuraCastAPIURL
+            record["showSongCover"] = metadata.showSongCover ? 1 : 0
+            record["updatedAt"] = metadata.updatedAt
+            _ = try await db.modifyRecords(saving: [record], deleting: [], savePolicy: .allKeys, atomically: true)
+            debug("[CloudKitSync] Radio metadata uploaded")
+        } catch {
+            debug("[CloudKitSync] Radio metadata upload failed: \(error.localizedDescription)")
+        }
+    }
+
+    func deleteRadioMetadata(recordName: String) async {
+        guard canSyncRadioStations else { return }
+        guard await status.accountAvailable else { return }
+        do {
+            try await ensureZoneExists()
+            _ = try await db.deleteRecord(withID: radioMetadataRecordID(recordName: recordName))
+            debug("[CloudKitSync] Radio metadata deleted")
+        } catch {
+            if !Self.isGoneError(error) {
+                debug("[CloudKitSync] Radio metadata deletion failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private static func radioMetadata(from record: CKRecord) -> RadioStationMetadata? {
+        guard record.recordType == "RadioStationMetadata",
+              let serverId = record["serverId"] as? String,
+              let stationId = record["stationId"] as? String,
+              let streamURLKey = record["streamURLKey"] as? String
+        else { return nil }
+        return RadioStationMetadata(
+            recordName: record.recordID.recordName,
+            serverId: serverId,
+            stationId: stationId,
+            streamURLKey: streamURLKey,
+            useAzuraCastAPI: (record["useAzuraCastAPI"] as? Int64 ?? 0) == 1,
+            azuraCastAPIURL: record["azuraCastAPIURL"] as? String ?? "",
+            showSongCover: (record["showSongCover"] as? Int64 ?? 1) == 1,
+            updatedAt: record["updatedAt"] as? Double ?? 0
+        )
+    }
+
     // MARK: - Scrobble Queue
 
     func flushScrobbleQueue() async {
@@ -1250,7 +1343,7 @@ actor CloudKitSyncService {
     }
 
     func handleSyncCategoryChange() async {
-        log("What to Sync updated — Play History: \(playHistorySyncEnabled ? "on" : "off"), Recap: \(recapSyncEnabled ? "on" : "off"), Lyrics Server: \(lyricsServerSyncEnabled ? "on" : "off")")
+        log("What to Sync updated — Play History: \(playHistorySyncEnabled ? "on" : "off"), Recap: \(recapSyncEnabled ? "on" : "off"), Lyrics Server: \(lyricsServerSyncEnabled ? "on" : "off"), Radio Stations: \(radioStationsSyncEnabled ? "on" : "off")")
         guard canSyncBase else {
             logDisabled(nil, action: "What to Sync update")
             return
@@ -1264,6 +1357,11 @@ actor CloudKitSyncService {
         }
         if canSync(.lyricsServer) {
             await pushLyricsServerSettingsIfNeeded()
+        }
+        if canSyncRadioStations {
+            await MainActor.run {
+                _ = Task { await RadioStationStore.shared.refresh() }
+            }
         }
         await downloadChanges()
         await updatePendingCounts()

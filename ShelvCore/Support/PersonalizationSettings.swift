@@ -8,16 +8,66 @@ nonisolated enum PersonalizationPreferenceKey {
     static let showFavoritesInLibrary = "ui.showFavoritesInLibrary"
     static let showFavoriteActions = "ui.showFavoriteActions"
     static let showInstantMixActions = "ui.showInstantMixActions"
+    static let showRadio = "ui.showRadio"
     static let miniPlayerStyle = "ui.miniPlayerStyle"
 
     static let swipeLeftPrimary = "ui.swipe.leftPrimary"
     static let swipeLeftSecondary = "ui.swipe.leftSecondary"
     static let swipeRightPrimary = "ui.swipe.rightPrimary"
     static let swipeRightSecondary = "ui.swipe.rightSecondary"
+    static let playlistSwipeLeftPrimary = "ui.swipe.playlists.leftPrimary"
+    static let playlistSwipeLeftSecondary = "ui.swipe.playlists.leftSecondary"
+    static let playlistSwipeLeftTertiary = "ui.swipe.playlists.leftTertiary"
+    static let playlistSwipeRightPrimary = "ui.swipe.playlists.rightPrimary"
+    static let playlistSwipeRightSecondary = "ui.swipe.playlists.rightSecondary"
+    static let albumArtistSwipeLeftPrimary = "ui.swipe.albumArtists.leftPrimary"
+    static let albumArtistSwipeLeftSecondary = "ui.swipe.albumArtists.leftSecondary"
+    static let albumArtistSwipeLeftTertiary = "ui.swipe.albumArtists.leftTertiary"
+    static let albumArtistSwipeRightPrimary = "ui.swipe.albumArtists.rightPrimary"
+    static let albumArtistSwipeRightSecondary = "ui.swipe.albumArtists.rightSecondary"
 
     static let legacyEnablePlaylists = "enablePlaylists"
     static let legacyEnableFavorites = "enableFavorites"
     static let legacyEnableInstantMix = "enableInstantMix"
+}
+
+nonisolated enum PersonalizationSwipeGroup: String, CaseIterable, Identifiable, Hashable {
+    case songs
+    case playlists
+    case albumArtists
+
+    var id: String { rawValue }
+
+    var titleKey: String {
+        switch self {
+        case .songs: return "songs"
+        case .playlists: return "playlists"
+        case .albumArtists: return "albums_artists"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .songs: return "music.note"
+        case .playlists: return "music.note.list"
+        case .albumArtists: return "square.stack"
+        }
+    }
+
+    var slots: [PersonalizationSwipeSlot] {
+        PersonalizationSwipeSlot.allCases.filter { $0.group == self }
+    }
+
+    var availableActions: [PersonalizationSwipeAction] {
+        switch self {
+        case .songs:
+            return [.none, .favorite, .addToPlaylist, .playNext, .addToQueue]
+        case .playlists:
+            return [.none, .pin, .download, .delete, .playNext, .addToQueue]
+        case .albumArtists:
+            return [.none, .favorite, .addToPlaylist, .download, .playNext, .addToQueue]
+        }
+    }
 }
 
 nonisolated enum PersonalizationTab: Equatable {
@@ -28,11 +78,21 @@ nonisolated enum PersonalizationTab: Equatable {
     case search
 }
 
-nonisolated enum PersonalizationSwipeSlot: String, CaseIterable {
+nonisolated enum PersonalizationSwipeSlot: String, CaseIterable, Hashable {
     case leftPrimary
     case leftSecondary
     case rightPrimary
     case rightSecondary
+    case playlistLeftPrimary
+    case playlistLeftSecondary
+    case playlistLeftTertiary
+    case playlistRightPrimary
+    case playlistRightSecondary
+    case albumArtistLeftPrimary
+    case albumArtistLeftSecondary
+    case albumArtistLeftTertiary
+    case albumArtistRightPrimary
+    case albumArtistRightSecondary
 
     var storageKey: String {
         switch self {
@@ -40,23 +100,99 @@ nonisolated enum PersonalizationSwipeSlot: String, CaseIterable {
         case .leftSecondary: return PersonalizationPreferenceKey.swipeLeftSecondary
         case .rightPrimary: return PersonalizationPreferenceKey.swipeRightPrimary
         case .rightSecondary: return PersonalizationPreferenceKey.swipeRightSecondary
+        case .playlistLeftPrimary: return PersonalizationPreferenceKey.playlistSwipeLeftPrimary
+        case .playlistLeftSecondary: return PersonalizationPreferenceKey.playlistSwipeLeftSecondary
+        case .playlistLeftTertiary: return PersonalizationPreferenceKey.playlistSwipeLeftTertiary
+        case .playlistRightPrimary: return PersonalizationPreferenceKey.playlistSwipeRightPrimary
+        case .playlistRightSecondary: return PersonalizationPreferenceKey.playlistSwipeRightSecondary
+        case .albumArtistLeftPrimary: return PersonalizationPreferenceKey.albumArtistSwipeLeftPrimary
+        case .albumArtistLeftSecondary: return PersonalizationPreferenceKey.albumArtistSwipeLeftSecondary
+        case .albumArtistLeftTertiary: return PersonalizationPreferenceKey.albumArtistSwipeLeftTertiary
+        case .albumArtistRightPrimary: return PersonalizationPreferenceKey.albumArtistSwipeRightPrimary
+        case .albumArtistRightSecondary: return PersonalizationPreferenceKey.albumArtistSwipeRightSecondary
         }
     }
 
     var titleKey: String {
         switch self {
-        case .leftPrimary: return "swipe_left_1"
-        case .leftSecondary: return "swipe_left_2"
-        case .rightPrimary: return "swipe_right_1"
-        case .rightSecondary: return "swipe_right_2"
+        case .leftPrimary, .playlistLeftPrimary, .albumArtistLeftPrimary:
+            return "swipe_left_1"
+        case .leftSecondary, .playlistLeftSecondary, .albumArtistLeftSecondary:
+            return "swipe_left_2"
+        case .playlistLeftTertiary, .albumArtistLeftTertiary:
+            return "swipe_left_3"
+        case .rightPrimary, .playlistRightPrimary, .albumArtistRightPrimary:
+            return "swipe_right_1"
+        case .rightSecondary, .playlistRightSecondary, .albumArtistRightSecondary:
+            return "swipe_right_2"
+        }
+    }
+
+    var group: PersonalizationSwipeGroup {
+        switch self {
+        case .leftPrimary, .leftSecondary, .rightPrimary, .rightSecondary:
+            return .songs
+        case .playlistLeftPrimary, .playlistLeftSecondary, .playlistLeftTertiary, .playlistRightPrimary, .playlistRightSecondary:
+            return .playlists
+        case .albumArtistLeftPrimary, .albumArtistLeftSecondary, .albumArtistLeftTertiary, .albumArtistRightPrimary, .albumArtistRightSecondary:
+            return .albumArtists
+        }
+    }
+
+    var isLeading: Bool {
+        switch self {
+        case .leftPrimary, .leftSecondary,
+             .playlistLeftPrimary, .playlistLeftSecondary, .playlistLeftTertiary,
+             .albumArtistLeftPrimary, .albumArtistLeftSecondary, .albumArtistLeftTertiary:
+            return true
+        case .rightPrimary, .rightSecondary,
+             .playlistRightPrimary, .playlistRightSecondary,
+             .albumArtistRightPrimary, .albumArtistRightSecondary:
+            return false
+        }
+    }
+
+    var defaultAction: PersonalizationSwipeAction {
+        switch self {
+        case .leftPrimary:
+            return .favorite
+        case .leftSecondary:
+            return .addToPlaylist
+        case .rightPrimary:
+            return .playNext
+        case .rightSecondary:
+            return .addToQueue
+        case .playlistLeftPrimary:
+            return .pin
+        case .playlistLeftSecondary:
+            return .download
+        case .playlistLeftTertiary:
+            return .delete
+        case .playlistRightPrimary:
+            return .playNext
+        case .playlistRightSecondary:
+            return .addToQueue
+        case .albumArtistLeftPrimary:
+            return .favorite
+        case .albumArtistLeftSecondary:
+            return .addToPlaylist
+        case .albumArtistLeftTertiary:
+            return .download
+        case .albumArtistRightPrimary:
+            return .playNext
+        case .albumArtistRightSecondary:
+            return .addToQueue
         }
     }
 }
 
-nonisolated enum PersonalizationSwipeAction: String, CaseIterable {
+nonisolated enum PersonalizationSwipeAction: String, CaseIterable, Hashable {
     case none
     case favorite
     case addToPlaylist
+    case download
+    case pin
+    case delete
     case playNext
     case addToQueue
 
@@ -65,6 +201,9 @@ nonisolated enum PersonalizationSwipeAction: String, CaseIterable {
         case .none: return "none"
         case .favorite: return "favorite"
         case .addToPlaylist: return "add_to_playlist_2"
+        case .download: return "download"
+        case .pin: return "pin"
+        case .delete: return "delete"
         case .playNext: return "play_next"
         case .addToQueue: return "add_to_queue"
         }
@@ -75,6 +214,9 @@ nonisolated enum PersonalizationSwipeAction: String, CaseIterable {
         case .none: return "minus.circle"
         case .favorite: return "heart"
         case .addToPlaylist: return "text.badge.plus"
+        case .download: return "arrow.down.circle"
+        case .pin: return "pin"
+        case .delete: return "trash"
         case .playNext: return "text.line.first.and.arrowtriangle.forward"
         case .addToQueue: return "text.line.last.and.arrowtriangle.forward"
         }
@@ -103,18 +245,21 @@ nonisolated enum PersonalizationMiniPlayerStyle: String, CaseIterable {
 nonisolated enum PersonalizationSettings {
     static let currentMigrationVersion = 1
 
-    static let defaultValues: [String: Any] = [
-        PersonalizationPreferenceKey.showPlaylistsTab: true,
-        PersonalizationPreferenceKey.showPlaylistActions: true,
-        PersonalizationPreferenceKey.showFavoritesInLibrary: true,
-        PersonalizationPreferenceKey.showFavoriteActions: true,
-        PersonalizationPreferenceKey.showInstantMixActions: true,
-        PersonalizationPreferenceKey.miniPlayerStyle: PersonalizationMiniPlayerStyle.shelv.rawValue,
-        PersonalizationPreferenceKey.swipeLeftPrimary: PersonalizationSwipeAction.favorite.rawValue,
-        PersonalizationPreferenceKey.swipeLeftSecondary: PersonalizationSwipeAction.addToPlaylist.rawValue,
-        PersonalizationPreferenceKey.swipeRightPrimary: PersonalizationSwipeAction.playNext.rawValue,
-        PersonalizationPreferenceKey.swipeRightSecondary: PersonalizationSwipeAction.addToQueue.rawValue,
-    ]
+    static let defaultValues: [String: Any] = {
+        var values: [String: Any] = [
+            PersonalizationPreferenceKey.showPlaylistsTab: true,
+            PersonalizationPreferenceKey.showPlaylistActions: true,
+            PersonalizationPreferenceKey.showFavoritesInLibrary: true,
+            PersonalizationPreferenceKey.showFavoriteActions: true,
+            PersonalizationPreferenceKey.showInstantMixActions: true,
+            PersonalizationPreferenceKey.showRadio: true,
+            PersonalizationPreferenceKey.miniPlayerStyle: PersonalizationMiniPlayerStyle.shelv.rawValue,
+        ]
+        for slot in PersonalizationSwipeSlot.allCases {
+            values[slot.storageKey] = slot.defaultAction.rawValue
+        }
+        return values
+    }()
 
     static func registerDefaults(in defaults: UserDefaults = .standard) {
         migrateLegacyKeysIfNeeded(in: defaults)
@@ -156,39 +301,54 @@ nonisolated enum PersonalizationSettings {
 
     static func swipeAction(for slot: PersonalizationSwipeSlot, in defaults: UserDefaults = .standard) -> PersonalizationSwipeAction {
         let rawValue = defaults.string(forKey: slot.storageKey)
-        return rawValue.flatMap(PersonalizationSwipeAction.init(rawValue:)) ?? defaultAction(for: slot)
+        return rawValue.flatMap(PersonalizationSwipeAction.init(rawValue:)) ?? slot.defaultAction
     }
 
     static func visibleSwipeAction(for slot: PersonalizationSwipeSlot, in defaults: UserDefaults = .standard) -> PersonalizationSwipeAction {
         let action = swipeAction(for: slot, in: defaults)
+        guard slot.group.availableActions.contains(action) else { return .none }
         return isAvailable(action, in: defaults) ? action : .none
     }
 
     static func setSwipeAction(_ action: PersonalizationSwipeAction, for slot: PersonalizationSwipeSlot, in defaults: UserDefaults = .standard) {
-        if action != .none {
-            for otherSlot in PersonalizationSwipeSlot.allCases where otherSlot != slot && swipeAction(for: otherSlot, in: defaults) == action {
+        let selectedAction = slot.group.availableActions.contains(action) ? action : .none
+
+        if selectedAction != .none {
+            for otherSlot in slot.group.slots where otherSlot != slot && swipeAction(for: otherSlot, in: defaults) == selectedAction {
                 defaults.set(PersonalizationSwipeAction.none.rawValue, forKey: otherSlot.storageKey)
             }
         }
 
-        defaults.set(action.rawValue, forKey: slot.storageKey)
-        normalizeSwipeActions(in: defaults)
+        defaults.set(selectedAction.rawValue, forKey: slot.storageKey)
+        normalizeSwipeActions(for: slot.group, in: defaults)
     }
 
     static func resetSwipeActions(in defaults: UserDefaults = .standard) {
-        defaults.set(PersonalizationSwipeAction.favorite.rawValue, forKey: PersonalizationPreferenceKey.swipeLeftPrimary)
-        defaults.set(PersonalizationSwipeAction.addToPlaylist.rawValue, forKey: PersonalizationPreferenceKey.swipeLeftSecondary)
-        defaults.set(PersonalizationSwipeAction.playNext.rawValue, forKey: PersonalizationPreferenceKey.swipeRightPrimary)
-        defaults.set(PersonalizationSwipeAction.addToQueue.rawValue, forKey: PersonalizationPreferenceKey.swipeRightSecondary)
-        normalizeSwipeActions(in: defaults)
+        for group in PersonalizationSwipeGroup.allCases {
+            resetSwipeActions(for: group, in: defaults)
+        }
+    }
+
+    static func resetSwipeActions(for group: PersonalizationSwipeGroup, in defaults: UserDefaults = .standard) {
+        for slot in group.slots {
+            defaults.set(slot.defaultAction.rawValue, forKey: slot.storageKey)
+        }
+        normalizeSwipeActions(for: group, in: defaults)
     }
 
     static func normalizeSwipeActions(in defaults: UserDefaults = .standard) {
+        for group in PersonalizationSwipeGroup.allCases {
+            normalizeSwipeActions(for: group, in: defaults)
+        }
+    }
+
+    static func normalizeSwipeActions(for group: PersonalizationSwipeGroup, in defaults: UserDefaults = .standard) {
         var used = Set<PersonalizationSwipeAction>()
 
-        for slot in PersonalizationSwipeSlot.allCases {
+        for slot in group.slots {
             let rawValue = defaults.string(forKey: slot.storageKey)
-            let current = rawValue.flatMap(PersonalizationSwipeAction.init(rawValue:)) ?? defaultAction(for: slot)
+            let parsed = rawValue.flatMap(PersonalizationSwipeAction.init(rawValue:)) ?? slot.defaultAction
+            let current = group.availableActions.contains(parsed) ? parsed : .none
 
             if current == .none {
                 defaults.set(PersonalizationSwipeAction.none.rawValue, forKey: slot.storageKey)
@@ -212,15 +372,8 @@ nonisolated enum PersonalizationSettings {
             return defaults.bool(forKey: PersonalizationPreferenceKey.showFavoriteActions)
         case .addToPlaylist:
             return defaults.bool(forKey: PersonalizationPreferenceKey.showPlaylistActions)
-        }
-    }
-
-    private static func defaultAction(for slot: PersonalizationSwipeSlot) -> PersonalizationSwipeAction {
-        switch slot {
-        case .leftPrimary: return .favorite
-        case .leftSecondary: return .addToPlaylist
-        case .rightPrimary: return .playNext
-        case .rightSecondary: return .addToQueue
+        case .download, .pin, .delete:
+            return true
         }
     }
 

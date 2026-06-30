@@ -1,0 +1,295 @@
+import Combine
+import Foundation
+
+@MainActor
+final class RadioStationStore: ObservableObject {
+    static let shared = RadioStationStore()
+
+    @Published private(set) var items: [RadioStationDisplayItem] = []
+    @Published private(set) var isLoading = false
+    @Published var errorMessage: String?
+
+    private let api = SubsonicAPIService.shared
+    private let encoder = JSONEncoder()
+    private let decoder = JSONDecoder()
+    private var refreshGeneration = 0
+
+    private init() {}
+
+    var activeServerId: String? {
+        guard let server = api.activeServer else { return nil }
+        return server.stableId.isEmpty ? server.id.uuidString : server.stableId
+    }
+
+    func resetInMemory() {
+        refreshGeneration += 1
+        items = []
+        isLoading = false
+        errorMessage = nil
+    }
+
+    func refresh() async {
+        refreshGeneration += 1
+        let generation = refreshGeneration
+        guard let serverId = activeServerId else {
+            items = []
+            isLoading = false
+            errorMessage = String(localized: "no_server_configured")
+            return
+        }
+        isLoading = true
+        defer {
+            if refreshGeneration == generation {
+                isLoading = false
+            }
+        }
+
+        do {
+            let stations = try await api.getInternetRadioStations()
+            let mergedMetadata = await mergedMetadata(for: stations, serverId: serverId)
+            guard refreshGeneration == generation, activeServerId == serverId else { return }
+            items = orderedItems(stations
+                .map { station in
+                    let metadata = mergedMetadata[RadioStationMetadata.recordName(
+                        serverId: serverId,
+                        stationId: station.id,
+                        streamURL: station.streamURL
+                    )] ?? RadioStationMetadata(serverId: serverId, station: station)
+                    return RadioStationDisplayItem(station: station, metadata: metadata)
+                })
+            errorMessage = nil
+        } catch {
+            guard refreshGeneration == generation else { return }
+            if !(error is CancellationError) {
+                errorMessage = radioErrorDescription(error)
+            }
+        }
+    }
+
+    func createStation(
+        name: String,
+        streamURL: String,
+        useAzuraCastAPI: Bool,
+        azuraCastAPIURL: String,
+        showSongCover: Bool
+    ) async -> Bool {
+        do {
+            let normalized = try validate(name: name, streamURL: streamURL)
+            try await api.createInternetRadioStation(name: normalized.name, streamURL: normalized.streamURL)
+            await refresh()
+            if let created = items.first(where: {
+                RadioStationMetadata.normalizedStreamURL($0.streamURL) == RadioStationMetadata.normalizedStreamURL(normalized.streamURL)
+            }) {
+                var metadata = RadioStationMetadata(serverId: activeServerId ?? "", station: created.station)
+                metadata.useAzuraCastAPI = useAzuraCastAPI
+                metadata.azuraCastAPIURL = azuraCastAPIURL.trimmingCharacters(in: .whitespacesAndNewlines)
+                metadata.showSongCover = showSongCover
+                metadata.updatedAt = Date().timeIntervalSince1970
+                await saveMetadata(metadata)
+                applyMetadata(metadata, to: created.id)
+            }
+            errorMessage = nil
+            return true
+        } catch {
+            if !(error is CancellationError) {
+                errorMessage = radioErrorDescription(error)
+            }
+            return false
+        }
+    }
+
+    func updateStation(
+        _ item: RadioStationDisplayItem,
+        name: String,
+        streamURL: String,
+        useAzuraCastAPI: Bool,
+        azuraCastAPIURL: String,
+        showSongCover: Bool
+    ) async -> Bool {
+        do {
+            let normalized = try validate(name: name, streamURL: streamURL)
+            try await api.updateInternetRadioStation(
+                id: item.station.id,
+                name: normalized.name,
+                streamURL: normalized.streamURL
+            )
+            var metadata = RadioStationMetadata(
+                recordName: item.metadata.recordName,
+                serverId: item.metadata.serverId,
+                stationId: item.station.id,
+                streamURLKey: RadioStationMetadata.normalizedStreamURL(normalized.streamURL),
+                useAzuraCastAPI: useAzuraCastAPI,
+                azuraCastAPIURL: azuraCastAPIURL.trimmingCharacters(in: .whitespacesAndNewlines),
+                showSongCover: showSongCover,
+                updatedAt: Date().timeIntervalSince1970
+            )
+            if metadata.serverId.isEmpty, let serverId = activeServerId {
+                metadata = RadioStationMetadata(
+                    recordName: RadioStationMetadata.recordName(serverId: serverId, stationId: item.station.id, streamURL: normalized.streamURL),
+                    serverId: serverId,
+                    stationId: item.station.id,
+                    streamURLKey: RadioStationMetadata.normalizedStreamURL(normalized.streamURL),
+                    useAzuraCastAPI: metadata.useAzuraCastAPI,
+                    azuraCastAPIURL: metadata.azuraCastAPIURL,
+                    showSongCover: metadata.showSongCover,
+                    updatedAt: metadata.updatedAt
+                )
+            }
+            await saveMetadata(metadata)
+            await refresh()
+            errorMessage = nil
+            return true
+        } catch {
+            if !(error is CancellationError) {
+                errorMessage = radioErrorDescription(error)
+            }
+            return false
+        }
+    }
+
+    func deleteStation(_ item: RadioStationDisplayItem) async -> Bool {
+        do {
+            try await api.deleteInternetRadioStation(id: item.station.id)
+            await deleteMetadata(item.metadata)
+            if AudioPlayerService.shared.currentRadioStation?.id == item.id {
+                AudioPlayerService.shared.stop()
+            }
+            await refresh()
+            errorMessage = nil
+            return true
+        } catch {
+            if !(error is CancellationError) {
+                errorMessage = radioErrorDescription(error)
+            }
+            return false
+        }
+    }
+
+    func updateMetadata(for item: RadioStationDisplayItem, _ update: (inout RadioStationMetadata) -> Void) async {
+        var metadata = item.metadata
+        update(&metadata)
+        metadata.updatedAt = Date().timeIntervalSince1970
+        await saveMetadata(metadata)
+        if let index = items.firstIndex(where: { $0.id == item.id }) {
+            items[index].metadata = metadata
+        }
+    }
+
+    private func validate(name: String, streamURL: String) throws -> (name: String, streamURL: String) {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else {
+            throw SubsonicAPIError.apiError(0, String(localized: "radio_station_name_required"))
+        }
+
+        let trimmedURL = streamURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: trimmedURL),
+              let scheme = url.scheme?.lowercased(),
+              ["http", "https"].contains(scheme),
+              url.host != nil
+        else {
+            throw SubsonicAPIError.apiError(0, String(localized: "invalid_stream_url"))
+        }
+
+        return (trimmedName, trimmedURL)
+    }
+
+    private func mergedMetadata(for stations: [RadioStation], serverId: String) async -> [String: RadioStationMetadata] {
+        let recordNames = stations.map {
+            RadioStationMetadata.recordName(serverId: serverId, stationId: $0.id, streamURL: $0.streamURL)
+        }
+        var local = loadLocalMetadata(serverId: serverId)
+        let remote = await CloudKitSyncService.shared.fetchRadioMetadata(recordNames: recordNames)
+        let remoteByRecordName = Dictionary(uniqueKeysWithValues: remote.map { ($0.recordName, $0) })
+
+        for metadata in remote {
+            if let existing = local[metadata.recordName], existing.updatedAt > metadata.updatedAt {
+                continue
+            }
+            local[metadata.recordName] = metadata
+        }
+
+        let validRecords = Set(recordNames)
+        local = local.filter { validRecords.contains($0.key) }
+        saveLocalMetadata(Array(local.values), serverId: serverId)
+        for metadata in local.values where shouldUploadLocalMetadata(metadata, remote: remoteByRecordName[metadata.recordName]) {
+            await CloudKitSyncService.shared.saveRadioMetadata(metadata)
+        }
+        return local
+    }
+
+    private func shouldUploadLocalMetadata(_ local: RadioStationMetadata, remote: RadioStationMetadata?) -> Bool {
+        if let remote {
+            return local.updatedAt > remote.updatedAt
+        }
+        return local.useAzuraCastAPI
+            || !local.azuraCastAPIURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || local.showSongCover == false
+    }
+
+    private func orderedItems(_ items: [RadioStationDisplayItem]) -> [RadioStationDisplayItem] {
+        items.sorted {
+            $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }
+    }
+
+    private func applyMetadata(_ metadata: RadioStationMetadata, to itemId: String) {
+        guard let index = items.firstIndex(where: { $0.id == itemId }) else { return }
+        items[index].metadata = metadata
+        items = orderedItems(items)
+    }
+
+    private func saveMetadata(_ metadata: RadioStationMetadata) async {
+        var local = loadLocalMetadata(serverId: metadata.serverId)
+        local[metadata.recordName] = metadata
+        saveLocalMetadata(Array(local.values), serverId: metadata.serverId)
+        await CloudKitSyncService.shared.saveRadioMetadata(metadata)
+    }
+
+    private func deleteMetadata(_ metadata: RadioStationMetadata) async {
+        var local = loadLocalMetadata(serverId: metadata.serverId)
+        local.removeValue(forKey: metadata.recordName)
+        saveLocalMetadata(Array(local.values), serverId: metadata.serverId)
+        await CloudKitSyncService.shared.deleteRadioMetadata(recordName: metadata.recordName)
+    }
+
+    private func loadLocalMetadata(serverId: String) -> [String: RadioStationMetadata] {
+        guard let data = try? Data(contentsOf: metadataFileURL(serverId: serverId)),
+              let metadata = try? decoder.decode([RadioStationMetadata].self, from: data)
+        else { return [:] }
+        var result: [String: RadioStationMetadata] = [:]
+        for item in metadata {
+            if let existing = result[item.recordName], existing.updatedAt > item.updatedAt {
+                continue
+            }
+            result[item.recordName] = item
+        }
+        return result
+    }
+
+    private func saveLocalMetadata(_ metadata: [RadioStationMetadata], serverId: String) {
+        guard let data = try? encoder.encode(metadata) else { return }
+        let url = metadataFileURL(serverId: serverId)
+        do {
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try data.write(to: url, options: .atomic)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func metadataFileURL(serverId: String) -> URL {
+        let safeServerId = serverId.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "server"
+        return FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Shelv", isDirectory: true)
+            .appendingPathComponent("Radio", isDirectory: true)
+            .appendingPathComponent("\(safeServerId).json")
+    }
+
+    private func radioErrorDescription(_ error: Error) -> String {
+        if let localized = (error as? LocalizedError)?.errorDescription {
+            return localized
+        }
+        return error.localizedDescription
+    }
+}
