@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Eigener Tab für Recap-Playlists (nur sichtbar wenn `recapEnabled`).
+/// Recap-Playlists, geöffnet über Discover wenn `recapEnabled` aktiv ist.
 /// Segmentiert nach Weekly/Monthly/Yearly (wie der Library-Picker),
 /// innerhalb der Periode neueste zuerst.
 struct RecapView: View {
@@ -31,43 +31,42 @@ struct RecapView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                Picker("", selection: $segment) {
-                    Text(String(localized: "weekly")).tag(0)
-                    Text(String(localized: "monthly")).tag(1)
-                    Text(String(localized: "yearly")).tag(2)
-                }
-                .pickerStyle(.segmented)
-                .frame(maxWidth: 700)
-                .padding(.top, 40)
-                .padding(.bottom, 24)
-                // Eigene Fokus-Sektion: Runter landet immer im Inhalt darunter, Hoch immer
-                // zurück auf die Periodenleiste — auch wenn horizontal nichts direkt darüber/
-                // darunter sitzt (sonst springt der Fokus an der Periodenleiste vorbei).
-                .focusSection()
+        VStack(spacing: 0) {
+            Picker("", selection: $segment) {
+                Text(String(localized: "weekly")).tag(0)
+                Text(String(localized: "monthly")).tag(1)
+                Text(String(localized: "yearly")).tag(2)
+            }
+            .pickerStyle(.segmented)
+            .frame(maxWidth: 700)
+            .padding(.top, 40)
+            .padding(.bottom, 24)
+            // Eigene Fokus-Sektion: Runter landet immer im Inhalt darunter, Hoch immer
+            // zurück auf die Periodenleiste — auch wenn horizontal nichts direkt darüber/
+            // darunter sitzt (sonst springt der Fokus an der Periodenleiste vorbei).
+            .focusSection()
 
-                ScrollView {
-                    if recapPlaylists.isEmpty {
-                        ContentUnavailableView(
-                            String(localized: "no_recaps_yet"),
-                            systemImage: "sparkles.rectangle.stack"
-                        )
-                        .frame(maxWidth: .infinity, minHeight: 300)
-                    } else {
-                        LazyVGrid(columns: coverGridColumns, alignment: .leading, spacing: 50) {
-                            ForEach(recapPlaylists) { PlaylistCard(playlist: $0, recapPeriod: period(for: $0)) }
-                        }
-                        .padding(.horizontal, 50)
-                        .padding(.top, 30)
-                        .padding(.bottom, 50)
-                        // Eigene Fokus-Sektion: Runter-Navigation vom Segment-Picker landet
-                        // zuverlässig auf der (ggf. einzelnen, links sitzenden) Playlist.
-                        .focusSection()
+            ScrollView {
+                if recapPlaylists.isEmpty {
+                    ContentUnavailableView(
+                        String(localized: "no_recaps_yet"),
+                        systemImage: "sparkles.rectangle.stack"
+                    )
+                    .frame(maxWidth: .infinity, minHeight: 300)
+                } else {
+                    LazyVGrid(columns: coverGridColumns, alignment: .leading, spacing: 50) {
+                        ForEach(recapPlaylists) { PlaylistCard(playlist: $0, recapPeriod: period(for: $0)) }
                     }
+                    .padding(.horizontal, 50)
+                    .padding(.top, 30)
+                    .padding(.bottom, 50)
+                    // Eigene Fokus-Sektion: Runter-Navigation vom Segment-Picker landet
+                    // zuverlässig auf der (ggf. einzelnen, links sitzenden) Playlist.
+                    .focusSection()
                 }
             }
-            .task(id: library.reloadID) { await library.loadPlaylists() }
         }
+        .navigationTitle("")
+        .task(id: library.reloadID) { await library.loadPlaylists() }
     }
 }

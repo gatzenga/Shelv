@@ -195,6 +195,14 @@ actor ImageCacheService {
     /// Stabiler Cache-Schlüssel `host_id_size` — ignoriert rotierende Auth-Token.
     static func stableCacheKey(for url: URL) -> String {
         let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        if let radioRevision = components?.queryItems?.first(where: { $0.name == RadioNowPlayingMetadata.artworkRevisionQueryItemName })?.value,
+           !radioRevision.isEmpty {
+            let host = url.host ?? "local"
+            let path = url.path.isEmpty ? "art" : url.path
+            let safePath = path.replacingOccurrences(of: "[^a-zA-Z0-9_-]", with: "_", options: .regularExpression)
+            let safeRevision = radioRevision.replacingOccurrences(of: "[^a-zA-Z0-9_-]", with: "_", options: .regularExpression)
+            return "\(host)_radio_\(safePath)_\(safeRevision)"
+        }
         let id   = components?.queryItems?.first(where: { $0.name == "id"   })?.value ?? ""
         let size = components?.queryItems?.first(where: { $0.name == "size" })?.value ?? "0"
         let host = url.host ?? "local"

@@ -4,6 +4,7 @@ struct DiscoverView: View {
     @ObservedObject var library = LibraryStore.shared
     @AppStorage("mixUseDatabase") private var mixUseDatabase = false
     @AppStorage("themeColor") private var themeColor = "violet"
+    @AppStorage("recapEnabled") private var recapEnabled = false
     private let api = SubsonicAPIService.shared
     private let player = AudioPlayerService.shared
 
@@ -18,7 +19,7 @@ struct DiscoverView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 40) {
-                    // Links Refresh (Reload + iCloud-Sync inkl. Queue-Check), rechts Insights.
+                    // Links Refresh (Reload + iCloud-Sync inkl. Queue-Check), rechts Discover-Aktionen.
                     HStack {
                         Button {
                             // Wie der Mac-Refresh: Server neu kontaktieren (Discover + Playlists)
@@ -34,10 +35,18 @@ struct DiscoverView: View {
                         }
                         .buttonStyle(.bordered)
                         Spacer()
-                        NavigationLink { InsightsView() } label: {
-                            Label(String(localized: "insights"), systemImage: "chart.bar.xaxis")
+                        HStack(spacing: 12) {
+                            if recapEnabled {
+                                NavigationLink { RecapView() } label: {
+                                    Label(String(localized: "recap"), systemImage: "sparkles.rectangle.stack")
+                                }
+                                .buttonStyle(.bordered)
+                            }
+                            NavigationLink { InsightsView() } label: {
+                                Label(String(localized: "insights"), systemImage: "chart.bar.xaxis")
+                            }
+                            .buttonStyle(.bordered)
                         }
-                        .buttonStyle(.bordered)
                     }
                     .padding(.horizontal, 50)
                     .focusSection()

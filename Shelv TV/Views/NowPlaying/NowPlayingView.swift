@@ -13,17 +13,18 @@ struct NowPlayingView: View {
     @State private var displayTime: Double = 0
     @State private var displayDuration: Double = 0
     @State private var panel: SidePanel?
+    @State private var showSleepTimer = false
 
     var body: some View {
         NavigationStack {
             Group {
-                if player.currentSong != nil {
+                if player.hasActivePlayback {
                     HStack(spacing: 0) {
                         playerColumn
                             .frame(maxWidth: .infinity)
                             .focusSection()
 
-                        if let panel {
+                        if let panel, !player.isRadioPlayback {
                             Divider()
                             sidePanel(panel)
                                 .frame(width: 720)
@@ -54,9 +55,15 @@ struct NowPlayingView: View {
 
     private var playerColumn: some View {
         VStack(spacing: 26) {
-            CoverArtView(url: player.currentSong?.coverURL(700), size: panel == nil ? 380 : 300, cornerRadius: 16)
-                .shadow(color: .black.opacity(0.4), radius: 24, y: 12)
-                .animation(.easeInOut(duration: 0.25), value: panel)
+            if let station = player.currentRadioStation {
+                TVRadioStationArtworkView(item: station, size: panel == nil ? 380 : 300, metadata: player.currentRadioMetadata)
+                    .shadow(color: .black.opacity(0.4), radius: 24, y: 12)
+                    .animation(.easeInOut(duration: 0.25), value: panel)
+            } else {
+                CoverArtView(url: player.currentSong?.coverURL(700), size: panel == nil ? 380 : 300, cornerRadius: 16)
+                    .shadow(color: .black.opacity(0.4), radius: 24, y: 12)
+                    .animation(.easeInOut(duration: 0.25), value: panel)
+            }
 
             VStack(spacing: 6) {
                 Text(player.displayTitle).font(.title2).bold().lineLimit(1)
@@ -65,18 +72,34 @@ struct NowPlayingView: View {
 
             // Seek (tvOS hat keinen Slider: fokussierbare Bar, links/rechts springt in Schritten)
             VStack(spacing: 6) {
-                SeekBar(time: displayTime, duration: displayDuration, accent: accent) { target in
-                    displayTime = target
-                    player.seek(to: target)
+                if player.isRadioPlayback {
+                    let statusColor: Color = player.isRadioConnecting
+                        ? .orange
+                        : (player.isPlaying ? .green : .secondary)
+
+                    HStack(spacing: 10) {
+                        Circle()
+                            .fill(statusColor)
+                            .frame(width: 9, height: 9)
+                        Text(player.radioStatusText)
+                            .font(.callout.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: 620, minHeight: 34)
+                } else {
+                    SeekBar(time: displayTime, duration: displayDuration, accent: accent) { target in
+                        displayTime = target
+                        player.seek(to: target)
+                    }
+                    HStack {
+                        Text(formatDuration(Int(displayTime))).monospacedDigit()
+                        Spacer()
+                        Text(formatDuration(Int(displayDuration))).monospacedDigit()
+                    }
+                    .frame(maxWidth: 620)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 }
-                HStack {
-                    Text(formatDuration(Int(displayTime))).monospacedDigit()
-                    Spacer()
-                    Text(formatDuration(Int(displayDuration))).monospacedDigit()
-                }
-                .frame(maxWidth: 620)
-                .font(.caption)
-                .foregroundStyle(.secondary)
 
                 // Codec · Bitrate (gleiche Quelle/Logik wie iOS & macOS); bei Buffering „Loading".
                 HStack(spacing: 6) {
@@ -90,45 +113,90 @@ struct NowPlayingView: View {
             }
 
             // Transport
-            HStack(spacing: 30) {
-                Button { player.toggleShuffle() } label: {
-                    Image(systemName: "shuffle")
-                        .foregroundStyle(player.isShuffled ? accent : Color.primary)
-                }
-                Button { player.previous() } label: { Image(systemName: "backward.fill") }
+            if player.isRadioPlayback {
                 Button { player.togglePlayPause() } label: {
-                    // Kein Spinner mehr — der Ladezustand steht bereits als „Loading" beim Codec-Badge.
                     Image(systemName: player.isPlaying ? "pause.fill" : "play.fill").font(.body)
                 }
-                Button { player.next(triggeredByUser: true) } label: { Image(systemName: "forward.fill") }
-                Button { player.repeatMode = player.repeatMode.toggled } label: {
-                    Image(systemName: player.repeatMode.systemImage)
-                        .foregroundStyle(player.repeatMode == .off ? Color.primary : accent)
-                }
-            }
-            .font(.callout)
-
-            // Sekundär: Favorit · Lyrics · Queue · Stop
-            HStack(spacing: 30) {
-                if showFavoriteActions, let song = player.currentSong {
-                    Button { Task { await library.toggleStarSong(song) } } label: {
-                        Image(systemName: library.isSongStarred(song) ? "heart.fill" : "heart")
-                            .foregroundStyle(library.isSongStarred(song) ? accent : Color.primary)
+                .font(.callout)
+            } else {
+                HStack(spacing: 30) {
+                    Button { player.toggleShuffle() } label: {
+                        Image(systemName: "shuffle")
+                            .foregroundStyle(player.isShuffled ? accent : Color.primary)
+                    }
+                    Button { player.previous() } label: { Image(systemName: "backward.fill") }
+                    Button { player.togglePlayPause() } label: {
+                        // Kein Spinner mehr — der Ladezustand steht bereits als „Loading" beim Codec-Badge.
+                        Image(systemName: player.isPlaying ? "pause.fill" : "play.fill").font(.body)
+                    }
+                    Button { player.next(triggeredByUser: true) } label: { Image(systemName: "forward.fill") }
+                    Button { player.repeatMode = player.repeatMode.toggled } label: {
+                        Image(systemName: player.repeatMode.systemImage)
+                            .foregroundStyle(player.repeatMode == .off ? Color.primary : accent)
                     }
                 }
-                Button { toggle(.lyrics) } label: {
-                    Label(String(localized: "lyrics"), systemImage: "text.quote")
-                        .foregroundStyle(panel == .lyrics ? accent : Color.primary)
+                .font(.callout)
+            }
+
+            // Sekundär: Radio zeigt nur Sleep Timer und Stop; Songs behalten Favorit, Lyrics und Queue.
+            HStack(spacing: 30) {
+                if player.isRadioPlayback {
+                    Button { showSleepTimer = true } label: {
+                        sleepTimerControlLabel
+                    }
+                    Button { player.stop() } label: { Image(systemName: "stop.fill") }
+                } else {
+                    if showFavoriteActions, let song = player.currentSong {
+                        Button { Task { await library.toggleStarSong(song) } } label: {
+                            Image(systemName: library.isSongStarred(song) ? "heart.fill" : "heart")
+                                .foregroundStyle(library.isSongStarred(song) ? accent : Color.primary)
+                        }
+                    }
+                    Button { toggle(.lyrics) } label: {
+                        Label(String(localized: "lyrics"), systemImage: "text.quote")
+                            .foregroundStyle(panel == .lyrics ? accent : Color.primary)
+                    }
+                    Button { toggle(.queue) } label: {
+                        Label(String(localized: "queue"), systemImage: "list.bullet")
+                            .foregroundStyle(panel == .queue ? accent : Color.primary)
+                    }
+                    Button { player.stop() } label: { Image(systemName: "stop.fill") }
                 }
-                Button { toggle(.queue) } label: {
-                    Label(String(localized: "queue"), systemImage: "list.bullet")
-                        .foregroundStyle(panel == .queue ? accent : Color.primary)
-                }
-                Button { player.stop() } label: { Image(systemName: "stop.fill") }
             }
             .font(.callout)
         }
         .padding(50)
+        .confirmationDialog(
+            String(localized: "sleep_timer"),
+            isPresented: $showSleepTimer,
+            titleVisibility: .visible
+        ) {
+            if player.sleepTimerEnd != nil {
+                Button(String(localized: "cancel_timer"), role: .destructive) {
+                    player.cancelSleepTimer()
+                }
+            }
+
+            ForEach(Self.sleepTimerOptions, id: \.self) { minutes in
+                Button(sleepTimerRowLabel(minutes: minutes)) {
+                    player.setSleepTimer(minutes: minutes)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var sleepTimerControlLabel: some View {
+        if let end = player.sleepTimerEnd {
+            TimelineView(.periodic(from: .now, by: 1)) { _ in
+                let remaining = max(0, Int(end.timeIntervalSinceNow))
+                Text(formatSleepTimer(remaining))
+                    .monospacedDigit()
+                    .foregroundStyle(accent)
+            }
+        } else {
+            Label(String(localized: "sleep_timer"), systemImage: "moon.zzz.fill")
+        }
     }
 
     /// Künstler- und Album-Name als Navigationsziele.
@@ -154,6 +222,18 @@ struct NowPlayingView: View {
                     Text(album).font(.callout).foregroundStyle(.tertiary).lineLimit(1)
                 }
             }
+        } else if player.isRadioPlayback {
+            VStack(spacing: 4) {
+                Text(player.radioDisplayArtistLine)
+                    .font(.callout)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                    .accessibilityHidden(player.radioDisplayArtist.isEmpty)
+                Text(player.radioDisplayStationName)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
         }
     }
 
@@ -171,6 +251,26 @@ struct NowPlayingView: View {
     private func syncDisplayFromPlayer() {
         displayTime = player.currentTime
         displayDuration = player.duration
+    }
+
+    private static let sleepTimerOptions = [15, 30, 45, 60, 90, 120]
+
+    private func sleepTimerRowLabel(minutes: Int) -> String {
+        if minutes < 60 {
+            return "\(minutes) \(String(localized: "minutes_abbreviation"))"
+        }
+        let hours = minutes / 60
+        let remainder = minutes % 60
+        if remainder == 0 {
+            return "\(hours) \(String(localized: "hour_abbreviation"))"
+        }
+        return "\(hours) \(String(localized: "hour_abbreviation")) \(remainder) \(String(localized: "minutes_abbreviation"))"
+    }
+
+    private func formatSleepTimer(_ seconds: Int) -> String {
+        let minutes = seconds / 60
+        let remainingSeconds = seconds % 60
+        return String(format: "%d:%02d", minutes, remainingSeconds)
     }
 
     // MARK: - Seitenpanel (rechts)

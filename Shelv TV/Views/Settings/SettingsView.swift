@@ -79,9 +79,14 @@ struct SettingsView: View {
 
 private struct TVUICustomizationsSettingsView: View {
     @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
+    @AppStorage(PersonalizationPreferenceKey.showRadio) private var showRadio = true
 
     var body: some View {
         Form {
+            Text(String(localized: "ui_customizations"))
+                .font(.largeTitle).bold()
+                .listRowBackground(Color.clear)
+
             Section(String(localized: "ui_customizations")) {
                 NavigationLink(String(localized: "playlists")) {
                     TVPlaylistsPersonalizationView()
@@ -90,9 +95,10 @@ private struct TVUICustomizationsSettingsView: View {
                     TVFavoritesPersonalizationView()
                 }
                 Toggle(String(localized: "show_instant_mix_actions"), isOn: $showInstantMixActions)
+                Toggle(String(localized: "show_radio"), isOn: $showRadio)
             }
         }
-        .navigationTitle(String(localized: "ui_customizations"))
+        .toolbar(.hidden, for: .tabBar)
     }
 }
 
@@ -102,12 +108,16 @@ private struct TVPlaylistsPersonalizationView: View {
 
     var body: some View {
         Form {
+            Text(String(localized: "playlists"))
+                .font(.largeTitle).bold()
+                .listRowBackground(Color.clear)
+
             Section(String(localized: "playlists")) {
                 Toggle(String(localized: "show_playlists"), isOn: $showPlaylists)
                 Toggle(String(localized: "show_add_to_playlist_actions"), isOn: $showPlaylistActions)
             }
         }
-        .navigationTitle(String(localized: "playlists"))
+        .toolbar(.hidden, for: .tabBar)
     }
 }
 
@@ -117,11 +127,15 @@ private struct TVFavoritesPersonalizationView: View {
 
     var body: some View {
         Form {
+            Text(String(localized: "favorites"))
+                .font(.largeTitle).bold()
+                .listRowBackground(Color.clear)
+
             Section(String(localized: "favorites")) {
                 Toggle(String(localized: "show_favorites"), isOn: $showFavorites)
                 Toggle(String(localized: "show_favorite_actions"), isOn: $showFavoriteActions)
             }
         }
-        .navigationTitle(String(localized: "favorites"))
+        .toolbar(.hidden, for: .tabBar)
     }
 }

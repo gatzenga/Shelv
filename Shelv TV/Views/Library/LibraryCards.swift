@@ -4,12 +4,11 @@ import SwiftUI
 /// linksbündig gepackt — nicht zentriert, nicht gestreckt. Auf 1920 pt → 6 Spalten.
 let coverGridColumns = Array(repeating: GridItem(.fixed(240), spacing: 40), count: 6)
 
-/// tvOS-Zeilen-Button-Stil: KEIN System-Zoom/-Highlight (das käme von `.card`/`.automatic`),
-/// nur ein dezenter Press-Effekt. Den Fokus-Look zeichnet der `rowButton`-Modifier per Akzent-Box.
+/// tvOS-Zeilen-Button-Stil: KEIN System-Zoom/-Highlight (das käme von `.card`/`.automatic`).
+/// Den Fokus-Look zeichnet der `rowButton`-Modifier per Akzent-Box.
 struct PlainRowButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .opacity(configuration.isPressed ? 0.6 : 1)
     }
 }
 
@@ -79,7 +78,6 @@ struct AlbumCard: View {
             }
         }
         .frame(width: size)
-        .albumContextMenu(album)
     }
 }
 
@@ -109,7 +107,6 @@ struct ArtistCard: View {
                 .foregroundStyle(focused ? .primary : .secondary)
         }
         .frame(width: size)
-        .artistContextMenu(artist)
     }
 }
 

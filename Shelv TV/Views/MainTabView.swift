@@ -1,14 +1,22 @@
 import SwiftUI
 
-/// Tab-Gerüst der tvOS-App: Now Playing · Discover · Library · Playlists · Recap · Suche · Settings.
+/// Tab-Gerüst der tvOS-App: Now Playing · Discover · Library · Playlists · Radio · Suche · Settings.
 /// Nutzt die neue `Tab`-API (tvOS 18+) mit value-basierter Selection — die Legacy-
 /// tabItem-API hatte auf tvOS kaputtes Menü-/Fokus-Verhalten (Tab-Bar unerreichbar,
 /// leerer Tab nach Feature-Toggle).
 struct MainTabView: View {
     @AppStorage(PersonalizationPreferenceKey.showPlaylistsTab) private var showPlaylistsTab = true
-    @AppStorage("recapEnabled") private var recapEnabled = false
+    @AppStorage(PersonalizationPreferenceKey.showRadio) private var showRadio = true
     @ObservedObject private var queueSync = QueueSyncService.shared
     @State private var selection = MainTabView.initialSelection
+    @State private var visibleShowPlaylistsTab = MainTabView.initialBoolPreference(
+        PersonalizationPreferenceKey.showPlaylistsTab,
+        default: true
+    )
+    @State private var visibleShowRadio = MainTabView.initialBoolPreference(
+        PersonalizationPreferenceKey.showRadio,
+        default: true
+    )
 
     private static var initialSelection: String {
         #if DEBUG
@@ -17,6 +25,12 @@ struct MainTabView: View {
         }
         #endif
         return "discover"
+    }
+
+    private static func initialBoolPreference(_ key: String, default defaultValue: Bool) -> Bool {
+        let defaults = UserDefaults.standard
+        guard defaults.object(forKey: key) != nil else { return defaultValue }
+        return defaults.bool(forKey: key)
     }
 
     var body: some View {
@@ -33,15 +47,15 @@ struct MainTabView: View {
                 LibraryView()
             }
 
-            if showPlaylistsTab {
+            if visibleShowPlaylistsTab {
                 Tab(String(localized: "playlists"), systemImage: "music.note.list", value: "playlists") {
                     PlaylistsView()
                 }
             }
 
-            if recapEnabled {
-                Tab(String(localized: "recaps"), systemImage: "sparkles.rectangle.stack", value: "recap") {
-                    RecapView()
+            if visibleShowRadio {
+                Tab(String(localized: "radio"), systemImage: "dot.radiowaves.left.and.right", value: "radio") {
+                    RadioView()
                 }
             }
 
@@ -59,11 +73,22 @@ struct MainTabView: View {
             // Vordergrund nicht zuverlässig (Pause kommt an, Play nicht), daher hier abfangen.
             AudioPlayerService.shared.togglePlayPause()
         }
-        .onChange(of: showPlaylistsTab) { _, on in
+        .onChange(of: showPlaylistsTab) { _, _ in
+            syncVisibleTabsIfAllowed()
+        }
+        .onChange(of: showRadio) { _, _ in
+            syncVisibleTabsIfAllowed()
+        }
+        .onChange(of: selection) { _, newSelection in
+            if newSelection != "settings" {
+                syncVisibleTabs()
+            }
+        }
+        .onChange(of: visibleShowPlaylistsTab) { _, on in
             if !on && selection == "playlists" { selection = "settings" }
         }
-        .onChange(of: recapEnabled) { _, on in
-            if !on && selection == "recap" { selection = "settings" }
+        .onChange(of: visibleShowRadio) { _, on in
+            if !on && selection == "radio" { selection = "search" }
         }
         // Fremde Queue von einem anderen Gerät — auf tvOS als nativer Alert (zuverlässig
         // fokussierbar, im Gegensatz zu einem Custom-Top-Banner). Nie automatisch.
@@ -81,5 +106,15 @@ struct MainTabView: View {
             try? await Task.sleep(for: .seconds(6))
             queueSync.dismissPending()
         }
+    }
+
+    private func syncVisibleTabsIfAllowed() {
+        guard selection != "settings" else { return }
+        syncVisibleTabs()
+    }
+
+    private func syncVisibleTabs() {
+        visibleShowPlaylistsTab = showPlaylistsTab
+        visibleShowRadio = showRadio
     }
 }

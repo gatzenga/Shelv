@@ -76,6 +76,7 @@ struct Shelv_TVApp: App {
                         // Standby-Eintrag wieder wegwischen. Nur Standby setzen + Views neu laden.
                         AudioPlayerService.shared.ensureDemoStandby(force: true)
                         LibraryStore.shared.resetInMemory()
+                        RadioStationStore.shared.resetInMemory()
                         return
                     }
                     #endif
@@ -83,6 +84,7 @@ struct Shelv_TVApp: App {
                     AudioPlayerService.shared.stop()
                     QueueSyncService.shared.handleServerChange()
                     LibraryStore.shared.resetInMemory()
+                    RadioStationStore.shared.resetInMemory()
                 }
                 .onChange(of: scenePhase) { _, phase in
                     guard phase == .active else { return }
