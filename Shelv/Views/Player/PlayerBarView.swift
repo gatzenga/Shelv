@@ -22,12 +22,22 @@ struct PlayerBarView: View {
 
     var body: some View {
         HStack(spacing: hStackSpacing) {
-            AlbumArtView(coverArtId: player.currentSong?.coverArt, size: 100, cornerRadius: coverCorner)
-                .frame(width: coverSize, height: coverSize)
-                .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
+            if let station = player.currentRadioStation {
+                RadioStationArtworkView(item: station, size: coverSize, metadata: player.currentRadioMetadata)
+                    .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
+            } else {
+                AlbumArtView(coverArtId: player.currentSong?.coverArt, size: 100, cornerRadius: coverCorner)
+                    .frame(width: coverSize, height: coverSize)
+                    .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
+            }
 
             VStack(alignment: .leading, spacing: 2) {
-                if player.showBufferingIndicator {
+                if player.isRadioPlayback && player.isRadioConnecting {
+                    Text(player.radioStatusText)
+                        .font(titleFont).bold()
+                        .foregroundStyle(.orange)
+                        .lineLimit(1)
+                } else if player.showBufferingIndicator {
                     Text(String(localized: "loading"))
                         .font(titleFont).bold()
                         .foregroundStyle(.orange)
@@ -38,7 +48,7 @@ struct PlayerBarView: View {
                         .foregroundStyle(.primary)
                         .lineLimit(1)
                 }
-                Text(player.currentSong?.artist ?? player.currentSong?.album ?? "")
+                Text(player.displaySubtitleLine)
                     .font(subtitleFont)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -46,15 +56,22 @@ struct PlayerBarView: View {
 
             Spacer()
 
-            Button {
-                player.previous()
-            } label: {
+            if player.isRadioPlayback {
                 Image(systemName: "backward.fill")
                     .font(skipIconFont)
-                    .foregroundStyle(.primary)
+                    .hidden()
                     .frame(width: skipSize, height: skipSize)
+            } else {
+                Button {
+                    player.previous()
+                } label: {
+                    Image(systemName: "backward.fill")
+                        .font(skipIconFont)
+                        .foregroundStyle(.primary)
+                        .frame(width: skipSize, height: skipSize)
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
 
             Button {
                 player.togglePlayPause()
@@ -68,16 +85,23 @@ struct PlayerBarView: View {
             }
             .buttonStyle(.plain)
 
-            Button {
-                player.next(triggeredByUser: true)
-            } label: {
+            if player.isRadioPlayback {
                 Image(systemName: "forward.fill")
                     .font(skipIconFont)
-                    .foregroundStyle(player.hasNextTrack ? Color.primary : Color.secondary)
+                    .hidden()
                     .frame(width: skipSize, height: skipSize)
+            } else {
+                Button {
+                    player.next(triggeredByUser: true)
+                } label: {
+                    Image(systemName: "forward.fill")
+                        .font(skipIconFont)
+                        .foregroundStyle(player.hasNextTrack ? Color.primary : Color.secondary)
+                        .frame(width: skipSize, height: skipSize)
+                }
+                .buttonStyle(.plain)
+                .disabled(!player.hasNextTrack)
             }
-            .buttonStyle(.plain)
-            .disabled(!player.hasNextTrack)
         }
         .padding(.horizontal, hPad)
         .padding(.vertical, vPad)

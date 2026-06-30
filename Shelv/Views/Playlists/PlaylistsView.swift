@@ -86,53 +86,29 @@ struct PlaylistsView: View {
                                     playlistRow(playlist)
                                 }
                                 .contextMenu { playlistContextMenu(playlist) }
-                                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                    Button {
-                                        Task {
-                                            if let loaded = await libraryStore.loadPlaylistDetail(id: playlist.id),
-                                               let songs = loaded.songs, !songs.isEmpty {
-                                                await MainActor.run {
-                                                    haptic(); player.addToQueue(songs)
-                                                    currentToast = ShelveToast(message: String(localized: "added_to_queue"))
-                                                }
-                                            }
-                                        }
-                                    } label: { Image(systemName: "text.badge.plus") }
-                                    .tint(accentColor)
-                                    Button {
-                                        Task {
-                                            if let loaded = await libraryStore.loadPlaylistDetail(id: playlist.id),
-                                               let songs = loaded.songs, !songs.isEmpty {
-                                                await MainActor.run {
-                                                    haptic(); player.addPlayNext(songs)
-                                                    currentToast = ShelveToast(message: String(localized: "plays_next"))
-                                                }
-                                            }
-                                        }
-                                    } label: { Image(systemName: "text.insert") }
-                                    .tint(.orange)
-                                    if enableDownloads {
-                                        playlistDownloadSwipe(playlist)
-                                    }
-                                }
-                                .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                                    Button {
+                                .personalizedPlaylistSwipeActions(
+                                    isPinned: pinStore.isPinned(playlist.id),
+                                    canDelete: !offlineMode.isOffline,
+                                    downloadState: playlistDownloadState(playlist),
+                                    accentColor: accentColor,
+                                    onPin: {
                                         haptic()
                                         pinStore.togglePin(playlist.id)
-                                    } label: {
-                                        Image(systemName: pinStore.isPinned(playlist.id) ? "pin.slash.fill" : "pin.fill")
+                                    },
+                                    onDelete: {
+                                        playlistToDelete = playlist
+                                        showDeleteConfirm = true
+                                    },
+                                    onDownload: {
+                                        handlePlaylistDownloadSwipe(playlist)
+                                    },
+                                    onPlayNext: {
+                                        playNextPlaylist(playlist)
+                                    },
+                                    onAddToQueue: {
+                                        queuePlaylist(playlist)
                                     }
-                                    .tint(accentColor)
-                                    if !offlineMode.isOffline {
-                                        Button {
-                                            playlistToDelete = playlist
-                                            showDeleteConfirm = true
-                                        } label: {
-                                            Image(systemName: "trash")
-                                        }
-                                        .tint(.red)
-                                    }
-                                }
+                                )
                             }
                         }
                         .listSectionSeparator(.hidden, edges: .top)
@@ -347,28 +323,53 @@ struct PlaylistsView: View {
         }
     }
 
-    @ViewBuilder
-    private func playlistDownloadSwipe(_ playlist: Playlist) -> some View {
+    private func playlistDownloadState(_ playlist: Playlist) -> PersonalizedDownloadSwipeState {
+        guard enableDownloads else { return .hidden }
         if downloadStore.offlinePlaylistIds.contains(playlist.id) {
-            Button(role: .destructive) {
-                haptic(); playlistToDeleteDownloads = playlist
-            } label: { Image(systemName: "arrow.down.circle") }
-            .tint(.red)
-        } else if !offlineMode.isOffline {
-            Button {
-                haptic()
-                Task {
-                    let loaded = await libraryStore.loadPlaylistDetail(id: playlist.id)
-                    libraryStore.errorMessage = nil
-                    if let songs = loaded?.songs, !songs.isEmpty {
-                        let missing = songs.filter { !downloadStore.isDownloaded(songId: $0.id) }
-                        if !missing.isEmpty { downloadStore.enqueueSongs(missing) }
-                        downloadStore.addOfflinePlaylist(playlist.id, songIds: songs.map(\.id))
-                        currentToast = ShelveToast(message: String(localized: "download_started"))
-                    }
+            return .delete
+        }
+        return offlineMode.isOffline ? .hidden : .download
+    }
+
+    private func handlePlaylistDownloadSwipe(_ playlist: Playlist) {
+        if downloadStore.offlinePlaylistIds.contains(playlist.id) {
+            haptic(); playlistToDeleteDownloads = playlist
+        } else if !offlineMode.isOffline, enableDownloads {
+            haptic()
+            Task {
+                let loaded = await libraryStore.loadPlaylistDetail(id: playlist.id)
+                libraryStore.errorMessage = nil
+                if let songs = loaded?.songs, !songs.isEmpty {
+                    let missing = songs.filter { !downloadStore.isDownloaded(songId: $0.id) }
+                    if !missing.isEmpty { downloadStore.enqueueSongs(missing) }
+                    downloadStore.addOfflinePlaylist(playlist.id, songIds: songs.map(\.id))
+                    currentToast = ShelveToast(message: String(localized: "download_started"))
                 }
-            } label: { Image(systemName: "arrow.down.circle") }
-            .tint(accentColor)
+            }
+        }
+    }
+
+    private func queuePlaylist(_ playlist: Playlist) {
+        Task {
+            if let loaded = await libraryStore.loadPlaylistDetail(id: playlist.id),
+               let songs = loaded.songs, !songs.isEmpty {
+                await MainActor.run {
+                    haptic(); player.addToQueue(songs)
+                    currentToast = ShelveToast(message: String(localized: "added_to_queue"))
+                }
+            }
+        }
+    }
+
+    private func playNextPlaylist(_ playlist: Playlist) {
+        Task {
+            if let loaded = await libraryStore.loadPlaylistDetail(id: playlist.id),
+               let songs = loaded.songs, !songs.isEmpty {
+                await MainActor.run {
+                    haptic(); player.addPlayNext(songs)
+                    currentToast = ShelveToast(message: String(localized: "plays_next"))
+                }
+            }
         }
     }
 
@@ -449,7 +450,8 @@ struct PlaylistsView: View {
             }
             .tint(accentColor)
         }
-        .presentationDetents([.medium])
+        .presentationSizing(.page)
         .presentationCornerRadius(24)
+        .presentationDragIndicator(.visible)
     }
 }

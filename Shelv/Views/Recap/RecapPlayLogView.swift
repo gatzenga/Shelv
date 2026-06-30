@@ -52,7 +52,7 @@ struct RecapPlayLogView: View {
                         .padding(.vertical, 2)
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             if let uuid = log.uuid {
-                                Button(role: .destructive) {
+                                Button {
                                     Task {
                                         haptic(); await PlayLogService.shared.deletePlayLog(uuid: uuid)
                                         await CloudKitSyncService.shared.deletePlayEvent(uuid: uuid)

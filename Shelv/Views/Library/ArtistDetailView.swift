@@ -303,29 +303,27 @@ struct ArtistDetailView: View {
                         }
                         .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                         .albumContextMenu(album, showPreview: false)
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            Button { haptic(); queueAlbum(album) } label: { Image(systemName: "text.badge.plus") }
-                                .tint(accentColor)
-                            Button { haptic(); playNextAlbum(album) } label: { Image(systemName: "text.insert") }
-                                .tint(.orange)
-                            albumDownloadSwipeButton(album)
-                        }
-                        .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                            if !offlineMode.isOffline {
-                                if showFavoriteActions {
-                                    Button {
-                                        haptic(.medium); Task { await libraryStore.toggleStarAlbum(album) }
-                                    } label: {
-                                        Image(systemName: libraryStore.isAlbumStarred(album) ? "heart.slash" : "heart.fill")
-                                    }
-                                    .tint(.pink)
-                                }
-                                if showPlaylistActions {
-                                    Button { addAlbumToPlaylist(album) } label: { Image(systemName: "music.note.list") }
-                                        .tint(accentColor)
-                                }
+                        .personalizedAlbumArtistSwipeActions(
+                            isOffline: offlineMode.isOffline,
+                            isFavorite: libraryStore.isAlbumStarred(album),
+                            downloadState: albumDownloadState(album),
+                            accentColor: accentColor,
+                            onFavorite: {
+                                haptic(.medium); Task { await libraryStore.toggleStarAlbum(album) }
+                            },
+                            onAddToPlaylist: {
+                                addAlbumToPlaylist(album)
+                            },
+                            onDownload: {
+                                handleAlbumDownloadSwipe(album)
+                            },
+                            onPlayNext: {
+                                haptic(); playNextAlbum(album)
+                            },
+                            onAddToQueue: {
+                                haptic(); queueAlbum(album)
                             }
-                        }
+                        )
                     }
                 } header: {
                     HStack {
@@ -397,25 +395,26 @@ struct ArtistDetailView: View {
         }
     }
 
-    @ViewBuilder
-    private func albumDownloadSwipeButton(_ album: Album) -> some View {
-        if enableDownloads {
-            let status = downloadStore.albumDownloadStatus(albumId: album.id,
-                                                           totalSongs: album.songCount ?? 0)
-            switch status {
-            case .none, .partial:
-                if !offlineMode.isOffline {
-                    Button {
-                        haptic(); downloadStore.enqueueAlbum(album)
-                    } label: { Image(systemName: "arrow.down.circle") }
-                    .tint(accentColor)
-                }
-            case .complete:
-                Button {
-                    haptic(); albumToDeleteDownloads = album
-                } label: { Image(systemName: "arrow.down.circle") }
-                .tint(.red)
-            }
+    private func albumDownloadState(_ album: Album) -> PersonalizedDownloadSwipeState {
+        guard enableDownloads else { return .hidden }
+        let status = downloadStore.albumDownloadStatus(albumId: album.id, totalSongs: album.songCount ?? 0)
+        switch status {
+        case .none, .partial:
+            return offlineMode.isOffline ? .hidden : .download
+        case .complete:
+            return .delete
+        }
+    }
+
+    private func handleAlbumDownloadSwipe(_ album: Album) {
+        guard enableDownloads else { return }
+        let status = downloadStore.albumDownloadStatus(albumId: album.id, totalSongs: album.songCount ?? 0)
+        switch status {
+        case .none, .partial:
+            guard !offlineMode.isOffline else { return }
+            haptic(); downloadStore.enqueueAlbum(album)
+        case .complete:
+            haptic(); albumToDeleteDownloads = album
         }
     }
 

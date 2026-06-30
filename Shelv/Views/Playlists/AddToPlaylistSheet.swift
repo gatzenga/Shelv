@@ -128,8 +128,9 @@ struct AddToPlaylistSheet: View {
             }
             .tint(accentColor)
         }
-        .presentationDetents([.medium])
+        .presentationSizing(.page)
         .presentationCornerRadius(24)
+        .presentationDragIndicator(.visible)
         .onAppear {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 nameFieldFocused = true

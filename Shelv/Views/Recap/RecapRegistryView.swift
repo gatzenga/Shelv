@@ -32,7 +32,7 @@ struct RecapRegistryView: View {
                         }
                         .padding(.vertical, 2)
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                            Button(role: .destructive) {
+                            Button {
                                 Task {
                                     haptic(); await recapStore.deleteRegistryEntryOnly(playlistId: entry.playlistId, serverId: serverId)
                                 }

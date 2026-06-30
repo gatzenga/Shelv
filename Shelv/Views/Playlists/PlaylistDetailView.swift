@@ -132,7 +132,7 @@ struct PlaylistDetailView: View {
                         )
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             if searchQuery.isEmpty {
-                                Button(role: .destructive) {
+                                Button {
                                     haptic(); Task { await removeSong(at: songsIndex) }
                                 } label: {
                                     Image(systemName: "trash")

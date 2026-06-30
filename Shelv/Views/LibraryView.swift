@@ -444,6 +444,14 @@ struct LibraryView: View {
         }
     }
 
+    private func addArtistToPlaylist(_ artist: Artist) {
+        Task {
+            let songs = await libraryStore.fetchAllSongs(for: artist)
+            guard !songs.isEmpty else { return }
+            NotificationCenter.default.post(name: .addSongsToPlaylist, object: songs.map(\.id))
+        }
+    }
+
     private func playInstantMix(artist: Artist) {
         InstantMixService.playArtistMix(for: artist, player: player)
     }
@@ -492,29 +500,27 @@ struct LibraryView: View {
                             }
                             .buttonStyle(.plain)
                             .contextMenu { albumContextMenuItems(album) }
-                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                Button { haptic(); queueAlbum(album) } label: { Image(systemName: "text.badge.plus") }
-                                    .tint(accentColor)
-                                Button { haptic(); playNextAlbum(album) } label: { Image(systemName: "text.insert") }
-                                    .tint(.orange)
-                                albumDownloadSwipeButton(album)
-                            }
-                            .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                                if !offlineMode.isOffline {
-                                    if showFavoriteActions {
-                                        Button {
-                                            haptic(.medium); Task { await libraryStore.toggleStarAlbum(album) }
-                                        } label: {
-                                            Image(systemName: libraryStore.isAlbumStarred(album) ? "heart.slash" : "heart.fill")
-                                        }
-                                        .tint(.pink)
-                                    }
-                                    if showPlaylistActions {
-                                        Button { addAlbumToPlaylist(album) } label: { Image(systemName: "music.note.list") }
-                                            .tint(accentColor)
-                                    }
+                            .personalizedAlbumArtistSwipeActions(
+                                isOffline: offlineMode.isOffline,
+                                isFavorite: libraryStore.isAlbumStarred(album),
+                                downloadState: albumDownloadState(album),
+                                accentColor: accentColor,
+                                onFavorite: {
+                                    haptic(.medium); Task { await libraryStore.toggleStarAlbum(album) }
+                                },
+                                onAddToPlaylist: {
+                                    addAlbumToPlaylist(album)
+                                },
+                                onDownload: {
+                                    handleAlbumDownloadSwipe(album)
+                                },
+                                onPlayNext: {
+                                    haptic(); playNextAlbum(album)
+                                },
+                                onAddToQueue: {
+                                    haptic(); queueAlbum(album)
                                 }
-                            }
+                            )
                         }
                     }
                     PlayerBottomSpacer()
@@ -601,35 +607,27 @@ struct LibraryView: View {
                         }
                         .buttonStyle(.plain)
                         .contextMenu { artistContextMenuItems(artist) }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            Button { haptic(); queueArtist(artist) } label: { Image(systemName: "text.badge.plus") }
-                                .tint(accentColor)
-                            Button { haptic(); playNextArtist(artist) } label: { Image(systemName: "text.insert") }
-                                .tint(.orange)
-                            artistDownloadSwipeButton(artist)
-                        }
-                        .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                            if !offlineMode.isOffline {
-                                if showFavoriteActions {
-                                    Button {
-                                        haptic(.medium); Task { await libraryStore.toggleStarArtist(artist) }
-                                    } label: {
-                                        Image(systemName: libraryStore.isArtistStarred(artist) ? "heart.slash" : "heart.fill")
-                                    }
-                                    .tint(.pink)
-                                }
-                                if showPlaylistActions {
-                                    Button {
-                                        Task {
-                                            let songs = await libraryStore.fetchAllSongs(for: artist)
-                                            guard !songs.isEmpty else { return }
-                                            NotificationCenter.default.post(name: .addSongsToPlaylist, object: songs.map(\.id))
-                                        }
-                                    } label: { Image(systemName: "music.note.list") }
-                                    .tint(accentColor)
-                                }
+                        .personalizedAlbumArtistSwipeActions(
+                            isOffline: offlineMode.isOffline,
+                            isFavorite: libraryStore.isArtistStarred(artist),
+                            downloadState: artistDownloadState(artist),
+                            accentColor: accentColor,
+                            onFavorite: {
+                                haptic(.medium); Task { await libraryStore.toggleStarArtist(artist) }
+                            },
+                            onAddToPlaylist: {
+                                addArtistToPlaylist(artist)
+                            },
+                            onDownload: {
+                                handleArtistDownloadSwipe(artist)
+                            },
+                            onPlayNext: {
+                                haptic(); playNextArtist(artist)
+                            },
+                            onAddToQueue: {
+                                haptic(); queueArtist(artist)
                             }
-                        }
+                        )
                     }
                 }
                 PlayerBottomSpacer()
@@ -698,33 +696,27 @@ struct LibraryView: View {
                                     accentColor: accentColor
                                 )
                             }
-                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                Button { haptic(); queueArtist(artist) } label: { Image(systemName: "text.badge.plus") }
-                                    .tint(accentColor)
-                                Button { haptic(); playNextArtist(artist) } label: { Image(systemName: "text.insert") }
-                                    .tint(.orange)
-                                artistDownloadSwipeButton(artist)
-                            }
-                            .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                                if !offlineMode.isOffline {
-                                    if showFavoriteActions {
-                                        Button {
-                                            haptic(.medium); Task { await libraryStore.toggleStarArtist(artist) }
-                                        } label: { Image(systemName: "heart.slash") }
-                                        .tint(.pink)
-                                    }
-                                    if showPlaylistActions {
-                                        Button {
-                                            Task {
-                                                let songs = await libraryStore.fetchAllSongs(for: artist)
-                                                guard !songs.isEmpty else { return }
-                                                NotificationCenter.default.post(name: .addSongsToPlaylist, object: songs.map(\.id))
-                                            }
-                                        } label: { Image(systemName: "music.note.list") }
-                                        .tint(accentColor)
-                                    }
+                            .personalizedAlbumArtistSwipeActions(
+                                isOffline: offlineMode.isOffline,
+                                isFavorite: true,
+                                downloadState: artistDownloadState(artist),
+                                accentColor: accentColor,
+                                onFavorite: {
+                                    haptic(.medium); Task { await libraryStore.toggleStarArtist(artist) }
+                                },
+                                onAddToPlaylist: {
+                                    addArtistToPlaylist(artist)
+                                },
+                                onDownload: {
+                                    handleArtistDownloadSwipe(artist)
+                                },
+                                onPlayNext: {
+                                    haptic(); playNextArtist(artist)
+                                },
+                                onAddToQueue: {
+                                    haptic(); queueArtist(artist)
                                 }
-                            }
+                            )
                         }
                     }
                 }
@@ -737,27 +729,27 @@ struct LibraryView: View {
                             .contextMenu {
                                 albumContextMenuItems(album)
                             }
-                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                Button { haptic(); queueAlbum(album) } label: { Image(systemName: "text.badge.plus") }
-                                    .tint(accentColor)
-                                Button { haptic(); playNextAlbum(album) } label: { Image(systemName: "text.insert") }
-                                    .tint(.orange)
-                                albumDownloadSwipeButton(album)
-                            }
-                            .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                                if !offlineMode.isOffline {
-                                    if showFavoriteActions {
-                                        Button {
-                                            haptic(.medium); Task { await libraryStore.toggleStarAlbum(album) }
-                                        } label: { Image(systemName: "heart.slash") }
-                                        .tint(.pink)
-                                    }
-                                    if showPlaylistActions {
-                                        Button { addAlbumToPlaylist(album) } label: { Image(systemName: "music.note.list") }
-                                            .tint(accentColor)
-                                    }
+                            .personalizedAlbumArtistSwipeActions(
+                                isOffline: offlineMode.isOffline,
+                                isFavorite: true,
+                                downloadState: albumDownloadState(album),
+                                accentColor: accentColor,
+                                onFavorite: {
+                                    haptic(.medium); Task { await libraryStore.toggleStarAlbum(album) }
+                                },
+                                onAddToPlaylist: {
+                                    addAlbumToPlaylist(album)
+                                },
+                                onDownload: {
+                                    handleAlbumDownloadSwipe(album)
+                                },
+                                onPlayNext: {
+                                    haptic(); playNextAlbum(album)
+                                },
+                                onAddToQueue: {
+                                    haptic(); queueAlbum(album)
                                 }
-                            }
+                            )
                         }
                     }
                 }
@@ -851,44 +843,45 @@ struct LibraryView: View {
         }
     }
 
-    @ViewBuilder
-    private func albumDownloadSwipeButton(_ album: Album) -> some View {
-        if enableDownloads {
-            let status = DownloadStore.shared.albumDownloadStatus(albumId: album.id,
-                                                                  totalSongs: album.songCount ?? 0)
-            switch status {
-            case .none, .partial:
-                if !offlineMode.isOffline {
-                    Button {
-                        haptic(); DownloadStore.shared.enqueueAlbum(album)
-                    } label: { Image(systemName: "arrow.down.circle") }
-                    .tint(accentColor)
-                }
-            case .complete:
-                Button {
-                    haptic(); albumToDeleteDownloads = album
-                } label: { Image(systemName: "arrow.down.circle") }
-                .tint(.red)
-            }
+    private func albumDownloadState(_ album: Album) -> PersonalizedDownloadSwipeState {
+        guard enableDownloads else { return .hidden }
+        let status = downloadStore.albumDownloadStatus(albumId: album.id, totalSongs: album.songCount ?? 0)
+        switch status {
+        case .none, .partial:
+            return offlineMode.isOffline ? .hidden : .download
+        case .complete:
+            return .delete
         }
     }
 
-    @ViewBuilder
-    private func artistDownloadSwipeButton(_ artist: Artist) -> some View {
-        if enableDownloads {
-            if downloadedArtistNames.contains(artist.name) {
-                Button {
-                    haptic(); artistToDeleteDownloads = artist
-                } label: { Image(systemName: "arrow.down.circle") }
-                .tint(.red)
-            } else if !offlineMode.isOffline {
-                Button {
-                    haptic()
-                    let sid = serverStore.activeServer?.stableId ?? ""
-                    Task { await DownloadService.shared.enqueueArtist(artist: artist, serverId: sid) }
-                } label: { Image(systemName: "arrow.down.circle") }
-                .tint(accentColor)
-            }
+    private func handleAlbumDownloadSwipe(_ album: Album) {
+        guard enableDownloads else { return }
+        let status = downloadStore.albumDownloadStatus(albumId: album.id, totalSongs: album.songCount ?? 0)
+        switch status {
+        case .none, .partial:
+            guard !offlineMode.isOffline else { return }
+            haptic(); downloadStore.enqueueAlbum(album)
+        case .complete:
+            haptic(); albumToDeleteDownloads = album
+        }
+    }
+
+    private func artistDownloadState(_ artist: Artist) -> PersonalizedDownloadSwipeState {
+        guard enableDownloads else { return .hidden }
+        if downloadedArtistNames.contains(artist.name) {
+            return .delete
+        }
+        return offlineMode.isOffline ? .hidden : .download
+    }
+
+    private func handleArtistDownloadSwipe(_ artist: Artist) {
+        guard enableDownloads else { return }
+        if downloadedArtistNames.contains(artist.name) {
+            haptic(); artistToDeleteDownloads = artist
+        } else if !offlineMode.isOffline {
+            haptic()
+            let sid = serverStore.activeServer?.stableId ?? ""
+            Task { await DownloadService.shared.enqueueArtist(artist: artist, serverId: sid) }
         }
     }
 

@@ -7,12 +7,14 @@ final class CarPlayRootController: NSObject {
     private var discoverController:  CarPlayDiscoverController?
     private var libraryController:   CarPlayLibraryController?
     private var playlistsController: CarPlayPlaylistsController?
+    private var radioController:     CarPlayRadioController?
     private var recapController:     CarPlayRecapController?
     private var queueController:     CarPlayQueueController?
     private var tabBar: CPTabBarTemplate?
     private var cancellables = Set<AnyCancellable>()
     private var lastRecapEnabled: Bool = UserDefaults.standard.bool(forKey: "recapEnabled")
     private var lastShowPlaylistsTab: Bool = UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showPlaylistsTab)
+    private var lastShowRadio: Bool = CarPlayRootController.radioTabEnabled
     private var lastRecapTabVisible: Bool = false
 
     // Apple's System-Buttons. EINMAL gebaut und stabil geteilt — Apple liest deren Selected-State
@@ -34,12 +36,14 @@ final class CarPlayRootController: NSObject {
         let discover  = CarPlayDiscoverController(interfaceController: interfaceController)
         let library   = CarPlayLibraryController(interfaceController: interfaceController)
         let playlists = CarPlayPlaylistsController(interfaceController: interfaceController)
+        let radio     = CarPlayRadioController(interfaceController: interfaceController)
         let recap     = CarPlayRecapController(interfaceController: interfaceController)
         let queue     = CarPlayQueueController()
 
         discoverController  = discover
         libraryController   = library
         playlistsController = playlists
+        radioController     = radio
         recapController     = recap
         queueController     = queue
 
@@ -72,6 +76,7 @@ final class CarPlayRootController: NSObject {
         discover.load()
         library.load()
         playlists.load()
+        radio.load()
         recap.load()
         queue.load()
 
@@ -107,11 +112,13 @@ final class CarPlayRootController: NSObject {
         discoverController?.cancel()
         libraryController?.cancel()
         playlistsController?.cancel()
+        radioController?.cancel()
         recapController?.cancel()
         queueController?.cancel()
         discoverController  = nil
         libraryController   = nil
         playlistsController = nil
+        radioController     = nil
         recapController     = nil
         queueController     = nil
         tabBar              = nil
@@ -130,7 +137,15 @@ final class CarPlayRootController: NSObject {
         if recapTabVisible, let t = recapController?.rootTemplate {
             templates.append(t)
         }
+        if Self.radioTabEnabled, let t = radioController?.rootTemplate {
+            templates.append(t)
+        }
         return templates
+    }
+
+    private static var radioTabEnabled: Bool {
+        guard UserDefaults.standard.object(forKey: PersonalizationPreferenceKey.showRadio) != nil else { return true }
+        return UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showRadio)
     }
 
     private var recapTabVisible: Bool {
@@ -175,7 +190,11 @@ final class CarPlayRootController: NSObject {
                 guard let self else { return }
                 let currentRecap = UserDefaults.standard.bool(forKey: "recapEnabled")
                 let currentPlaylists = UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showPlaylistsTab)
-                guard currentRecap != self.lastRecapEnabled || currentPlaylists != self.lastShowPlaylistsTab else { return }
+                let currentRadio = Self.radioTabEnabled
+                guard currentRecap != self.lastRecapEnabled
+                      || currentPlaylists != self.lastShowPlaylistsTab
+                      || currentRadio != self.lastShowRadio
+                else { return }
                 self.refreshTabs()
             }
             .store(in: &cancellables)
@@ -186,12 +205,15 @@ final class CarPlayRootController: NSObject {
         let recapVisible = recapTabVisible
         let recapEnabled = UserDefaults.standard.bool(forKey: "recapEnabled")
         let playlistsEnabled = UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showPlaylistsTab)
+        let radioEnabled = Self.radioTabEnabled
         guard recapVisible != lastRecapTabVisible
               || recapEnabled != lastRecapEnabled
-              || playlistsEnabled != lastShowPlaylistsTab else { return }
+              || playlistsEnabled != lastShowPlaylistsTab
+              || radioEnabled != lastShowRadio else { return }
         lastRecapTabVisible = recapVisible
         lastRecapEnabled = recapEnabled
         lastShowPlaylistsTab = playlistsEnabled
+        lastShowRadio = radioEnabled
         tabBar?.updateTemplates(visibleTabTemplates())
     }
 
@@ -205,6 +227,10 @@ final class CarPlayRootController: NSObject {
         updateNowPlayingButtons()
 
         AudioPlayerService.shared.$currentSong
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.updateNowPlayingButtons() }
+            .store(in: &cancellables)
+        AudioPlayerService.shared.$currentRadioStation
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.updateNowPlayingButtons() }
             .store(in: &cancellables)
@@ -243,7 +269,14 @@ final class CarPlayRootController: NSObject {
     }
 
     private func updateNowPlayingButtons() {
-        let song = AudioPlayerService.shared.currentSong
+        let player = AudioPlayerService.shared
+        CPNowPlayingTemplate.shared.isUpNextButtonEnabled = !player.isRadioPlayback
+        if player.isRadioPlayback {
+            CPNowPlayingTemplate.shared.updateNowPlayingButtons([])
+            return
+        }
+
+        let song = player.currentSong
         let starred = song.map { LibraryStore.shared.isSongStarred($0) } ?? false
 
         // Geteilte System-Buttons (immer dieselben Instanzen) + frisch gebauter Heart-Button

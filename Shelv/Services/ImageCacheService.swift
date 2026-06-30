@@ -77,8 +77,7 @@ actor ImageCacheService {
                 return img
             }
             if Task.isCancelled { return nil }
-            guard let (data, _) = try? await URLSession.shared.data(from: url),
-                  let img = UIImage(data: data) else { return nil }
+            guard let (data, img) = await Self.downloadImage(from: url) else { return nil }
             if Task.isCancelled { return nil }
             try? data.write(to: diskURL, options: .atomic)
             return img
@@ -102,6 +101,29 @@ actor ImageCacheService {
         }
 
         return img
+    }
+
+    nonisolated private static func downloadImage(from url: URL) async -> (Data, UIImage)? {
+        for attempt in 1...3 {
+            if Task.isCancelled { return nil }
+            var request = URLRequest(url: url)
+            request.cachePolicy = .reloadIgnoringLocalCacheData
+            request.timeoutInterval = 12
+            if let (data, response) = try? await URLSession.shared.data(for: request),
+               isSuccessfulImageResponse(response),
+               let image = UIImage(data: data) {
+                return (data, image)
+            }
+            if attempt < 3 {
+                try? await Task.sleep(for: .milliseconds(350))
+            }
+        }
+        return nil
+    }
+
+    nonisolated private static func isSuccessfulImageResponse(_ response: URLResponse) -> Bool {
+        guard let http = response as? HTTPURLResponse else { return true }
+        return (200..<300).contains(http.statusCode)
     }
 
     private nonisolated static func trimDiskCache(cacheDir: URL) {

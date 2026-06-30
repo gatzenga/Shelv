@@ -409,6 +409,7 @@ struct ICloudSyncSettingsView: View {
     @AppStorage("iCloudSyncPlayHistoryEnabled") private var playHistorySyncEnabled = true
     @AppStorage("iCloudSyncRecapEnabled") private var recapSyncEnabled = true
     @AppStorage("iCloudSyncLyricsServerEnabled") private var lyricsServerSyncEnabled = false
+    @AppStorage("iCloudSyncRadioStationsEnabled") private var radioStationsSyncEnabled = true
 
     @State private var isSyncingManually = false
 
@@ -524,6 +525,17 @@ struct ICloudSyncSettingsView: View {
                 .tint(accentColor)
                 .disabled(!iCloudSyncEnabled)
                 .onChange(of: lyricsServerSyncEnabled) { _, _ in
+                    Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
+                }
+
+                Toggle(isOn: $radioStationsSyncEnabled) {
+                    Label { Text(String(localized: "radio_stations")) } icon: {
+                        Image(systemName: "dot.radiowaves.left.and.right").foregroundStyle(accentColor)
+                    }
+                }
+                .tint(accentColor)
+                .disabled(!iCloudSyncEnabled)
+                .onChange(of: radioStationsSyncEnabled) { _, _ in
                     Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
                 }
             }

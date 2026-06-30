@@ -97,6 +97,7 @@ struct ContentView: View {
                 AudioPlayerService.shared.stop()
                 QueueSyncService.shared.handleServerChange()
                 libraryStore.resetInMemory()
+                RadioStationStore.shared.resetInMemory()
                 #if DEBUG
                 // Demo-Server aktiv → festes Player-Standbild setzen (nach stop(), sonst würde
                 // es sofort wieder gelöscht) und Recap-Anzeige aktivieren.
@@ -182,7 +183,7 @@ struct ContentView: View {
             selectedTab = 0
             showRecap = true
         case .nowPlaying:
-            if AudioPlayerService.shared.currentSong != nil {
+            if AudioPlayerService.shared.hasActivePlayback {
                 showPlayer = true
             } else {
                 selectedTab = 0
@@ -234,10 +235,11 @@ private struct ShelvBottomRoot: View {
                     safeAreaBottom: geometry.safeAreaInsets.bottom,
                     showPlayer: $showPlayer
                 )
-
-                BottomBanners(topInset: geometry.safeAreaInsets.top)
             }
             .wrappedInGlassContainer()
+            .overlay(alignment: .top) {
+                BottomBanners(topInset: geometry.safeAreaInsets.top)
+            }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             PlayerBarInset(isRegularWidth: isRegularWidth, showPlayer: $showPlayer)
@@ -301,14 +303,17 @@ private struct NativeBottomRoot: View {
     }
 
     var body: some View {
-        ZStack {
-            if #available(iOS 26.0, *) {
-                nativeTabView
-            } else {
-                EmptyView()
+        GeometryReader { geometry in
+            ZStack {
+                if #available(iOS 26.0, *) {
+                    nativeTabView
+                } else {
+                    EmptyView()
+                }
             }
-
-            BottomBanners(topInset: 0)
+            .overlay(alignment: .top) {
+                BottomBanners(topInset: geometry.safeAreaInsets.top)
+            }
         }
     }
 
@@ -333,7 +338,7 @@ private struct NativeBottomRoot: View {
                 SearchView(resetToken: searchResetToken)
             }
         }
-        .tabBarMinimizeBehavior(player.currentSong != nil ? .onScrollDown : .automatic)
+        .tabBarMinimizeBehavior(player.hasActivePlayback ? .onScrollDown : .automatic)
         .tabViewSearchActivation(.searchTabSelection)
         .tint(accentColor)
     }
@@ -343,7 +348,7 @@ private struct NativeBottomRoot: View {
     private var nativeTabView: some View {
         if #available(iOS 26.1, *) {
             tabs
-                .tabViewBottomAccessory(isEnabled: player.currentSong != nil) {
+                .tabViewBottomAccessory(isEnabled: player.hasActivePlayback) {
                     NativeMiniPlayerAccessory(showPlayer: $showPlayer)
                         .padding(.horizontal, 12)
                         .padding(.bottom, 2)
@@ -371,15 +376,14 @@ private struct BottomBanners: View {
     @ObservedObject private var queueSync = QueueSyncService.shared
 
     var body: some View {
-        VStack {
+        VStack(spacing: 8) {
             ServerErrorBanner()
-                .padding(.top, topInset + 4)
                 .animation(.easeInOut, value: offlineMode.serverErrorBannerVisible)
             QueueSyncBanner()
-                .padding(.top, offlineMode.serverErrorBannerVisible ? 0 : topInset + 4)
                 .animation(.easeInOut, value: queueSync.pendingRemote != nil)
-            Spacer()
         }
+        .padding(.top, topInset + 12)
+        .frame(maxWidth: .infinity, alignment: .top)
         .allowsHitTesting(offlineMode.serverErrorBannerVisible || queueSync.pendingRemote != nil)
         .ignoresSafeArea(edges: .top)
     }
@@ -399,19 +403,23 @@ private struct NativeMiniPlayerAccessory: View {
     }
 
     var body: some View {
-        if let song = player.currentSong {
+        if player.hasActivePlayback {
             Button(action: presentPlayer) {
                 HStack(spacing: 10) {
-                    AlbumArtView(coverArtId: song.coverArt, size: 100, cornerRadius: 6)
-                        .frame(width: 32, height: 32)
-                        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    if let song = player.currentSong {
+                        AlbumArtView(coverArtId: song.coverArt, size: 100, cornerRadius: 6)
+                            .frame(width: 32, height: 32)
+                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    } else if let station = player.currentRadioStation {
+                        RadioStationArtworkView(item: station, size: 32, metadata: player.currentRadioMetadata)
+                    }
 
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(song.title)
+                        Text(player.displayTitle)
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.primary)
                             .lineLimit(1)
-                        Text(song.artist ?? "")
+                        Text(player.displaySubtitleLine)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
@@ -437,6 +445,10 @@ private struct NativeMiniPlayerAccessory: View {
                     .onEnded { value in
                         let width = value.translation.width
                         if abs(width) > abs(value.translation.height) {
+                            guard !player.isRadioPlayback else {
+                                dragX = 0
+                                return
+                            }
                             if width < -48 {
                                 player.next(triggeredByUser: true)
                             } else if width > 48 {
@@ -451,7 +463,7 @@ private struct NativeMiniPlayerAccessory: View {
 
     private var playbackControls: some View {
         HStack(spacing: 10) {
-            if showsSkipButtons {
+            if showsSkipButtons && !player.isRadioPlayback {
                 Button {
                     player.previous()
                 } label: {
@@ -479,7 +491,7 @@ private struct NativeMiniPlayerAccessory: View {
             .buttonStyle(.plain)
             .accessibilityLabel(player.isPlaying ? String(localized: "pause") : String(localized: "play"))
 
-            if showsSkipButtons {
+            if showsSkipButtons && !player.isRadioPlayback {
                 Button {
                     player.next(triggeredByUser: true)
                 } label: {
@@ -520,7 +532,7 @@ private struct PlayerBarOverlay: View {
     }
 
     var body: some View {
-        if player.currentSong != nil && !isRegularWidth {
+        if player.hasActivePlayback && !isRegularWidth {
             VStack {
                 Spacer()
                 PlayerBarView()
@@ -535,7 +547,7 @@ private struct PlayerBarOverlay: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .ignoresSafeArea(edges: .bottom)
             .onAppear { scheduleMeasurements() }
-            .onChange(of: player.currentSong?.id) { _, _ in scheduleMeasurements() }
+            .onChange(of: player.currentSong?.id ?? player.currentRadioStation?.id) { _, _ in scheduleMeasurements() }
             .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { measureTabBar() }
             }
@@ -590,7 +602,7 @@ private struct PlayerBarInset: View {
     @ObservedObject private var player = AudioPlayerService.shared
 
     var body: some View {
-        if player.currentSong != nil && isRegularWidth {
+        if player.hasActivePlayback && isRegularWidth {
             PlayerBarView()
                 .onTapGesture {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {

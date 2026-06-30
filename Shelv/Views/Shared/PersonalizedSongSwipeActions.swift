@@ -32,7 +32,7 @@ struct PersonalizedSongSwipeActionsModifier: ViewModifier {
     @ViewBuilder
     private func swipeButton(for slot: PersonalizationSwipeSlot) -> some View {
         switch action(for: slot) {
-        case .none:
+        case .none, .download, .pin, .delete:
             EmptyView()
         case .favorite:
             if !isOffline && showFavoriteActions {
@@ -79,6 +79,8 @@ struct PersonalizedSongSwipeActionsModifier: ViewModifier {
             return PersonalizationSwipeAction(rawValue: rightPrimary).flatMap(normalized) ?? .none
         case .rightSecondary:
             return PersonalizationSwipeAction(rawValue: rightSecondary).flatMap(normalized) ?? .none
+        default:
+            return .none
         }
     }
 
@@ -90,6 +92,8 @@ struct PersonalizedSongSwipeActionsModifier: ViewModifier {
             return showPlaylistActions ? action : .none
         case .none, .playNext, .addToQueue:
             return action
+        case .download, .pin, .delete:
+            return .none
         }
     }
 }

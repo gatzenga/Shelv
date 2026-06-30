@@ -120,7 +120,7 @@ struct DownloadsView: View {
                                 DownloadedAlbumRow(album: album)
                             }
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                Button(role: .destructive) {
+                                Button {
                                     haptic(); albumToDeleteDownloads = album
                                 } label: {
                                     DeleteDownloadIcon()
@@ -163,7 +163,7 @@ struct DownloadsView: View {
                         DownloadedArtistRow(artist: artist)
                     }
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                        Button(role: .destructive) {
+                        Button {
                             haptic(); artistToDeleteDownloads = artist
                         } label: {
                             DeleteDownloadIcon()
@@ -361,7 +361,7 @@ struct DownloadedAlbumDetailView: View {
                 ForEach(Array(songs.enumerated()), id: \.element.songId) { index, song in
                     DownloadedSongRow(song: song, playbackList: songs, startIndex: index)
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            Button(role: .destructive) {
+                            Button {
                                 haptic(); downloadStore.deleteSong(song.songId)
                             } label: {
                                 DeleteDownloadIcon()
@@ -405,7 +405,7 @@ struct DownloadedArtistDetailView: View {
                     DownloadedAlbumRow(album: album)
                 }
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                    Button(role: .destructive) {
+                    Button {
                         haptic(); albumToDeleteDownloads = album
                     } label: {
                         DeleteDownloadIcon()

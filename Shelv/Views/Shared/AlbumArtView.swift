@@ -49,7 +49,7 @@ struct AlbumArtView: View {
                 content.cornerRadius(cornerRadius)
             }
         }
-        .task(id: coverArtId) {
+        .task(id: loadIdentifier) {
             await load()
         }
         .onReceive(NotificationCenter.default.publisher(for: .artworkIndexReady)) { _ in
@@ -125,6 +125,10 @@ struct AlbumArtView: View {
                 .font(.system(size: CGFloat(size) * 0.2))
                 .foregroundStyle(.secondary)
         }
+    }
+
+    private var loadIdentifier: String {
+        "\(coverArtId ?? "none")_\(size)"
     }
 
 }

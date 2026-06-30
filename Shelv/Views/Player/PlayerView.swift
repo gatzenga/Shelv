@@ -99,6 +99,7 @@ struct PlayerView: View {
     @State private var showQueue: Bool = false
     @State private var showAddToPlaylist = false
     @State private var showLyricsSheet: Bool = false
+    @State private var showSleepTimer = false
     @State private var artistDestination: Artist?
     @State private var isResolvingArtist = false
     @State private var artistResolveTask: Task<Void, Never>?
@@ -140,6 +141,21 @@ struct PlayerView: View {
     private var activeProgressFraction: Binding<Double> {
         (isDragging || player.isSeeking) ? $seekValue : progressFraction
     }
+    private var playerBackgroundIdentifier: String {
+        if player.isRadioPlayback {
+            guard let station = player.currentRadioStation else { return "radio-none" }
+            if station.metadata.showSongCover,
+               let metadata = player.currentRadioMetadata,
+               trimmedNonEmpty(metadata.artworkURL) != nil {
+                return "radio-art-\(metadata.artworkRevisionToken)"
+            }
+            if let coverArt = trimmedNonEmpty(station.coverArt) {
+                return "radio-cover-\(coverArt)"
+            }
+            return "radio-station-\(station.id)"
+        }
+        return player.currentSong?.coverArt ?? "song-none"
+    }
 
     // Track-Infos (Titel/Artist/Album) als eigene View — entlastet den Type-Checker
     // des großen body und hält die Marquee-Logik beisammen. Auf Slider-Breite begrenzt.
@@ -175,6 +191,10 @@ struct PlayerView: View {
                 MarqueeText(text: albumName,
                             uiFont: .preferred(.callout),
                             color: Color(.tertiaryLabel))
+            } else if player.isRadioPlayback {
+                MarqueeText(text: player.displaySubtitleLine,
+                            uiFont: .preferred(.callout),
+                            color: Color(.tertiaryLabel))
             }
         }
         .padding(.horizontal, isPad ? 48 : 32)
@@ -183,6 +203,8 @@ struct PlayerView: View {
     private func artSize(_ h: CGFloat) -> CGFloat {
         isPad ? min(480, max(300, h * 0.50)) : min(280, h * 0.44)
     }
+    private func radioPlayButtonSize(_ h: CGFloat) -> CGFloat { isPad ? min(96, max(72, h * 0.11)) : 75 }
+    private func radioControlSize(_ h: CGFloat) -> CGFloat { isPad ? min(56, max(44, h * 0.065)) : 50 }
     private func visibleArtSize(_ h: CGFloat) -> CGFloat {
         let base = artSize(h)
         let extra: CGFloat = isPad ? min(56, max(36, h * 0.045)) : (h < 700 ? 18 : 30)
@@ -252,12 +274,28 @@ struct PlayerView: View {
                 let visibleArt = visibleArtSize(h)
                 let play = playButtonSize(h)
                 let ctrl = controlSize(h)
+                let radioArt = visibleArt
+                let radioPlay = radioPlayButtonSize(h)
+                let radioCtrl = radioControlSize(h)
+                Group {
+                    if player.isRadioPlayback {
+                        radioPlayerContent(
+                            artworkSize: radioArt,
+                            playSize: radioPlay,
+                            controlSize: radioCtrl,
+                            height: h
+                        )
+                    } else {
                 VStack(spacing: 0) {
                     Spacer(minLength: 0)
 
                     ZStack(alignment: .bottom) {
-                        AlbumArtView(coverArtId: player.currentSong?.coverArt, size: 600, cornerRadius: isPad ? 22 : 20)
-                            .frame(width: visibleArt, height: visibleArt)
+                        if let station = player.currentRadioStation {
+                            RadioStationArtworkView(item: station, size: visibleArt, metadata: player.currentRadioMetadata)
+                        } else {
+                            AlbumArtView(coverArtId: player.currentSong?.coverArt, size: 600, cornerRadius: isPad ? 22 : 20)
+                                .frame(width: visibleArt, height: visibleArt)
+                        }
                     }
                     .frame(width: art, height: art, alignment: .bottom)
                     .shadow(color: .black.opacity(0.4), radius: 30, y: 15)
@@ -268,14 +306,30 @@ struct PlayerView: View {
                     Spacer(minLength: 0)
 
                     VStack(spacing: 4) {
-                        playbackProgressControl
+                        if player.isRadioPlayback {
+                            let statusColor: Color = player.isRadioConnecting
+                                ? .orange
+                                : (player.isPlaying ? .green : .secondary)
 
-                        HStack {
-                            Text(formatTime(isDragging ? seekValue * displayDuration : displayTime))
-                                .font(.caption2).foregroundStyle(.secondary).monospacedDigit()
-                            Spacer()
-                            Text(formatTime(displayDuration))
-                                .font(.caption2).foregroundStyle(.secondary).monospacedDigit()
+                            HStack(spacing: 8) {
+                                Circle()
+                                    .fill(statusColor)
+                                    .frame(width: 7, height: 7)
+                                Text(player.radioStatusText)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .frame(height: 32)
+                        } else {
+                            playbackProgressControl
+
+                            HStack {
+                                Text(formatTime(isDragging ? seekValue * displayDuration : displayTime))
+                                    .font(.caption2).foregroundStyle(.secondary).monospacedDigit()
+                                Spacer()
+                                Text(formatTime(displayDuration))
+                                    .font(.caption2).foregroundStyle(.secondary).monospacedDigit()
+                            }
                         }
 
                         HStack(spacing: 4) {
@@ -295,46 +349,59 @@ struct PlayerView: View {
                     .padding(.bottom, vPad(h, large: 24, small: 32))
 
                     // Transport-Buttons
-                    HStack(spacing: isPad ? 28 : 22) {
-                        Image(systemName: "shuffle")
-                            .font(.system(size: isPad ? 22 : 19, weight: .semibold))
-                            .foregroundStyle(player.isShuffled ? accentColor : .secondary)
-                            .frame(width: 44, height: 44).contentShape(Rectangle())
-                            .onTapGesture { player.toggleShuffle() }
+                    Group {
+                        if player.isRadioPlayback {
+                            Button { player.togglePlayPause() } label: {
+                                ZStack {
+                                    Circle().fill(accentColor).frame(width: play, height: play)
+                                    Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                                        .font(.system(size: isPad ? 34 : 30)).foregroundStyle(.white)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        } else {
+                            HStack(spacing: isPad ? 28 : 22) {
+                                Image(systemName: "shuffle")
+                                    .font(.system(size: isPad ? 22 : 19, weight: .semibold))
+                                    .foregroundStyle(player.isShuffled ? accentColor : .secondary)
+                                    .frame(width: 44, height: 44).contentShape(Rectangle())
+                                    .onTapGesture { player.toggleShuffle() }
 
-                        Image(systemName: "backward.fill")
-                            .font(.system(size: isPad ? 28 : 24))
-                            .foregroundStyle(.primary)
-                            .frame(width: 44, height: 44).contentShape(Rectangle())
-                            .onTapGesture { player.previous() }
+                                Image(systemName: "backward.fill")
+                                    .font(.system(size: isPad ? 28 : 24))
+                                    .foregroundStyle(.primary)
+                                    .frame(width: 44, height: 44).contentShape(Rectangle())
+                                    .onTapGesture { player.previous() }
 
-                        Button { player.togglePlayPause() } label: {
-                            ZStack {
-                                Circle().fill(accentColor).frame(width: play, height: play)
-                                Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                                    .font(.system(size: isPad ? 34 : 30)).foregroundStyle(.white)
+                                Button { player.togglePlayPause() } label: {
+                                    ZStack {
+                                        Circle().fill(accentColor).frame(width: play, height: play)
+                                        Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                                            .font(.system(size: isPad ? 34 : 30)).foregroundStyle(.white)
+                                    }
+                                }
+                                .buttonStyle(.plain)
+
+                                Image(systemName: "forward.fill")
+                                    .font(.system(size: isPad ? 28 : 24))
+                                    .foregroundStyle(player.hasNextTrack ? Color.primary : Color.secondary)
+                                    .frame(width: 44, height: 44).contentShape(Rectangle())
+                                    .onTapGesture { player.next(triggeredByUser: true) }
+                                    .disabled(!player.hasNextTrack)
+
+                                Image(systemName: player.repeatMode.systemImage)
+                                    .font(.system(size: isPad ? 22 : 19, weight: .semibold))
+                                    .foregroundStyle(player.repeatMode != .off ? accentColor : .secondary)
+                                    .frame(width: 44, height: 44).contentShape(Rectangle())
+                                    .onTapGesture { player.cycleRepeatMode() }
                             }
                         }
-                        .buttonStyle(.plain)
-
-                        Image(systemName: "forward.fill")
-                            .font(.system(size: isPad ? 28 : 24))
-                            .foregroundStyle(player.hasNextTrack ? Color.primary : Color.secondary)
-                            .frame(width: 44, height: 44).contentShape(Rectangle())
-                            .onTapGesture { player.next(triggeredByUser: true) }
-                            .disabled(!player.hasNextTrack)
-
-                        Image(systemName: player.repeatMode.systemImage)
-                            .font(.system(size: isPad ? 22 : 19, weight: .semibold))
-                            .foregroundStyle(player.repeatMode != .off ? accentColor : .secondary)
-                            .frame(width: 44, height: 44).contentShape(Rectangle())
-                            .onTapGesture { player.cycleRepeatMode() }
                     }
                     .padding(.bottom, vPad(h, large: 36, small: 20))
 
                     // Sekundäre Buttons — Amperfy-Stil: grauer Kreis, .primary Icon
                     HStack {
-                        if showFavoriteActions && !offlineMode.isOffline, let song = player.currentSong {
+                        if !player.isRadioPlayback, showFavoriteActions && !offlineMode.isOffline, let song = player.currentSong {
                             Button {
                                 Task { await libraryStore.toggleStarSong(song) }
                             } label: {
@@ -348,27 +415,38 @@ struct PlayerView: View {
                             Spacer()
                         }
 
-                        Button { showLyricsSheet = true } label: {
-                            playerSecondaryButton(icon: "quote.bubble", color: .primary, size: ctrl, isPad: isPad)
-                        }
-                        .buttonStyle(.plain)
-
-                        Spacer()
-
-                        Button { showQueue = true } label: {
-                            playerSecondaryButton(icon: "list.bullet", color: .primary, size: ctrl, isPad: isPad)
-                        }
-                        .buttonStyle(.plain)
-
-                        if showPlaylistActions && !offlineMode.isOffline {
-                            Spacer()
-                            Button { showAddToPlaylist = true } label: {
-                                playerSecondaryButton(icon: "music.note.list", color: .primary, size: ctrl, isPad: isPad)
+                        if !player.isRadioPlayback {
+                            Button { showLyricsSheet = true } label: {
+                                playerSecondaryButton(icon: "quote.bubble", color: .primary, size: ctrl, isPad: isPad)
                             }
                             .buttonStyle(.plain)
+
+                            Spacer()
+
+                            Button { showQueue = true } label: {
+                                playerSecondaryButton(icon: "list.bullet", color: .primary, size: ctrl, isPad: isPad)
+                            }
+                            .buttonStyle(.plain)
+
+                            if showPlaylistActions && !offlineMode.isOffline {
+                                Spacer()
+                                Button { showAddToPlaylist = true } label: {
+                                    playerSecondaryButton(icon: "music.note.list", color: .primary, size: ctrl, isPad: isPad)
+                                }
+                                .buttonStyle(.plain)
+                            }
+
+                            Spacer()
                         }
 
-                        Spacer()
+                        if player.isRadioPlayback {
+                            Button { showSleepTimer = true } label: {
+                                sleepTimerButton(size: ctrl, isPad: isPad)
+                            }
+                            .buttonStyle(.plain)
+
+                            Spacer()
+                        }
 
                         Button { player.stop(); dismiss() } label: {
                             playerSecondaryButton(icon: "stop.fill", color: .primary, size: ctrl, isPad: isPad)
@@ -377,6 +455,8 @@ struct PlayerView: View {
                     }
                     .padding(.horizontal, isPad ? 44 : 36)
                     .padding(.bottom, vPad(h, large: 32, small: 40))
+                }
+                    }
                 }
                 .frame(width: geo.size.width, height: geo.size.height)
                 .ignoresSafeArea(edges: .bottom)
@@ -406,7 +486,7 @@ struct PlayerView: View {
                     artistResolveTask = nil
                     isResolvingArtist = false
                 }
-                .task(id: player.currentSong?.coverArt) {
+                .task(id: playerBackgroundIdentifier) {
                     await updatePlayerBackground()
                 }
                 .onChange(of: colorScheme) { _, _ in
@@ -435,8 +515,189 @@ struct PlayerView: View {
                             .tint(accentColor)
                     }
                 }
+                .sheet(isPresented: $showSleepTimer) {
+                    SleepTimerPanel()
+                        .presentationSizing(.page)
+                        .presentationCornerRadius(24)
+                        .presentationDragIndicator(.visible)
+                        .tint(accentColor)
+                }
             }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func radioPlayerContent(
+        artworkSize art: CGFloat,
+        playSize play: CGFloat,
+        controlSize ctrl: CGFloat,
+        height h: CGFloat
+    ) -> some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+
+            radioFullscreenArtwork(size: art)
+                .shadow(color: .black.opacity(0.4), radius: 30, y: 15)
+                .padding(.bottom, vPad(h, large: 20, small: 20))
+
+            VStack(spacing: isPad ? 6 : 10) {
+                Text(radioStationName)
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+
+                radioStatusPill
+
+                Text(radioTrackTitle)
+                    .font(.title2)
+                    .bold()
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .padding(.horizontal, 20)
+
+                Text(radioTrackArtistLine)
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(1)
+                    .padding(.horizontal, 20)
+                    .accessibilityHidden(radioTrackArtist.isEmpty)
+            }
+
+            Spacer(minLength: 0)
+
+            Button {
+                player.togglePlayPause()
+            } label: {
+                ZStack {
+                    Circle()
+                        .fill(accentColor)
+                        .frame(width: play, height: play)
+                    Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                        .font(.system(size: isPad ? 34 : 30))
+                        .foregroundStyle(.white)
+                }
+            }
+            .buttonStyle(.plain)
+            .padding(.bottom, vPad(h, large: 36, small: 32))
+
+            HStack(spacing: isPad ? 80 : 60) {
+                Button { showSleepTimer = true } label: {
+                    sleepTimerButton(size: ctrl, isPad: isPad)
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    player.stop()
+                    dismiss()
+                } label: {
+                    playerSecondaryButton(icon: "stop.fill", color: .primary, size: ctrl, isPad: isPad)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.bottom, vPad(h, large: 32, small: 50))
+        }
+    }
+
+    @ViewBuilder
+    private func radioFullscreenArtwork(size: CGFloat) -> some View {
+        ZStack {
+            if let url = radioRemoteArtworkURL {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    default:
+                        radioStationFallbackArtwork(size: size)
+                    }
+                }
+            } else {
+                radioStationFallbackArtwork(size: size)
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: isPad ? 22 : 24, style: .continuous))
+    }
+
+    @ViewBuilder
+    private func radioStationFallbackArtwork(size: CGFloat) -> some View {
+        if let coverArt = player.currentRadioStation?.coverArt {
+            RadioStationPlayerArtworkView(
+                coverArtId: coverArt,
+                displaySize: size,
+                cornerRadius: isPad ? 22 : 24
+            )
+        } else {
+            radioPlaceholderArtwork
+        }
+    }
+
+    private var radioRemoteArtworkURL: URL? {
+        guard player.currentRadioStation?.metadata.showSongCover == true else { return nil }
+        return player.currentRadioMetadata?.cacheBustedArtworkURL
+    }
+
+    private var radioStationName: String {
+        player.radioDisplayStationName
+    }
+
+    private var radioTrackTitle: String {
+        player.radioDisplayTitle
+    }
+
+    private var radioTrackArtist: String {
+        player.radioDisplayArtist
+    }
+
+    private var radioTrackArtistLine: String {
+        player.radioDisplayArtistLine
+    }
+
+    private var radioStatusConfiguration: (title: String, systemImage: String, color: Color) {
+        if player.isRadioConnecting {
+            return (String(localized: "connecting"), "wifi.exclamationmark", .orange)
+        }
+        if player.isPlaying {
+            return ("Live", "antenna.radiowaves.left.and.right", .green)
+        }
+        return (String(localized: "paused"), "pause.fill", .secondary)
+    }
+
+    @ViewBuilder
+    private var radioStatusPill: some View {
+        let config = radioStatusConfiguration
+        Label(config.title, systemImage: config.systemImage)
+            .font(.caption)
+            .foregroundStyle(config.color)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(config.color.opacity(0.1), in: Capsule())
+    }
+
+    private var radioPlaceholderArtwork: some View {
+        ZStack {
+            Color.gray.opacity(colorScheme == .dark ? 0.2 : 0.1)
+            Image(systemName: "music.note.house")
+                .font(.system(size: 80))
+                .foregroundStyle(.gray.opacity(0.5))
+        }
+    }
+
+    @ViewBuilder
+    private func sleepTimerButton(size: CGFloat, isPad: Bool) -> some View {
+        if let end = player.sleepTimerEnd {
+            TimelineView(.periodic(from: .now, by: 1)) { _ in
+                let remaining = max(0, Int(end.timeIntervalSinceNow))
+                Text(String(format: "%d:%02d", remaining / 60, remaining % 60))
+                    .font(.system(size: isPad ? 13 : 11, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(accentColor)
+                    .frame(width: size, height: size)
+            }
+        } else {
+            playerSecondaryButton(icon: "moon.zzz.fill", color: .primary, size: size, isPad: isPad)
         }
     }
 
@@ -449,7 +710,8 @@ struct PlayerView: View {
     }
 
     private func updatePlayerBackground() async {
-        guard let coverArtId = player.currentSong?.coverArt else {
+        let key = playerBackgroundIdentifier
+        guard key != "song-none", key != "radio-none" else {
             withAnimation(.easeInOut(duration: 0.5)) {
                 playerBgPrimary = Color(UIColor.systemBackground)
                 playerBgSecondary = Color(UIColor.systemBackground)
@@ -459,7 +721,7 @@ struct PlayerView: View {
             return
         }
 
-        if let hit = Self.paletteCache.object(forKey: coverArtId as NSString) {
+        if let hit = Self.paletteCache.object(forKey: key as NSString) {
             rawPrimary = hit.primary
             rawSecondary = hit.secondary
             withAnimation(.easeInOut(duration: 0.6)) {
@@ -469,6 +731,37 @@ struct PlayerView: View {
             return
         }
 
+        let resolved = await loadPlayerBackgroundImage()
+        guard !Task.isCancelled else { return }
+        guard let img = resolved else {
+            rawPrimary = nil
+            rawSecondary = nil
+            withAnimation(.easeInOut(duration: 0.5)) {
+                playerBgPrimary = Color(UIColor.systemBackground)
+                playerBgSecondary = Color(UIColor.systemBackground)
+            }
+            return
+        }
+        let (primary, secondary) = img.extractPlayerPalette()
+        guard !Task.isCancelled else { return }
+        Self.paletteCache.setObject(PlayerPaletteResult(primary, secondary), forKey: key as NSString)
+        rawPrimary = primary
+        rawSecondary = secondary
+        withAnimation(.easeInOut(duration: 0.6)) {
+            playerBgPrimary = adaptedColor(primary, asSecondary: false)
+            playerBgSecondary = adaptedColor(secondary ?? primary, asSecondary: true)
+        }
+    }
+
+    private func loadPlayerBackgroundImage() async -> UIImage? {
+        if player.isRadioPlayback {
+            return await loadRadioBackgroundImage()
+        }
+        guard let coverArtId = player.currentSong?.coverArt else { return nil }
+        return await loadSongBackgroundImage(coverArtId: coverArtId)
+    }
+
+    private func loadSongBackgroundImage(coverArtId: String) async -> UIImage? {
         let key300 = "\(coverArtId)_300"
         let image: UIImage?
         if let cached = ImageCacheService.shared.cachedImage(key: key300) {
@@ -482,34 +775,31 @@ struct PlayerView: View {
             image = nil
         }
 
-        let resolved: UIImage?
         if let image {
-            resolved = image
+            return image
         } else if let url = SubsonicAPIService.shared.coverArtURL(for: coverArtId, size: 80) {
-            resolved = await ImageCacheService.shared.image(url: url, key: "\(coverArtId)_80")
+            return await ImageCacheService.shared.image(url: url, key: "\(coverArtId)_80")
         } else {
-            resolved = nil
+            return nil
         }
+    }
 
-        guard !Task.isCancelled else { return }
-        guard let img = resolved else {
-            rawPrimary = nil
-            rawSecondary = nil
-            withAnimation(.easeInOut(duration: 0.5)) {
-                playerBgPrimary = Color(UIColor.systemBackground)
-                playerBgSecondary = Color(UIColor.systemBackground)
+    private func loadRadioBackgroundImage() async -> UIImage? {
+        guard let station = player.currentRadioStation else { return nil }
+        if station.metadata.showSongCover,
+           let url = player.currentRadioMetadata?.cacheBustedArtworkURL {
+            let key = "radio_remote_\(url.absoluteString)"
+            if let cached = ImageCacheService.shared.cachedImage(key: key) {
+                return cached
             }
-            return
+            if let image = await ImageCacheService.shared.image(url: url, key: key) {
+                return image
+            }
         }
-        let (primary, secondary) = img.extractPlayerPalette()
-        guard !Task.isCancelled else { return }
-        Self.paletteCache.setObject(PlayerPaletteResult(primary, secondary), forKey: coverArtId as NSString)
-        rawPrimary = primary
-        rawSecondary = secondary
-        withAnimation(.easeInOut(duration: 0.6)) {
-            playerBgPrimary = adaptedColor(primary, asSecondary: false)
-            playerBgSecondary = adaptedColor(secondary ?? primary, asSecondary: true)
+        if let coverArtId = station.coverArt {
+            return await loadSongBackgroundImage(coverArtId: coverArtId)
         }
+        return nil
     }
 
     private func adaptedColor(_ uiColor: UIColor, asSecondary: Bool) -> Color {
@@ -556,10 +846,151 @@ struct PlayerView: View {
         player.actualStreamFormat?.displayString
     }
 
+    private func trimmedNonEmpty(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty
+        else { return nil }
+        return trimmed
+    }
+
     private func formatTime(_ seconds: Double) -> String {
         guard seconds.isFinite, seconds >= 0 else { return "0:00" }
         let total = Int(seconds)
         return String(format: "%d:%02d", total / 60, total % 60)
+    }
+}
+
+private struct RadioStationPlayerArtworkView: View {
+    let coverArtId: String
+    let displaySize: CGFloat
+    let cornerRadius: CGFloat
+    private let requestSize: Int
+    @State private var image: UIImage?
+    @State private var isLoading: Bool
+
+    init(coverArtId: String, displaySize: CGFloat, cornerRadius: CGFloat) {
+        self.coverArtId = coverArtId
+        self.displaySize = displaySize
+        self.cornerRadius = cornerRadius
+        let scale = UIScreen.main.scale
+        let pixelSize = Int((displaySize * scale).rounded(.up))
+        self.requestSize = min(1200, max(600, pixelSize))
+        let key = "\(coverArtId)_\(self.requestSize)"
+        self._image = State(initialValue: ImageCacheService.shared.cachedImage(key: key))
+        self._isLoading = State(initialValue: ImageCacheService.shared.cachedImage(key: key) == nil)
+    }
+
+    var body: some View {
+        ZStack {
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Color.gray.opacity(0.16)
+                    .overlay {
+                        if isLoading {
+                            ProgressView()
+                                .tint(.secondary)
+                        } else {
+                            Image(systemName: "dot.radiowaves.left.and.right")
+                                .font(.system(size: displaySize * 0.28, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+            }
+        }
+        .frame(width: displaySize, height: displaySize)
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        .task(id: "\(coverArtId)_\(requestSize)") {
+            await load()
+        }
+    }
+
+    @MainActor
+    private func load() async {
+        let key = "\(coverArtId)_\(requestSize)"
+        if let cached = ImageCacheService.shared.cachedImage(key: key) {
+            image = cached
+            isLoading = false
+            return
+        }
+
+        #if DEBUG
+        if coverArtId.hasPrefix("demo_"), let demoImage = UIImage(named: coverArtId) {
+            ImageCacheService.shared.cache(demoImage, key: key)
+            image = demoImage
+            isLoading = false
+            return
+        }
+        #endif
+
+        guard let url = SubsonicAPIService.shared.coverArtURL(for: coverArtId, size: requestSize) else {
+            isLoading = false
+            return
+        }
+        isLoading = image == nil
+        let loaded = await ImageCacheService.shared.image(url: url, key: key)
+        guard !Task.isCancelled else { return }
+        if let loaded {
+            image = loaded
+        }
+        isLoading = false
+    }
+}
+
+private struct SleepTimerPanel: View {
+    @ObservedObject private var player = AudioPlayerService.shared
+    @Environment(\.dismiss) private var dismiss
+
+    private let options = [15, 30, 45, 60, 90, 120]
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if player.sleepTimerEnd != nil {
+                    Section {
+                        Button(role: .destructive) {
+                            player.cancelSleepTimer()
+                            dismiss()
+                        } label: {
+                            Text(String(localized: "cancel_timer"))
+                        }
+                    }
+                }
+
+                Section {
+                    ForEach(options, id: \.self) { minutes in
+                        Button {
+                            player.setSleepTimer(minutes: minutes)
+                            dismiss()
+                        } label: {
+                            Text(rowLabel(for: minutes))
+                                .foregroundStyle(.primary)
+                        }
+                    }
+                }
+            }
+            .navigationTitle(String(localized: "sleep_timer"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(String(localized: "done")) { dismiss() }
+                        .bold()
+                }
+            }
+        }
+    }
+
+    private func rowLabel(for minutes: Int) -> String {
+        switch minutes {
+        case 60:
+            return "1 \(String(localized: "hour_abbreviation"))"
+        case 120:
+            return "2 \(String(localized: "hour_abbreviation"))"
+        default:
+            return "\(minutes) \(String(localized: "minutes_abbreviation"))"
+        }
     }
 }
 

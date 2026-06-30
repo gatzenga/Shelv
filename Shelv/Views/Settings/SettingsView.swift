@@ -335,6 +335,7 @@ struct SettingsView: View {
 private struct UICustomizationsSettingsView: View {
     @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
+    @AppStorage(PersonalizationPreferenceKey.showRadio) private var showRadio = true
     @AppStorage(PersonalizationPreferenceKey.miniPlayerStyle) private var miniPlayerStyleRaw = PersonalizationMiniPlayerStyle.shelv.rawValue
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
@@ -361,8 +362,15 @@ private struct UICustomizationsSettingsView: View {
 
             Section {
                 Toggle(isOn: $showInstantMixActions) {
-                    Label { Text(String(localized: "instant_mix")) } icon: {
+                    Label { Text(String(localized: "show_instant_mix_actions")) } icon: {
                         Image(systemName: "sparkles").foregroundStyle(accentColor)
+                    }
+                }
+                .tint(accentColor)
+
+                Toggle(isOn: $showRadio) {
+                    Label { Text(String(localized: "show_radio")) } icon: {
+                        Image(systemName: "dot.radiowaves.left.and.right").foregroundStyle(accentColor)
                     }
                 }
                 .tint(accentColor)
@@ -446,31 +454,26 @@ private struct UIFavoritesSettingsView: View {
 
 private struct UISwipeActionsSettingsView: View {
     @AppStorage("themeColor") private var themeColorName = "violet"
-    @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
-    @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
-    @AppStorage(PersonalizationPreferenceKey.swipeLeftPrimary) private var leftPrimary = PersonalizationSwipeAction.favorite.rawValue
-    @AppStorage(PersonalizationPreferenceKey.swipeLeftSecondary) private var leftSecondary = PersonalizationSwipeAction.addToPlaylist.rawValue
-    @AppStorage(PersonalizationPreferenceKey.swipeRightPrimary) private var rightPrimary = PersonalizationSwipeAction.playNext.rawValue
-    @AppStorage(PersonalizationPreferenceKey.swipeRightSecondary) private var rightSecondary = PersonalizationSwipeAction.addToQueue.rawValue
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
     var body: some View {
         List {
-            Section(String(localized: "swipe_left")) {
-                SwipeSlotNavigationRow(slot: .leftPrimary, accentColor: accentColor)
-                SwipeSlotNavigationRow(slot: .leftSecondary, accentColor: accentColor)
-            }
-
-            Section(String(localized: "swipe_right")) {
-                SwipeSlotNavigationRow(slot: .rightPrimary, accentColor: accentColor)
-                SwipeSlotNavigationRow(slot: .rightSecondary, accentColor: accentColor)
+            Section {
+                ForEach(PersonalizationSwipeGroup.allCases, id: \.self) { group in
+                    NavigationLink {
+                        UISwipeActionGroupSettingsView(group: group)
+                    } label: {
+                        Label { Text(localized(group.titleKey)) } icon: {
+                            Image(systemName: group.systemImage).foregroundStyle(accentColor)
+                        }
+                    }
+                }
             }
 
             Section {
                 Button {
                     PersonalizationSettings.resetSwipeActions()
-                    refreshStoredSlots()
                 } label: {
                     Label(String(localized: "reset_to_defaults"), systemImage: "arrow.counterclockwise")
                 }
@@ -481,32 +484,55 @@ private struct UISwipeActionsSettingsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             PersonalizationSettings.normalizeSwipeActions()
-            refreshStoredSlots()
+        }
+    }
+}
+
+private struct UISwipeActionGroupSettingsView: View {
+    let group: PersonalizationSwipeGroup
+    @AppStorage("themeColor") private var themeColorName = "violet"
+    @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
+    @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
+
+    private var accentColor: Color { AppTheme.color(for: themeColorName) }
+    private var leadingSlots: [PersonalizationSwipeSlot] { group.slots.filter(\.isLeading) }
+    private var trailingSlots: [PersonalizationSwipeSlot] { group.slots.filter { !$0.isLeading } }
+
+    var body: some View {
+        List {
+            Section(String(localized: "swipe_left")) {
+                ForEach(leadingSlots, id: \.self) { slot in
+                    SwipeSlotNavigationRow(slot: slot, accentColor: accentColor)
+                }
+            }
+
+            Section(String(localized: "swipe_right")) {
+                ForEach(trailingSlots, id: \.self) { slot in
+                    SwipeSlotNavigationRow(slot: slot, accentColor: accentColor)
+                }
+            }
+
+            Section {
+                Button {
+                    PersonalizationSettings.resetSwipeActions(for: group)
+                } label: {
+                    Label(String(localized: "reset_to_defaults"), systemImage: "arrow.counterclockwise")
+                }
+                .foregroundStyle(accentColor)
+            }
+        }
+        .navigationTitle(localized(group.titleKey))
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            PersonalizationSettings.normalizeSwipeActions(for: group)
         }
         .onChange(of: showFavoriteActions) { _, _ in
-            PersonalizationSettings.normalizeSwipeActions()
-            refreshStoredSlots()
+            PersonalizationSettings.normalizeSwipeActions(for: group)
         }
         .onChange(of: showPlaylistActions) { _, _ in
-            PersonalizationSettings.normalizeSwipeActions()
-            refreshStoredSlots()
+            PersonalizationSettings.normalizeSwipeActions(for: group)
         }
-        .onChange(of: leftPrimary) { _, _ in }
-        .onChange(of: leftSecondary) { _, _ in }
-        .onChange(of: rightPrimary) { _, _ in }
-        .onChange(of: rightSecondary) { _, _ in }
         .transaction { $0.animation = nil }
-    }
-
-    private func refreshStoredSlots() {
-        leftPrimary = UserDefaults.standard.string(forKey: PersonalizationPreferenceKey.swipeLeftPrimary)
-            ?? PersonalizationSwipeAction.favorite.rawValue
-        leftSecondary = UserDefaults.standard.string(forKey: PersonalizationPreferenceKey.swipeLeftSecondary)
-            ?? PersonalizationSwipeAction.addToPlaylist.rawValue
-        rightPrimary = UserDefaults.standard.string(forKey: PersonalizationPreferenceKey.swipeRightPrimary)
-            ?? PersonalizationSwipeAction.playNext.rawValue
-        rightSecondary = UserDefaults.standard.string(forKey: PersonalizationPreferenceKey.swipeRightSecondary)
-            ?? PersonalizationSwipeAction.addToQueue.rawValue
     }
 }
 
@@ -553,7 +579,7 @@ private struct SwipeActionPickerView: View {
 
     var body: some View {
         List {
-            ForEach(PersonalizationSwipeAction.allCases, id: \.self) { action in
+            ForEach(slot.group.availableActions, id: \.self) { action in
                 let reason = disabledReason(for: action)
                 Button {
                     PersonalizationSettings.setSwipeAction(action, for: slot)
@@ -573,7 +599,7 @@ private struct SwipeActionPickerView: View {
         .navigationTitle(localized(slot.titleKey))
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
-            PersonalizationSettings.normalizeSwipeActions()
+            PersonalizationSettings.normalizeSwipeActions(for: slot.group)
             rawAction = UserDefaults.standard.string(forKey: slot.storageKey) ?? slot.defaultAction.rawValue
         }
         .transaction { $0.animation = nil }
@@ -653,17 +679,6 @@ private struct SwipeActionIcon: View {
     }
 }
 
-private extension PersonalizationSwipeSlot {
-    var defaultAction: PersonalizationSwipeAction {
-        switch self {
-        case .leftPrimary: return .favorite
-        case .leftSecondary: return .addToPlaylist
-        case .rightPrimary: return .playNext
-        case .rightSecondary: return .addToQueue
-        }
-    }
-}
-
 private extension PersonalizationSwipeAction {
     func displayColor(accentColor: Color) -> Color {
         switch self {
@@ -671,8 +686,10 @@ private extension PersonalizationSwipeAction {
             return .secondary
         case .favorite:
             return .pink
-        case .addToPlaylist, .addToQueue:
+        case .addToPlaylist, .addToQueue, .download, .pin:
             return accentColor
+        case .delete:
+            return .red
         case .playNext:
             return .orange
         }

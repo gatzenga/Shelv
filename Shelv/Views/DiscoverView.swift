@@ -9,6 +9,7 @@ struct DiscoverView: View {
     @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage("recapEnabled") private var recapEnabled = false
     @AppStorage("mixUseDatabase") private var mixUseDatabase = false
+    @AppStorage(PersonalizationPreferenceKey.showRadio) private var showRadio = true
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
     private var recapButtonVisible: Bool {
@@ -25,6 +26,7 @@ struct DiscoverView: View {
     @State private var randomRefreshing = false
     @State private var showInsights = false
     @State private var showRecap = false
+    @State private var showRadioSheet = false
     @State private var showOfflineHint = false
     @State private var refreshContinuation: CheckedContinuation<Void, Never>?
 
@@ -108,21 +110,26 @@ struct DiscoverView: View {
             .scrollIndicators(.hidden)
             .navigationTitle("Shelv")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    HStack(spacing: 16) {
-                        if recapButtonVisible {
-                            Button {
-                                showRecap = true
-                            } label: {
-                                Image(systemName: "calendar.badge.clock")
-                            }
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    if recapButtonVisible {
+                        Button {
+                            showRecap = true
+                        } label: {
+                            Image(systemName: "calendar.badge.clock")
                         }
-                        if !offlineMode.isOffline {
-                            Button {
-                                showInsights = true
-                            } label: {
-                                Image(systemName: "chart.bar.xaxis")
-                            }
+                    }
+                    if !offlineMode.isOffline {
+                        Button {
+                            showInsights = true
+                        } label: {
+                            Image(systemName: "chart.bar.xaxis")
+                        }
+                    }
+                    if showRadio {
+                        Button {
+                            showRadioSheet = true
+                        } label: {
+                            Image(systemName: "dot.radiowaves.left.and.right")
                         }
                     }
                 }
@@ -135,6 +142,12 @@ struct DiscoverView: View {
             }
             .sheet(isPresented: $showRecap) {
                 RecapView()
+                    .presentationDetents([.large])
+                    .presentationCornerRadius(24)
+                    .tint(accentColor)
+            }
+            .sheet(isPresented: $showRadioSheet) {
+                RadioStationsView()
                     .presentationDetents([.large])
                     .presentationCornerRadius(24)
                     .tint(accentColor)

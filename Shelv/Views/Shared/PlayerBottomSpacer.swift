@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Isolierter Spacer, der nur `currentSong` beobachtet — verhindert,
+/// Isolierter Spacer, der nur den aktiven Player-Zustand beobachtet — verhindert,
 /// dass die gesamte umgebende View bei jedem currentTime-Update neu rendert.
 struct PlayerBottomSpacer: View {
     var activeHeight: CGFloat = 90
@@ -10,6 +10,6 @@ struct PlayerBottomSpacer: View {
 
     var body: some View {
         Color.clear
-            .frame(height: player.currentSong != nil ? activeHeight : inactiveHeight)
+            .frame(height: player.hasActivePlayback ? activeHeight : inactiveHeight)
     }
 }
