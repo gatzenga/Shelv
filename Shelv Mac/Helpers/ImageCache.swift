@@ -10,6 +10,7 @@ struct CoverArtView: View {
     var isCircle: Bool = false
 
     @State private var image: NSImage?
+    @State private var activeLoadKey: String?
 
     init(url: URL?, size: CGFloat = 180, cornerRadius: CGFloat = 8, isCircle: Bool = false) {
         self.url = url
@@ -68,9 +69,18 @@ struct CoverArtView: View {
 
     private func loadImage() async {
         guard let url else { image = nil; return }
+        let key = stableKey
+        guard activeLoadKey != key else { return }
+        activeLoadKey = key
+        defer {
+            if activeLoadKey == key {
+                activeLoadKey = nil
+            }
+        }
 
         if let hit = ImageCacheService.shared.cachedImage(url: url) {
-            image = hit; return
+            if stableKey == key { image = hit }
+            return
         }
 
         // Stale-while-revalidate: altes Bild bleibt sichtbar während neues lädt.
@@ -83,7 +93,7 @@ struct CoverArtView: View {
         if let artId, artId.hasPrefix("demo_") {
             if let img = NSImage(named: artId) {
                 ImageCacheService.shared.cache(img, url: url)
-                image = img
+                if stableKey == key { image = img }
             }
             return
         }
@@ -96,18 +106,18 @@ struct CoverArtView: View {
             }.value
             if let img = loaded {
                 ImageCacheService.shared.cache(img, url: url)
-                image = img
+                if stableKey == key { image = img }
                 return
             }
         }
 
         if UserDefaults.standard.bool(forKey: "offlineModeEnabled") {
             if let img = await ImageCacheService.shared.diskOnlyImage(url: url) {
-                image = img
+                if stableKey == key { image = img }
             }
         } else {
             if let img = await ImageCacheService.shared.image(url: url) {
-                image = img
+                if stableKey == key { image = img }
             }
         }
     }
@@ -268,6 +278,14 @@ actor ImageCacheService {
     /// Stabil über App-Neustarts hinweg (kein hashValue).
     static func stableCacheKey(for url: URL) -> String {
         let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        if let radioRevision = components?.queryItems?.first(where: { $0.name == RadioNowPlayingMetadata.artworkRevisionQueryItemName })?.value,
+           !radioRevision.isEmpty {
+            let host = url.host ?? "local"
+            let path = url.path.isEmpty ? "art" : url.path
+            let safePath = path.replacingOccurrences(of: "[^a-zA-Z0-9_-]", with: "_", options: .regularExpression)
+            let safeRevision = radioRevision.replacingOccurrences(of: "[^a-zA-Z0-9_-]", with: "_", options: .regularExpression)
+            return "\(host)_radio_\(safePath)_\(safeRevision)"
+        }
         let id   = components?.queryItems?.first(where: { $0.name == "id"   })?.value ?? ""
         let size = components?.queryItems?.first(where: { $0.name == "size" })?.value ?? "0"
         let host = url.host ?? "local"

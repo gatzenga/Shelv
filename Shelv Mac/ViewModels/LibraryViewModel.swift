@@ -145,6 +145,8 @@ class LibraryViewModel: ObservableObject {
 
     private let api = SubsonicAPIService.shared
     private let libraryRepository = LibraryRepository.shared
+    private var lastPlaylistsLoadDate: Date?
+    private let playlistsRefreshInterval: TimeInterval = 60
 
     private var activeServerKeys: (serverKey: String, stableId: String?)? {
         guard let server = AppState.shared.serverStore.activeServer else { return nil }
@@ -195,6 +197,7 @@ class LibraryViewModel: ObservableObject {
         starredAlbums = []
         starredArtists = []
         playlists = []
+        lastPlaylistsLoadDate = nil
         errorMessage = nil
     }
 
@@ -449,12 +452,22 @@ class LibraryViewModel: ObservableObject {
 
     // MARK: - Playlists
 
-    func loadPlaylists() async {
+    func loadPlaylists(force: Bool = false) async {
+        guard !isLoadingPlaylists else { return }
+        if !force,
+           let lastPlaylistsLoadDate,
+           Date().timeIntervalSince(lastPlaylistsLoadDate) < playlistsRefreshInterval {
+            return
+        }
+
         if playlists.isEmpty, let serverId = AppState.shared.serverStore.activeServer?.stableId {
             playlists = loadPlaylistsCache(serverId: serverId)
         }
         guard !OfflineModeService.shared.isOffline else { isLoadingPlaylists = false; return }
-        isLoadingPlaylists = playlists.isEmpty
+        isLoadingPlaylists = true
+        lastPlaylistsLoadDate = Date()
+        defer { isLoadingPlaylists = false }
+
         do {
             playlists = try await api.getPlaylists()
             if let serverId = AppState.shared.serverStore.activeServer?.stableId {
@@ -463,7 +476,6 @@ class LibraryViewModel: ObservableObject {
         } catch {
             errorMessage = error.localizedDescription
         }
-        isLoadingPlaylists = false
     }
 
     func loadPlaylistDetail(id: String) async -> PlaylistDetail? {

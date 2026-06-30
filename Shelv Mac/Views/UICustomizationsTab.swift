@@ -94,6 +94,7 @@ private struct MacFavoritesPersonalizationPanel: View {
 
 private struct MacInstantMixPersonalizationPanel: View {
     @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
+    @AppStorage(PersonalizationPreferenceKey.showRadio) private var showRadio = true
     @Environment(\.themeColor) private var themeColor
 
     var body: some View {
@@ -101,6 +102,11 @@ private struct MacInstantMixPersonalizationPanel: View {
             Section {
                 Toggle(isOn: $showInstantMixActions) {
                     Label(String(localized: "show_instant_mix_actions"), systemImage: "sparkles")
+                }
+                .tint(themeColor)
+
+                Toggle(isOn: $showRadio) {
+                    Label(String(localized: "show_radio"), systemImage: "dot.radiowaves.left.and.right")
                 }
                 .tint(themeColor)
             }

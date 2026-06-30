@@ -8,6 +8,7 @@ struct SearchView: View {
     @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
     @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
     @State private var lyricsResults: [LyricsSearchResult] = []
+    @State private var searchTask: Task<Void, Never>?
     @State private var lyricsTask: Task<Void, Never>?
 
     var body: some View {
@@ -140,14 +141,31 @@ struct SearchView: View {
         .navigationTitle(String(localized: "search"))
         .onAppear { isSearchFocused = true }
         .onChange(of: vm.query) { _, newValue in
-            if newValue.count >= 2 {
-                Task { await vm.search() }
+            searchTask?.cancel()
+            lyricsTask?.cancel()
+
+            let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.count >= 2 {
+                searchTask = Task {
+                    try? await Task.sleep(for: .milliseconds(300))
+                    guard !Task.isCancelled else { return }
+                    await vm.search()
+                }
                 lyricsTask?.cancel()
-                lyricsTask = Task { await performLyricsSearch(query: newValue) }
+                lyricsTask = Task {
+                    try? await Task.sleep(for: .milliseconds(300))
+                    guard !Task.isCancelled else { return }
+                    await performLyricsSearch(query: trimmed)
+                }
             } else {
                 lyricsResults = []
                 vm.clearResults()
             }
+        }
+        .onDisappear {
+            searchTask?.cancel()
+            lyricsTask?.cancel()
+            vm.cancelSearch()
         }
     }
 

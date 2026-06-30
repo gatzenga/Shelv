@@ -52,8 +52,7 @@ struct PlaylistTrackRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(song.title)
                     .font(.body)
-                    .foregroundStyle(isPlaying ? themeColor : .primary)
-                    .fontWeight(isPlaying ? .semibold : .regular)
+                    .foregroundStyle(.primary)
                     .lineLimit(1)
                 if let artist = song.artist {
                     Text(artist)
@@ -109,8 +108,6 @@ struct PlaylistTrackRow: View {
             Color(NSColor.windowBackgroundColor)
             if isHovered {
                 Color.primary.opacity(0.07)
-            } else if isPlaying {
-                themeColor.opacity(0.08)
             }
         }
         .contentShape(Rectangle())

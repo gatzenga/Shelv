@@ -12,6 +12,7 @@ struct SidebarView: View {
     @Environment(\.themeColor) private var themeColor
     @AppStorage(PersonalizationPreferenceKey.showFavoritesInLibrary) private var showFavoritesInLibrary = true
     @AppStorage(PersonalizationPreferenceKey.showPlaylistsTab) private var showPlaylistsInSidebar = true
+    @AppStorage(PersonalizationPreferenceKey.showRadio) private var showRadio = true
     @AppStorage("enableDownloads") private var enableDownloads = false
     @AppStorage("downloadsOnlyFilter") private var showDownloadsOnly: Bool = false
     @AppStorage("playlistSortOption") private var sortOptionRaw: String = PlaylistSortOption.alphabetical.rawValue
@@ -79,6 +80,13 @@ struct SidebarView: View {
             if showFavoritesInLibrary {
                 SidebarRow(item: .favorites, isSelected: selection == .favorites && selectedPlaylist == nil, themeColor: themeColor) {
                     selection = .favorites
+                    selectedPlaylist = nil
+                    appState.navigationPath = NavigationPath()
+                }
+            }
+            if showRadio {
+                SidebarRow(item: .radio, isSelected: selection == .radio && selectedPlaylist == nil, themeColor: themeColor) {
+                    selection = .radio
                     selectedPlaylist = nil
                     appState.navigationPath = NavigationPath()
                 }
@@ -165,6 +173,13 @@ struct SidebarView: View {
         }
         .onChange(of: showPlaylistsInSidebar) { _, new in
             if new { Task { await libraryStore.loadPlaylists() } }
+        }
+        .onChange(of: showRadio) { _, new in
+            if !new && selection == .radio {
+                selection = .search
+                selectedPlaylist = nil
+                appState.navigationPath = NavigationPath()
+            }
         }
         .onChange(of: selection) { _, _ in
             if showPlaylistsInSidebar { Task { await libraryStore.loadPlaylists() } }

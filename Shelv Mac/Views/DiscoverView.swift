@@ -231,7 +231,7 @@ struct DiscoverView: View {
                 Button {
                     Task {
                         async let discover:  Void = vm.load()
-                        async let playlists: Void = libraryStore.loadPlaylists()
+                        async let playlists: Void = libraryStore.loadPlaylists(force: true)
                         async let sync:      Void = CloudKitSyncService.shared.syncNow()
                         _ = await (discover, playlists, sync)
                     }

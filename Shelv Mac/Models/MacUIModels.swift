@@ -55,6 +55,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
     case albums = "albums"
     case artists = "artists"
     case favorites = "favorites"
+    case radio = "radio"
     case search = "search"
 
     var id: String { rawValue }
@@ -65,6 +66,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         case .albums:   return String(localized: "albums")
         case .artists:  return String(localized: "artists")
         case .favorites: return String(localized: "favorites")
+        case .radio: return String(localized: "radio")
         case .search:   return String(localized: "search")
         }
     }
@@ -75,6 +77,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
         case .albums: return "square.grid.2x2"
         case .artists: return "music.mic"
         case .favorites: return "heart"
+        case .radio: return "dot.radiowaves.left.and.right"
         case .search: return "magnifyingglass"
         }
     }

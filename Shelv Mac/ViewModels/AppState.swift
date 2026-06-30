@@ -69,6 +69,7 @@ class AppState: ObservableObject {
         // ändert isLoggedIn nicht, dadurch re-evaluiert die View nicht zuverlässig und
         // die onChange(activeServerID) feuert evtl. nicht. stop() + Standby atomar hier.
         player.stop()
+        RadioStationStore.shared.resetInMemory()
         #if DEBUG
         if api.isDemoActive {
             player.ensureDemoStandby(force: true)

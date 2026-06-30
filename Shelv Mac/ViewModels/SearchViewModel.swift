@@ -15,15 +15,24 @@ class SearchViewModel: ObservableObject {
     var isEmpty: Bool { artists.isEmpty && albums.isEmpty && songs.isEmpty }
 
     func search() async {
-        guard !query.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !term.isEmpty else {
+            clearResults()
+            return
+        }
         searchTask?.cancel()
         searchTask = Task {
             isLoading = true
+            defer {
+                if !Task.isCancelled {
+                    isLoading = false
+                }
+            }
             if OfflineModeService.shared.isOffline {
-                await searchOffline()
+                await searchOffline(query: term)
             } else {
                 do {
-                    let result = try await api.search(query: query)
+                    let result = try await api.search(query: term)
                     guard !Task.isCancelled else { return }
                     artists = (result.artist ?? []).filter { ($0.albumCount ?? 0) > 0 }
                     albums = result.album ?? []
@@ -33,12 +42,11 @@ class SearchViewModel: ObservableObject {
                     NotificationCenter.default.post(name: .showToast, object: String(localized: "search_failed"))
                 }
             }
-            isLoading = false
         }
         await searchTask?.value
     }
 
-    private func searchOffline() async {
+    private func searchOffline(query: String) async {
         let stable = AppState.shared.serverStore.activeServer?.stableId ?? ""
         guard !stable.isEmpty else { artists = []; albums = []; songs = []; return }
         let records = await DownloadDatabase.shared.search(serverId: stable, query: query, limit: 100)
@@ -56,7 +64,14 @@ class SearchViewModel: ObservableObject {
             .map { $0.asArtist() }
     }
 
+    func cancelSearch() {
+        searchTask?.cancel()
+        searchTask = nil
+        isLoading = false
+    }
+
     func clearResults() {
+        cancelSearch()
         artists = []
         albums = []
         songs = []

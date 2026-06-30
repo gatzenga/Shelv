@@ -352,6 +352,7 @@ struct ICloudSyncTab: View {
     @AppStorage("iCloudSyncPlayHistoryEnabled") private var playHistorySyncEnabled = true
     @AppStorage("iCloudSyncRecapEnabled") private var recapSyncEnabled = true
     @AppStorage("iCloudSyncLyricsServerEnabled") private var lyricsServerSyncEnabled = false
+    @AppStorage("iCloudSyncRadioStationsEnabled") private var radioStationsSyncEnabled = true
 
     @State private var isSyncingManually = false
     @State private var showSyncLog = false
@@ -434,6 +435,11 @@ struct ICloudSyncTab: View {
                 Toggle(String(localized: "lyrics_server"), isOn: $lyricsServerSyncEnabled)
                     .disabled(!iCloudSyncEnabled)
                     .onChange(of: lyricsServerSyncEnabled) { _, _ in
+                        Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
+                    }
+                Toggle(String(localized: "radio_stations"), isOn: $radioStationsSyncEnabled)
+                    .disabled(!iCloudSyncEnabled)
+                    .onChange(of: radioStationsSyncEnabled) { _, _ in
                         Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
                     }
             }

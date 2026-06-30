@@ -81,6 +81,7 @@ struct MainWindowView: View {
                     appState.player.stop()
                     QueueSyncService.shared.handleServerChange()
                     libraryStore.reset()
+                    RadioStationStore.shared.resetInMemory()
                     #if DEBUG
                     // Demo-Server aktiv → festes Player-Standbild (nach stop(), sonst sofort
                     // wieder gelöscht) + Recap-Anzeige aktivieren. Wie iOS-ContentView.
@@ -180,6 +181,7 @@ struct MainWindowView: View {
             case .albums:          AlbumsView().environmentObject(libraryStore)
             case .artists:         ArtistsView().environmentObject(libraryStore)
             case .favorites:       FavoritesView().environmentObject(libraryStore)
+            case .radio:           RadioView()
             case .search:          SearchView().environmentObject(libraryStore)
             }
         }
