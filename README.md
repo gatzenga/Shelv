@@ -5,7 +5,7 @@
 
 # Shelv
 
-A native, album and artist focused iOS, iPadOS, macOS, and tvOS client for [Navidrome](https://www.navidrome.org/) and Subsonic-compatible music servers, built with SwiftUI. Includes **Recap** — automatic weekly, monthly, and yearly playlists of your most-played songs, with optional iCloud sync across iPhone, iPad, Mac, and Apple TV.
+A native, album and artist focused iOS, iPadOS, macOS, and tvOS client for [Navidrome](https://www.navidrome.org/) and Subsonic-compatible music servers, built with SwiftUI. Stream your own music library, add radio stations, and create **Recap** playlists — automatic weekly, monthly, and yearly playlists of your most-played songs, with optional iCloud sync across iPhone, iPad, Mac, and Apple TV.
 
 [![Download on the App Store](https://developer.apple.com/app-store/marketing/guidelines/images/badge-download-on-the-app-store.svg)](https://apps.apple.com/us/app/shelv-player/id6762255865)
 
@@ -57,6 +57,12 @@ A native, album and artist focused iOS, iPadOS, macOS, and tvOS client for [Navi
 - Available via context menus, swipe actions, and the full-screen player
 - Playlists can be enabled or disabled in Settings; when disabled, all related UI elements are hidden
 
+### Radio *(optional)*
+- Add and play server-backed radio stations across iPhone, iPad, Mac, Apple TV, and CarPlay
+- Supports regular stream URLs; optional AzuraCast metadata can enrich Now Playing with live title, artist, station status, and artwork
+- Station settings and display preferences can be synced through iCloud
+- Station lists keep their own station artwork stable while the player and system Now Playing can show the current track artwork when enabled
+
 ### Lyrics
 - Synced and plain-text lyrics displayed in the full-screen player, with automatic line highlighting and scrolling for time-coded tracks
 - Lyrics are fetched from your Navidrome server first; if none are stored there, Shelv falls back to [lrclib.net](https://lrclib.net) automatically
@@ -89,7 +95,7 @@ A native, album and artist focused iOS, iPadOS, macOS, and tvOS client for [Navi
 - Database can be exported and imported; after an import a sync check runs automatically with rollback on cancel
 
 ### CarPlay
-- Browse Discover, Library, Playlists, Favorites, Recaps, and the current queue from CarPlay
+- Browse Discover, Library, Radio, Playlists, Favorites, Recaps, and the current queue from CarPlay
 - Play, shuffle, queue, favorite, and open Now Playing using CarPlay-native templates
 - Cover art is streamed in small batches so lists stay responsive while artwork loads
 
@@ -103,12 +109,12 @@ A native, album and artist focused iOS, iPadOS, macOS, and tvOS client for [Navi
 - **Cache** — See the current cover art cache size and clear it with a single tap
 - **Downloads** — Enable downloads, set storage limit, run a bulk download, toggle Offline Mode, manage downloaded content
 - **Playback** — Configure gapless playback, transcoding, replay gain, scrobble threshold, lyrics, and Queue Sync
-- **iCloud** — Enable iCloud sync and choose what to sync: Play History, Recap, and Lyrics Server
+- **iCloud** — Enable iCloud sync and choose what to sync: Play History, Recap, Lyrics Server, Queue Sync, and Radio Stations
 - **Recap** — Configure periods (weekly, monthly, yearly), retention, play threshold, and database export/import
-- **Favorites & Playlists** — Toggle each feature on or off independently
+- **Favorites, Playlists & Radio** — Toggle each feature on or off independently
 
 ### Cover Art
-- Memory and disk cached artwork throughout the UI (NSCache + disk, never blocks the main thread)
+- Memory and disk cached artwork throughout the UI, including radio station artwork (NSCache + disk, never blocks the main thread)
 - Automatic retry on failure with linear backoff; concurrent deduplication prevents redundant downloads
 
 ## Requirements
@@ -138,8 +144,10 @@ ShelvApp  (@main)
 ├── ServerStore              — server list, active server, Keychain integration
 ├── LibraryStore  (@MainActor) — albums, artists, Discover data (disk + memory cache)
 ├── AudioPlayerService.shared — AVPlayer, 3-queue system, MPRemoteCommandCenter, AirPlay
+├── RadioStationStore.shared  — server-backed radio stations and synced radio metadata
+├── RadioMetadataService.shared — ICY and AzuraCast now-playing metadata polling
 ├── QueueSyncService.shared   — optional iCloud/Subsonic queue handoff
-└── CloudKitSyncService.shared — Play History, Recap, Lyrics Server, and Queue Sync records
+└── CloudKitSyncService.shared — Play History, Recap, Lyrics Server, Queue Sync, and Radio records
 ```
 
 All API communication goes through `SubsonicAPIService.shared` using MD5 token authentication. Cover art is handled exclusively by `ImageCacheService` (actor-isolated, NSCache + disk, concurrent deduplication) — `AsyncImage` is never used directly.
