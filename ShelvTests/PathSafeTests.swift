@@ -31,4 +31,46 @@ final class PathSafeTests: XCTestCase {
             ["song.custom"]
         )
     }
+
+    func testFileExtensionsAreSafePathComponents() {
+        XCTAssertEqual("flac".pathSafeFileExtension(), "flac")
+        XCTAssertEqual(".mp3".pathSafeFileExtension(), "mp3")
+        XCTAssertEqual("audio/mpeg".pathSafeFileExtension(), "audio_mpeg")
+        XCTAssertEqual("../aac".pathSafeFileExtension(), "_aac")
+    }
+
+    func testEmptyFileExtensionsFallBackToMP3() {
+        XCTAssertEqual("".pathSafeFileExtension(), "mp3")
+        XCTAssertEqual("...".pathSafeFileExtension(), "mp3")
+    }
+
+    func testDownloadFileNameCandidatesPreserveLegacyStoredName() {
+        let candidates = "artist/song:01".pathSafeDownloadFileNameCandidates(
+            fileExtension: "flac",
+            storedFilePath: "/old/container/server/artist-song-01.flac"
+        )
+
+        XCTAssertEqual(candidates, [
+            "artist_song_01.flac",
+            "artist-song-01.flac"
+        ])
+    }
+
+    func testDownloadFileNameCandidatesSkipDuplicateOrUnsafeStoredName() {
+        XCTAssertEqual(
+            "song-1".pathSafeDownloadFileNameCandidates(
+                fileExtension: "mp3",
+                storedFilePath: "/old/container/song-1.mp3"
+            ),
+            ["song-1.mp3"]
+        )
+
+        XCTAssertEqual(
+            "song-1".pathSafeDownloadFileNameCandidates(
+                fileExtension: "mp3",
+                storedFilePath: "/old/container/.."
+            ),
+            ["song-1.mp3"]
+        )
+    }
 }

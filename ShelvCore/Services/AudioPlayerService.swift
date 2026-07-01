@@ -194,6 +194,9 @@ class AudioPlayerService: ObservableObject {
     private var playbackGeneration: Int = 0
     private var networkMonitor = NWPathMonitor()
     private let networkMonitorQueue = DispatchQueue(label: "shelv.network", qos: .utility)
+    #if os(iOS)
+    private var needsNowPlayingArtworkRepushOnResume = false
+    #endif
 
     private var resumeTime: Double = 0
 
@@ -219,6 +222,14 @@ class AudioPlayerService: ObservableObject {
             name: UIApplication.didEnterBackgroundNotification,
             object: nil
         )
+        #if os(iOS)
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(appDidBecomeActive),
+            name: UIApplication.didBecomeActiveNotification,
+            object: nil
+        )
+        #endif
         #elseif os(macOS)
         willTerminateObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification,
@@ -269,9 +280,18 @@ class AudioPlayerService: ObservableObject {
 
     @objc private func appDidEnterBackground() {
         saveState()
+        #if os(iOS)
+        needsNowPlayingArtworkRepushOnResume = hasActivePlayback
+        #endif
         // Vor einer möglichen Suspendierung sofort hochladen (Debounce überspringen).
         QueueSyncService.shared.flushUpload()
     }
+
+    #if os(iOS)
+    @objc private func appDidBecomeActive() {
+        repushNowPlayingArtworkIfNeeded()
+    }
+    #endif
 
     #if os(tvOS)
     private var queueStateFileURL: URL? {
@@ -575,6 +595,7 @@ class AudioPlayerService: ObservableObject {
     }
 
     private func playRadioStation(_ item: RadioStationDisplayItem, resetReconnectAttempts: Bool) {
+        guard let url = URL(string: item.streamURL) else { return }
         stopFastSeeking()
         if resetReconnectAttempts {
             radioReconnectAttempts = 0
@@ -592,11 +613,6 @@ class AudioPlayerService: ObservableObject {
             await self.activateSessionAsync()
             guard self.playbackGeneration == gen else { return }
             #endif
-            guard let url = URL(string: item.streamURL) else {
-                self.isPlaying = false
-                self.isBuffering = false
-                return
-            }
 
             let isSameRadioStation = self.playbackMode == .radio
                 && self.currentRadioStation?.id == item.id
@@ -783,6 +799,47 @@ class AudioPlayerService: ObservableObject {
         upcomingSongs(limit: backgroundStreamPreCacheLimit).compactMap { streamCacheJob(for: $0) }
     }
 
+    #if os(iOS) || os(tvOS) || os(macOS)
+    private func prewarmNowPlayingArtwork(startingWith song: Song) {
+        var seen = Set<String>()
+        var songs: [Song] = []
+        for candidate in [song] + upcomingSongs(limit: 4) {
+            guard seen.insert(candidate.id).inserted else { continue }
+            songs.append(candidate)
+        }
+        prewarmNowPlayingArtwork(for: songs, limit: 5)
+    }
+
+    private func prewarmNowPlayingArtwork(for songs: [Song], limit: Int = 5) {
+        nowPlaying.prewarmSongArtwork(for: songs, limit: limit)
+    }
+    #endif
+
+    #if os(iOS)
+    private func repushNowPlayingArtworkIfNeeded() {
+        guard needsNowPlayingArtworkRepushOnResume else { return }
+        needsNowPlayingArtworkRepushOnResume = false
+        repushNowPlayingArtwork()
+    }
+
+    private func repushNowPlayingArtwork() {
+        if nowPlaying.reapplyCurrentArtwork() { return }
+
+        if let song = currentSong {
+            prewarmNowPlayingArtwork(startingWith: song)
+            nowPlaying.update(song: song, currentTime: currentTime)
+            nowPlaying.updatePlaybackRate(isPlaying ? 1 : 0, currentTime: currentTime)
+            MPNowPlayingInfoCenter.default().playbackState = isPlaying ? .playing : .paused
+            return
+        }
+
+        if let station = currentRadioStation {
+            nowPlaying.updateRadio(station: station, metadata: currentRadioMetadata, isPlaying: isPlaying)
+            MPNowPlayingInfoCenter.default().playbackState = isPlaying ? .playing : .paused
+        }
+    }
+    #endif
+
     private func currentStreamCacheKeepIds() -> Set<String> {
         guard let currentSong else { return [] }
         return Set(desiredStreamCacheJobs().map(\.songId)).union([currentSong.id])
@@ -864,6 +921,12 @@ class AudioPlayerService: ObservableObject {
     private func startPlayback(song: Song, seekTo: Double = 0) {
         prepareForSongPlayback()
         stopFastSeeking()
+        #if os(iOS) || os(tvOS) || os(macOS)
+        prewarmNowPlayingArtwork(startingWith: song)
+        if resolveURL(for: song) != nil {
+            nowPlaying.primeSong(song: song, currentTime: seekTo)
+        }
+        #endif
         playbackGeneration += 1
         let gen = playbackGeneration
         #if os(tvOS)
@@ -1137,6 +1200,9 @@ class AudioPlayerService: ObservableObject {
         isPlaying = true
         nowPlaying.updatePlaybackRate(1, currentTime: currentTime)
         MPNowPlayingInfoCenter.default().playbackState = .playing
+        #if os(iOS)
+        repushNowPlayingArtworkIfNeeded()
+        #endif
 
         #if os(tvOS)
         // tvOS verwirft den Puffer eines pausierten HTTP-Streams; play() am alten Item läuft
@@ -1481,6 +1547,9 @@ class AudioPlayerService: ObservableObject {
         var state = queueState
         state.addPlayNext(songs)
         applyQueueState(state)
+        #if os(iOS) || os(tvOS) || os(macOS)
+        prewarmNowPlayingArtwork(for: songs, limit: 5)
+        #endif
         saveState()
     }
 
@@ -1499,6 +1568,9 @@ class AudioPlayerService: ObservableObject {
         } else {
             userQueue.append(song)
         }
+        #if os(iOS) || os(tvOS) || os(macOS)
+        prewarmNowPlayingArtwork(for: [song], limit: 1)
+        #endif
         saveState()
     }
 
@@ -1694,6 +1766,9 @@ class AudioPlayerService: ObservableObject {
         } else {
             userQueue.append(contentsOf: songs)
         }
+        #if os(iOS) || os(tvOS) || os(macOS)
+        prewarmNowPlayingArtwork(for: songs, limit: 5)
+        #endif
         saveState()
     }
 
@@ -1826,6 +1901,9 @@ class AudioPlayerService: ObservableObject {
                 self.currentStreamURL = url
                 if let d = song.duration { self.duration = Double(d) }
                 self.engine.trustedDuration = Double(song.duration ?? 0)
+                #if os(iOS) || os(tvOS) || os(macOS)
+                self.prewarmNowPlayingArtwork(startingWith: song)
+                #endif
                 self.nowPlaying.update(song: song, currentTime: self.currentTime)
                 MPNowPlayingInfoCenter.default().playbackState = .playing
                 if let url {

@@ -327,6 +327,15 @@ actor CloudKitSyncService {
         }
     }
 
+    private func refreshAccountAvailability(action: String) async -> Bool {
+        let accountStatus = await updateAccountStatus()
+        guard accountStatus == .available else {
+            log("\(action) skipped — iCloud account not available")
+            return false
+        }
+        return true
+    }
+
     private static func describe(_ s: CKAccountStatus) -> String {
         switch s {
         case .available:           return "available"
@@ -524,7 +533,7 @@ actor CloudKitSyncService {
                 debug("[CloudKitSync] Download CKError code=\(ck.code.rawValue) (\(ck.code)) userInfo=\(ck.userInfo)")
             }
             if isZoneNotFound(error) {
-                await markLocalAsUnsyncedForActiveServer()
+                await markLocalAsUnsyncedForReUpload()
                 setChangeToken(nil, for: category)
                 isZoneReady = false
                 log("iCloud zone was reset on another device — marking local \(category.displayName) data for re-upload")
@@ -532,7 +541,7 @@ actor CloudKitSyncService {
                 // Zone was wiped and recreated on another device (typical when that device
                 // re-enabled sync in the same flow). Treat like zoneNotFound so our local
                 // truth gets re-uploaded.
-                await markLocalAsUnsyncedForActiveServer()
+                await markLocalAsUnsyncedForReUpload()
                 setChangeToken(nil, for: category)
                 isZoneReady = false
                 log("Change token expired for \(category.displayName) — marking local data for re-upload")
@@ -1033,6 +1042,7 @@ actor CloudKitSyncService {
             isZoneReady = false
             clearChangeTokens()
             clearPendingMarkerDeletions()   // Zone weg = wartende Marker-Löschungen erledigt
+            await markLocalAsUnsyncedForReUpload()
             await MainActor.run {
                 status.lastSyncDate = Date()
                 status.isSyncing = false
@@ -1044,6 +1054,7 @@ actor CloudKitSyncService {
                 isZoneReady = false
                 clearChangeTokens()
                 clearPendingMarkerDeletions()
+                await markLocalAsUnsyncedForReUpload()
                 log("iCloud zone already gone")
             } else {
                 log("Zone deletion failed: \(error.localizedDescription)", isError: true)
@@ -1051,17 +1062,19 @@ actor CloudKitSyncService {
         }
     }
 
-    private func markLocalAsUnsyncedForActiveServer() async {
-        // Retention-Settings sind serverunabhängig: nach einem Zone-Wipe den lokalen
-        // Stand neu hochladbar machen, damit er nicht aus iCloud verschwindet.
+    private func markLocalAsUnsyncedForReUpload() async {
+        // Settings sind serverunabhängig: nach einem Zone-Wipe den lokalen Stand neu
+        // hochladbar machen, damit er nicht aus iCloud verschwindet.
         if UserDefaults.standard.double(forKey: retentionUpdatedAtKey) > 0 {
-            Self.setUserDefault(.int(0), forKey: retentionSyncedAtKey)
+            Self.setUserDefault(.double(0), forKey: retentionSyncedAtKey)
         }
-        let sid: String = await MainActor.run {
-            SubsonicAPIService.shared.activeServer?.stableId ?? ""
+        let lyricsUpdatedAt = UserDefaults.standard.double(forKey: lyricsServerUpdatedAtKey)
+        let useCustomLyricsServer = UserDefaults.standard.bool(forKey: Self.lyricsUseCustomKey)
+        let customLyricsURL = UserDefaults.standard.string(forKey: Self.lyricsCustomURLKey) ?? ""
+        if lyricsUpdatedAt > 0 || useCustomLyricsServer || !customLyricsURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            Self.setUserDefault(.double(0), forKey: lyricsServerSyncedAtKey)
         }
-        guard !sid.isEmpty else { return }
-        await PlayLogService.shared.markServerUnsyncedForReUpload(serverId: sid)
+        await PlayLogService.shared.markAllUnsyncedForReUpload()
         await updatePendingCounts()
     }
 
@@ -1267,6 +1280,7 @@ actor CloudKitSyncService {
             logDisabled(nil, action: "iCloud sync")
             return
         }
+        guard await refreshAccountAvailability(action: "iCloud sync") else { return }
         log("Syncing…")
         if canSync(.recap) {
             await flushPendingMarkerDeletions()
@@ -1289,6 +1303,7 @@ actor CloudKitSyncService {
     // MARK: - flushAndWait (mit Timeout)
 
     func flushAndWait(timeout: TimeInterval = 60) async throws {
+        guard await refreshAccountAvailability(action: "iCloud flush") else { return }
         try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask {
                 await self.uploadPendingEvents()
@@ -1328,10 +1343,9 @@ actor CloudKitSyncService {
         log("iCloud sync enabled — purging iCloud and re-uploading local truth")
         await setup()
         // Wipe iCloud so stale markers (from sync-off periods) can't be adopted.
-        // Local data is preserved; markServerUnsyncedForReUpload re-flags everything
-        // for re-upload. Other devices detect zoneNotFound on next sync and do the same.
+        // Local data is preserved; deleteZone re-flags local cloud data for re-upload.
+        // Other devices detect zoneNotFound on next sync and do the same.
         await deleteZone(force: true)
-        await markLocalAsUnsyncedForActiveServer()
         resetChangeToken()
         await uploadPendingEvents()
         if canSync(.recap) {
@@ -1348,6 +1362,7 @@ actor CloudKitSyncService {
             logDisabled(nil, action: "What to Sync update")
             return
         }
+        guard await refreshAccountAvailability(action: "What to Sync update") else { return }
         if canSync(.playHistory) {
             await uploadPendingEvents()
         }

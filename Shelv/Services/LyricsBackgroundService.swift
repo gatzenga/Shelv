@@ -45,6 +45,9 @@ actor LyricsBackgroundService {
     /// O(1)-Lookup für „dieser Song ist gerade in der Queue oder läuft schon".
     /// Key = "serverId::songId".
     private var trackedKeys: Set<String> = []
+    /// Jobs, die der User abgebrochen hat. Verhindert, dass späte Background-Completions
+    /// oder verzögerte Retries nach `cancelAll()` wieder Arbeit anstoßen.
+    private var cancelledKeys: Set<String> = []
     /// Snapshot der bereits in der DB gecachten Song-IDs. Wird einmal pro Bulk-Session
     /// geladen statt pro enqueueSongs-Call (das wäre 1 DB-Query pro Album beim Streaming).
     private var cachedSongIdsSnapshot: Set<String>?
@@ -95,8 +98,13 @@ actor LyricsBackgroundService {
                 task.cancel()
                 continue
             }
+            let key = key(for: job)
+            guard !cancelledKeys.contains(key) else {
+                task.cancel()
+                continue
+            }
             inflight[dlTask.taskIdentifier] = job
-            trackedKeys.insert("\(job.serverId)::\(job.songId)")
+            trackedKeys.insert(key)
             totalCount += 1
         }
         publishProgress()
@@ -110,6 +118,25 @@ actor LyricsBackgroundService {
 
     func progressSnapshot() -> (completed: Int, total: Int)? {
         totalCount > 0 ? (completedCount, totalCount) : nil
+    }
+
+    private func key(for job: LyricsJob) -> String {
+        "\(job.serverId)::\(job.songId)"
+    }
+
+    @discardableResult
+    private func registerForProcessing(_ job: LyricsJob) -> Bool {
+        let key = key(for: job)
+        guard !cancelledKeys.contains(key) else { return false }
+        if trackedKeys.insert(key).inserted {
+            totalCount += 1
+        }
+        return true
+    }
+
+    private func isActive(_ job: LyricsJob) -> Bool {
+        let key = key(for: job)
+        return trackedKeys.contains(key) && !cancelledKeys.contains(key)
     }
 
     func enqueueSongs(_ songs: [Song], serverId: String) async {
@@ -129,6 +156,7 @@ actor LyricsBackgroundService {
             let key = "\(serverId)::\(song.id)"
             if trackedKeys.contains(key) { continue }
             if cached.contains(song.id) { continue }
+            cancelledKeys.remove(key)
 
             let navURL: URL? = includeNavidrome
                 ? api.api.lyricsURL(for: song.id, server: api.server, password: api.password)
@@ -184,6 +212,9 @@ actor LyricsBackgroundService {
     // MARK: - Cancel
 
     func cancelAll() {
+        for key in trackedKeys {
+            cancelledKeys.insert(key)
+        }
         pending.removeAll()
         let inflightTaskIds = Array(inflight.keys)
         inflight.removeAll()
@@ -239,6 +270,7 @@ actor LyricsBackgroundService {
         } else {
             return
         }
+        guard registerForProcessing(job) else { return }
 
         // Netzwerk-Fehler (5xx, 429) → Retry-Pfad
         if (500...599).contains(statusCode) || statusCode == 429 {
@@ -271,6 +303,7 @@ actor LyricsBackgroundService {
     /// Layer-Übergang: navidrome → lrcCached → lrcGet → lrcOnlineCached → lrcOnlineGet → saveNone.
     /// retryCount für die neue Layer wird zurückgesetzt.
     private func advanceLayerOrFinish(job: LyricsJob) {
+        guard isActive(job) else { return }
         switch job.layer {
         case .navidrome:
             var next = job
@@ -316,6 +349,7 @@ actor LyricsBackgroundService {
         } else if let desc = taskDescription, let decoded = decodeJob(desc) {
             job = decoded
         } else { return }
+        guard registerForProcessing(job) else { return }
 
         // User-Cancel: kein Save, kein Progress-Bump
         if let urlError = error as? URLError, urlError.code == .cancelled { return }
@@ -326,6 +360,7 @@ actor LyricsBackgroundService {
 
     /// Bis zu `maxRetries` mit Backoff in der aktuellen Layer, danach zur nächsten Layer.
     private func handleNetworkFailure(job: LyricsJob) {
+        guard isActive(job) else { return }
         if job.retryCount < Self.maxRetries {
             var next = job
             next.retryCount += 1
@@ -346,11 +381,13 @@ actor LyricsBackgroundService {
     }
 
     private func requeue(_ job: LyricsJob) {
+        guard isActive(job) else { return }
         pending.insert(job, at: 0)
         startNextJobs()
     }
 
     private func saveNone(job: LyricsJob) {
+        guard isActive(job) else { return }
         DBErrorLog.logLyrics("Bulk no lyrics → \(job.songTitle)")
         let none = LyricsRecord(
             songId: job.songId, serverId: job.serverId, source: "none",
@@ -365,7 +402,8 @@ actor LyricsBackgroundService {
     }
 
     private func finishJob(_ job: LyricsJob, result: String) {
-        trackedKeys.remove("\(job.serverId)::\(job.songId)")
+        guard isActive(job) else { return }
+        trackedKeys.remove(key(for: job))
         completedCount += 1
         DBErrorLog.logLyrics("Bulk complete → \(result): \(job.songTitle) (\(completedCount)/\(totalCount))")
         publishProgress()

@@ -407,9 +407,36 @@ nonisolated enum DemoContent {
 
     /// Fester Player-Zustand: "The Last Signal" aus "Depth Unknown", pausiert bei 2:46 / 4:19.
     static var playerSong: Song {
-        songsByAlbumId["demo-album-depth_unknown"]!.first { $0.title == "The Last Signal" }!
+        depthUnknownSongs.first { $0.title == "The Last Signal" } ?? firstAvailableDemoSong
     }
-    static var playerQueue: [Song] { songsByAlbumId["demo-album-depth_unknown"]! }
+    static var playerQueue: [Song] {
+        depthUnknownSongs.isEmpty ? [firstAvailableDemoSong] : depthUnknownSongs
+    }
+
+    private static var depthUnknownSongs: [Song] {
+        songsByAlbumId["demo-album-depth_unknown"] ?? []
+    }
+
+    private static var firstAvailableDemoSong: Song {
+        songsByAlbumId.values.lazy.flatMap { $0 }.first ?? Song(
+            id: "demo-player-fallback",
+            title: "The Last Signal",
+            artist: "Demo",
+            album: "Demo",
+            albumId: "demo-album-fallback",
+            track: 1,
+            discNumber: 1,
+            duration: 259,
+            coverArt: nil,
+            year: 2024,
+            genre: "Ambient",
+            playCount: 0,
+            starred: nil,
+            suffix: "mp3",
+            bitRate: 320,
+            replayGain: nil
+        )
+    }
     static let playerCurrentIndex = 1          // "The Last Signal" ist Track 2
     static let playerCurrentTime: Double = 166 // 2:46
     static let playerDuration: Double = 259    // 4:19

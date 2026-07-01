@@ -505,7 +505,7 @@ class LibraryViewModel: ObservableObject {
     }
 
     nonisolated private static func loadLibraryCache<T: Decodable>(_ type: T.Type, name: String, serverId: String) -> T? {
-        let url = libraryCacheDir.appendingPathComponent("\(name)_\(serverId).json")
+        let url = libraryCacheDir.appendingPathComponent("\(name.pathSafeComponent)_\(serverId.pathSafeComponent).json")
         guard let data = try? Data(contentsOf: url) else { return nil }
         return try? JSONDecoder().decode(type, from: data)
     }
@@ -524,20 +524,22 @@ class LibraryViewModel: ObservableObject {
 
     nonisolated private static func saveStarredCache(songs: [Song], albums: [Album], artists: [Artist], serverId: String) {
         let dir = starredCacheDir
+        let safeServerId = serverId.pathSafeComponent
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        try? JSONEncoder().encode(songs).write(to: dir.appendingPathComponent("starred_songs_\(serverId).json"))
-        try? JSONEncoder().encode(albums).write(to: dir.appendingPathComponent("starred_albums_\(serverId).json"))
-        try? JSONEncoder().encode(artists).write(to: dir.appendingPathComponent("starred_artists_\(serverId).json"))
+        try? JSONEncoder().encode(songs).write(to: dir.appendingPathComponent("starred_songs_\(safeServerId).json"))
+        try? JSONEncoder().encode(albums).write(to: dir.appendingPathComponent("starred_albums_\(safeServerId).json"))
+        try? JSONEncoder().encode(artists).write(to: dir.appendingPathComponent("starred_artists_\(safeServerId).json"))
     }
 
     nonisolated private static func loadStarredCache(serverId: String) -> Starred2Result? {
         let dir = starredCacheDir
         let dec = JSONDecoder()
-        let songs   = (try? Data(contentsOf: dir.appendingPathComponent("starred_songs_\(serverId).json")))
+        let safeServerId = serverId.pathSafeComponent
+        let songs   = (try? Data(contentsOf: dir.appendingPathComponent("starred_songs_\(safeServerId).json")))
             .flatMap { try? dec.decode([Song].self, from: $0) }
-        let albums  = (try? Data(contentsOf: dir.appendingPathComponent("starred_albums_\(serverId).json")))
+        let albums  = (try? Data(contentsOf: dir.appendingPathComponent("starred_albums_\(safeServerId).json")))
             .flatMap { try? dec.decode([Album].self, from: $0) }
-        let artists = (try? Data(contentsOf: dir.appendingPathComponent("starred_artists_\(serverId).json")))
+        let artists = (try? Data(contentsOf: dir.appendingPathComponent("starred_artists_\(safeServerId).json")))
             .flatMap { try? dec.decode([Artist].self, from: $0) }
         guard songs != nil || albums != nil || artists != nil else { return nil }
         return Starred2Result(artist: artists, album: albums, song: songs)
@@ -545,13 +547,13 @@ class LibraryViewModel: ObservableObject {
 
     private func savePlaylistsCache(_ playlists: [Playlist], serverId: String) {
         guard let data = try? JSONEncoder().encode(playlists) else { return }
-        let url = Self.playlistCacheDir.appendingPathComponent("playlist_list_\(serverId).json")
+        let url = Self.playlistCacheDir.appendingPathComponent("playlist_list_\(serverId.pathSafeComponent).json")
         try? FileManager.default.createDirectory(at: Self.playlistCacheDir, withIntermediateDirectories: true)
         try? data.write(to: url)
     }
 
     private func loadPlaylistsCache(serverId: String) -> [Playlist] {
-        let url = Self.playlistCacheDir.appendingPathComponent("playlist_list_\(serverId).json")
+        let url = Self.playlistCacheDir.appendingPathComponent("playlist_list_\(serverId.pathSafeComponent).json")
         guard let data = try? Data(contentsOf: url) else { return [] }
         return (try? JSONDecoder().decode([Playlist].self, from: data)) ?? []
     }
@@ -585,7 +587,7 @@ class LibraryViewModel: ObservableObject {
             if let entry = await PlayLogService.shared.registryEntry(playlistId: playlist.id) {
                 CloudKitSyncService.debugLog("[LibraryDelete] playlistId=\(playlist.id) was recap, deleting marker=\(entry.ckRecordName ?? "nil")")
                 if let ckName = entry.ckRecordName {
-                    await CloudKitSyncService.shared.deleteRecapMarker(ckRecordName: ckName)
+                    await CloudKitSyncService.shared.queueRecapMarkerDeletion(ckRecordName: ckName)
                 }
                 await PlayLogService.shared.deleteRegistryEntry(playlistId: playlist.id)
                 NotificationCenter.default.post(name: .recapRegistryUpdated, object: nil)

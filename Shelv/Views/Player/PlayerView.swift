@@ -92,6 +92,7 @@ struct PlayerView: View {
 
     @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
     @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
+    @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     @AppStorage("radioSortDirection") private var radioSortDirectionRaw = SortDirection.ascending.rawValue
 
     @State private var seekValue: Double = 0
@@ -109,6 +110,7 @@ struct PlayerView: View {
     @State private var rawSecondary: UIColor? = nil
     @State private var playerBgPrimary: Color = Color(UIColor.systemBackground)
     @State private var playerBgSecondary: Color = Color(UIColor.systemBackground)
+    @State private var activePlayerBackgroundIdentifier: String?
 
     private static let paletteCache: NSCache<NSString, PlayerPaletteResult> = {
         let c = NSCache<NSString, PlayerPaletteResult>()
@@ -431,6 +433,15 @@ struct PlayerView: View {
 
                             Spacer()
 
+                            if showInstantMixActions && !offlineMode.isOffline, let song = player.currentSong {
+                                Button {
+                                    InstantMixService.playSongMix(for: song, player: player)
+                                } label: {
+                                    playerSecondaryButton(icon: "sparkles", color: .primary, size: ctrl, isPad: isPad)
+                                }
+                                .buttonStyle(.plain)
+                            }
+
                             Button { showQueue = true } label: {
                                 playerSecondaryButton(icon: "list.bullet", color: .primary, size: ctrl, isPad: isPad)
                             }
@@ -744,6 +755,7 @@ struct PlayerView: View {
     private func updatePlayerBackground() async {
         let key = playerBackgroundIdentifier
         guard key != "song-none", key != "radio-none" else {
+            activePlayerBackgroundIdentifier = nil
             withAnimation(.easeInOut(duration: 0.5)) {
                 playerBgPrimary = Color(UIColor.systemBackground)
                 playerBgSecondary = Color(UIColor.systemBackground)
@@ -752,6 +764,8 @@ struct PlayerView: View {
             rawSecondary = nil
             return
         }
+
+        activePlayerBackgroundIdentifier = key
 
         if let hit = Self.paletteCache.object(forKey: key as NSString) {
             rawPrimary = hit.primary
@@ -764,7 +778,7 @@ struct PlayerView: View {
         }
 
         let resolved = await loadPlayerBackgroundImage()
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled, activePlayerBackgroundIdentifier == key else { return }
         guard let img = resolved else {
             rawPrimary = nil
             rawSecondary = nil
@@ -775,7 +789,7 @@ struct PlayerView: View {
             return
         }
         let (primary, secondary) = img.extractPlayerPalette()
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled, activePlayerBackgroundIdentifier == key else { return }
         Self.paletteCache.setObject(PlayerPaletteResult(primary, secondary), forKey: key as NSString)
         rawPrimary = primary
         rawSecondary = secondary
@@ -795,12 +809,15 @@ struct PlayerView: View {
 
     private func loadSongBackgroundImage(coverArtId: String) async -> UIImage? {
         let key300 = "\(coverArtId)_300"
+        let fallbackSizes = ImageCacheService.coverFallbackSizes(preferred: 300)
         let image: UIImage?
-        if let cached = ImageCacheService.shared.cachedImage(key: key300) {
+        if let cached = ImageCacheService.shared.cachedImage(key: key300, fallbackSizes: fallbackSizes) {
             image = cached
         } else if let localPath = LocalArtworkIndex.shared.localPath(for: coverArtId),
                   let local = UIImage(contentsOfFile: localPath) {
             image = local
+        } else if let cached = await ImageCacheService.shared.diskOnlyImage(key: key300, fallbackSizes: fallbackSizes) {
+            image = cached
         } else if let url = SubsonicAPIService.shared.coverArtURL(for: coverArtId, size: 300) {
             image = await ImageCacheService.shared.image(url: url, key: key300)
         } else {
@@ -899,6 +916,7 @@ private struct RadioStationPlayerArtworkView: View {
     private let requestSize: Int
     @State private var image: UIImage?
     @State private var isLoading: Bool
+    @State private var activeLoadKey: String?
 
     init(coverArtId: String, displaySize: CGFloat, cornerRadius: CGFloat) {
         self.coverArtId = coverArtId
@@ -908,8 +926,12 @@ private struct RadioStationPlayerArtworkView: View {
         let pixelSize = Int((displaySize * scale).rounded(.up))
         self.requestSize = min(1200, max(600, pixelSize))
         let key = "\(coverArtId)_\(self.requestSize)"
-        self._image = State(initialValue: ImageCacheService.shared.cachedImage(key: key))
-        self._isLoading = State(initialValue: ImageCacheService.shared.cachedImage(key: key) == nil)
+        let cached = ImageCacheService.shared.cachedImage(
+            key: key,
+            fallbackSizes: ImageCacheService.coverFallbackSizes(preferred: self.requestSize)
+        )
+        self._image = State(initialValue: cached)
+        self._isLoading = State(initialValue: cached == nil)
     }
 
     var body: some View {
@@ -942,16 +964,20 @@ private struct RadioStationPlayerArtworkView: View {
     @MainActor
     private func load() async {
         let key = "\(coverArtId)_\(requestSize)"
-        if let cached = ImageCacheService.shared.cachedImage(key: key) {
+        let expectedKey = key
+        activeLoadKey = expectedKey
+        let fallbackSizes = ImageCacheService.coverFallbackSizes(preferred: requestSize)
+        if let cached = ImageCacheService.shared.cachedImage(key: key, fallbackSizes: fallbackSizes) {
             image = cached
             isLoading = false
-            return
         }
 
         #if DEBUG
-        if coverArtId.hasPrefix("demo_"), let demoImage = UIImage(named: coverArtId) {
-            ImageCacheService.shared.cache(demoImage, key: key)
-            image = demoImage
+        if coverArtId.hasPrefix("demo_") {
+            if image == nil, let demoImage = UIImage(named: coverArtId) {
+                ImageCacheService.shared.cache(demoImage, key: key)
+                image = demoImage
+            }
             isLoading = false
             return
         }
@@ -962,8 +988,13 @@ private struct RadioStationPlayerArtworkView: View {
             return
         }
         isLoading = image == nil
+        if let cached = await ImageCacheService.shared.diskOnlyImage(key: key, fallbackSizes: fallbackSizes) {
+            guard !Task.isCancelled, activeLoadKey == expectedKey else { return }
+            image = cached
+            isLoading = false
+        }
         let loaded = await ImageCacheService.shared.image(url: url, key: key)
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled, activeLoadKey == expectedKey else { return }
         if let loaded {
             image = loaded
         }

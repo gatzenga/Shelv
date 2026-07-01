@@ -12,8 +12,9 @@ enum CarPlayNavigation {
         // das automatisch sichtbare CPNowPlayingTemplate einen virtuellen Slot, also
         // effektiv 4. Statt den Push stillschweigend zu droppen (User klickt, nichts
         // passiert) räumen wir den Stack auf den Tab-Root zurück und pushen frisch.
-        let isPlaying = AudioPlayerService.shared.currentSong != nil
-        let cap = isPlaying ? 4 : 5
+        let player = AudioPlayerService.shared
+        let hasActiveNowPlaying = player.currentSong != nil || player.currentRadioStation != nil
+        let cap = hasActiveNowPlaying ? 4 : 5
         if ic.templates.count >= cap {
             Task { @MainActor in
                 await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
@@ -372,13 +373,29 @@ enum CarPlayNavigation {
             )
             safePush(template, on: ic)
 
-            let allSongs = (await LibraryStore.shared.loadPlaylistDetail(id: playlist.id))?.songs ?? []
-            var songs: [Song] = OfflineModeService.shared.isOffline
-                ? allSongs.filter { DownloadStore.shared.isDownloaded(songId: $0.id) }
-                : allSongs
-            if songs.isEmpty && DownloadStore.shared.offlinePlaylistIds.contains(playlist.id) {
+            let songs: [Song]
+            if OfflineModeService.shared.isOffline {
                 let ids = DownloadStore.shared.playlistSongIds[playlist.id] ?? []
-                songs = ids.compactMap { id in DownloadStore.shared.songs.first { $0.songId == id }?.asSong() }
+                let downloadedSongs = ids.compactMap { id in
+                    DownloadStore.shared.songs.first { $0.songId == id }?.asSong()
+                }
+                if downloadedSongs.isEmpty {
+                    songs = ((await LibraryStore.shared.loadPlaylistDetail(id: playlist.id))?.songs ?? [])
+                        .filter { DownloadStore.shared.isDownloaded(songId: $0.id) }
+                } else {
+                    songs = downloadedSongs
+                }
+            } else {
+                if let detail = await LibraryStore.shared.loadPlaylistDetail(id: playlist.id) {
+                    songs = detail.songs ?? []
+                } else if DownloadStore.shared.offlinePlaylistIds.contains(playlist.id) {
+                    let ids = DownloadStore.shared.playlistSongIds[playlist.id] ?? []
+                    songs = ids.compactMap { id in
+                        DownloadStore.shared.songs.first { $0.songId == id }?.asSong()
+                    }
+                } else {
+                    songs = []
+                }
             }
             configurePlaylistDetail(template, playlist: playlist, songs: songs, ic: ic)
         }

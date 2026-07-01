@@ -33,4 +33,33 @@ extension String {
         }
         return candidates
     }
+
+    /// Macht eine server-gelieferte Dateiendung sicher als Teil eines Dateinamens.
+    nonisolated func pathSafeFileExtension(default fallback: String = "mp3") -> String {
+        var s = trimmingCharacters(in: .whitespacesAndNewlines)
+        while s.hasPrefix(".") { s.removeFirst() }
+        s = s.pathSafeComponent
+        if s == "_" {
+            return fallback.pathSafeComponent
+        }
+        return s
+    }
+
+    /// Liefert Dateinamen-Kandidaten fuer gespeicherte Downloads nach der
+    /// Migration auf sichere Song-ID-Pfadkomponenten.
+    nonisolated func pathSafeDownloadFileNameCandidates(
+        fileExtension: String,
+        storedFilePath: String
+    ) -> [String] {
+        let canonicalName = "\(pathSafeComponent).\(fileExtension.pathSafeFileExtension())"
+        let storedName = URL(fileURLWithPath: storedFilePath).lastPathComponent
+        var candidates = [canonicalName]
+        if !storedName.isEmpty,
+           storedName != ".",
+           storedName != "..",
+           !candidates.contains(storedName) {
+            candidates.append(storedName)
+        }
+        return candidates
+    }
 }

@@ -148,6 +148,7 @@ final class CarPlayPlaylistsController {
             return (items, coverMap)
         }
         let (items, coverMap) = makeItems()
+        prefillCoversFromCache(coverMap)
         rootTemplate.updateSections([CPListSection(items: items, header: nil, sectionIndexTitle: nil)])
         guard !coverMap.isEmpty else { return }
         coverLoadTask?.cancel()

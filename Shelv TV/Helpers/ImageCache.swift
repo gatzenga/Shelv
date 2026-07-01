@@ -4,7 +4,6 @@ import UIKit
 // MARK: - Cover Art View
 
 /// Cover-Anzeige für tvOS. Stale-while-revalidate, Demo-Asset-Auflösung für `demo_`-IDs.
-/// Kein Download-/Offline-Pfad — den gibt es auf tvOS nicht.
 struct CoverArtView: View {
     let url: URL?
     var size: CGFloat = 240
@@ -12,6 +11,7 @@ struct CoverArtView: View {
     var isCircle: Bool = false
 
     @State private var image: UIImage?
+    @State private var activeLoadKey: String?
 
     init(url: URL?, size: CGFloat = 240, cornerRadius: CGFloat = 10, isCircle: Bool = false) {
         self.url = url
@@ -65,8 +65,18 @@ struct CoverArtView: View {
 
     private func loadImage() async {
         guard let url else { image = nil; return }
+        let key = stableKey
+        guard activeLoadKey != key else { return }
+        activeLoadKey = key
+        defer {
+            if activeLoadKey == key {
+                activeLoadKey = nil
+            }
+        }
+
         if let hit = ImageCacheService.shared.cachedImage(url: url) {
-            image = hit; return
+            if stableKey == key { image = hit }
+            return
         }
 
         let comps = URLComponents(url: url, resolvingAgainstBaseURL: false)
@@ -76,14 +86,18 @@ struct CoverArtView: View {
         if let artId, artId.hasPrefix("demo_") {
             if let img = UIImage(named: artId) {
                 ImageCacheService.shared.cache(img, url: url)
-                image = img
+                if stableKey == key { image = img }
             }
             return
         }
         #endif
 
+        if let img = await ImageCacheService.shared.diskOnlyImage(url: url) {
+            if stableKey == key { image = img }
+        }
+
         if let img = await ImageCacheService.shared.image(url: url) {
-            image = img
+            if stableKey == key { image = img }
         }
     }
 }
@@ -122,10 +136,55 @@ actor ImageCacheService {
         memory.object(forKey: Self.stableCacheKey(for: url) as NSString)
     }
 
+    nonisolated func cachedImage(url: URL, fallbackSizes: [Int]) -> (image: UIImage, key: String)? {
+        let key = Self.stableCacheKey(for: url)
+        if let hit = memory.object(forKey: key as NSString) {
+            return (hit, key)
+        }
+        for fallbackKey in Self.fallbackCacheKeys(for: url, key: key, sizes: fallbackSizes) {
+            guard let hit = memory.object(forKey: fallbackKey as NSString) else { continue }
+            return (hit, fallbackKey)
+        }
+        return nil
+    }
+
     nonisolated func cache(_ img: UIImage, url: URL) {
         let key = Self.stableCacheKey(for: url) as NSString
         let cost = Int(img.size.width * img.size.height * 4)
         memory.setObject(img, forKey: key, cost: cost)
+    }
+
+    func diskOnlyImage(url: URL) async -> UIImage? {
+        await diskOnlyImageResult(url: url)?.image
+    }
+
+    func diskOnlyImageResult(url: URL, fallbackSizes: [Int]? = nil) async -> (image: UIImage, key: String)? {
+        let key = Self.stableCacheKey(for: url)
+        let nsKey = key as NSString
+        if let hit = memory.object(forKey: nsKey) { return (hit, key) }
+
+        let diskURL = cacheDir.appendingPathComponent(key)
+        let dir = cacheDir
+        let sizes = fallbackSizes ?? Self.coverFallbackSizes(preferred: Self.preferredSize(for: url))
+        let result = await Task.detached(priority: .medium) { () -> (UIImage, String)? in
+            if let data = try? Data(contentsOf: diskURL),
+               let img = UIImage(data: data) {
+                return (img, key)
+            }
+            for fallbackKey in Self.fallbackCacheKeys(for: url, key: key, sizes: sizes) {
+                let fallbackURL = dir.appendingPathComponent(fallbackKey)
+                guard let data = try? Data(contentsOf: fallbackURL),
+                      let img = UIImage(data: data) else { continue }
+                return (img, fallbackKey)
+            }
+            return nil
+        }.value
+
+        if let (img, resolvedKey) = result {
+            let cost = Int(img.size.width * img.size.height * 4)
+            memory.setObject(img, forKey: resolvedKey as NSString, cost: cost)
+        }
+        return result
     }
 
     func image(url: URL) async -> UIImage? {
@@ -190,6 +249,29 @@ actor ImageCacheService {
 
     func diskUsageBytes() -> Int {
         FileManager.default.directorySize(at: cacheDir)
+    }
+
+    nonisolated static func coverFallbackSizes(preferred: Int) -> [Int] {
+        var seen = Set<Int>()
+        return [preferred, 700, 600, 500, 400, 380, 320, 300, 240, 200, 180, 160, 156, 150, 120, 100, 80, 50]
+            .filter { $0 > 0 && seen.insert($0).inserted }
+    }
+
+    private nonisolated static func preferredSize(for url: URL) -> Int {
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        let size = components?.queryItems?.first(where: { $0.name == "size" })?.value
+        return Int(size ?? "") ?? 600
+    }
+
+    private nonisolated static func fallbackCacheKeys(for url: URL, key: String, sizes: [Int]) -> [String] {
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        guard let coverID = components?.queryItems?.first(where: { $0.name == "id" })?.value,
+              !coverID.isEmpty,
+              let lastUnderscore = key.lastIndex(of: "_")
+        else { return [] }
+
+        let idPrefix = String(key[key.startIndex..<lastUnderscore]) + "_"
+        return sizes.map { "\(idPrefix)\($0)" }.filter { $0 != key }
     }
 
     /// Stabiler Cache-Schlüssel `host_id_size` — ignoriert rotierende Auth-Token.

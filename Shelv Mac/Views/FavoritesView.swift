@@ -141,6 +141,7 @@ struct FavoriteSongRow: View {
 
     @ObservedObject private var downloadStore = DownloadStore.shared
     @ObservedObject private var offlineMode = OfflineModeService.shared
+    @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     @AppStorage("enableDownloads") private var enableDownloads = false
     @State private var isHovered = false
 
@@ -198,6 +199,11 @@ struct FavoriteSongRow: View {
         .gesture(TapGesture(count: 2).onEnded { onPlay() })
         .contextMenu {
             Button(String(localized: "play")) { onPlay() }
+            if showInstantMixActions && !offlineMode.isOffline {
+                Button(String(localized: "instant_mix")) {
+                    InstantMixService.playSongMix(for: song)
+                }
+            }
             Divider()
             Button(String(localized: "play_next")) { onPlayNext() }
             Button(String(localized: "add_to_queue")) { onAddToQueue() }

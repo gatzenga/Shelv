@@ -12,6 +12,7 @@ struct PersonalizedSongSwipeActionsModifier: ViewModifier {
 
     @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
     @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
+    @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     @AppStorage(PersonalizationPreferenceKey.swipeLeftPrimary) private var leftPrimary = PersonalizationSwipeAction.favorite.rawValue
     @AppStorage(PersonalizationPreferenceKey.swipeLeftSecondary) private var leftSecondary = PersonalizationSwipeAction.addToPlaylist.rawValue
     @AppStorage(PersonalizationPreferenceKey.swipeRightPrimary) private var rightPrimary = PersonalizationSwipeAction.playNext.rawValue
@@ -24,6 +25,14 @@ struct PersonalizedSongSwipeActionsModifier: ViewModifier {
                 swipeButton(for: .leftSecondary)
             }
             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                if !isOffline && showInstantMixActions {
+                    Button {
+                        InstantMixService.playSongMix(for: song)
+                    } label: {
+                        Image(systemName: "sparkles")
+                    }
+                    .tint(.purple)
+                }
                 swipeButton(for: .rightPrimary)
                 swipeButton(for: .rightSecondary)
             }

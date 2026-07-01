@@ -665,6 +665,7 @@ actor PlayLogService {
         
         safeWrite { db in
             try db.execute(sql: "UPDATE play_log SET syncedAt = NULL WHERE uuid IS NOT NULL")
+            try db.execute(sql: "UPDATE recap_registry SET ckRecordName = NULL")
         }
     }
 

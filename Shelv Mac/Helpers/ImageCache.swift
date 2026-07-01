@@ -111,14 +111,13 @@ struct CoverArtView: View {
             }
         }
 
-        if UserDefaults.standard.bool(forKey: "offlineModeEnabled") {
-            if let img = await ImageCacheService.shared.diskOnlyImage(url: url) {
-                if stableKey == key { image = img }
-            }
-        } else {
-            if let img = await ImageCacheService.shared.image(url: url) {
-                if stableKey == key { image = img }
-            }
+        if let img = await ImageCacheService.shared.diskOnlyImage(url: url) {
+            if stableKey == key { image = img }
+            if UserDefaults.standard.bool(forKey: "offlineModeEnabled") { return }
+        }
+
+        if let img = await ImageCacheService.shared.image(url: url) {
+            if stableKey == key { image = img }
         }
     }
 }
@@ -157,6 +156,18 @@ actor ImageCacheService {
         memory.object(forKey: Self.stableCacheKey(for: url) as NSString)
     }
 
+    nonisolated func cachedImage(url: URL, fallbackSizes: [Int]) -> (image: NSImage, key: String)? {
+        let key = Self.stableCacheKey(for: url)
+        if let hit = memory.object(forKey: key as NSString) {
+            return (hit, key)
+        }
+        for fallbackKey in Self.fallbackCacheKeys(for: url, key: key, sizes: fallbackSizes) {
+            guard let hit = memory.object(forKey: fallbackKey as NSString) else { continue }
+            return (hit, fallbackKey)
+        }
+        return nil
+    }
+
     nonisolated func cache(_ img: NSImage, url: URL) {
         let key = Self.stableCacheKey(for: url) as NSString
         let cost = Int(img.size.width * img.size.height * 4)
@@ -164,35 +175,34 @@ actor ImageCacheService {
     }
 
     func diskOnlyImage(url: URL) async -> NSImage? {
+        await diskOnlyImageResult(url: url)?.image
+    }
+
+    func diskOnlyImageResult(url: URL, fallbackSizes: [Int]? = nil) async -> (image: NSImage, key: String)? {
         let key = Self.stableCacheKey(for: url)
         let nsKey = key as NSString
-        if let hit = memory.object(forKey: nsKey) { return hit }
+        if let hit = memory.object(forKey: nsKey) { return (hit, key) }
         let diskURL = cacheDir.appendingPathComponent(key)
         let dir = cacheDir
-        let img = await Task.detached(priority: .medium) { () -> NSImage? in
+        let sizes = fallbackSizes ?? Self.coverFallbackSizes(preferred: Self.preferredSize(for: url))
+        let result = await Task.detached(priority: .medium) { () -> (NSImage, String)? in
             if let data = try? Data(contentsOf: diskURL),
                let img = NSImage(data: data) {
-                return img
+                return (img, key)
             }
-            // Fallback: gleiche Cover-ID, andere gecachte Grösse
-            guard let lastUnderscore = key.lastIndex(of: "_") else { return nil }
-            let idPrefix = String(key[key.startIndex..<lastUnderscore]) + "_"
-            let fallbackSizes = [200, 320, 160, 120, 240, 80, 100, 50]
-            for size in fallbackSizes {
-                let fallbackKey = "\(idPrefix)\(size)"
-                guard fallbackKey != key else { continue }
+            for fallbackKey in Self.fallbackCacheKeys(for: url, key: key, sizes: sizes) {
                 let fallbackURL = dir.appendingPathComponent(fallbackKey)
                 guard let data = try? Data(contentsOf: fallbackURL),
                       let img = NSImage(data: data) else { continue }
-                return img
+                return (img, fallbackKey)
             }
             return nil
         }.value
-        if let img {
+        if let (img, resolvedKey) = result {
             let cost = Int(img.size.width * img.size.height * 4)
-            memory.setObject(img, forKey: nsKey, cost: cost)
+            memory.setObject(img, forKey: resolvedKey as NSString, cost: cost)
         }
-        return img
+        return result
     }
 
     func image(url: URL) async -> NSImage? {
@@ -270,6 +280,29 @@ actor ImageCacheService {
 
     func diskUsageBytes() -> Int {
         FileManager.default.directorySize(at: cacheDir)
+    }
+
+    nonisolated static func coverFallbackSizes(preferred: Int) -> [Int] {
+        var seen = Set<Int>()
+        return [preferred, 700, 600, 500, 400, 380, 320, 300, 240, 200, 180, 160, 156, 150, 120, 100, 80, 50]
+            .filter { $0 > 0 && seen.insert($0).inserted }
+    }
+
+    private nonisolated static func preferredSize(for url: URL) -> Int {
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        let size = components?.queryItems?.first(where: { $0.name == "size" })?.value
+        return Int(size ?? "") ?? 600
+    }
+
+    private nonisolated static func fallbackCacheKeys(for url: URL, key: String, sizes: [Int]) -> [String] {
+        let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        guard let coverID = components?.queryItems?.first(where: { $0.name == "id" })?.value,
+              !coverID.isEmpty,
+              let lastUnderscore = key.lastIndex(of: "_")
+        else { return [] }
+
+        let idPrefix = String(key[key.startIndex..<lastUnderscore]) + "_"
+        return sizes.map { "\(idPrefix)\($0)" }.filter { $0 != key }
     }
 
     // MARK: - Stabiler Cache-Schlüssel

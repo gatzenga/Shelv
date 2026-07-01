@@ -111,26 +111,38 @@ final class DownloadStore: ObservableObject {
         let sid = serverId
         let rawRecords = await DownloadDatabase.shared.allRecords(serverId: sid)
         // Container-UUID kann sich nach Updates ändern; Pfade neu berechnen falls Datei nicht mehr auffindbar
-        let healResult = await Task.detached(priority: .utility) { () -> (records: [DownloadRecord], toUpdate: [DownloadRecord]) in
+        let healResult = await Task.detached(priority: .utility) { () -> (records: [DownloadRecord], toUpdate: [DownloadRecord], toDelete: [DownloadRecord]) in
             var healed: [DownloadRecord] = []
             var toUpdate: [DownloadRecord] = []
+            var toDelete: [DownloadRecord] = []
             for var record in rawRecords {
                 if FileManager.default.fileExists(atPath: record.filePath) {
                     healed.append(record)
                 } else {
-                    let newURL = DownloadService.serverDirectory(serverId: record.serverId)
-                        .appendingPathComponent("\(record.songId).\(record.fileExtension)")
-                    if FileManager.default.fileExists(atPath: newURL.path) {
-                        record.filePath = newURL.path
+                    let serverDir = DownloadService.serverDirectory(serverId: record.serverId)
+                    let candidateNames = record.songId.pathSafeDownloadFileNameCandidates(
+                        fileExtension: record.fileExtension,
+                        storedFilePath: record.filePath
+                    )
+
+                    if let candidate = candidateNames
+                        .map({ serverDir.appendingPathComponent($0) })
+                        .first(where: { FileManager.default.fileExists(atPath: $0.path) }) {
+                        record.filePath = candidate.path
                         toUpdate.append(record)
+                        healed.append(record)
+                    } else {
+                        toDelete.append(record)
                     }
-                    healed.append(record)
                 }
             }
-            return (records: healed, toUpdate: toUpdate)
+            return (records: healed, toUpdate: toUpdate, toDelete: toDelete)
         }.value
         for record in healResult.toUpdate {
             await DownloadDatabase.shared.upsert(record)
+        }
+        for record in healResult.toDelete {
+            await DownloadDatabase.shared.delete(songId: record.songId, serverId: record.serverId)
         }
         let records = healResult.records
         let total = await DownloadDatabase.shared.totalBytes(serverId: sid)
@@ -151,8 +163,8 @@ final class DownloadStore: ObservableObject {
         recordsByAlbumId = newRecordsByAlbumId
 
         let albumsGrouped = newRecordsByAlbumId
-            .map { (albumId, group) -> DownloadedAlbum in
-                let first = group.first!
+            .compactMap { (albumId, group) -> DownloadedAlbum? in
+                guard let first = group.first else { return nil }
                 let albumArtist = first.albumArtistName ?? first.artistName
                 let coverArtId = first.albumCoverArtId ?? first.coverArtId
                 return DownloadedAlbum(
@@ -170,8 +182,8 @@ final class DownloadStore: ObservableObject {
             }
 
         let artistsGrouped = Dictionary(grouping: albumsGrouped) { $0.artistName }
-            .map { (artistName: String, albumsList: [DownloadedAlbum]) -> DownloadedArtist in
-                let first = albumsList.first!
+            .compactMap { (artistName: String, albumsList: [DownloadedAlbum]) -> DownloadedArtist? in
+                guard let first = albumsList.first else { return nil }
                 let cover = first.songs.first?.artistCoverArtId ?? artistCoverByName[artistName]
                 return DownloadedArtist(
                     artistId: first.artistId ?? "name:\(artistName)",
@@ -283,11 +295,18 @@ final class DownloadStore: ObservableObject {
 
         let albumArtist = song.albumArtistName ?? artistName
         let albumCoverArtId = song.albumCoverArtId ?? song.coverArtId
+        let albumSongs: [DownloadedSong]
+        if let currentAlbumSongs = recordsByAlbumId[albumId], !currentAlbumSongs.isEmpty {
+            albumSongs = currentAlbumSongs
+        } else {
+            albumSongs = [song]
+            recordsByAlbumId[albumId] = albumSongs
+        }
         let updatedAlbum = DownloadedAlbum(
             albumId: albumId, serverId: serverId,
             title: song.albumTitle, artistName: albumArtist,
             artistId: song.artistId, coverArtId: albumCoverArtId,
-            songs: recordsByAlbumId[albumId]!
+            songs: albumSongs
         )
         let isNewAlbum: Bool
         if let albumIdx = albums.firstIndex(where: { $0.albumId == albumId }) {
@@ -363,12 +382,14 @@ final class DownloadStore: ObservableObject {
                 DownloadStatusCache.shared.removeAlbum(albumId)
             } else {
                 let old = albums[albumIdx]
-                albums[albumIdx] = DownloadedAlbum(
-                    albumId: old.albumId, serverId: old.serverId,
-                    title: old.title, artistName: old.artistName,
-                    artistId: old.artistId, coverArtId: old.coverArtId,
-                    songs: recordsByAlbumId[albumId]!
-                )
+                if let albumSongs = recordsByAlbumId[albumId], !albumSongs.isEmpty {
+                    albums[albumIdx] = DownloadedAlbum(
+                        albumId: old.albumId, serverId: old.serverId,
+                        title: old.title, artistName: old.artistName,
+                        artistId: old.artistId, coverArtId: old.coverArtId,
+                        songs: albumSongs
+                    )
+                }
             }
         }
 

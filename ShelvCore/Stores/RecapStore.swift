@@ -456,7 +456,7 @@ class RecapStore: ObservableObject {
 
             let current = try? await api.getPlaylist(id: entry.playlistId)
 
-            if current == nil {
+            guard let current else {
                 guard !expectedIds.isEmpty else { continue }
                 var expectedSongs: [Song] = []
                 for id in expectedIds {
@@ -483,10 +483,10 @@ class RecapStore: ObservableObject {
                 continue
             }
 
-            let currentSongs = current!.songs ?? []
+            let currentSongs = current.songs ?? []
             let currentIds   = currentSongs.map(\.id)
-            let currentName  = current!.name
-            let currentComment = current!.comment
+            let currentName  = current.name
+            let currentComment = current.comment
 
             let nameMismatch    = currentName != period.playlistName
             let commentMissing  = (currentComment ?? "") != "Shelv Recap"
@@ -691,7 +691,7 @@ class RecapStore: ObservableObject {
             CloudKitSyncService.debugLog("[UserAction:resetLastWeek] playlistId=\(target.playlistId) marker=\(target.ckRecordName ?? "nil") period=\(target.periodStart)")
             try? await SubsonicAPIService.shared.deletePlaylist(id: target.playlistId)
             if let ckName = target.ckRecordName {
-                await CloudKitSyncService.shared.deleteRecapMarker(ckRecordName: ckName)
+                await CloudKitSyncService.shared.queueRecapMarkerDeletion(ckRecordName: ckName)
             }
             await PlayLogService.shared.deleteRegistryEntry(playlistId: target.playlistId)
             RecapProcessedWeeks.remove(target.periodStart)
@@ -740,7 +740,7 @@ class RecapStore: ObservableObject {
             CloudKitSyncService.debugLog("\(logTag) playlistId=\(target.playlistId) marker=\(target.ckRecordName ?? "nil") period=\(target.periodStart)")
             try? await SubsonicAPIService.shared.deletePlaylist(id: target.playlistId)
             if let ckName = target.ckRecordName {
-                await CloudKitSyncService.shared.deleteRecapMarker(ckRecordName: ckName)
+                await CloudKitSyncService.shared.queueRecapMarkerDeletion(ckRecordName: ckName)
             }
             await PlayLogService.shared.deleteRegistryEntry(playlistId: target.playlistId)
             UserDefaults.standard.removeObject(forKey: genKey)
@@ -769,7 +769,7 @@ class RecapStore: ObservableObject {
             CloudKitSyncService.debugLog("[Retention:manual] deleting playlistId=\(entry.playlistId) marker=\(entry.ckRecordName ?? "nil") period=\(entry.periodType)")
             try? await SubsonicAPIService.shared.deletePlaylist(id: entry.playlistId)
             if let ckName = entry.ckRecordName {
-                await CloudKitSyncService.shared.deleteRecapMarker(ckRecordName: ckName)
+                await CloudKitSyncService.shared.queueRecapMarkerDeletion(ckRecordName: ckName)
             }
             await PlayLogService.shared.deleteRegistryEntry(playlistId: entry.playlistId)
         }

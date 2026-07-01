@@ -333,7 +333,7 @@ actor RecapGenerator {
             CloudKitSyncService.debugLog("[Retention] deleting playlistId=\(entry.playlistId) marker=\(entry.ckRecordName ?? "nil") period=\(entry.periodType)/\(Date(timeIntervalSince1970: entry.periodStart))")
             try? await SubsonicAPIService.shared.deletePlaylist(id: entry.playlistId)
             if let ckName = entry.ckRecordName {
-                await CloudKitSyncService.shared.deleteRecapMarker(ckRecordName: ckName)
+                await CloudKitSyncService.shared.queueRecapMarkerDeletion(ckRecordName: ckName)
             }
             await PlayLogService.shared.deleteRegistryEntry(playlistId: entry.playlistId)
         }

@@ -215,7 +215,7 @@ actor DownloadService {
             }
             let initialExt: String = {
                 if let t = transcoding { return t.codec.fileExtension }
-                return (song.suffix?.isEmpty == false) ? song.suffix! : "mp3"
+                return song.suffix?.pathSafeFileExtension() ?? "mp3"
             }()
             let job = DownloadJob(
                 song: song,
@@ -392,7 +392,7 @@ actor DownloadService {
             jobKeyByTask.removeValue(forKey: taskId)
         }
         let completionKeys = Array(inCompletionJobs.keys)
-        for key in completionKeys { cancelledKeys.insert(key) }
+        for key in pendingKeys + inflightKeys + completionKeys { cancelledKeys.insert(key) }
         session?.getAllTasks { tasks in tasks.forEach { $0.cancel() } }
         for key in pendingKeys + inflightKeys + completionKeys {
             publishProgress(key: key, value: nil)
@@ -403,6 +403,10 @@ actor DownloadService {
     }
 
     func deleteAllForServer(_ serverId: String) async {
+        let activeSongIds = Set(jobSongIds(matching: { $0.serverId == serverId }))
+        for songId in activeSongIds {
+            cancel(songId: songId, serverId: serverId)
+        }
         let records = await DownloadDatabase.shared.allRecords(serverId: serverId)
         for r in records {
             cancel(songId: r.songId, serverId: serverId)
@@ -418,13 +422,7 @@ actor DownloadService {
 
     func deleteAll() async {
         // Cancel aller Downloads FIRST — bevor wir Files anfassen
-        pendingJobs.removeAll()
-        pendingJobKeys.removeAll()
-        for taskId in Array(inflightJobs.keys) {
-            inflightJobs.removeValue(forKey: taskId)
-            jobKeyByTask.removeValue(forKey: taskId)
-        }
-        session?.getAllTasks { tasks in tasks.forEach { $0.cancel() } }
+        cancelBatch()
 
         // DB leeren (rows weg, Pool bleibt offen mit leerer DB)
         await DownloadDatabase.shared.deleteAll()
@@ -637,7 +635,8 @@ actor DownloadService {
 
         let serverDir = Self.serverDirectory(serverId: job.serverId)
         // Wenn der Server nicht das angeforderte Format liefert, mit korrekter Extension speichern.
-        let actualExt = TranscodingPolicy.extensionFor(mimeType: mimeType) ?? job.fileExtension
+        let actualExt = (TranscodingPolicy.extensionFor(mimeType: mimeType) ?? job.fileExtension)
+            .pathSafeFileExtension()
         let finalURL = serverDir.appendingPathComponent("\(job.song.id.pathSafeComponent).\(actualExt)")
 
         // Race-Window 1: User cancel-te zwischen erstem `await` und jetzt.
@@ -748,11 +747,25 @@ actor DownloadService {
 
     private func retryOrFail(job: DownloadJob, error: Error) async {
         let key = Self.key(songId: job.song.id, serverId: job.serverId)
+        if cancelledKeys.contains(key) {
+            cancelledKeys.remove(key)
+            publishProgress(key: key, value: nil)
+            stateSubject.send((key, .none))
+            startNextJobs()
+            return
+        }
         var next = job
         next.attempt += 1
         if next.attempt < maxAttempts {
             let backoff = pow(2.0, Double(next.attempt))
             try? await Task.sleep(nanoseconds: UInt64(backoff * 1_000_000_000))
+            if cancelledKeys.contains(key) {
+                cancelledKeys.remove(key)
+                publishProgress(key: key, value: nil)
+                stateSubject.send((key, .none))
+                startNextJobs()
+                return
+            }
             pendingJobs.append(next)
             pendingJobKeys.insert(key)
             stateSubject.send((key, .queued))
@@ -764,11 +777,18 @@ actor DownloadService {
            let api = await currentAPI(for: job.serverId),
            let rawURL = api.api.downloadURL(for: job.song.id, server: api.server, password: api.password,
                                             transcoding: nil) {
+            if cancelledKeys.contains(key) {
+                cancelledKeys.remove(key)
+                publishProgress(key: key, value: nil)
+                stateSubject.send((key, .none))
+                startNextJobs()
+                return
+            }
             var raw = job
             raw.attempt = 0
             raw.fellBackToRaw = true
             raw.downloadURL = rawURL
-            raw.fileExtension = (job.song.suffix?.isEmpty == false) ? job.song.suffix! : "mp3"
+            raw.fileExtension = job.song.suffix?.pathSafeFileExtension() ?? "mp3"
             pendingJobs.append(raw)
             pendingJobKeys.insert(key)
             stateSubject.send((key, .queued))

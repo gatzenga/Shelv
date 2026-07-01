@@ -45,6 +45,24 @@ nonisolated enum InstantMixService {
         }
     }
 
+    @MainActor
+    static func playSongMix(for song: Song) {
+        playSongMix(for: song, player: AudioPlayerService.shared)
+    }
+
+    @MainActor
+    static func playSongMix(for song: Song, player: AudioPlayerService) {
+        guard isEnabled else { return }
+        Task {
+            let songs = await songMix(for: song)
+            guard !songs.isEmpty else {
+                NotificationCenter.default.post(name: .instantMixUnavailable, object: nil)
+                return
+            }
+            player.play(songs: songs, startIndex: 0)
+        }
+    }
+
     static func albumMix(for album: Album) async -> [Song] {
         guard !UserDefaults.standard.bool(forKey: "offlineModeEnabled") else { return [] }
 
@@ -89,6 +107,11 @@ nonisolated enum InstantMixService {
              into: &songs,
              seen: &seen)
         return songs
+    }
+
+    static func songMix(for song: Song) async -> [Song] {
+        guard !UserDefaults.standard.bool(forKey: "offlineModeEnabled") else { return [] }
+        return await moreLikeThisQueue(for: song)
     }
 
     private static func moreLikeThisQueue(for source: Song) async -> [Song] {

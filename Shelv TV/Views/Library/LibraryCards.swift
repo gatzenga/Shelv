@@ -235,7 +235,9 @@ private struct SongContextMenuModifier: ViewModifier {
     let song: Song
     @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
     @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
+    @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     @ObservedObject private var library = LibraryStore.shared
+    @ObservedObject private var offlineMode = OfflineModeService.shared
     @State private var showAddToPlaylist = false
 
     func body(content: Content) -> some View {
@@ -247,6 +249,11 @@ private struct SongContextMenuModifier: ViewModifier {
                 }
                 Button { player.addToQueue(song) } label: {
                     Label(String(localized: "add_to_queue"), systemImage: "text.append")
+                }
+                if showInstantMixActions && !offlineMode.isOffline {
+                    Button { InstantMixService.playSongMix(for: song, player: player) } label: {
+                        Label(String(localized: "instant_mix"), systemImage: "sparkles")
+                    }
                 }
                 if showFavoriteActions {
                     let starred = library.isSongStarred(song)

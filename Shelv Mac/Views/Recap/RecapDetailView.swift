@@ -11,6 +11,7 @@ struct RecapDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
     @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
+    @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     @AppStorage("enableDownloads") private var enableDownloads = false
     @State private var songs: [SongWithCount] = []
     @State private var isLoading = true
@@ -103,6 +104,11 @@ struct RecapDetailView: View {
                         .contextMenu {
                             Button(String(localized: "play")) {
                                 AudioPlayerService.shared.play(songs: songs.map { $0.song }, startIndex: idx)
+                            }
+                            if showInstantMixActions && !offlineMode.isOffline {
+                                Button(String(localized: "instant_mix")) {
+                                    InstantMixService.playSongMix(for: entry.song)
+                                }
                             }
                             Divider()
                             Button(String(localized: "play_next")) {

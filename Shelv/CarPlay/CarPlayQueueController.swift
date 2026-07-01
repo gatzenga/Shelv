@@ -53,6 +53,7 @@ final class CarPlayQueueController {
 
         coverTask?.cancel()
         let built = buildSections()
+        prefillCoversFromCache(built.itemsByCoverId)
         rootTemplate.updateSections(built.sections)
         guard !built.itemsByCoverId.isEmpty else { return }
         coverTask = Task {

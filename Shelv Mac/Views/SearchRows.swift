@@ -90,6 +90,7 @@ struct SearchSongRow: View {
     @Environment(\.themeColor) private var themeColor
     @ObservedObject private var downloadStore = DownloadStore.shared
     @ObservedObject private var offlineMode = OfflineModeService.shared
+    @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     @AppStorage("enableDownloads") private var enableDownloads = false
     @State private var isHovered = false
 
@@ -119,6 +120,11 @@ struct SearchSongRow: View {
         .onTapGesture(count: 2) { onPlay() }
         .contextMenu {
             Button(String(localized: "play")) { onPlay() }
+            if showInstantMixActions && !offlineMode.isOffline {
+                Button(String(localized: "instant_mix")) {
+                    InstantMixService.playSongMix(for: song)
+                }
+            }
             Divider()
             if let onPlayNext {
                 Button(String(localized: "play_next")) { onPlayNext() }
@@ -153,11 +159,13 @@ struct LyricsSearchRow: View {
     let onPlay: () -> Void
     var onPlayNext: (() -> Void)? = nil
     var onAddToQueue: (() -> Void)? = nil
+    var onInstantMix: (() -> Void)? = nil
     var onFavorite: (() -> Void)? = nil
     var onAddToPlaylist: (() -> Void)? = nil
     @Environment(\.themeColor) private var themeColor
     @ObservedObject private var downloadStore = DownloadStore.shared
     @ObservedObject private var offlineMode = OfflineModeService.shared
+    @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     @AppStorage("enableDownloads") private var enableDownloads = false
     @State private var isHovered = false
 
@@ -211,6 +219,9 @@ struct LyricsSearchRow: View {
         .onTapGesture(count: 2) { onPlay() }
         .contextMenu {
             Button(String(localized: "play")) { onPlay() }
+            if showInstantMixActions && !offlineMode.isOffline, let onInstantMix {
+                Button(String(localized: "instant_mix")) { onInstantMix() }
+            }
             Divider()
             if let onPlayNext {
                 Button(String(localized: "play_next")) { onPlayNext() }

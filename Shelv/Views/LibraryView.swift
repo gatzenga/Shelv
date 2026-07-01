@@ -42,6 +42,13 @@ struct LibraryView: View {
 
     private let columns = [GridItem(.adaptive(minimum: 150, maximum: 200), spacing: 14)]
 
+    private struct DownloadedLibrarySnapshot: Sendable {
+        let albumIds: Set<String>
+        let artistNames: Set<String>
+        let artistBadgeNames: Set<String>
+        let songIds: Set<String>
+    }
+
     @ViewBuilder
     private var segmentContent: some View {
         switch segment {
@@ -74,16 +81,25 @@ struct LibraryView: View {
                 artistListContent
             }
         case .favorites:
+            let snapshot = downloadedLibrarySnapshot
+            let starredSongs = displayStarredSongs(using: snapshot)
+            let starredAlbums = displayStarredAlbums(using: snapshot)
+            let starredArtists = displayStarredArtists(using: snapshot)
             let isLoadingFavorites = libraryStore.isLoadingStarred
-                && displayStarredSongs.isEmpty
-                && displayStarredAlbums.isEmpty
-                && displayStarredArtists.isEmpty
+                && starredSongs.isEmpty
+                && starredAlbums.isEmpty
+                && starredArtists.isEmpty
             if isLoadingFavorites {
                 Spacer()
                 ProgressView()
                 Spacer()
             } else {
-                favoritesContent
+                favoritesContent(
+                    songs: starredSongs,
+                    albums: starredAlbums,
+                    artists: starredArtists,
+                    snapshot: snapshot
+                )
             }
         }
     }
@@ -188,8 +204,16 @@ struct LibraryView: View {
     private func rebuildGroups() {
         rebuildTask?.cancel()
 
-        let albumsSource = displayAlbums
-        let artistsSource = displayArtists
+        let albumsSource: [Album]
+        let artistsSource: [Artist]
+        if offlineMode.isOffline {
+            let snapshot = downloadedLibrarySnapshot
+            albumsSource = displayAlbums(using: snapshot)
+            artistsSource = displayArtists(using: snapshot)
+        } else {
+            albumsSource = libraryStore.albums
+            artistsSource = libraryStore.artists
+        }
         let libraryAlbums = libraryStore.albums
         let sortOpt = sortOption
         let albumDir = albumDirection
@@ -260,19 +284,20 @@ struct LibraryView: View {
         }
     }
 
-    private var downloadedAlbumIds: Set<String> {
-        Set(downloadStore.albums.map { $0.albumId })
-    }
-    private var downloadedArtistNames: Set<String> {
-        Set(downloadStore.artists.map { $0.name })
-    }
-
-    private var downloadedArtistBadgeNames: Set<String> {
-        var names = downloadedArtistNames
+    private var downloadedLibrarySnapshot: DownloadedLibrarySnapshot {
+        let albumIds = Set(downloadStore.albums.map(\.albumId))
+        let artistNames = Set(downloadStore.artists.map(\.name))
+        let songIds = Set(downloadStore.songs.map(\.songId))
+        var artistBadgeNames = artistNames
         for song in downloadStore.songs {
-            names.formUnion(splitNavidromeArtist(song.artistName))
+            artistBadgeNames.formUnion(splitNavidromeArtist(song.artistName))
         }
-        return names
+        return DownloadedLibrarySnapshot(
+            albumIds: albumIds,
+            artistNames: artistNames,
+            artistBadgeNames: artistBadgeNames,
+            songIds: songIds
+        )
     }
 
     private func splitNavidromeArtist(_ name: String) -> [String] {
@@ -292,14 +317,11 @@ struct LibraryView: View {
         }
         return parts.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
     }
-    private var downloadedSongIds: Set<String> {
-        Set(downloadStore.songs.map { $0.songId })
-    }
 
-    private var displayAlbums: [Album] {
+    private func displayAlbums(using snapshot: DownloadedLibrarySnapshot) -> [Album] {
         guard offlineMode.isOffline else { return libraryStore.albums }
         if libraryStore.albums.isEmpty { return downloadStore.albums.map { $0.asAlbum() } }
-        let fromLibrary = libraryStore.albums.filter { downloadedAlbumIds.contains($0.id) }
+        let fromLibrary = libraryStore.albums.filter { snapshot.albumIds.contains($0.id) }
         let coveredIds = Set(fromLibrary.map { $0.id })
         let extras = downloadStore.albums
             .filter { !coveredIds.contains($0.albumId) }
@@ -307,10 +329,10 @@ struct LibraryView: View {
         return fromLibrary + extras
     }
 
-    private var displayArtists: [Artist] {
+    private func displayArtists(using snapshot: DownloadedLibrarySnapshot) -> [Artist] {
         guard offlineMode.isOffline else { return libraryStore.artists }
         if libraryStore.artists.isEmpty { return downloadStore.artists.map { $0.asArtist() } }
-        let fromLibrary = libraryStore.artists.filter { downloadedArtistNames.contains($0.name) }
+        let fromLibrary = libraryStore.artists.filter { snapshot.artistNames.contains($0.name) }
         let coveredNames = Set(fromLibrary.map { $0.name })
         let extras = downloadStore.artists
             .filter { !coveredNames.contains($0.name) }
@@ -553,6 +575,7 @@ struct LibraryView: View {
 
     @ViewBuilder
     private var artistGridContent: some View {
+        let snapshot = downloadedLibrarySnapshot
         LazyVStack(alignment: .leading, spacing: 0, pinnedViews: .sectionHeaders) {
             ForEach(artistGroups, id: \.letter) { group in
                 Section {
@@ -561,12 +584,12 @@ struct LibraryView: View {
                             NavigationLink(destination: ArtistDetailView(artist: artist)) {
                                 LibraryArtistGridCell(
                                     artist: artist,
-                                    isDownloaded: downloadedArtistBadgeNames.contains(artist.name),
+                                    isDownloaded: snapshot.artistBadgeNames.contains(artist.name),
                                     accentColor: accentColor
                                 )
                             }
                             .buttonStyle(.plain)
-                            .contextMenu { artistContextMenuItems(artist) }
+                            .contextMenu { artistContextMenuItems(artist, snapshot: snapshot) }
                         }
                     }
                     .padding(.horizontal)
@@ -584,6 +607,7 @@ struct LibraryView: View {
 
     @ViewBuilder
     private var artistListContent: some View {
+        let snapshot = downloadedLibrarySnapshot
         ScrollViewReader { proxy in
             List {
                 ForEach(artistGroups, id: \.letter) { group in
@@ -601,16 +625,16 @@ struct LibraryView: View {
                             LibraryArtistListRow(
                                 artist: artist,
                                 localAlbumCount: albumCountByArtist[artist.id] ?? artist.albumCount ?? 0,
-                                isDownloaded: downloadedArtistBadgeNames.contains(artist.name),
+                                isDownloaded: snapshot.artistBadgeNames.contains(artist.name),
                                 accentColor: accentColor
                             )
                         }
                         .buttonStyle(.plain)
-                        .contextMenu { artistContextMenuItems(artist) }
+                        .contextMenu { artistContextMenuItems(artist, snapshot: snapshot) }
                         .personalizedAlbumArtistSwipeActions(
                             isOffline: offlineMode.isOffline,
                             isFavorite: libraryStore.isArtistStarred(artist),
-                            downloadState: artistDownloadState(artist),
+                            downloadState: artistDownloadState(artist, snapshot: snapshot),
                             accentColor: accentColor,
                             onFavorite: {
                                 haptic(.medium); Task { await libraryStore.toggleStarArtist(artist) }
@@ -657,26 +681,31 @@ struct LibraryView: View {
         }
     }
 
-    private var displayStarredSongs: [Song] {
+    private func displayStarredSongs(using snapshot: DownloadedLibrarySnapshot) -> [Song] {
         guard offlineMode.isOffline else { return libraryStore.starredSongs }
-        return libraryStore.starredSongs.filter { downloadedSongIds.contains($0.id) }
+        return libraryStore.starredSongs.filter { snapshot.songIds.contains($0.id) }
     }
 
-    private var displayStarredAlbums: [Album] {
+    private func displayStarredAlbums(using snapshot: DownloadedLibrarySnapshot) -> [Album] {
         guard offlineMode.isOffline else { return libraryStore.starredAlbums }
-        return libraryStore.starredAlbums.filter { downloadedAlbumIds.contains($0.id) }
+        return libraryStore.starredAlbums.filter { snapshot.albumIds.contains($0.id) }
     }
 
-    private var displayStarredArtists: [Artist] {
+    private func displayStarredArtists(using snapshot: DownloadedLibrarySnapshot) -> [Artist] {
         guard offlineMode.isOffline else { return libraryStore.starredArtists }
-        return libraryStore.starredArtists.filter { downloadedArtistNames.contains($0.name) }
+        return libraryStore.starredArtists.filter { snapshot.artistNames.contains($0.name) }
     }
 
     @ViewBuilder
-    private var favoritesContent: some View {
-        let hasSongs   = !displayStarredSongs.isEmpty
-        let hasAlbums  = !displayStarredAlbums.isEmpty
-        let hasArtists = !displayStarredArtists.isEmpty
+    private func favoritesContent(
+        songs: [Song],
+        albums: [Album],
+        artists: [Artist],
+        snapshot: DownloadedLibrarySnapshot
+    ) -> some View {
+        let hasSongs = !songs.isEmpty
+        let hasAlbums = !albums.isEmpty
+        let hasArtists = !artists.isEmpty
 
         if !hasSongs && !hasAlbums && !hasArtists {
             ContentUnavailableView(
@@ -688,18 +717,18 @@ struct LibraryView: View {
             List {
                 if hasArtists {
                     Section(String(localized: "artists")) {
-                        ForEach(displayStarredArtists) { artist in
+                        ForEach(artists) { artist in
                             NavigationLink(destination: ArtistDetailView(artist: artist)) {
                                 LibraryFavoriteArtistRow(
                                     artist: artist,
-                                    isDownloaded: downloadedArtistBadgeNames.contains(artist.name),
+                                    isDownloaded: snapshot.artistBadgeNames.contains(artist.name),
                                     accentColor: accentColor
                                 )
                             }
                             .personalizedAlbumArtistSwipeActions(
                                 isOffline: offlineMode.isOffline,
                                 isFavorite: true,
-                                downloadState: artistDownloadState(artist),
+                                downloadState: artistDownloadState(artist, snapshot: snapshot),
                                 accentColor: accentColor,
                                 onFavorite: {
                                     haptic(.medium); Task { await libraryStore.toggleStarArtist(artist) }
@@ -722,7 +751,7 @@ struct LibraryView: View {
                 }
                 if hasAlbums {
                     Section(String(localized: "albums")) {
-                        ForEach(displayStarredAlbums) { album in
+                        ForEach(albums) { album in
                             NavigationLink(destination: AlbumDetailView(album: album)) {
                                 LibraryFavoriteAlbumRow(album: album)
                             }
@@ -755,7 +784,7 @@ struct LibraryView: View {
                 }
                 if hasSongs {
                     Section(String(localized: "songs")) {
-                        ForEach(displayStarredSongs) { song in
+                        ForEach(songs) { song in
                             Button { player.playSong(song) } label: {
                                 LibraryStarredSongRow(song: song)
                             }
@@ -866,9 +895,9 @@ struct LibraryView: View {
         }
     }
 
-    private func artistDownloadState(_ artist: Artist) -> PersonalizedDownloadSwipeState {
+    private func artistDownloadState(_ artist: Artist, snapshot: DownloadedLibrarySnapshot) -> PersonalizedDownloadSwipeState {
         guard enableDownloads else { return .hidden }
-        if downloadedArtistNames.contains(artist.name) {
+        if snapshot.artistNames.contains(artist.name) {
             return .delete
         }
         return offlineMode.isOffline ? .hidden : .download
@@ -876,7 +905,7 @@ struct LibraryView: View {
 
     private func handleArtistDownloadSwipe(_ artist: Artist) {
         guard enableDownloads else { return }
-        if downloadedArtistNames.contains(artist.name) {
+        if downloadedLibrarySnapshot.artistNames.contains(artist.name) {
             haptic(); artistToDeleteDownloads = artist
         } else if !offlineMode.isOffline {
             haptic()
@@ -908,7 +937,7 @@ struct LibraryView: View {
     }
 
     @ViewBuilder
-    private func artistContextMenuItems(_ artist: Artist) -> some View {
+    private func artistContextMenuItems(_ artist: Artist, snapshot: DownloadedLibrarySnapshot) -> some View {
         Button {
             Task {
                 let songs = await libraryStore.fetchAllSongs(for: artist)
@@ -974,7 +1003,7 @@ struct LibraryView: View {
                     Label(String(localized: "download_artist"), systemImage: "arrow.down.circle")
                 }
             }
-            if downloadedArtistNames.contains(artist.name) {
+            if snapshot.artistNames.contains(artist.name) {
                 Button(role: .destructive) {
                     artistToDeleteDownloads = artist
                 } label: {

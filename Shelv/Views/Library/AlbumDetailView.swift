@@ -24,29 +24,39 @@ struct AlbumDetailView: View {
     @State private var searchQuery = ""
     @State private var showDeleteAlbumDownloadConfirm = false
 
+    private struct IndexedSongRow: Identifiable {
+        let index: Int
+        let song: Song
+
+        var id: String { song.id }
+    }
+
     private var showPerSongArtist: Bool {
         Set((detail?.song ?? []).compactMap(\.artist)).count > 1
     }
 
-    private var displayedSongs: [Song] {
+    private var displayedSongRows: [IndexedSongRow] {
         let all = detail?.song ?? []
-        guard !searchQuery.isEmpty else { return all }
-        return all.filter {
-            $0.title.localizedCaseInsensitiveContains(searchQuery)
-                || ($0.artist?.localizedCaseInsensitiveContains(searchQuery) ?? false)
+        return all.enumerated().compactMap { index, song in
+            guard !searchQuery.isEmpty else {
+                return IndexedSongRow(index: index, song: song)
+            }
+            let matches = song.title.localizedCaseInsensitiveContains(searchQuery)
+                || (song.artist?.localizedCaseInsensitiveContains(searchQuery) ?? false)
+            return matches ? IndexedSongRow(index: index, song: song) : nil
         }
     }
 
-    private var discGroups: [(disc: Int, songs: [Song])] {
+    private var discGroups: [(disc: Int, songs: [IndexedSongRow])] {
         let all = detail?.song ?? []
         let discNumbers = Set(all.compactMap(\.discNumber))
         guard discNumbers.count >= 2 else { return [] }
-        let sorted = all.sorted {
-            let d0 = $0.discNumber ?? 1, d1 = $1.discNumber ?? 1
+        let sorted = all.enumerated().map { IndexedSongRow(index: $0.offset, song: $0.element) }.sorted {
+            let d0 = $0.song.discNumber ?? 1, d1 = $1.song.discNumber ?? 1
             if d0 != d1 { return d0 < d1 }
-            return ($0.track ?? 0) < ($1.track ?? 0)
+            return ($0.song.track ?? 0) < ($1.song.track ?? 0)
         }
-        let grouped = Dictionary(grouping: sorted) { $0.discNumber ?? 1 }
+        let grouped = Dictionary(grouping: sorted) { $0.song.discNumber ?? 1 }
         return grouped.keys.sorted().map { disc in (disc: disc, songs: grouped[disc, default: []]) }
     }
 
@@ -84,17 +94,15 @@ struct AlbumDetailView: View {
                             .foregroundStyle(.secondary)
                             .textCase(nil)
                         ) {
-                            ForEach(group.songs, id: \.id) { song in
-                                let startIndex = allSongs.firstIndex(where: { $0.id == song.id }) ?? 0
-                                songRow(song: song, startIndex: startIndex, allSongs: allSongs)
+                            ForEach(group.songs) { row in
+                                songRow(song: row.song, startIndex: row.index, allSongs: allSongs)
                             }
                         }
                     }
                 } else {
                     Section {
-                        ForEach(Array(displayedSongs.enumerated()), id: \.element.id) { index, song in
-                            let startIndex = allSongs.firstIndex(where: { $0.id == song.id }) ?? index
-                            songRow(song: song, startIndex: startIndex, allSongs: allSongs)
+                        ForEach(displayedSongRows) { row in
+                            songRow(song: row.song, startIndex: row.index, allSongs: allSongs)
                         }
                     }
                 }

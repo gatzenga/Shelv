@@ -11,6 +11,7 @@ actor ImageCacheService {
     private static let diskLimitBytes = 1_073_741_824 // 1 GB
     private static let diskTrimTarget  = 900 * 1024 * 1024 // 900 MB (hysteresis)
     private static let writesPerTrimCheck = 20
+    private static let defaultFallbackSizes = [600, 300, 240, 200, 192, 180, 160, 156, 150, 120, 100, 80, 50]
 
     private init() {
         cacheDir = FileManager.default
@@ -26,39 +27,55 @@ actor ImageCacheService {
         memory.object(forKey: key as NSString)
     }
 
+    nonisolated func cachedImage(key: String, fallbackSizes: [Int]) -> UIImage? {
+        for candidate in Self.candidateKeys(for: key, fallbackSizes: fallbackSizes) {
+            if let hit = memory.object(forKey: candidate as NSString) {
+                return hit
+            }
+        }
+        return nil
+    }
+
     nonisolated func cache(_ img: UIImage, key: String) {
         let cost = Int(img.size.width * img.size.height * 4)
         memory.setObject(img, forKey: key as NSString, cost: cost)
     }
 
-    func diskOnlyImage(key: String) async -> UIImage? {
-        if let hit = memory.object(forKey: key as NSString) { return hit }
-        let diskURL = cacheDir.appendingPathComponent(key.pathSafeComponent)
-        let dir = cacheDir
-        let img = await Task.detached(priority: .medium) { () -> UIImage? in
-            if let data = try? Data(contentsOf: diskURL),
-               let img = UIImage(data: data) {
-                return img
+    nonisolated static func coverFallbackSizes(preferred size: Int) -> [Int] {
+        var seen = Set<Int>()
+        return ([size] + defaultFallbackSizes).filter { seen.insert($0).inserted }
+    }
+
+    func diskOnlyImage(key: String, fallbackSizes: [Int] = ImageCacheService.defaultFallbackSizes) async -> UIImage? {
+        await diskOnlyImageResult(key: key, fallbackSizes: fallbackSizes)?.image
+    }
+
+    func diskOnlyImageResult(
+        key: String,
+        fallbackSizes: [Int] = ImageCacheService.defaultFallbackSizes
+    ) async -> (key: String, image: UIImage)? {
+        let candidates = Self.candidateKeys(for: key, fallbackSizes: fallbackSizes)
+        for candidate in candidates {
+            if let hit = memory.object(forKey: candidate as NSString) {
+                return (candidate, hit)
             }
-            // Fallback: gleiche Cover-ID, andere gecachte Grösse
-            guard let lastUnderscore = key.lastIndex(of: "_") else { return nil }
-            let idPrefix = String(key[key.startIndex..<lastUnderscore]) + "_"
-            let fallbackSizes = [600, 300, 240, 200, 192, 180, 160, 156, 150, 120, 100, 80, 50]
-            for size in fallbackSizes {
-                let fallbackKey = "\(idPrefix)\(size)"
-                guard fallbackKey != key else { continue }
-                let fallbackURL = dir.appendingPathComponent(fallbackKey.pathSafeComponent)
+        }
+        let dir = cacheDir
+        let result = await Task.detached(priority: .medium) { () -> (String, UIImage)? in
+            for candidate in candidates {
+                let fallbackURL = dir.appendingPathComponent(candidate.pathSafeComponent)
                 guard let data = try? Data(contentsOf: fallbackURL),
                       let img = UIImage(data: data) else { continue }
-                return img
+                return (candidate, img)
             }
             return nil
         }.value
-        if let img {
+        if let (candidate, img) = result {
             let cost = Int(img.size.width * img.size.height * 4)
-            memory.setObject(img, forKey: key as NSString, cost: cost)
+            memory.setObject(img, forKey: candidate as NSString, cost: cost)
+            return (candidate, img)
         }
-        return img
+        return nil
     }
 
     func image(url: URL, key: String) async -> UIImage? {
@@ -124,6 +141,18 @@ actor ImageCacheService {
     nonisolated private static func isSuccessfulImageResponse(_ response: URLResponse) -> Bool {
         guard let http = response as? HTTPURLResponse else { return true }
         return (200..<300).contains(http.statusCode)
+    }
+
+    private nonisolated static func candidateKeys(for key: String, fallbackSizes: [Int]) -> [String] {
+        var keys = [key]
+        guard let lastUnderscore = key.lastIndex(of: "_") else { return keys }
+        let idPrefix = String(key[key.startIndex..<lastUnderscore]) + "_"
+        for size in fallbackSizes {
+            let fallbackKey = "\(idPrefix)\(size)"
+            guard fallbackKey != key, !keys.contains(fallbackKey) else { continue }
+            keys.append(fallbackKey)
+        }
+        return keys
     }
 
     private nonisolated static func trimDiskCache(cacheDir: URL) {

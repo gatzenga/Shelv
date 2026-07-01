@@ -121,6 +121,11 @@ struct SearchView: View {
                                                 NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_queue"))
                                             }
                                         },
+                                        onInstantMix: {
+                                            withLyricsSong(item) { song in
+                                                InstantMixService.playSongMix(for: song, player: appState.player)
+                                            }
+                                        },
                                         onFavorite: {
                                             withLyricsSong(item) { song in
                                                 Task { await libraryStore.toggleStarSong(song) }

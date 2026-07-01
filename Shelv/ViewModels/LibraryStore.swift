@@ -39,7 +39,7 @@ class LibraryStore: ObservableObject {
     }
 
     nonisolated static func diskURL(name: String, serverID: UUID) -> URL {
-        libraryDir.appendingPathComponent("\(name)_\(serverID).json")
+        libraryDir.appendingPathComponent("\(name.pathSafeComponent)_\(serverID).json")
     }
 
     nonisolated static func diskCacheSizeBytes() -> Int {
@@ -543,7 +543,7 @@ class LibraryStore: ObservableObject {
         if let entry = await PlayLogService.shared.registryEntry(playlistId: playlist.id) {
             CloudKitSyncService.debugLog("[LibraryDelete] playlistId=\(playlist.id) was recap, deleting marker=\(entry.ckRecordName ?? "nil")")
             if let ckName = entry.ckRecordName {
-                await CloudKitSyncService.shared.deleteRecapMarker(ckRecordName: ckName)
+                await CloudKitSyncService.shared.queueRecapMarkerDeletion(ckRecordName: ckName)
             }
             await PlayLogService.shared.deleteRegistryEntry(playlistId: playlist.id)
             NotificationCenter.default.post(name: .recapRegistryUpdated, object: nil)

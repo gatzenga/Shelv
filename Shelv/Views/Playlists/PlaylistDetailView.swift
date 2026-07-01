@@ -30,12 +30,22 @@ struct PlaylistDetailView: View {
     @State private var originalRanks: [String: Int] = [:]
     @Environment(\.dismiss) private var dismiss
 
-    private var displayedSongs: [Song] {
-        guard !searchQuery.isEmpty, !isEditMode else { return songs }
-        return songs.filter {
-            $0.title.localizedCaseInsensitiveContains(searchQuery)
-                || ($0.artist?.localizedCaseInsensitiveContains(searchQuery) ?? false)
-                || ($0.album?.localizedCaseInsensitiveContains(searchQuery) ?? false)
+    private struct IndexedSongRow: Identifiable {
+        let index: Int
+        let song: Song
+
+        var id: String { song.id }
+    }
+
+    private var displayedSongRows: [IndexedSongRow] {
+        songs.enumerated().compactMap { index, song in
+            guard !searchQuery.isEmpty, !isEditMode else {
+                return IndexedSongRow(index: index, song: song)
+            }
+            let matches = song.title.localizedCaseInsensitiveContains(searchQuery)
+                || (song.artist?.localizedCaseInsensitiveContains(searchQuery) ?? false)
+                || (song.album?.localizedCaseInsensitiveContains(searchQuery) ?? false)
+            return matches ? IndexedSongRow(index: index, song: song) : nil
         }
     }
 
@@ -66,8 +76,9 @@ struct PlaylistDetailView: View {
                 }
             } else {
                 Section {
-                    ForEach(Array(displayedSongs.enumerated()), id: \.element.id) { displayIndex, song in
-                        let songsIndex = songs.firstIndex(where: { $0.id == song.id }) ?? displayIndex
+                    ForEach(displayedSongRows) { row in
+                        let song = row.song
+                        let songsIndex = row.index
                         Button {
                             player.play(songs: songs, startIndex: songsIndex)
                         } label: {
