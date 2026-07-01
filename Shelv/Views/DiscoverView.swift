@@ -125,7 +125,7 @@ struct DiscoverView: View {
                             Image(systemName: "chart.bar.xaxis")
                         }
                     }
-                    if showRadio {
+                    if showRadio && !offlineMode.isOffline {
                         Button {
                             showRadioSheet = true
                         } label: {
@@ -180,6 +180,7 @@ struct DiscoverView: View {
             }
             .onChange(of: offlineMode.isOffline) { _, isOffline in
                 if isOffline {
+                    showRadioSheet = false
                     if let cont = refreshContinuation {
                         refreshContinuation = nil
                         cont.resume()

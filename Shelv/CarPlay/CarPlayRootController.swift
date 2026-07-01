@@ -144,6 +144,7 @@ final class CarPlayRootController: NSObject {
     }
 
     private static var radioTabEnabled: Bool {
+        guard !OfflineModeService.shared.isOffline else { return false }
         guard UserDefaults.standard.object(forKey: PersonalizationPreferenceKey.showRadio) != nil else { return true }
         return UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showRadio)
     }

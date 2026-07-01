@@ -7,16 +7,14 @@ import SwiftUI
 struct MainTabView: View {
     @AppStorage(PersonalizationPreferenceKey.showPlaylistsTab) private var showPlaylistsTab = true
     @AppStorage(PersonalizationPreferenceKey.showRadio) private var showRadio = true
+    @ObservedObject private var offlineMode = OfflineModeService.shared
     @ObservedObject private var queueSync = QueueSyncService.shared
     @State private var selection = MainTabView.initialSelection
     @State private var visibleShowPlaylistsTab = MainTabView.initialBoolPreference(
         PersonalizationPreferenceKey.showPlaylistsTab,
         default: true
     )
-    @State private var visibleShowRadio = MainTabView.initialBoolPreference(
-        PersonalizationPreferenceKey.showRadio,
-        default: true
-    )
+    @State private var visibleShowRadio = MainTabView.initialRadioVisible
 
     private static var initialSelection: String {
         #if DEBUG
@@ -31,6 +29,11 @@ struct MainTabView: View {
         let defaults = UserDefaults.standard
         guard defaults.object(forKey: key) != nil else { return defaultValue }
         return defaults.bool(forKey: key)
+    }
+
+    private static var initialRadioVisible: Bool {
+        guard !OfflineModeService.shared.isOffline else { return false }
+        return initialBoolPreference(PersonalizationPreferenceKey.showRadio, default: true)
     }
 
     var body: some View {
@@ -79,6 +82,9 @@ struct MainTabView: View {
         .onChange(of: showRadio) { _, _ in
             syncVisibleTabsIfAllowed()
         }
+        .onChange(of: offlineMode.isOffline) { _, _ in
+            syncVisibleTabs()
+        }
         .onChange(of: selection) { _, newSelection in
             if newSelection != "settings" {
                 syncVisibleTabs()
@@ -115,6 +121,6 @@ struct MainTabView: View {
 
     private func syncVisibleTabs() {
         visibleShowPlaylistsTab = showPlaylistsTab
-        visibleShowRadio = showRadio
+        visibleShowRadio = showRadio && !offlineMode.isOffline
     }
 }

@@ -84,7 +84,7 @@ struct SidebarView: View {
                     appState.navigationPath = NavigationPath()
                 }
             }
-            if showRadio {
+            if showRadio && !offlineMode.isOffline {
                 SidebarRow(item: .radio, isSelected: selection == .radio && selectedPlaylist == nil, themeColor: themeColor) {
                     selection = .radio
                     selectedPlaylist = nil
@@ -176,6 +176,13 @@ struct SidebarView: View {
         }
         .onChange(of: showRadio) { _, new in
             if !new && selection == .radio {
+                selection = .search
+                selectedPlaylist = nil
+                appState.navigationPath = NavigationPath()
+            }
+        }
+        .onChange(of: offlineMode.isOffline) { _, isOffline in
+            if isOffline && selection == .radio {
                 selection = .search
                 selectedPlaylist = nil
                 appState.navigationPath = NavigationPath()
