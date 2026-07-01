@@ -8,7 +8,8 @@ import AppKit
 
 private struct RadioArtworkSource: Sendable {
     let url: URL
-    let cacheKey: String?
+    let cacheKeys: [String]
+    let coverArtID: String?
 
     var identifier: String { url.absoluteString }
 }
@@ -122,6 +123,10 @@ final class AudioPlayerNowPlayingController {
             stationArtworkURL: stationArtworkURL,
             stationCoverArtID: station.coverArt
         )
+        if let cached = Self.cachedRadioArtwork(from: artworkSources) {
+            currentArtwork = cached.artwork
+            currentArtworkSource = cached.source
+        }
         loadRadioArtworkIfNeeded(artworkSources)
 
         if let currentArtwork,
@@ -199,16 +204,22 @@ final class AudioPlayerNowPlayingController {
         var sources: [RadioArtworkSource] = []
         var seenURLs = Set<String>()
 
-        func append(_ url: URL?, cacheKey: String?) {
+        func append(_ url: URL?, cacheKeys: [String], coverArtID: String? = nil) {
             guard let url,
                   seenURLs.insert(url.absoluteString).inserted
             else { return }
-            sources.append(RadioArtworkSource(url: url, cacheKey: cacheKey))
+            sources.append(RadioArtworkSource(url: url, cacheKeys: cacheKeys, coverArtID: coverArtID))
         }
 
-        append(remoteArtworkURL, cacheKey: remoteArtworkURL.map { "radio_remote_\($0.absoluteString)" })
-        append(stationArtworkURL, cacheKey: stationCoverArtID.map { "\($0)_600" })
+        append(remoteArtworkURL, cacheKeys: remoteArtworkURL.map { ["radio_remote_\($0.absoluteString)"] } ?? [])
+        append(stationArtworkURL,
+               cacheKeys: stationCoverArtID.map(Self.stationCoverCacheKeys) ?? [],
+               coverArtID: stationCoverArtID)
         return sources
+    }
+
+    nonisolated private static func stationCoverCacheKeys(for coverArtID: String) -> [String] {
+        [600, 300, 240, 200, 192, 180, 160, 156, 150, 120, 100, 80, 50].map { "\(coverArtID)_\($0)" }
     }
 
     @MainActor
@@ -221,28 +232,95 @@ final class AudioPlayerNowPlayingController {
     }
 
     #if os(macOS)
+    private static func cachedRadioArtwork(from sources: [RadioArtworkSource]) -> (artwork: MPMediaItemArtwork, source: String)? {
+        for source in sources {
+            guard let image = ImageCacheService.shared.cachedImage(url: source.url) else { continue }
+            let artwork = MPMediaItemArtwork(boundsSize: CGSize(width: 600, height: 600)) { _ in image }
+            return (artwork, source.identifier)
+        }
+        return nil
+    }
+
     private static func loadRadioArtworkImage(from sources: [RadioArtworkSource]) async -> (image: NSImage, source: String)? {
         for source in sources {
             if Task.isCancelled { return nil }
+            if let coverArtID = source.coverArtID,
+               let localPath = LocalArtworkIndex.shared.localPath(for: coverArtID),
+               let localImage = NSImage(contentsOfFile: localPath) {
+                ImageCacheService.shared.cache(localImage, url: source.url)
+                return (localImage, source.identifier)
+            }
+            if source.coverArtID != nil,
+               let image = await ImageCacheService.shared.diskOnlyImage(url: source.url) {
+                return (image, source.identifier)
+            }
             guard let image = await ImageCacheService.shared.image(url: source.url) else { continue }
             return (image, source.identifier)
         }
         return nil
     }
     #elseif os(iOS)
+    private static func cachedRadioArtwork(from sources: [RadioArtworkSource]) -> (artwork: MPMediaItemArtwork, source: String)? {
+        for source in sources {
+            for key in source.cacheKeys {
+                guard let image = ImageCacheService.shared.cachedImage(key: key) else { continue }
+                let square = squareCroppedArtworkImage(image)
+                let artwork = MPMediaItemArtwork(boundsSize: square.size) { _ in square }
+                return (artwork, source.identifier)
+            }
+        }
+        return nil
+    }
+
     private static func loadRadioArtworkImage(from sources: [RadioArtworkSource]) async -> (image: UIImage, source: String)? {
         for source in sources {
             if Task.isCancelled { return nil }
-            let cacheKey = source.cacheKey ?? "radio_remote_\(source.url.absoluteString)"
+            let cacheKeys = source.cacheKeys.isEmpty ? ["radio_remote_\(source.url.absoluteString)"] : source.cacheKeys
+            for cacheKey in cacheKeys {
+                if let image = ImageCacheService.shared.cachedImage(key: cacheKey) {
+                    return (image, source.identifier)
+                }
+            }
+            if let coverArtID = source.coverArtID,
+               let localPath = LocalArtworkIndex.shared.localPath(for: coverArtID),
+               let image = UIImage(contentsOfFile: localPath) {
+                if let cacheKey = cacheKeys.first {
+                    ImageCacheService.shared.cache(image, key: cacheKey)
+                }
+                return (image, source.identifier)
+            }
+            if source.coverArtID != nil {
+                for cacheKey in cacheKeys {
+                    if let image = await ImageCacheService.shared.diskOnlyImage(key: cacheKey) {
+                        return (image, source.identifier)
+                    }
+                }
+            }
+            let cacheKey = cacheKeys.first ?? "radio_remote_\(source.url.absoluteString)"
             guard let image = await ImageCacheService.shared.image(url: source.url, key: cacheKey) else { continue }
             return (image, source.identifier)
         }
         return nil
     }
     #else
+    private static func cachedRadioArtwork(from sources: [RadioArtworkSource]) -> (artwork: MPMediaItemArtwork, source: String)? {
+        for source in sources {
+            guard let image = ImageCacheService.shared.cachedImage(url: source.url) else { continue }
+            let square = squareCroppedArtworkImage(image)
+            let artwork = MPMediaItemArtwork(boundsSize: square.size) { _ in square }
+            return (artwork, source.identifier)
+        }
+        return nil
+    }
+
     private static func loadRadioArtworkImage(from sources: [RadioArtworkSource]) async -> (image: UIImage, source: String)? {
         for source in sources {
             if Task.isCancelled { return nil }
+            if let coverArtID = source.coverArtID,
+               let localPath = LocalArtworkIndex.shared.localPath(for: coverArtID),
+               let localImage = UIImage(contentsOfFile: localPath) {
+                return (localImage, source.identifier)
+            }
             guard let image = await ImageCacheService.shared.image(url: source.url) else { continue }
             return (image, source.identifier)
         }
