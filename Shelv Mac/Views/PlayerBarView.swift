@@ -6,6 +6,7 @@ struct PlayerBarView: View {
     @ObservedObject var libraryStore = LibraryViewModel.shared
     @ObservedObject var downloadStore = DownloadStore.shared
     @ObservedObject private var player = AudioPlayerService.shared
+    @ObservedObject private var radioStore = RadioStationStore.shared
 
     private var audioBadge: String? {
         player.actualStreamFormat?.displayString
@@ -13,6 +14,7 @@ struct PlayerBarView: View {
     @Environment(\.themeColor) private var themeColor
     @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
     @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
+    @AppStorage("radioSortDirectionMac") private var radioSortDirectionRaw = SortDirection.ascending.rawValue
     @State private var isDragging: Bool = false
     @State private var dragValue: Double = 0
     // currentTime ist kein @Published → das Zeit-Label/der Slider werden über den
@@ -21,6 +23,11 @@ struct PlayerBarView: View {
     @State private var displayTime: Double = 0
     @State private var lastAudibleVolume: Float = 0.7
     @State private var isSleepTimerMenuPresented: Bool = false
+
+    private var radioDisplayItems: [RadioStationDisplayItem] {
+        let direction = SortDirection(rawValue: radioSortDirectionRaw) ?? .ascending
+        return direction == .descending ? Array(radioStore.items.reversed()) : radioStore.items
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -150,9 +157,12 @@ struct PlayerBarView: View {
                         }
 
                         if player.isRadioPlayback {
-                            Image(systemName: "backward.fill")
-                                .hidden()
-                                .font(.title2)
+                            Button { player.playPreviousRadioStation(in: radioDisplayItems) } label: {
+                                Image(systemName: "backward.fill")
+                            }
+                            .buttonStyle(.plain)
+                            .font(.title2)
+                            .disabled(radioDisplayItems.count <= 1)
                         } else {
                             Button { player.previous() } label: {
                                 Image(systemName: "backward.fill")
@@ -176,9 +186,12 @@ struct PlayerBarView: View {
                         .disabled(!player.hasActivePlayback)
 
                         if player.isRadioPlayback {
-                            Image(systemName: "forward.fill")
-                                .hidden()
-                                .font(.title2)
+                            Button { player.playNextRadioStation(in: radioDisplayItems) } label: {
+                                Image(systemName: "forward.fill")
+                            }
+                            .buttonStyle(.plain)
+                            .font(.title2)
+                            .disabled(radioDisplayItems.count <= 1)
                         } else {
                             Button { player.next(triggeredByUser: true) } label: {
                                 Image(systemName: "forward.fill")
@@ -375,6 +388,16 @@ struct PlayerBarView: View {
         HStack(spacing: 18) {
             sleepTimerMenu
 
+            Button { player.playPreviousRadioStation(in: radioDisplayItems) } label: {
+                Image(systemName: "backward.fill")
+                    .foregroundStyle(radioDisplayItems.count > 1 ? Color.primary : Color.secondary.opacity(0.45))
+                    .frame(width: 28, height: 28)
+            }
+            .buttonStyle(.plain)
+            .font(.title2)
+            .disabled(radioDisplayItems.count <= 1)
+            .help(String(localized: "previous"))
+
             Button { player.togglePlayPause() } label: {
                 ZStack {
                     Circle().fill(themeColor)
@@ -387,6 +410,16 @@ struct PlayerBarView: View {
             }
             .buttonStyle(.plain)
             .disabled(!player.hasActivePlayback)
+
+            Button { player.playNextRadioStation(in: radioDisplayItems) } label: {
+                Image(systemName: "forward.fill")
+                    .foregroundStyle(radioDisplayItems.count > 1 ? Color.primary : Color.secondary.opacity(0.45))
+                    .frame(width: 28, height: 28)
+            }
+            .buttonStyle(.plain)
+            .font(.title2)
+            .disabled(radioDisplayItems.count <= 1)
+            .help(String(localized: "next"))
 
             Button { player.stop() } label: {
                 Image(systemName: "stop.fill")

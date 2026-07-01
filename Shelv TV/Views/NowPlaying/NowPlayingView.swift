@@ -5,10 +5,16 @@ private enum SidePanel { case lyrics, queue }
 struct NowPlayingView: View {
     @ObservedObject var player = AudioPlayerService.shared
     @ObservedObject private var library = LibraryStore.shared
+    @ObservedObject private var radioStore = RadioStationStore.shared
     @AppStorage("themeColor") private var themeColor = "violet"
     @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
+    @AppStorage("radioSortDirectionTV") private var radioSortDirectionRaw = SortDirection.ascending.rawValue
     @Environment(\.scenePhase) private var scenePhase
     private var accent: Color { AppTheme.color(for: themeColor) }
+    private var radioDisplayItems: [RadioStationDisplayItem] {
+        let direction = SortDirection(rawValue: radioSortDirectionRaw) ?? .ascending
+        return direction == .descending ? Array(radioStore.items.reversed()) : radioStore.items
+    }
 
     @State private var displayTime: Double = 0
     @State private var displayDuration: Double = 0
@@ -114,8 +120,20 @@ struct NowPlayingView: View {
 
             // Transport
             if player.isRadioPlayback {
-                Button { player.togglePlayPause() } label: {
-                    Image(systemName: player.isPlaying ? "pause.fill" : "play.fill").font(.body)
+                HStack(spacing: 30) {
+                    Button { player.playPreviousRadioStation(in: radioDisplayItems) } label: {
+                        Image(systemName: "backward.fill")
+                    }
+                    .disabled(radioDisplayItems.count <= 1)
+
+                    Button { player.togglePlayPause() } label: {
+                        Image(systemName: player.isPlaying ? "pause.fill" : "play.fill").font(.body)
+                    }
+
+                    Button { player.playNextRadioStation(in: radioDisplayItems) } label: {
+                        Image(systemName: "forward.fill")
+                    }
+                    .disabled(radioDisplayItems.count <= 1)
                 }
                 .font(.callout)
             } else {

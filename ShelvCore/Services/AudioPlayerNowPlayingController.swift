@@ -6,6 +6,13 @@ import UIKit
 import AppKit
 #endif
 
+private struct RadioArtworkSource: Sendable {
+    let url: URL
+    let cacheKey: String?
+
+    var identifier: String { url.absoluteString }
+}
+
 final class AudioPlayerNowPlayingController {
     private var currentArtwork: MPMediaItemArtwork?
     private var currentArtworkSource: String?
@@ -108,41 +115,39 @@ final class AudioPlayerNowPlayingController {
         info[MPNowPlayingInfoPropertyDefaultPlaybackRate] = 1.0
         info[MPNowPlayingInfoPropertyMediaType] = MPNowPlayingInfoMediaType.audio.rawValue as NSNumber
 
-        let remoteArtworkURL = station.metadata.showSongCover ? metadata?.cacheBustedArtworkURL : nil
+        let remoteArtworkURL = station.usesDynamicSongCover ? metadata?.cacheBustedArtworkURL : nil
         let stationArtworkURL = station.coverArt.flatMap { SubsonicAPIService.shared.coverArtURL(for: $0, size: 600) }
-        loadRadioArtworkIfNeeded(remoteArtworkURL ?? stationArtworkURL, fallbackURL: remoteArtworkURL == nil ? nil : stationArtworkURL)
+        let artworkSources = radioArtworkSources(
+            remoteArtworkURL: remoteArtworkURL,
+            stationArtworkURL: stationArtworkURL,
+            stationCoverArtID: station.coverArt
+        )
+        loadRadioArtworkIfNeeded(artworkSources)
 
-        if let currentArtwork {
+        if let currentArtwork,
+           let currentArtworkSource,
+           artworkSources.contains(where: { $0.identifier == currentArtworkSource }) {
             info[MPMediaItemPropertyArtwork] = currentArtwork
         }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
     }
 
-    private func loadRadioArtworkIfNeeded(_ url: URL?, fallbackURL: URL? = nil) {
-        let source = url?.absoluteString
-        guard source != nil else {
+    private func loadRadioArtworkIfNeeded(_ sources: [RadioArtworkSource]) {
+        guard let primarySource = sources.first else {
             cancelArtwork()
             currentArtworkSource = nil
             currentArtwork = nil
             return
         }
+        let source = primarySource.identifier
         guard source != currentArtworkSource || currentArtwork == nil else { return }
         guard source != loadingArtworkSource else { return }
         cancelArtwork()
         loadingArtworkSource = source
-        guard let source else { return }
-        var seenURLs = Set<String>()
-        let urls = [url, fallbackURL]
-            .compactMap { $0 }
-            .filter { seenURLs.insert($0.absoluteString).inserted }
-        guard !urls.isEmpty else {
-            loadingArtworkSource = nil
-            return
-        }
 
         #if os(macOS)
         artworkTask = Task.detached(priority: .utility) { [weak self] in
-            guard let loaded = await Self.loadRadioArtworkImage(from: urls),
+            guard let loaded = await Self.loadRadioArtworkImage(from: sources),
                   !Task.isCancelled else {
                 await MainActor.run { [weak self] in
                     self?.finishFailedRadioArtworkLoad(source: source)
@@ -163,7 +168,7 @@ final class AudioPlayerNowPlayingController {
         }
         #else
         artworkTask = Task.detached(priority: .utility) { [weak self] in
-            guard let loaded = await Self.loadRadioArtworkImage(from: urls),
+            guard let loaded = await Self.loadRadioArtworkImage(from: sources),
                   !Task.isCancelled else {
                 await MainActor.run { [weak self] in
                     self?.finishFailedRadioArtworkLoad(source: source)
@@ -186,6 +191,26 @@ final class AudioPlayerNowPlayingController {
         #endif
     }
 
+    private func radioArtworkSources(
+        remoteArtworkURL: URL?,
+        stationArtworkURL: URL?,
+        stationCoverArtID: String?
+    ) -> [RadioArtworkSource] {
+        var sources: [RadioArtworkSource] = []
+        var seenURLs = Set<String>()
+
+        func append(_ url: URL?, cacheKey: String?) {
+            guard let url,
+                  seenURLs.insert(url.absoluteString).inserted
+            else { return }
+            sources.append(RadioArtworkSource(url: url, cacheKey: cacheKey))
+        }
+
+        append(remoteArtworkURL, cacheKey: remoteArtworkURL.map { "radio_remote_\($0.absoluteString)" })
+        append(stationArtworkURL, cacheKey: stationCoverArtID.map { "\($0)_600" })
+        return sources
+    }
+
     @MainActor
     private func finishFailedRadioArtworkLoad(source: String) {
         guard loadingArtworkSource == source else { return }
@@ -196,36 +221,36 @@ final class AudioPlayerNowPlayingController {
     }
 
     #if os(macOS)
-    private static func loadRadioArtworkImage(from urls: [URL]) async -> (image: NSImage, source: String)? {
-        for url in urls {
+    private static func loadRadioArtworkImage(from sources: [RadioArtworkSource]) async -> (image: NSImage, source: String)? {
+        for source in sources {
             if Task.isCancelled { return nil }
-            var request = URLRequest(url: url)
-            request.cachePolicy = .reloadIgnoringLocalCacheData
-            request.timeoutInterval = 12
-            guard let (data, response) = try? await URLSession.shared.data(for: request),
-                  isSuccessfulImageResponse(response),
-                  let image = NSImage(data: data)
-            else { continue }
-            return (image, url.absoluteString)
+            guard let image = await ImageCacheService.shared.image(url: source.url) else { continue }
+            return (image, source.identifier)
+        }
+        return nil
+    }
+    #elseif os(iOS)
+    private static func loadRadioArtworkImage(from sources: [RadioArtworkSource]) async -> (image: UIImage, source: String)? {
+        for source in sources {
+            if Task.isCancelled { return nil }
+            let cacheKey = source.cacheKey ?? "radio_remote_\(source.url.absoluteString)"
+            guard let image = await ImageCacheService.shared.image(url: source.url, key: cacheKey) else { continue }
+            return (image, source.identifier)
         }
         return nil
     }
     #else
-    private static func loadRadioArtworkImage(from urls: [URL]) async -> (image: UIImage, source: String)? {
-        for url in urls {
+    private static func loadRadioArtworkImage(from sources: [RadioArtworkSource]) async -> (image: UIImage, source: String)? {
+        for source in sources {
             if Task.isCancelled { return nil }
-            var request = URLRequest(url: url)
-            request.cachePolicy = .reloadIgnoringLocalCacheData
-            request.timeoutInterval = 12
-            guard let (data, response) = try? await URLSession.shared.data(for: request),
-                  isSuccessfulImageResponse(response),
-                  let image = UIImage(data: data)
-            else { continue }
-            return (image, url.absoluteString)
+            guard let image = await ImageCacheService.shared.image(url: source.url) else { continue }
+            return (image, source.identifier)
         }
         return nil
     }
+    #endif
 
+    #if !os(macOS)
     nonisolated private static func squareCroppedArtworkImage(_ image: UIImage) -> UIImage {
         let width = image.size.width
         let height = image.size.height
@@ -242,11 +267,6 @@ final class AudioPlayerNowPlayingController {
         return UIImage(cgImage: croppedImage, scale: scale, orientation: image.imageOrientation)
     }
     #endif
-
-    private static func isSuccessfulImageResponse(_ response: URLResponse) -> Bool {
-        guard let http = response as? HTTPURLResponse else { return true }
-        return (200..<300).contains(http.statusCode)
-    }
 
     func cancelArtwork() {
         artworkTask?.cancel()

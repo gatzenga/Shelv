@@ -260,7 +260,7 @@ struct TVRadioStationArtworkView: View {
     }
 
     private var remoteArtworkURL: URL? {
-        guard item.metadata.showSongCover,
+        guard item.usesDynamicSongCover,
               let url = metadata?.cacheBustedArtworkURL
         else { return nil }
         return url
@@ -298,8 +298,8 @@ private struct TVRadioStationEditSheet: View {
                     } label: {
                         Label(String(localized: "fill_api_url_from_stream_url"), systemImage: "wand.and.stars")
                     }
+                    Toggle(String(localized: "show_song_cover"), isOn: $showSongCover)
                 }
-                Toggle(String(localized: "show_song_cover"), isOn: $showSongCover)
                 HStack(spacing: 30) {
                     Button(String(localized: "cancel"), role: .cancel) { dismiss() }
                     Button(String(localized: "done")) { save() }

@@ -145,6 +145,7 @@ nonisolated struct RadioStationDisplayItem: Identifiable, Hashable, Sendable {
     var name: String { station.name }
     var streamURL: String { station.streamURL }
     var coverArt: String? { station.coverArt }
+    var usesDynamicSongCover: Bool { metadata.useAzuraCastAPI && metadata.showSongCover }
 }
 
 nonisolated struct RadioNowPlayingMetadata: Codable, Hashable, Sendable {

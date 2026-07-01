@@ -97,9 +97,10 @@ extension AudioPlayerService {
     func updateRemoteCommandAvailability() {
         let cc = MPRemoteCommandCenter.shared()
         let songControlsEnabled = !isRadioPlayback
+        let radioStationControlsEnabled = isRadioPlayback && RadioStationStore.shared.items.count > 1
 
-        cc.nextTrackCommand.isEnabled = songControlsEnabled
-        cc.previousTrackCommand.isEnabled = songControlsEnabled
+        cc.nextTrackCommand.isEnabled = songControlsEnabled || radioStationControlsEnabled
+        cc.previousTrackCommand.isEnabled = songControlsEnabled || radioStationControlsEnabled
         cc.changePlaybackPositionCommand.isEnabled = songControlsEnabled
         cc.seekForwardCommand.isEnabled = songControlsEnabled
         cc.seekBackwardCommand.isEnabled = songControlsEnabled

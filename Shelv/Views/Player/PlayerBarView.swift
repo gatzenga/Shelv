@@ -2,10 +2,16 @@ import SwiftUI
 
 struct PlayerBarView: View {
     @ObservedObject var player = AudioPlayerService.shared
+    @ObservedObject private var radioStore = RadioStationStore.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
+    @AppStorage("radioSortDirection") private var radioSortDirectionRaw = SortDirection.ascending.rawValue
     @Environment(\.horizontalSizeClass) private var hSizeClass
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
     private var isRegular: Bool { hSizeClass == .regular }
+    private var radioDisplayItems: [RadioStationDisplayItem] {
+        let direction = SortDirection(rawValue: radioSortDirectionRaw) ?? .ascending
+        return direction == .descending ? Array(radioStore.items.reversed()) : radioStore.items
+    }
 
     // iPad bekommt eine kompakte, aber merklich größere Variante
     private var coverSize: CGFloat { isRegular ? 56 : 40 }
@@ -57,10 +63,16 @@ struct PlayerBarView: View {
             Spacer()
 
             if player.isRadioPlayback {
-                Image(systemName: "backward.fill")
-                    .font(skipIconFont)
-                    .hidden()
-                    .frame(width: skipSize, height: skipSize)
+                Button {
+                    player.playPreviousRadioStation(in: radioDisplayItems)
+                } label: {
+                    Image(systemName: "backward.fill")
+                        .font(skipIconFont)
+                        .foregroundStyle(radioDisplayItems.count > 1 ? Color.primary : Color.secondary)
+                        .frame(width: skipSize, height: skipSize)
+                }
+                .buttonStyle(.plain)
+                .disabled(radioDisplayItems.count <= 1)
             } else {
                 Button {
                     player.previous()
@@ -86,10 +98,16 @@ struct PlayerBarView: View {
             .buttonStyle(.plain)
 
             if player.isRadioPlayback {
-                Image(systemName: "forward.fill")
-                    .font(skipIconFont)
-                    .hidden()
-                    .frame(width: skipSize, height: skipSize)
+                Button {
+                    player.playNextRadioStation(in: radioDisplayItems)
+                } label: {
+                    Image(systemName: "forward.fill")
+                        .font(skipIconFont)
+                        .foregroundStyle(radioDisplayItems.count > 1 ? Color.primary : Color.secondary)
+                        .frame(width: skipSize, height: skipSize)
+                }
+                .buttonStyle(.plain)
+                .disabled(radioDisplayItems.count <= 1)
             } else {
                 Button {
                     player.next(triggeredByUser: true)

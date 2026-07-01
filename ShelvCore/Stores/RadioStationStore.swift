@@ -23,7 +23,7 @@ final class RadioStationStore: ObservableObject {
 
     func resetInMemory() {
         refreshGeneration += 1
-        items = []
+        setItems([])
         isLoading = false
         errorMessage = nil
     }
@@ -32,11 +32,14 @@ final class RadioStationStore: ObservableObject {
         refreshGeneration += 1
         let generation = refreshGeneration
         guard let serverId = activeServerId else {
-            items = []
+            setItems([])
             isLoading = false
             errorMessage = String(localized: "no_server_configured")
             return
         }
+
+        publishCachedStationsIfNeeded(serverId: serverId)
+
         isLoading = true
         defer {
             if refreshGeneration == generation {
@@ -46,17 +49,16 @@ final class RadioStationStore: ObservableObject {
 
         do {
             let stations = try await api.getInternetRadioStations()
+            saveCachedStations(stations, serverId: serverId)
+
+            let localMetadata = filteredLocalMetadata(for: stations, serverId: serverId)
+            guard refreshGeneration == generation, activeServerId == serverId else { return }
+            setItems(displayItems(for: stations, serverId: serverId, metadataByRecordName: localMetadata))
+            errorMessage = nil
+
             let mergedMetadata = await mergedMetadata(for: stations, serverId: serverId)
             guard refreshGeneration == generation, activeServerId == serverId else { return }
-            items = orderedItems(stations
-                .map { station in
-                    let metadata = mergedMetadata[RadioStationMetadata.recordName(
-                        serverId: serverId,
-                        stationId: station.id,
-                        streamURL: station.streamURL
-                    )] ?? RadioStationMetadata(serverId: serverId, station: station)
-                    return RadioStationDisplayItem(station: station, metadata: metadata)
-                })
+            setItems(displayItems(for: stations, serverId: serverId, metadataByRecordName: mergedMetadata))
             errorMessage = nil
         } catch {
             guard refreshGeneration == generation else { return }
@@ -197,6 +199,11 @@ final class RadioStationStore: ObservableObject {
         let recordNames = stations.map {
             RadioStationMetadata.recordName(serverId: serverId, stationId: $0.id, streamURL: $0.streamURL)
         }
+        guard !recordNames.isEmpty else {
+            saveLocalMetadata([], serverId: serverId)
+            return [:]
+        }
+
         var local = loadLocalMetadata(serverId: serverId)
         let remote = await CloudKitSyncService.shared.fetchRadioMetadata(recordNames: recordNames)
         let remoteByRecordName = Dictionary(uniqueKeysWithValues: remote.map { ($0.recordName, $0) })
@@ -232,10 +239,48 @@ final class RadioStationStore: ObservableObject {
         }
     }
 
+    private func publishCachedStationsIfNeeded(serverId: String) {
+        guard items.isEmpty else { return }
+        let stations = loadCachedStations(serverId: serverId)
+        guard !stations.isEmpty else { return }
+        let metadata = filteredLocalMetadata(for: stations, serverId: serverId)
+        setItems(displayItems(for: stations, serverId: serverId, metadataByRecordName: metadata))
+        errorMessage = nil
+    }
+
+    private func displayItems(
+        for stations: [RadioStation],
+        serverId: String,
+        metadataByRecordName: [String: RadioStationMetadata]
+    ) -> [RadioStationDisplayItem] {
+        orderedItems(stations.map { station in
+            let recordName = RadioStationMetadata.recordName(
+                serverId: serverId,
+                stationId: station.id,
+                streamURL: station.streamURL
+            )
+            let metadata = metadataByRecordName[recordName] ?? RadioStationMetadata(serverId: serverId, station: station)
+            return RadioStationDisplayItem(station: station, metadata: metadata)
+        })
+    }
+
+    private func filteredLocalMetadata(for stations: [RadioStation], serverId: String) -> [String: RadioStationMetadata] {
+        let validRecords = Set(stations.map {
+            RadioStationMetadata.recordName(serverId: serverId, stationId: $0.id, streamURL: $0.streamURL)
+        })
+        guard !validRecords.isEmpty else { return [:] }
+        return loadLocalMetadata(serverId: serverId).filter { validRecords.contains($0.key) }
+    }
+
     private func applyMetadata(_ metadata: RadioStationMetadata, to itemId: String) {
         guard let index = items.firstIndex(where: { $0.id == itemId }) else { return }
         items[index].metadata = metadata
-        items = orderedItems(items)
+        setItems(orderedItems(items))
+    }
+
+    private func setItems(_ newItems: [RadioStationDisplayItem]) {
+        items = newItems
+        AudioPlayerService.shared.updateRemoteCommandAvailability()
     }
 
     private func saveMetadata(_ metadata: RadioStationMetadata) async {
@@ -266,6 +311,24 @@ final class RadioStationStore: ObservableObject {
         return result
     }
 
+    private func loadCachedStations(serverId: String) -> [RadioStation] {
+        guard let data = try? Data(contentsOf: stationCacheFileURL(serverId: serverId)),
+              let stations = try? decoder.decode([RadioStation].self, from: data)
+        else { return [] }
+        return stations
+    }
+
+    private func saveCachedStations(_ stations: [RadioStation], serverId: String) {
+        guard let data = try? encoder.encode(stations) else { return }
+        let url = stationCacheFileURL(serverId: serverId)
+        do {
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try data.write(to: url, options: .atomic)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     private func saveLocalMetadata(_ metadata: [RadioStationMetadata], serverId: String) {
         guard let data = try? encoder.encode(metadata) else { return }
         let url = metadataFileURL(serverId: serverId)
@@ -279,11 +342,21 @@ final class RadioStationStore: ObservableObject {
 
     private func metadataFileURL(serverId: String) -> URL {
         let safeServerId = serverId.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "server"
-        return FileManager.default
+        return radioRootDirectoryURL()
+            .appendingPathComponent("\(safeServerId).json")
+    }
+
+    private func stationCacheFileURL(serverId: String) -> URL {
+        let safeServerId = serverId.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "server"
+        return radioRootDirectoryURL()
+            .appendingPathComponent("\(safeServerId).stations.json")
+    }
+
+    private func radioRootDirectoryURL() -> URL {
+        FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Shelv", isDirectory: true)
             .appendingPathComponent("Radio", isDirectory: true)
-            .appendingPathComponent("\(safeServerId).json")
     }
 
     private func radioErrorDescription(_ error: Error) -> String {

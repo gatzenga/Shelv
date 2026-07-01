@@ -550,6 +550,30 @@ class AudioPlayerService: ObservableObject {
         playRadioStation(item, resetReconnectAttempts: true)
     }
 
+    func playNextRadioStation(in orderedStations: [RadioStationDisplayItem]? = nil) {
+        playAdjacentRadioStation(in: orderedStations, offset: 1)
+    }
+
+    func playPreviousRadioStation(in orderedStations: [RadioStationDisplayItem]? = nil) {
+        playAdjacentRadioStation(in: orderedStations, offset: -1)
+    }
+
+    private func playAdjacentRadioStation(in orderedStations: [RadioStationDisplayItem]?, offset: Int) {
+        guard isRadioPlayback else { return }
+        let stations = orderedStations ?? RadioStationStore.shared.items
+        guard stations.count > 1 else { return }
+
+        let currentID = currentRadioStation?.id
+        let currentIndex = currentID.flatMap { id in stations.firstIndex { $0.id == id } }
+        let targetIndex: Int
+        if let currentIndex {
+            targetIndex = (currentIndex + offset + stations.count) % stations.count
+        } else {
+            targetIndex = offset >= 0 ? 0 : stations.count - 1
+        }
+        playRadioStation(stations[targetIndex])
+    }
+
     private func playRadioStation(_ item: RadioStationDisplayItem, resetReconnectAttempts: Bool) {
         stopFastSeeking()
         if resetReconnectAttempts {
@@ -1314,7 +1338,10 @@ class AudioPlayerService: ObservableObject {
     }
 
     func next(triggeredByUser: Bool = false) {
-        guard !isRadioPlayback else { return }
+        if isRadioPlayback {
+            playNextRadioStation()
+            return
+        }
         var state = queueState
         let action = state.advance(
             repeatMode: repeatMode,
@@ -1335,7 +1362,10 @@ class AudioPlayerService: ObservableObject {
     }
 
     func previous() {
-        guard !isRadioPlayback else { return }
+        if isRadioPlayback {
+            playPreviousRadioStation()
+            return
+        }
         if currentTime > 3 {
             seek(to: 0)
             saveState()

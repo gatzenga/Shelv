@@ -303,7 +303,7 @@ struct MacRadioStationArtworkView: View {
     }
 
     private var remoteArtworkURL: URL? {
-        guard item.metadata.showSongCover,
+        guard item.usesDynamicSongCover,
               let url = metadata?.cacheBustedArtworkURL
         else { return nil }
         return url
@@ -359,8 +359,8 @@ private struct MacRadioStationEditorView: View {
                         } label: {
                             Label(String(localized: "fill_api_url_from_stream_url"), systemImage: "wand.and.stars")
                         }
+                        Toggle(String(localized: "show_song_cover"), isOn: $showSongCover)
                     }
-                    Toggle(String(localized: "show_song_cover"), isOn: $showSongCover)
                 } header: {
                     Text(String(localized: "azuracast"))
                 }

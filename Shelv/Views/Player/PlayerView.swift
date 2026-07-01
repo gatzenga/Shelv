@@ -81,6 +81,7 @@ private struct NativePlayerProgressSlider: View {
 struct PlayerView: View {
     @ObservedObject var player = AudioPlayerService.shared
     @ObservedObject var libraryStore = LibraryStore.shared
+    @ObservedObject private var radioStore = RadioStationStore.shared
     @ObservedObject private var offlineMode = OfflineModeService.shared
     @Environment(\.dismiss) var dismiss
     @Environment(\.colorScheme) var colorScheme
@@ -91,6 +92,7 @@ struct PlayerView: View {
 
     @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
     @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
+    @AppStorage("radioSortDirection") private var radioSortDirectionRaw = SortDirection.ascending.rawValue
 
     @State private var seekValue: Double = 0
     @State private var isDragging: Bool = false
@@ -144,7 +146,7 @@ struct PlayerView: View {
     private var playerBackgroundIdentifier: String {
         if player.isRadioPlayback {
             guard let station = player.currentRadioStation else { return "radio-none" }
-            if station.metadata.showSongCover,
+            if station.usesDynamicSongCover,
                let metadata = player.currentRadioMetadata,
                trimmedNonEmpty(metadata.artworkURL) != nil {
                 return "radio-art-\(metadata.artworkRevisionToken)"
@@ -155,6 +157,11 @@ struct PlayerView: View {
             return "radio-station-\(station.id)"
         }
         return player.currentSong?.coverArt ?? "song-none"
+    }
+
+    private var radioDisplayItems: [RadioStationDisplayItem] {
+        let direction = SortDirection(rawValue: radioSortDirectionRaw) ?? .ascending
+        return direction == .descending ? Array(radioStore.items.reversed()) : radioStore.items
     }
 
     // Track-Infos (Titel/Artist/Album) als eigene View — entlastet den Type-Checker
@@ -280,6 +287,7 @@ struct PlayerView: View {
                 Group {
                     if player.isRadioPlayback {
                         radioPlayerContent(
+                            artworkFrameSize: art,
                             artworkSize: radioArt,
                             playSize: radioPlay,
                             controlSize: radioCtrl,
@@ -529,6 +537,7 @@ struct PlayerView: View {
 
     @ViewBuilder
     private func radioPlayerContent(
+        artworkFrameSize artFrame: CGFloat,
         artworkSize art: CGFloat,
         playSize play: CGFloat,
         controlSize ctrl: CGFloat,
@@ -538,6 +547,7 @@ struct PlayerView: View {
             Spacer(minLength: 0)
 
             radioFullscreenArtwork(size: art)
+                .frame(width: artFrame, height: artFrame, alignment: .bottom)
                 .shadow(color: .black.opacity(0.4), radius: 30, y: 15)
                 .padding(.bottom, vPad(h, large: 20, small: 20))
 
@@ -567,19 +577,29 @@ struct PlayerView: View {
 
             Spacer(minLength: 0)
 
-            Button {
-                player.togglePlayPause()
-            } label: {
-                ZStack {
-                    Circle()
-                        .fill(accentColor)
-                        .frame(width: play, height: play)
-                    Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: isPad ? 34 : 30))
-                        .foregroundStyle(.white)
+            HStack(spacing: isPad ? 28 : 22) {
+                radioSkipButton(systemImage: "backward.fill", size: ctrl) {
+                    player.playPreviousRadioStation(in: radioDisplayItems)
+                }
+
+                Button {
+                    player.togglePlayPause()
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(accentColor)
+                            .frame(width: play, height: play)
+                        Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                            .font(.system(size: isPad ? 34 : 30))
+                            .foregroundStyle(.white)
+                    }
+                }
+                .buttonStyle(.plain)
+
+                radioSkipButton(systemImage: "forward.fill", size: ctrl) {
+                    player.playNextRadioStation(in: radioDisplayItems)
                 }
             }
-            .buttonStyle(.plain)
             .padding(.bottom, vPad(h, large: 36, small: 32))
 
             HStack(spacing: isPad ? 80 : 60) {
@@ -598,6 +618,18 @@ struct PlayerView: View {
             }
             .padding(.bottom, vPad(h, large: 32, small: 50))
         }
+    }
+
+    private func radioSkipButton(systemImage: String, size: CGFloat, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: isPad ? 28 : 24))
+                .foregroundStyle(radioDisplayItems.count > 1 ? Color.primary : Color.secondary)
+                .frame(width: max(44, size), height: max(44, size))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(radioDisplayItems.count <= 1)
     }
 
     @ViewBuilder
@@ -636,7 +668,7 @@ struct PlayerView: View {
     }
 
     private var radioRemoteArtworkURL: URL? {
-        guard player.currentRadioStation?.metadata.showSongCover == true else { return nil }
+        guard player.currentRadioStation?.usesDynamicSongCover == true else { return nil }
         return player.currentRadioMetadata?.cacheBustedArtworkURL
     }
 
@@ -786,7 +818,7 @@ struct PlayerView: View {
 
     private func loadRadioBackgroundImage() async -> UIImage? {
         guard let station = player.currentRadioStation else { return nil }
-        if station.metadata.showSongCover,
+        if station.usesDynamicSongCover,
            let url = player.currentRadioMetadata?.cacheBustedArtworkURL {
             let key = "radio_remote_\(url.absoluteString)"
             if let cached = ImageCacheService.shared.cachedImage(key: key) {

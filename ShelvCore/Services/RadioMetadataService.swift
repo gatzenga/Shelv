@@ -140,16 +140,30 @@ final class RadioMetadataService: ObservableObject {
         guard let url = URL(string: streamURL) else { return }
         let (stationName, track) = await ICYMetadataFetcher.fetch(from: url)
         guard self.generation == generation else { return }
-        let metadata = RadioNowPlayingMetadata(
-            stationName: stationName?.nilIfEmpty ?? fallbackStationName,
-            title: track?.title.nilIfEmpty,
-            artist: track?.artist.nilIfEmpty,
-            album: nil,
-            artworkURL: nil,
-            isLive: false
-        )
+        let resolvedStationName = stationName?.nilIfEmpty ?? fallbackStationName
         await MainActor.run {
-            self.currentMetadata = metadata
+            if let track {
+                self.currentMetadata = RadioNowPlayingMetadata(
+                    stationName: resolvedStationName,
+                    title: track.title.nilIfEmpty,
+                    artist: track.artist.nilIfEmpty,
+                    album: nil,
+                    artworkURL: nil,
+                    isLive: false
+                )
+            } else if let current = self.currentMetadata,
+                      current.displayTitle != nil || current.displayArtist != nil {
+                self.currentMetadata = RadioNowPlayingMetadata(
+                    stationName: resolvedStationName,
+                    title: current.title,
+                    artist: current.artist,
+                    album: nil,
+                    artworkURL: nil,
+                    isLive: false
+                )
+            } else {
+                self.currentMetadata = RadioNowPlayingMetadata(stationName: resolvedStationName)
+            }
             self.isConnecting = false
             self.isOnline = true
         }
@@ -213,6 +227,7 @@ private struct ICYTrackInfo {
 }
 
 private final class ICYMetadataFetcher: NSObject, URLSessionDataDelegate {
+    private static let maxBufferedBytes = 2 * 1024 * 1024
     private static let streamTitleSeparators = [
         " - ",
         " – ",
@@ -267,7 +282,7 @@ private final class ICYMetadataFetcher: NSObject, URLSessionDataDelegate {
 
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
         receivedData.append(data)
-        if let metaint, receivedData.count >= metaint + 1 {
+        if parsedTrack() != nil || receivedData.count >= Self.maxBufferedBytes {
             finish()
             task?.cancel()
         }
@@ -300,17 +315,37 @@ private final class ICYMetadataFetcher: NSObject, URLSessionDataDelegate {
     }
 
     private func parsedTrack() -> ICYTrackInfo? {
-        guard let metaint, receivedData.count > metaint else { return nil }
-        let lengthByte = receivedData[metaint]
-        let metadataLength = Int(lengthByte) * 16
-        guard metadataLength > 0, receivedData.count >= metaint + 1 + metadataLength else { return nil }
-        let metadata = receivedData[(metaint + 1)..<(metaint + 1 + metadataLength)]
-        guard let raw = String(bytes: metadata, encoding: .utf8) ?? String(bytes: metadata, encoding: .isoLatin1) else { return nil }
+        guard let metaint, metaint > 0 else { return nil }
+        var metadataOffset = metaint
+
+        while receivedData.count > metadataOffset {
+            let lengthByte = receivedData[metadataOffset]
+            let metadataLength = Int(lengthByte) * 16
+            let metadataStart = metadataOffset + 1
+            let metadataEnd = metadataStart + metadataLength
+            guard receivedData.count >= metadataEnd else { return nil }
+            defer { metadataOffset = metadataEnd + metaint }
+            guard metadataLength > 0 else { continue }
+
+            let metadata = receivedData[metadataStart..<metadataEnd]
+            guard let raw = String(bytes: metadata, encoding: .utf8) ?? String(bytes: metadata, encoding: .isoLatin1),
+                  let streamTitle = Self.streamTitle(from: raw)
+            else { continue }
+            return Self.trackInfo(from: streamTitle)
+        }
+
+        return nil
+    }
+
+    private static func streamTitle(from raw: String) -> String? {
         guard let start = raw.range(of: "StreamTitle='"),
               let end = raw[start.upperBound...].range(of: "'")
         else { return nil }
         let streamTitle = String(raw[start.upperBound..<end.lowerBound])
-        guard !streamTitle.isEmpty else { return nil }
+        return streamTitle.nilIfEmpty
+    }
+
+    private static func trackInfo(from streamTitle: String) -> ICYTrackInfo {
         for separator in Self.streamTitleSeparators {
             guard let range = streamTitle.range(of: separator) else { continue }
             let artist = String(streamTitle[..<range.lowerBound]).normalizedRadioDashText
