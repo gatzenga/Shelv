@@ -92,7 +92,6 @@ struct PlayerView: View {
 
     @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
     @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
-    @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     @AppStorage("radioSortDirection") private var radioSortDirectionRaw = SortDirection.ascending.rawValue
 
     @State private var seekValue: Double = 0
@@ -432,15 +431,6 @@ struct PlayerView: View {
                             .buttonStyle(.plain)
 
                             Spacer()
-
-                            if showInstantMixActions && !offlineMode.isOffline, let song = player.currentSong {
-                                Button {
-                                    InstantMixService.playSongMix(for: song, player: player)
-                                } label: {
-                                    playerSecondaryButton(icon: "sparkles", color: .primary, size: ctrl, isPad: isPad)
-                                }
-                                .buttonStyle(.plain)
-                            }
 
                             Button { showQueue = true } label: {
                                 playerSecondaryButton(icon: "list.bullet", color: .primary, size: ctrl, isPad: isPad)

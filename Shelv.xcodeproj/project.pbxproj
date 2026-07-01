@@ -23,6 +23,7 @@
 		BC10010F2FFE000000000001 /* ShelvCore/Services/LibraryRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC10011F2FFE000000000001 /* ShelvCore/Services/LibraryRepository.swift */; };
 		BC1001212FFE000000000001 /* ShelvCore/Support/PersonalizationSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001202FFE000000000001 /* ShelvCore/Support/PersonalizationSettings.swift */; };
 		BC1001222FFE000000000001 /* ShelvCore/Models/RadioStation.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001232FFE000000000001 /* ShelvCore/Models/RadioStation.swift */; };
+		BC1001242FFE000000000001 /* ShelvCore/Services/InstantMixQueueBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001252FFE000000000001 /* ShelvCore/Services/InstantMixQueueBuilder.swift */; };
 		BC1867E52F91A088006D96E2 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC1867E42F91A088006D96E2 /* GRDB */; };
 		BC51161D2FDC8A850011CDE9 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC51161C2FDC8A850011CDE9 /* GRDB */; };
 		BC7B84A72FDB17F90058CB78 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC7B84A62FDB17F90058CB78 /* GRDB */; };
@@ -45,6 +46,7 @@
 		BC10011F2FFE000000000001 /* ShelvCore/Services/LibraryRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/LibraryRepository.swift; sourceTree = "<group>"; };
 		BC1001202FFE000000000001 /* ShelvCore/Support/PersonalizationSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Support/PersonalizationSettings.swift; sourceTree = "<group>"; };
 		BC1001232FFE000000000001 /* ShelvCore/Models/RadioStation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Models/RadioStation.swift; sourceTree = "<group>"; };
+		BC1001252FFE000000000001 /* ShelvCore/Services/InstantMixQueueBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/InstantMixQueueBuilder.swift; sourceTree = "<group>"; };
 		BC5116112FDC8A690011CDE9 /* Shelv TV.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Shelv TV.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC7B83F52FDB17700058CB78 /* Shelv.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Shelv.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC9C59382F8E9FB000FF4D25 /* Shelv.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Shelv.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -128,6 +130,7 @@
 				BC1001182FFE000000000001 /* ShelvCore/Services/TranscodingPolicy.swift */,
 				BC1001192FFE000000000001 /* ShelvCore/Services/NetworkStatus.swift */,
 				BC10011A2FFE000000000001 /* ShelvCore/Services/URL+QueryParam.swift */,
+				BC1001252FFE000000000001 /* ShelvCore/Services/InstantMixQueueBuilder.swift */,
 				BC10011B2FFE000000000001 /* ShelvCore/Utilities/PathSafe.swift */,
 				BC10011E2FFE000000000001 /* ShelvCore/Services/LibraryDatabase.swift */,
 				BC10011F2FFE000000000001 /* ShelvCore/Services/LibraryRepository.swift */,
@@ -364,6 +367,7 @@
 				BC1001082FFE000000000001 /* ShelvCore/Services/TranscodingPolicy.swift in Sources */,
 				BC1001092FFE000000000001 /* ShelvCore/Services/NetworkStatus.swift in Sources */,
 				BC10010A2FFE000000000001 /* ShelvCore/Services/URL+QueryParam.swift in Sources */,
+				BC1001242FFE000000000001 /* ShelvCore/Services/InstantMixQueueBuilder.swift in Sources */,
 				BC10010B2FFE000000000001 /* ShelvCore/Utilities/PathSafe.swift in Sources */,
 				BC10010E2FFE000000000001 /* ShelvCore/Services/LibraryDatabase.swift in Sources */,
 				BC10010F2FFE000000000001 /* ShelvCore/Services/LibraryRepository.swift in Sources */,

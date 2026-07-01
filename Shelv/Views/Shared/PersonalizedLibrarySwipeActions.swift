@@ -39,7 +39,7 @@ struct PersonalizedPlaylistSwipeActionsModifier: ViewModifier {
     @ViewBuilder
     private func swipeButton(for slot: PersonalizationSwipeSlot) -> some View {
         switch action(for: slot) {
-        case .none, .favorite, .addToPlaylist:
+        case .none, .favorite, .addToPlaylist, .instantMix:
             EmptyView()
         case .pin:
             Button {
@@ -126,7 +126,7 @@ struct PersonalizedPlaylistSwipeActionsModifier: ViewModifier {
             return downloadState == .hidden ? .none : action
         case .delete:
             return canDelete ? action : .none
-        case .none, .favorite, .addToPlaylist:
+        case .none, .favorite, .addToPlaylist, .instantMix:
             return .none
         }
     }
@@ -167,7 +167,7 @@ struct PersonalizedAlbumArtistSwipeActionsModifier: ViewModifier {
     @ViewBuilder
     private func swipeButton(for slot: PersonalizationSwipeSlot) -> some View {
         switch action(for: slot) {
-        case .none, .pin, .delete:
+        case .none, .pin, .delete, .instantMix:
             EmptyView()
         case .favorite:
             Button {
@@ -254,7 +254,7 @@ struct PersonalizedAlbumArtistSwipeActionsModifier: ViewModifier {
             return downloadState == .hidden ? .none : action
         case .playNext, .addToQueue:
             return action
-        case .none, .pin, .delete:
+        case .none, .pin, .delete, .instantMix:
             return .none
         }
     }

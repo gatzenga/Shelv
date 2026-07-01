@@ -33,6 +33,7 @@ final class PersonalizationSettingsTests: XCTestCase {
         XCTAssertEqual(PersonalizationSettings.swipeAction(for: .leftSecondary, in: defaults), .addToPlaylist)
         XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightPrimary, in: defaults), .playNext)
         XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightSecondary, in: defaults), .addToQueue)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightTertiary, in: defaults), .instantMix)
     }
 
     func testLegacyDisabledKeysMigrateToSeparateVisibilityAndActionKeys() {
@@ -80,6 +81,7 @@ final class PersonalizationSettingsTests: XCTestCase {
         PersonalizationSettings.registerDefaults(in: defaults)
         defaults.set(false, forKey: PersonalizationPreferenceKey.showFavoriteActions)
         defaults.set(false, forKey: PersonalizationPreferenceKey.showPlaylistActions)
+        defaults.set(false, forKey: PersonalizationPreferenceKey.showInstantMixActions)
 
         PersonalizationSettings.normalizeSwipeActions(in: defaults)
 
@@ -87,11 +89,13 @@ final class PersonalizationSettingsTests: XCTestCase {
         XCTAssertEqual(PersonalizationSettings.swipeAction(for: .leftSecondary, in: defaults), .addToPlaylist)
         XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightPrimary, in: defaults), .playNext)
         XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightSecondary, in: defaults), .addToQueue)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightTertiary, in: defaults), .instantMix)
 
         XCTAssertEqual(PersonalizationSettings.visibleSwipeAction(for: .leftPrimary, in: defaults), .none)
         XCTAssertEqual(PersonalizationSettings.visibleSwipeAction(for: .leftSecondary, in: defaults), .none)
         XCTAssertEqual(PersonalizationSettings.visibleSwipeAction(for: .rightPrimary, in: defaults), .playNext)
         XCTAssertEqual(PersonalizationSettings.visibleSwipeAction(for: .rightSecondary, in: defaults), .addToQueue)
+        XCTAssertEqual(PersonalizationSettings.visibleSwipeAction(for: .rightTertiary, in: defaults), .none)
     }
 
     func testReenabledFeatureRestoresConfiguredSwipeAction() {
@@ -134,11 +138,13 @@ final class PersonalizationSettingsTests: XCTestCase {
         PersonalizationSettings.setSwipeAction(.playNext, for: .leftPrimary, in: defaults)
         PersonalizationSettings.setSwipeAction(.playNext, for: .leftSecondary, in: defaults)
         PersonalizationSettings.setSwipeAction(.none, for: .rightSecondary, in: defaults)
+        PersonalizationSettings.setSwipeAction(.none, for: .rightTertiary, in: defaults)
 
         XCTAssertEqual(PersonalizationSettings.swipeAction(for: .leftPrimary, in: defaults), .none)
         XCTAssertEqual(PersonalizationSettings.swipeAction(for: .leftSecondary, in: defaults), .playNext)
         XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightPrimary, in: defaults), .none)
         XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightSecondary, in: defaults), .none)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightTertiary, in: defaults), .none)
     }
 
     func testSelectingUsedSwipeActionMovesItFromPreviousSlot() {
@@ -150,6 +156,65 @@ final class PersonalizationSettingsTests: XCTestCase {
 
         XCTAssertEqual(PersonalizationSettings.swipeAction(for: .leftPrimary, in: defaults), .playNext)
         XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightPrimary, in: defaults), .none)
+    }
+
+    func testMigratesOldDefaultSongSwipeSlotsToSongInstantMix() {
+        defaults.set(1, forKey: PersonalizationPreferenceKey.migrationVersion)
+        defaults.set(PersonalizationSwipeAction.favorite.rawValue, forKey: PersonalizationPreferenceKey.swipeLeftPrimary)
+        defaults.set(PersonalizationSwipeAction.addToPlaylist.rawValue, forKey: PersonalizationPreferenceKey.swipeLeftSecondary)
+        defaults.set(PersonalizationSwipeAction.playNext.rawValue, forKey: PersonalizationPreferenceKey.swipeRightPrimary)
+        defaults.set(PersonalizationSwipeAction.addToQueue.rawValue, forKey: PersonalizationPreferenceKey.swipeRightSecondary)
+
+        PersonalizationSettings.registerDefaults(in: defaults)
+
+        XCTAssertEqual(defaults.integer(forKey: PersonalizationPreferenceKey.migrationVersion), PersonalizationSettings.currentMigrationVersion)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightPrimary, in: defaults), .playNext)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightSecondary, in: defaults), .addToQueue)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightTertiary, in: defaults), .instantMix)
+    }
+
+    func testMigrationDoesNotAddSongInstantMixToCustomizedSwipeSlots() {
+        defaults.set(1, forKey: PersonalizationPreferenceKey.migrationVersion)
+        defaults.set(PersonalizationSwipeAction.favorite.rawValue, forKey: PersonalizationPreferenceKey.swipeLeftPrimary)
+        defaults.set(PersonalizationSwipeAction.playNext.rawValue, forKey: PersonalizationPreferenceKey.swipeLeftSecondary)
+        defaults.set(PersonalizationSwipeAction.none.rawValue, forKey: PersonalizationPreferenceKey.swipeRightPrimary)
+        defaults.set(PersonalizationSwipeAction.addToQueue.rawValue, forKey: PersonalizationPreferenceKey.swipeRightSecondary)
+
+        PersonalizationSettings.registerDefaults(in: defaults)
+
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .leftSecondary, in: defaults), .playNext)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightSecondary, in: defaults), .addToQueue)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightTertiary, in: defaults), .none)
+    }
+
+    func testMigratesPreviousSongInstantMixSwipeOrderToOuterSlot() {
+        defaults.set(2, forKey: PersonalizationPreferenceKey.migrationVersion)
+        defaults.set(PersonalizationSwipeAction.favorite.rawValue, forKey: PersonalizationPreferenceKey.swipeLeftPrimary)
+        defaults.set(PersonalizationSwipeAction.addToPlaylist.rawValue, forKey: PersonalizationPreferenceKey.swipeLeftSecondary)
+        defaults.set(PersonalizationSwipeAction.playNext.rawValue, forKey: PersonalizationPreferenceKey.swipeRightPrimary)
+        defaults.set(PersonalizationSwipeAction.instantMix.rawValue, forKey: PersonalizationPreferenceKey.swipeRightSecondary)
+        defaults.set(PersonalizationSwipeAction.addToQueue.rawValue, forKey: PersonalizationPreferenceKey.swipeRightTertiary)
+
+        PersonalizationSettings.registerDefaults(in: defaults)
+
+        XCTAssertEqual(defaults.integer(forKey: PersonalizationPreferenceKey.migrationVersion), PersonalizationSettings.currentMigrationVersion)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightPrimary, in: defaults), .playNext)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightSecondary, in: defaults), .addToQueue)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightTertiary, in: defaults), .instantMix)
+    }
+
+    func testMigrationKeepsCustomizedSongInstantMixSwipeOrder() {
+        defaults.set(2, forKey: PersonalizationPreferenceKey.migrationVersion)
+        defaults.set(PersonalizationSwipeAction.favorite.rawValue, forKey: PersonalizationPreferenceKey.swipeLeftPrimary)
+        defaults.set(PersonalizationSwipeAction.addToPlaylist.rawValue, forKey: PersonalizationPreferenceKey.swipeLeftSecondary)
+        defaults.set(PersonalizationSwipeAction.playNext.rawValue, forKey: PersonalizationPreferenceKey.swipeRightPrimary)
+        defaults.set(PersonalizationSwipeAction.instantMix.rawValue, forKey: PersonalizationPreferenceKey.swipeRightSecondary)
+        defaults.set(PersonalizationSwipeAction.none.rawValue, forKey: PersonalizationPreferenceKey.swipeRightTertiary)
+
+        PersonalizationSettings.registerDefaults(in: defaults)
+
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightSecondary, in: defaults), .instantMix)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightTertiary, in: defaults), .none)
     }
 
     func testIPhoneTabOrderKeepsSettingsImmediatelyBeforeSearch() {

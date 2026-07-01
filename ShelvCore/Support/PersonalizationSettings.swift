@@ -15,6 +15,7 @@ nonisolated enum PersonalizationPreferenceKey {
     static let swipeLeftSecondary = "ui.swipe.leftSecondary"
     static let swipeRightPrimary = "ui.swipe.rightPrimary"
     static let swipeRightSecondary = "ui.swipe.rightSecondary"
+    static let swipeRightTertiary = "ui.swipe.rightTertiary"
     static let playlistSwipeLeftPrimary = "ui.swipe.playlists.leftPrimary"
     static let playlistSwipeLeftSecondary = "ui.swipe.playlists.leftSecondary"
     static let playlistSwipeLeftTertiary = "ui.swipe.playlists.leftTertiary"
@@ -61,7 +62,7 @@ nonisolated enum PersonalizationSwipeGroup: String, CaseIterable, Identifiable, 
     var availableActions: [PersonalizationSwipeAction] {
         switch self {
         case .songs:
-            return [.none, .favorite, .addToPlaylist, .playNext, .addToQueue]
+            return [.none, .favorite, .addToPlaylist, .instantMix, .playNext, .addToQueue]
         case .playlists:
             return [.none, .pin, .download, .delete, .playNext, .addToQueue]
         case .albumArtists:
@@ -83,6 +84,7 @@ nonisolated enum PersonalizationSwipeSlot: String, CaseIterable, Hashable {
     case leftSecondary
     case rightPrimary
     case rightSecondary
+    case rightTertiary
     case playlistLeftPrimary
     case playlistLeftSecondary
     case playlistLeftTertiary
@@ -100,6 +102,7 @@ nonisolated enum PersonalizationSwipeSlot: String, CaseIterable, Hashable {
         case .leftSecondary: return PersonalizationPreferenceKey.swipeLeftSecondary
         case .rightPrimary: return PersonalizationPreferenceKey.swipeRightPrimary
         case .rightSecondary: return PersonalizationPreferenceKey.swipeRightSecondary
+        case .rightTertiary: return PersonalizationPreferenceKey.swipeRightTertiary
         case .playlistLeftPrimary: return PersonalizationPreferenceKey.playlistSwipeLeftPrimary
         case .playlistLeftSecondary: return PersonalizationPreferenceKey.playlistSwipeLeftSecondary
         case .playlistLeftTertiary: return PersonalizationPreferenceKey.playlistSwipeLeftTertiary
@@ -125,12 +128,14 @@ nonisolated enum PersonalizationSwipeSlot: String, CaseIterable, Hashable {
             return "swipe_right_1"
         case .rightSecondary, .playlistRightSecondary, .albumArtistRightSecondary:
             return "swipe_right_2"
+        case .rightTertiary:
+            return "swipe_right_3"
         }
     }
 
     var group: PersonalizationSwipeGroup {
         switch self {
-        case .leftPrimary, .leftSecondary, .rightPrimary, .rightSecondary:
+        case .leftPrimary, .leftSecondary, .rightPrimary, .rightSecondary, .rightTertiary:
             return .songs
         case .playlistLeftPrimary, .playlistLeftSecondary, .playlistLeftTertiary, .playlistRightPrimary, .playlistRightSecondary:
             return .playlists
@@ -146,6 +151,7 @@ nonisolated enum PersonalizationSwipeSlot: String, CaseIterable, Hashable {
              .albumArtistLeftPrimary, .albumArtistLeftSecondary, .albumArtistLeftTertiary:
             return true
         case .rightPrimary, .rightSecondary,
+             .rightTertiary,
              .playlistRightPrimary, .playlistRightSecondary,
              .albumArtistRightPrimary, .albumArtistRightSecondary:
             return false
@@ -162,6 +168,8 @@ nonisolated enum PersonalizationSwipeSlot: String, CaseIterable, Hashable {
             return .playNext
         case .rightSecondary:
             return .addToQueue
+        case .rightTertiary:
+            return .instantMix
         case .playlistLeftPrimary:
             return .pin
         case .playlistLeftSecondary:
@@ -193,6 +201,7 @@ nonisolated enum PersonalizationSwipeAction: String, CaseIterable, Hashable {
     case download
     case pin
     case delete
+    case instantMix
     case playNext
     case addToQueue
 
@@ -204,6 +213,7 @@ nonisolated enum PersonalizationSwipeAction: String, CaseIterable, Hashable {
         case .download: return "download"
         case .pin: return "pin"
         case .delete: return "delete"
+        case .instantMix: return "instant_mix"
         case .playNext: return "play_next"
         case .addToQueue: return "add_to_queue"
         }
@@ -217,6 +227,7 @@ nonisolated enum PersonalizationSwipeAction: String, CaseIterable, Hashable {
         case .download: return "arrow.down.circle"
         case .pin: return "pin"
         case .delete: return "trash"
+        case .instantMix: return "sparkles"
         case .playNext: return "text.line.first.and.arrowtriangle.forward"
         case .addToQueue: return "text.line.last.and.arrowtriangle.forward"
         }
@@ -243,7 +254,7 @@ nonisolated enum PersonalizationMiniPlayerStyle: String, CaseIterable {
 }
 
 nonisolated enum PersonalizationSettings {
-    static let currentMigrationVersion = 1
+    static let currentMigrationVersion = 3
 
     static let defaultValues: [String: Any] = {
         var values: [String: Any] = [
@@ -268,28 +279,94 @@ nonisolated enum PersonalizationSettings {
     }
 
     static func migrateLegacyKeysIfNeeded(in defaults: UserDefaults = .standard) {
-        guard defaults.integer(forKey: PersonalizationPreferenceKey.migrationVersion) < currentMigrationVersion else {
+        let previousVersion = defaults.integer(forKey: PersonalizationPreferenceKey.migrationVersion)
+        guard previousVersion < currentMigrationVersion else {
             return
         }
 
-        if defaults.object(forKey: PersonalizationPreferenceKey.legacyEnablePlaylists) != nil {
+        if previousVersion < 1,
+           defaults.object(forKey: PersonalizationPreferenceKey.legacyEnablePlaylists) != nil {
             let enabled = defaults.bool(forKey: PersonalizationPreferenceKey.legacyEnablePlaylists)
             defaults.set(enabled, forKey: PersonalizationPreferenceKey.showPlaylistsTab)
             defaults.set(enabled, forKey: PersonalizationPreferenceKey.showPlaylistActions)
         }
 
-        if defaults.object(forKey: PersonalizationPreferenceKey.legacyEnableFavorites) != nil {
+        if previousVersion < 1,
+           defaults.object(forKey: PersonalizationPreferenceKey.legacyEnableFavorites) != nil {
             let enabled = defaults.bool(forKey: PersonalizationPreferenceKey.legacyEnableFavorites)
             defaults.set(enabled, forKey: PersonalizationPreferenceKey.showFavoritesInLibrary)
             defaults.set(enabled, forKey: PersonalizationPreferenceKey.showFavoriteActions)
         }
 
-        if defaults.object(forKey: PersonalizationPreferenceKey.legacyEnableInstantMix) != nil {
+        if previousVersion < 1,
+           defaults.object(forKey: PersonalizationPreferenceKey.legacyEnableInstantMix) != nil {
             let enabled = defaults.bool(forKey: PersonalizationPreferenceKey.legacyEnableInstantMix)
             defaults.set(enabled, forKey: PersonalizationPreferenceKey.showInstantMixActions)
         }
 
+        if previousVersion < 2 {
+            migrateSongInstantMixSwipeDefault(previousVersion: previousVersion, in: defaults)
+        }
+
+        if previousVersion == 2 {
+            migrateSongInstantMixSwipeOrderDefault(in: defaults)
+        }
+
         defaults.set(currentMigrationVersion, forKey: PersonalizationPreferenceKey.migrationVersion)
+    }
+
+    private static func migrateSongInstantMixSwipeDefault(previousVersion: Int, in defaults: UserDefaults) {
+        let oldDefaults: [(PersonalizationSwipeSlot, PersonalizationSwipeAction)] = [
+            (.leftPrimary, .favorite),
+            (.leftSecondary, .addToPlaylist),
+            (.rightPrimary, .playNext),
+            (.rightSecondary, .addToQueue),
+        ]
+
+        let rightSecondary = defaults.string(forKey: PersonalizationPreferenceKey.swipeRightSecondary)
+            .flatMap(PersonalizationSwipeAction.init(rawValue:))
+        guard previousVersion > 0 || rightSecondary == .addToQueue else { return }
+
+        let hasStoredSongSwipes = oldDefaults.contains { slot, _ in
+            defaults.object(forKey: slot.storageKey) != nil
+        }
+        guard hasStoredSongSwipes else { return }
+
+        let usesOldSongDefaults = oldDefaults.allSatisfy { slot, expected in
+            guard let rawValue = defaults.string(forKey: slot.storageKey) else { return true }
+            return PersonalizationSwipeAction(rawValue: rawValue) == expected
+        }
+
+        if usesOldSongDefaults {
+            defaults.set(PersonalizationSwipeAction.addToQueue.rawValue, forKey: PersonalizationPreferenceKey.swipeRightSecondary)
+            defaults.set(PersonalizationSwipeAction.instantMix.rawValue, forKey: PersonalizationPreferenceKey.swipeRightTertiary)
+        } else {
+            defaults.set(PersonalizationSwipeAction.none.rawValue, forKey: PersonalizationPreferenceKey.swipeRightTertiary)
+        }
+    }
+
+    private static func migrateSongInstantMixSwipeOrderDefault(in defaults: UserDefaults) {
+        let previousDefaults: [(PersonalizationSwipeSlot, PersonalizationSwipeAction)] = [
+            (.leftPrimary, .favorite),
+            (.leftSecondary, .addToPlaylist),
+            (.rightPrimary, .playNext),
+            (.rightSecondary, .instantMix),
+            (.rightTertiary, .addToQueue),
+        ]
+
+        let hasStoredSongSwipes = previousDefaults.contains { slot, _ in
+            defaults.object(forKey: slot.storageKey) != nil
+        }
+        guard hasStoredSongSwipes else { return }
+
+        let usesPreviousDefaults = previousDefaults.allSatisfy { slot, expected in
+            guard let rawValue = defaults.string(forKey: slot.storageKey) else { return true }
+            return PersonalizationSwipeAction(rawValue: rawValue) == expected
+        }
+        guard usesPreviousDefaults else { return }
+
+        defaults.set(PersonalizationSwipeAction.addToQueue.rawValue, forKey: PersonalizationPreferenceKey.swipeRightSecondary)
+        defaults.set(PersonalizationSwipeAction.instantMix.rawValue, forKey: PersonalizationPreferenceKey.swipeRightTertiary)
     }
 
     static func tabOrder(showPlaylists: Bool) -> [PersonalizationTab] {
@@ -368,6 +445,8 @@ nonisolated enum PersonalizationSettings {
         switch action {
         case .none, .playNext, .addToQueue:
             return true
+        case .instantMix:
+            return defaults.bool(forKey: PersonalizationPreferenceKey.showInstantMixActions)
         case .favorite:
             return defaults.bool(forKey: PersonalizationPreferenceKey.showFavoriteActions)
         case .addToPlaylist:

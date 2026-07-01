@@ -435,6 +435,7 @@
 "swipe_left_3" = "向左滑动 3";
 "swipe_right_1" = "向右滑动 1";
 "swipe_right_2" = "向右滑动 2";
+"swipe_right_3" = "向右滑动 3";
 "none" = "无";
 "reset_to_defaults" = "恢复默认值";
 "unavailable" = "不可用";

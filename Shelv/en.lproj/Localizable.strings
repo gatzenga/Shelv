@@ -435,6 +435,7 @@
 "swipe_left_3" = "Swipe Left 3";
 "swipe_right_1" = "Swipe Right 1";
 "swipe_right_2" = "Swipe Right 2";
+"swipe_right_3" = "Swipe Right 3";
 "none" = "None";
 "reset_to_defaults" = "Reset to Defaults";
 "unavailable" = "Unavailable";

@@ -17,6 +17,7 @@ struct PersonalizedSongSwipeActionsModifier: ViewModifier {
     @AppStorage(PersonalizationPreferenceKey.swipeLeftSecondary) private var leftSecondary = PersonalizationSwipeAction.addToPlaylist.rawValue
     @AppStorage(PersonalizationPreferenceKey.swipeRightPrimary) private var rightPrimary = PersonalizationSwipeAction.playNext.rawValue
     @AppStorage(PersonalizationPreferenceKey.swipeRightSecondary) private var rightSecondary = PersonalizationSwipeAction.addToQueue.rawValue
+    @AppStorage(PersonalizationPreferenceKey.swipeRightTertiary) private var rightTertiary = PersonalizationSwipeAction.instantMix.rawValue
 
     func body(content: Content) -> some View {
         content
@@ -25,16 +26,9 @@ struct PersonalizedSongSwipeActionsModifier: ViewModifier {
                 swipeButton(for: .leftSecondary)
             }
             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                if !isOffline && showInstantMixActions {
-                    Button {
-                        InstantMixService.playSongMix(for: song)
-                    } label: {
-                        Image(systemName: "sparkles")
-                    }
-                    .tint(.purple)
-                }
                 swipeButton(for: .rightPrimary)
                 swipeButton(for: .rightSecondary)
+                swipeButton(for: .rightTertiary)
             }
     }
 
@@ -60,6 +54,15 @@ struct PersonalizedSongSwipeActionsModifier: ViewModifier {
                     Image(systemName: "music.note.list")
                 }
                 .tint(accentColor)
+            }
+        case .instantMix:
+            if !isOffline && showInstantMixActions {
+                Button {
+                    InstantMixService.playSongMix(for: song)
+                } label: {
+                    Image(systemName: "sparkles")
+                }
+                .tint(.purple)
             }
         case .playNext:
             Button {
@@ -88,6 +91,8 @@ struct PersonalizedSongSwipeActionsModifier: ViewModifier {
             return PersonalizationSwipeAction(rawValue: rightPrimary).flatMap(normalized) ?? .none
         case .rightSecondary:
             return PersonalizationSwipeAction(rawValue: rightSecondary).flatMap(normalized) ?? .none
+        case .rightTertiary:
+            return PersonalizationSwipeAction(rawValue: rightTertiary).flatMap(normalized) ?? .none
         default:
             return .none
         }
@@ -99,6 +104,8 @@ struct PersonalizedSongSwipeActionsModifier: ViewModifier {
             return showFavoriteActions ? action : .none
         case .addToPlaylist:
             return showPlaylistActions ? action : .none
+        case .instantMix:
+            return showInstantMixActions ? action : .none
         case .none, .playNext, .addToQueue:
             return action
         case .download, .pin, .delete:

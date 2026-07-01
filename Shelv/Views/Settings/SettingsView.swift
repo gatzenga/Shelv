@@ -493,6 +493,7 @@ private struct UISwipeActionGroupSettingsView: View {
     @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
     @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
+    @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
     private var leadingSlots: [PersonalizationSwipeSlot] { group.slots.filter(\.isLeading) }
@@ -530,6 +531,9 @@ private struct UISwipeActionGroupSettingsView: View {
             PersonalizationSettings.normalizeSwipeActions(for: group)
         }
         .onChange(of: showPlaylistActions) { _, _ in
+            PersonalizationSettings.normalizeSwipeActions(for: group)
+        }
+        .onChange(of: showInstantMixActions) { _, _ in
             PersonalizationSettings.normalizeSwipeActions(for: group)
         }
         .transaction { $0.animation = nil }
@@ -688,6 +692,8 @@ private extension PersonalizationSwipeAction {
             return .pink
         case .addToPlaylist, .addToQueue, .download, .pin:
             return accentColor
+        case .instantMix:
+            return .purple
         case .delete:
             return .red
         case .playNext:
