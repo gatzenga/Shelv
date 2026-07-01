@@ -63,7 +63,7 @@ final class RadioMetadataService: ObservableObject {
         }
 
         Task { await self.fetchAzuraCastNowPlaying(apiURL: trimmed, fallbackStationName: fallbackStationName, generation: gen) }
-        timer = Timer.publish(every: 10, on: .main, in: .common)
+        timer = Timer.publish(every: 5, on: .main, in: .common)
             .autoconnect()
             .sink { [weak self] _ in
                 guard let self else { return }
@@ -109,7 +109,8 @@ final class RadioMetadataService: ObservableObject {
             let response = try Self.decoder.decode(AzuraCastNowPlayingResponse.self, from: data)
             guard self.generation == generation else { return }
 
-            let artURL = response.nowPlaying?.song?.art ?? stationArtURL(apiURL: url, shortcode: response.station.shortcode)
+            let stationArtworkURL = stationArtURL(apiURL: url, shortcode: response.station.shortcode)
+            let artURL = response.nowPlaying?.song?.art?.nilIfEmpty ?? stationArtworkURL
             let metadata = RadioNowPlayingMetadata(
                 stationName: response.station.name.isEmpty ? fallbackStationName : response.station.name,
                 title: response.nowPlaying?.song?.title.nilIfEmpty,
