@@ -109,7 +109,8 @@ final class CarPlayDiscoverController {
     private func fetchAndBuild() async {
         async let discover: Void = LibraryStore.shared.loadDiscover()
         async let random:   Void = LibraryStore.shared.refreshRandomAlbums()
-        _ = await (discover, random)
+        async let radio:    Void = RadioStationStore.shared.refresh()
+        _ = await (discover, random, radio)
         guard !Task.isCancelled else { return }
 
         let allEmpty = LibraryStore.shared.recentlyAdded.isEmpty

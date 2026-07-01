@@ -27,8 +27,9 @@ struct DiscoverView: View {
                             Task {
                                 async let discover:  Void = load()
                                 async let playlists: Void = LibraryStore.shared.loadPlaylists()
+                                async let radio:     Void = RadioStationStore.shared.refresh()
                                 async let sync:      Void = CloudKitSyncService.shared.syncNow()
-                                _ = await (discover, playlists, sync)
+                                _ = await (discover, playlists, radio, sync)
                             }
                         } label: {
                             Label(String(localized: "refresh"), systemImage: "arrow.clockwise")

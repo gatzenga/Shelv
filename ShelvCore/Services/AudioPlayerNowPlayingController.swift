@@ -17,6 +17,7 @@ private struct RadioArtworkSource: Sendable {
 final class AudioPlayerNowPlayingController {
     private var currentArtwork: MPMediaItemArtwork?
     private var currentArtworkSource: String?
+    private var currentArtworkIsFallback = false
     private var loadingArtworkSource: String?
     private var artworkTask: Task<Void, Never>?
     private var lastReportedTime: Double = -1
@@ -24,6 +25,7 @@ final class AudioPlayerNowPlayingController {
     func update(song: Song, currentTime: Double) {
         cancelArtwork()
         currentArtworkSource = nil
+        currentArtworkIsFallback = false
         var info: [String: Any] = [:]
         info[MPMediaItemPropertyTitle] = song.title
         info[MPMediaItemPropertyArtist] = song.artist ?? ""
@@ -123,15 +125,20 @@ final class AudioPlayerNowPlayingController {
             stationArtworkURL: stationArtworkURL,
             stationCoverArtID: station.coverArt
         )
-        if let cached = Self.cachedRadioArtwork(from: artworkSources) {
+        let cached = Self.cachedRadioArtwork(from: artworkSources)
+        if let cached {
             currentArtwork = cached.artwork
             currentArtworkSource = cached.source
+            currentArtworkIsFallback = cached.isFallback
         }
         loadRadioArtworkIfNeeded(artworkSources)
 
+        let attachesCurrentArtwork = currentArtwork != nil
+            && currentArtworkSource != nil
+            && artworkSources.contains(where: { $0.identifier == currentArtworkSource })
+
         if let currentArtwork,
-           let currentArtworkSource,
-           artworkSources.contains(where: { $0.identifier == currentArtworkSource }) {
+           attachesCurrentArtwork {
             info[MPMediaItemPropertyArtwork] = currentArtwork
         }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
@@ -142,11 +149,16 @@ final class AudioPlayerNowPlayingController {
             cancelArtwork()
             currentArtworkSource = nil
             currentArtwork = nil
+            currentArtworkIsFallback = false
             return
         }
         let source = primarySource.identifier
-        guard source != currentArtworkSource || currentArtwork == nil else { return }
-        guard source != loadingArtworkSource else { return }
+        guard source != currentArtworkSource || currentArtwork == nil || currentArtworkIsFallback else {
+            return
+        }
+        guard source != loadingArtworkSource else {
+            return
+        }
         cancelArtwork()
         loadingArtworkSource = source
 
@@ -165,6 +177,7 @@ final class AudioPlayerNowPlayingController {
                 guard self.loadingArtworkSource == source else { return }
                 self.currentArtwork = artwork
                 self.currentArtworkSource = loaded.source
+                self.currentArtworkIsFallback = loaded.isFallback
                 self.loadingArtworkSource = nil
                 var updated = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
                 updated[MPMediaItemPropertyArtwork] = artwork
@@ -187,6 +200,7 @@ final class AudioPlayerNowPlayingController {
                 guard self.loadingArtworkSource == source else { return }
                 self.currentArtwork = artwork
                 self.currentArtworkSource = loaded.source
+                self.currentArtworkIsFallback = loaded.isFallback
                 self.loadingArtworkSource = nil
                 var updated = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
                 updated[MPMediaItemPropertyArtwork] = artwork
@@ -228,101 +242,108 @@ final class AudioPlayerNowPlayingController {
         loadingArtworkSource = nil
         if currentArtwork == nil {
             currentArtworkSource = nil
+            currentArtworkIsFallback = false
         }
     }
 
     #if os(macOS)
-    private static func cachedRadioArtwork(from sources: [RadioArtworkSource]) -> (artwork: MPMediaItemArtwork, source: String)? {
+    private static func cachedRadioArtwork(from sources: [RadioArtworkSource]) -> (artwork: MPMediaItemArtwork, source: String, isFallback: Bool)? {
         for source in sources {
             guard let image = ImageCacheService.shared.cachedImage(url: source.url) else { continue }
             let artwork = MPMediaItemArtwork(boundsSize: CGSize(width: 600, height: 600)) { _ in image }
-            return (artwork, source.identifier)
+            return (artwork, source.identifier, false)
         }
         return nil
     }
 
-    private static func loadRadioArtworkImage(from sources: [RadioArtworkSource]) async -> (image: NSImage, source: String)? {
+    private static func loadRadioArtworkImage(from sources: [RadioArtworkSource]) async -> (image: NSImage, source: String, isFallback: Bool)? {
         for source in sources {
             if Task.isCancelled { return nil }
             if let coverArtID = source.coverArtID,
                let localPath = LocalArtworkIndex.shared.localPath(for: coverArtID),
                let localImage = NSImage(contentsOfFile: localPath) {
                 ImageCacheService.shared.cache(localImage, url: source.url)
-                return (localImage, source.identifier)
+                return (localImage, source.identifier, false)
             }
             if source.coverArtID != nil,
                let image = await ImageCacheService.shared.diskOnlyImage(url: source.url) {
-                return (image, source.identifier)
+                return (image, source.identifier, false)
             }
             guard let image = await ImageCacheService.shared.image(url: source.url) else { continue }
-            return (image, source.identifier)
+            return (image, source.identifier, false)
         }
         return nil
     }
     #elseif os(iOS)
-    private static func cachedRadioArtwork(from sources: [RadioArtworkSource]) -> (artwork: MPMediaItemArtwork, source: String)? {
+    private static func cachedRadioArtwork(from sources: [RadioArtworkSource]) -> (artwork: MPMediaItemArtwork, source: String, isFallback: Bool)? {
         for source in sources {
-            for key in source.cacheKeys {
+            let keys = source.cacheKeys.isEmpty ? ["radio_remote_\(source.url.absoluteString)"] : source.cacheKeys
+            for (index, key) in keys.enumerated() {
                 guard let image = ImageCacheService.shared.cachedImage(key: key) else { continue }
+                let isFallback = index > 0
                 let square = squareCroppedArtworkImage(image)
                 let artwork = MPMediaItemArtwork(boundsSize: square.size) { _ in square }
-                return (artwork, source.identifier)
+                return (artwork, source.identifier, isFallback)
             }
         }
         return nil
     }
 
-    private static func loadRadioArtworkImage(from sources: [RadioArtworkSource]) async -> (image: UIImage, source: String)? {
+    private static func loadRadioArtworkImage(from sources: [RadioArtworkSource]) async -> (image: UIImage, source: String, isFallback: Bool)? {
         for source in sources {
             if Task.isCancelled { return nil }
             let cacheKeys = source.cacheKeys.isEmpty ? ["radio_remote_\(source.url.absoluteString)"] : source.cacheKeys
-            for cacheKey in cacheKeys {
-                if let image = ImageCacheService.shared.cachedImage(key: cacheKey) {
-                    return (image, source.identifier)
-                }
+            let preferredKey = cacheKeys[0]
+
+            if let image = ImageCacheService.shared.cachedImage(key: preferredKey) {
+                return (image, source.identifier, false)
             }
+
             if let coverArtID = source.coverArtID,
                let localPath = LocalArtworkIndex.shared.localPath(for: coverArtID),
                let image = UIImage(contentsOfFile: localPath) {
-                if let cacheKey = cacheKeys.first {
-                    ImageCacheService.shared.cache(image, key: cacheKey)
-                }
-                return (image, source.identifier)
+                ImageCacheService.shared.cache(image, key: preferredKey)
+                return (image, source.identifier, false)
             }
-            if source.coverArtID != nil {
-                for cacheKey in cacheKeys {
-                    if let image = await ImageCacheService.shared.diskOnlyImage(key: cacheKey) {
-                        return (image, source.identifier)
+
+            if let image = await ImageCacheService.shared.image(url: source.url, key: preferredKey) {
+                return (image, source.identifier, false)
+            }
+
+            if source.coverArtID != nil, cacheKeys.count > 1 {
+                for fallbackKey in cacheKeys.dropFirst() {
+                    if let image = ImageCacheService.shared.cachedImage(key: fallbackKey) {
+                        return (image, source.identifier, true)
+                    }
+                    if let image = await ImageCacheService.shared.diskOnlyImage(key: fallbackKey) {
+                        return (image, source.identifier, true)
                     }
                 }
             }
-            let cacheKey = cacheKeys.first ?? "radio_remote_\(source.url.absoluteString)"
-            guard let image = await ImageCacheService.shared.image(url: source.url, key: cacheKey) else { continue }
-            return (image, source.identifier)
         }
         return nil
     }
     #else
-    private static func cachedRadioArtwork(from sources: [RadioArtworkSource]) -> (artwork: MPMediaItemArtwork, source: String)? {
+    private static func cachedRadioArtwork(from sources: [RadioArtworkSource]) -> (artwork: MPMediaItemArtwork, source: String, isFallback: Bool)? {
         for source in sources {
             guard let image = ImageCacheService.shared.cachedImage(url: source.url) else { continue }
             let square = squareCroppedArtworkImage(image)
             let artwork = MPMediaItemArtwork(boundsSize: square.size) { _ in square }
-            return (artwork, source.identifier)
+            return (artwork, source.identifier, false)
         }
         return nil
     }
 
-    private static func loadRadioArtworkImage(from sources: [RadioArtworkSource]) async -> (image: UIImage, source: String)? {
+    private static func loadRadioArtworkImage(from sources: [RadioArtworkSource]) async -> (image: UIImage, source: String, isFallback: Bool)? {
         for source in sources {
             if Task.isCancelled { return nil }
             if let coverArtID = source.coverArtID,
                let localPath = LocalArtworkIndex.shared.localPath(for: coverArtID),
                let localImage = UIImage(contentsOfFile: localPath) {
-                return (localImage, source.identifier)
+                return (localImage, source.identifier, false)
             }
             guard let image = await ImageCacheService.shared.image(url: source.url) else { continue }
-            return (image, source.identifier)
+            return (image, source.identifier, false)
         }
         return nil
     }
@@ -356,6 +377,7 @@ final class AudioPlayerNowPlayingController {
         cancelArtwork()
         currentArtwork = nil
         currentArtworkSource = nil
+        currentArtworkIsFallback = false
         lastReportedTime = -1
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
     }
