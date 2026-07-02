@@ -100,6 +100,10 @@
 "list_view" = "列表视图";
 "grid_view" = "网格视图";
 "sort" = "排序";
+"genre" = "流派";
+"all_genres" = "所有流派";
+"clear_genre_filter" = "清除流派筛选";
+"genre_filter_active_format" = "流派：%@";
 "name" = "名称";
 "most_played" = "播放最多";
 "year" = "年份";

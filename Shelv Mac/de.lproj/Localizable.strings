@@ -80,6 +80,10 @@
 "download" = "Herunterladen";
 "filter" = "Filtern…";
 "sort" = "Sortieren";
+"genre" = "Genre";
+"all_genres" = "Alle Genres";
+"clear_genre_filter" = "Genre-Filter zurücksetzen";
+"genre_filter_active_format" = "Genre: %@";
 "direction" = "Richtung";
 "last_modified" = "Zuletzt geändert";
 "date_created" = "Erstellungsdatum";

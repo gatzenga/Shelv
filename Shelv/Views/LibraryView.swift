@@ -20,6 +20,7 @@ struct LibraryView: View {
     private var sortOption: AlbumSortOption { AlbumSortOption(rawValue: sortOptionRaw) ?? .alphabetical }
     @AppStorage("albumSortDirection") private var albumDirectionRaw: String = SortDirection.ascending.rawValue
     private var albumDirection: SortDirection { SortDirection(rawValue: albumDirectionRaw) ?? .ascending }
+    @AppStorage("albumGenreFilter") private var albumGenreFilterRaw = ""
     @AppStorage("artistSortOption") private var artistSortRaw: String = ArtistSortOption.alphabetical.rawValue
     private var artistSortOption: ArtistSortOption { ArtistSortOption(rawValue: artistSortRaw) ?? .alphabetical }
     @AppStorage("artistSortDirection") private var artistDirectionRaw: String = SortDirection.ascending.rawValue
@@ -32,6 +33,7 @@ struct LibraryView: View {
     @State private var navigateToArtist: Artist?
     @State private var currentToast: ShelveToast?
     @State private var albumGroups: [(letter: String, items: [Album])] = []
+    @State private var albumGenreOptions: [AlbumGenreFilterOption] = []
     @State private var artistGroups: [(letter: String, items: [Artist])] = []
     @State private var albumCountByArtist: [String: Int] = [:]
     @State private var refreshContinuation: CheckedContinuation<Void, Never>?
@@ -117,8 +119,15 @@ struct LibraryView: View {
 
     @ToolbarContentBuilder
     private var libraryToolbar: some ToolbarContent {
-        if segment == .albums || segment == .artists {
-            ToolbarItem(placement: .topBarTrailing) {
+        if segment != .favorites {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                if segment == .albums {
+                    LibraryGenreFilterMenu(
+                        selectedGenre: $albumGenreFilterRaw,
+                        options: albumGenreOptions
+                    )
+                }
+
                 LibrarySortMenu(
                     segment: segment,
                     albumSortRaw: $sortOptionRaw,
@@ -130,10 +139,7 @@ struct LibraryView: View {
                         Task { await libraryStore.applyAlbumSort(sortBy: newValue) }
                     }
                 )
-            }
-        }
-        if segment != .favorites {
-            ToolbarItem(placement: .topBarTrailing) {
+
                 LibraryViewToggleButton(
                     segment: segment,
                     albumIsGrid: $albumIsGrid,
@@ -193,6 +199,7 @@ struct LibraryView: View {
             rebuildGroups()
         }
         .onChange(of: albumDirectionRaw) { _, _ in rebuildGroups() }
+        .onChange(of: albumGenreFilterRaw) { _, _ in rebuildGroups() }
         .onChange(of: artistSortRaw) { _, _ in rebuildGroups() }
         .onChange(of: artistDirectionRaw) { _, _ in rebuildGroups() }
         .onChange(of: showFavoritesInLibrary) { _, enabled in
@@ -217,17 +224,32 @@ struct LibraryView: View {
         let libraryAlbums = libraryStore.albums
         let sortOpt = sortOption
         let albumDir = albumDirection
+        let selectedAlbumGenre = AlbumGenreFilterOption.normalizedGenre(albumGenreFilterRaw)
         let artistSort = artistSortOption
         let artistDir = artistDirection
 
         rebuildTask = Task.detached(priority: .userInitiated) {
+            let calculatedAlbumGenreOptions = AlbumGenreFilterOption.options(from: albumsSource)
+            let effectiveSelectedAlbumGenre = AlbumGenreFilterOption.selectedGenre(
+                selectedAlbumGenre,
+                in: calculatedAlbumGenreOptions
+            )
+            let filteredAlbums: [Album]
+            if let effectiveSelectedAlbumGenre {
+                filteredAlbums = albumsSource.filter {
+                    AlbumGenreFilterOption.matches($0, selectedGenre: effectiveSelectedAlbumGenre)
+                }
+            } else {
+                filteredAlbums = albumsSource
+            }
+
             // 1. Alben im Hintergrund gruppieren
             let albumCacheSort = LibraryRepository.albumCacheSort(for: sortOpt.rawValue)
             let requestedAlbumDirection: LibraryDatabaseSortDirection = sortOpt == .alphabetical
                 ? .ascending
                 : (albumDir == .ascending ? .ascending : .descending)
             let sortedAlbums = LibraryRepository.locallySortedAlbums(
-                albumsSource,
+                filteredAlbums,
                 sort: albumCacheSort.0,
                 direction: requestedAlbumDirection
             )
@@ -278,6 +300,7 @@ struct LibraryView: View {
 
             await MainActor.run {
                 self.albumGroups = calculatedAlbumGroups
+                self.albumGenreOptions = calculatedAlbumGenreOptions
                 self.artistGroups = calculatedArtistGroups
                 self.albumCountByArtist = calculatedAlbumCountByArtist
             }

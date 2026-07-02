@@ -40,6 +40,65 @@ struct LibraryViewToggleButton: View {
     }
 }
 
+struct LibraryGenreFilterMenu: View {
+    @Binding var selectedGenre: String
+    let options: [AlbumGenreFilterOption]
+
+    private var effectiveSelectedGenre: String? {
+        AlbumGenreFilterOption.selectedGenre(selectedGenre, in: options)
+    }
+
+    private var hasActiveFilter: Bool {
+        effectiveSelectedGenre != nil
+    }
+
+    var body: some View {
+        Menu {
+            Picker(selection: Binding(
+                get: { effectiveSelectedGenre ?? "" },
+                set: { selectedGenre = $0 }
+            )) {
+                Text(String(localized: "all_genres")).tag("")
+                ForEach(options) { option in
+                    Text(option.label).tag(option.name)
+                }
+            } label: {
+                Label(String(localized: "genre"), systemImage: "guitars")
+            }
+
+            if hasActiveFilter {
+                Divider()
+
+                Button {
+                    selectedGenre = ""
+                } label: {
+                    Label(String(localized: "clear_genre_filter"), systemImage: "xmark.circle")
+                }
+            }
+        } label: {
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: "guitars")
+                    .foregroundStyle(Color.primary)
+
+                if hasActiveFilter {
+                    Circle()
+                        .fill(Color.secondary)
+                        .frame(width: 7, height: 7)
+                        .offset(x: 4, y: -3)
+                }
+            }
+        }
+        .tint(.primary)
+        .disabled(options.isEmpty && !hasActiveFilter)
+        .accessibilityLabel(
+            effectiveSelectedGenre.map {
+                String(format: String(localized: "genre_filter_active_format"), $0)
+            }
+            ?? String(localized: "genre")
+        )
+    }
+}
+
 struct LibrarySortMenu: View {
     let segment: LibrarySegment
     @Binding var albumSortRaw: String
@@ -95,7 +154,9 @@ struct LibrarySortMenu: View {
             }
         } label: {
             Image(systemName: "arrow.up.arrow.down")
+                .foregroundStyle(Color.primary)
         }
+        .tint(.primary)
     }
 
     private var artistSortMenu: some View {
@@ -119,6 +180,8 @@ struct LibrarySortMenu: View {
             }
         } label: {
             Image(systemName: "arrow.up.arrow.down")
+                .foregroundStyle(Color.primary)
         }
+        .tint(.primary)
     }
 }

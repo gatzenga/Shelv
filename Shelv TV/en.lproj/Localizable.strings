@@ -94,6 +94,10 @@
 "list_view" = "List view";
 "grid_view" = "Grid view";
 "sort" = "Sort";
+"genre" = "Genre";
+"all_genres" = "All Genres";
+"clear_genre_filter" = "Clear Genre Filter";
+"genre_filter_active_format" = "Genre: %@";
 "name" = "Name";
 "most_played" = "Most Played";
 "year" = "Year";

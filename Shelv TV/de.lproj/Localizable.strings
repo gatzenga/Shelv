@@ -94,6 +94,10 @@
 "list_view" = "Listenansicht";
 "grid_view" = "Rasteransicht";
 "sort" = "Sortieren";
+"genre" = "Genre";
+"all_genres" = "Alle Genres";
+"clear_genre_filter" = "Genre-Filter zurücksetzen";
+"genre_filter_active_format" = "Genre: %@";
 "name" = "Name";
 "most_played" = "Meist gespielt";
 "year" = "Jahr";

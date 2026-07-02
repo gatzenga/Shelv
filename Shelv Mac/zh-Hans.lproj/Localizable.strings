@@ -80,6 +80,10 @@
 "download" = "下载";
 "filter" = "筛选…";
 "sort" = "排序";
+"genre" = "流派";
+"all_genres" = "所有流派";
+"clear_genre_filter" = "清除流派筛选";
+"genre_filter_active_format" = "流派：%@";
 "direction" = "方向";
 "last_modified" = "最近修改";
 "date_created" = "创建日期";

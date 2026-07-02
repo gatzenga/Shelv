@@ -68,12 +68,13 @@ struct ArtistsView: View {
                     .textFieldStyle(.roundedBorder)
                     .frame(maxWidth: 220)
                 Spacer()
-                Picker(String(localized: "sort"), selection: $vm.artistSortOption) {
+                Picker("\(String(localized: "sort")):", selection: $vm.artistSortOption) {
                     ForEach(ArtistSortOption.allCases.filter { !offlineMode.isOffline || !$0.requiresServer }, id: \.self) { opt in
                         Text(opt.label).tag(opt)
                     }
                 }
                 .pickerStyle(.menu)
+                .tint(.primary)
                 .frame(width: 180)
                 if vm.artistSortOption != .name {
                     Button {

@@ -26,6 +26,7 @@ struct LibraryView: View {
     @AppStorage(PersonalizationPreferenceKey.showFavoritesInLibrary) private var showFavoritesInLibrary = true
     @AppStorage("albumSortOption") private var albumSortRaw = "alphabeticalByName"
     @AppStorage("albumSortDirection") private var albumDirRaw = "ascending"
+    @AppStorage("albumGenreFilter") private var albumGenreFilterRaw = ""
     @AppStorage("artistSortDirection") private var artistDirRaw = "ascending"
     @AppStorage("albumViewIsGrid") private var albumIsGrid = true
     @AppStorage("artistViewIsGrid") private var artistIsGrid = false
@@ -33,9 +34,11 @@ struct LibraryView: View {
     @State private var segment = 0   // 0 = Albums, 1 = Artists, 2 = Favorites
     @State private var path = NavigationPath()
     @State private var derivedAlbums: [Album] = []
+    @State private var albumGenreOptions: [AlbumGenreFilterOption] = []
     @State private var derivedArtists: [Artist] = []
     @State private var derivedAlbumCountByArtist: [String: Int] = [:]
     @State private var derivedRebuildTask: Task<Void, Never>?
+    @State private var showAlbumGenrePicker = false
     private let player = AudioPlayerService.shared
 
     private var albumSort: AlbumSortOption { AlbumSortOption(rawValue: albumSortRaw) ?? .alphabetical }
@@ -88,6 +91,7 @@ struct LibraryView: View {
             .onReceive(store.$artists) { _ in Task { @MainActor in rebuildDerivedLibraryState() } }
             .onChange(of: albumSortRaw) { _, _ in rebuildDerivedLibraryState() }
             .onChange(of: albumDirRaw) { _, _ in rebuildDerivedLibraryState() }
+            .onChange(of: albumGenreFilterRaw) { _, _ in rebuildDerivedLibraryState() }
             .onChange(of: artistDirRaw) { _, _ in rebuildDerivedLibraryState() }
             .onChange(of: showFavoritesInLibrary) { _, enabled in
                 if !enabled && segment == 2 { segment = 0 }
@@ -106,16 +110,31 @@ struct LibraryView: View {
         let artists = store.artists
         let sort = albumSort
         let albumDirection = albumDir
+        let selectedAlbumGenre = AlbumGenreFilterOption.normalizedGenre(albumGenreFilterRaw)
         let artistDirection = artistDir
 
         derivedRebuildTask = Task.detached(priority: .userInitiated) {
+            let nextGenreOptions = AlbumGenreFilterOption.options(from: albums)
+            let effectiveSelectedAlbumGenre = AlbumGenreFilterOption.selectedGenre(
+                selectedAlbumGenre,
+                in: nextGenreOptions
+            )
+            let filteredAlbums: [Album]
+            if let effectiveSelectedAlbumGenre {
+                filteredAlbums = albums.filter {
+                    AlbumGenreFilterOption.matches($0, selectedGenre: effectiveSelectedAlbumGenre)
+                }
+            } else {
+                filteredAlbums = albums
+            }
+
             let nextAlbums: [Album] = {
                 let cacheSort = LibraryRepository.albumCacheSort(for: sort.rawValue)
                 let requestedDirection: LibraryDatabaseSortDirection = albumDirection == .ascending
                     ? .ascending
                     : .descending
                 return LibraryRepository.locallySortedAlbums(
-                    albums,
+                    filteredAlbums,
                     sort: cacheSort.0,
                     direction: requestedDirection
                 )
@@ -138,6 +157,7 @@ struct LibraryView: View {
             guard !Task.isCancelled else { return }
             await MainActor.run {
                 derivedAlbums = nextAlbums
+                albumGenreOptions = nextGenreOptions
                 derivedArtists = nextArtists
                 derivedAlbumCountByArtist = nextAlbumCountByArtist
             }
@@ -148,6 +168,7 @@ struct LibraryView: View {
 
     private var albumControls: some View {
         HStack(spacing: 24) {
+            albumGenreButton
             Menu {
                 ForEach(AlbumSortOption.allCases, id: \.rawValue) { opt in
                     Button { albumSortRaw = opt.rawValue } label: {
@@ -156,7 +177,7 @@ struct LibraryView: View {
                     }
                 }
             } label: {
-                Label(albumSort.label, systemImage: "arrow.up.arrow.down")
+                Label("\(String(localized: "sort")): \(albumSort.label)", systemImage: "arrow.up.arrow.down")
             }
             Button { albumDirRaw = albumDir == .ascending ? "descending" : "ascending" } label: {
                 Image(systemName: albumDir.icon)
@@ -168,6 +189,46 @@ struct LibraryView: View {
         .buttonStyle(.bordered)
         .padding(.bottom, 16)
         .focusSection()
+    }
+
+    private var albumGenreButtonTitle: String {
+        let selectedGenre = AlbumGenreFilterOption.selectedGenre(albumGenreFilterRaw, in: albumGenreOptions)
+            ?? String(localized: "all_genres")
+        return "\(String(localized: "genre")): \(selectedGenre)"
+    }
+
+    private var albumGenreButton: some View {
+        Button {
+            showAlbumGenrePicker = true
+        } label: {
+            Label(albumGenreButtonTitle, systemImage: "guitars")
+        }
+        .disabled(albumGenreOptions.isEmpty)
+        .confirmationDialog(String(localized: "genre"), isPresented: $showAlbumGenrePicker, titleVisibility: .visible) {
+            Button {
+                albumGenreFilterRaw = ""
+            } label: {
+                if AlbumGenreFilterOption.selectedGenre(albumGenreFilterRaw, in: albumGenreOptions) == nil {
+                    Label(String(localized: "all_genres"), systemImage: "checkmark")
+                } else {
+                    Text(String(localized: "all_genres"))
+                }
+            }
+
+            ForEach(albumGenreOptions) { option in
+                Button {
+                    albumGenreFilterRaw = option.name
+                } label: {
+                    if AlbumGenreFilterOption.normalizedKey(albumGenreFilterRaw) == option.id {
+                        Label(option.label, systemImage: "checkmark")
+                    } else {
+                        Text(option.label)
+                    }
+                }
+            }
+
+            Button(String(localized: "cancel"), role: .cancel) {}
+        }
     }
 
     private var artistControls: some View {

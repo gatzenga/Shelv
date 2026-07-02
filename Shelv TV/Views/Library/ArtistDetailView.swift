@@ -117,7 +117,7 @@ struct ArtistDetailView: View {
                         if sort == opt { Label(opt.label, systemImage: "checkmark") } else { Text(opt.label) }
                     }
                 }
-            } label: { Label(sort.label, systemImage: "arrow.up.arrow.down") }
+            } label: { Label("\(String(localized: "sort")): \(sort.label)", systemImage: "arrow.up.arrow.down") }
             Button { dirRaw = dir == .ascending ? "descending" : "ascending" } label: {
                 Image(systemName: dir.icon)
             }

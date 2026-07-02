@@ -7,12 +7,21 @@ struct AlbumsView: View {
     @ObservedObject private var offlineMode = OfflineModeService.shared
     @AppStorage("albumViewIsGrid") private var isGrid: Bool = true
     @AppStorage("downloadsOnlyFilter") private var showDownloadsOnly: Bool = false
+    @AppStorage("albumGenreFilter") private var albumGenreFilter: String = ""
     @State private var searchText: String = ""
     @State private var displayAlbums: [Album] = []
+    @State private var genreOptions: [AlbumGenreFilterOption] = []
     @State private var displayRebuildTask: Task<Void, Never>?
 
     private var effectiveShowDownloadsOnly: Bool {
         offlineMode.isOffline || showDownloadsOnly
+    }
+
+    private var genreSelection: Binding<String> {
+        Binding(
+            get: { AlbumGenreFilterOption.selectedGenre(albumGenreFilter, in: genreOptions) ?? "" },
+            set: { albumGenreFilter = $0 }
+        )
     }
 
     private func rebuildDisplayAlbums() {
@@ -24,6 +33,7 @@ struct AlbumsView: View {
         let downloadedAlbums = downloadStore.albums.map { $0.asAlbum() }
         let downloadedIds = Set(downloadStore.albums.map { $0.albumId })
         let query = searchText
+        let selectedGenre = AlbumGenreFilterOption.normalizedGenre(albumGenreFilter)
 
         displayRebuildTask = Task.detached(priority: .userInitiated) {
             let baseAlbums: [Album]
@@ -35,11 +45,25 @@ struct AlbumsView: View {
                 baseAlbums = sortedAlbums
             }
 
+            let nextGenreOptions = AlbumGenreFilterOption.options(from: baseAlbums)
+            let effectiveSelectedGenre = AlbumGenreFilterOption.selectedGenre(
+                selectedGenre,
+                in: nextGenreOptions
+            )
+            let genreFilteredAlbums: [Album]
+            if let effectiveSelectedGenre {
+                genreFilteredAlbums = baseAlbums.filter {
+                    AlbumGenreFilterOption.matches($0, selectedGenre: effectiveSelectedGenre)
+                }
+            } else {
+                genreFilteredAlbums = baseAlbums
+            }
+
             let result: [Album]
             if query.isEmpty {
-                result = baseAlbums
+                result = genreFilteredAlbums
             } else {
-                result = baseAlbums.filter {
+                result = genreFilteredAlbums.filter {
                     $0.name.localizedCaseInsensitiveContains(query) ||
                     ($0.artist?.localizedCaseInsensitiveContains(query) ?? false)
                 }
@@ -48,6 +72,7 @@ struct AlbumsView: View {
             guard !Task.isCancelled else { return }
             await MainActor.run {
                 displayAlbums = result
+                genreOptions = nextGenreOptions
             }
         }
     }
@@ -62,12 +87,22 @@ struct AlbumsView: View {
                     .textFieldStyle(.roundedBorder)
                     .frame(maxWidth: 220)
                 Spacer()
-                Picker(String(localized: "sort"), selection: $vm.sortOption) {
+                Picker("\(String(localized: "genre")):", selection: genreSelection) {
+                    Text(String(localized: "all_genres")).tag("")
+                    ForEach(genreOptions) { option in
+                        Text(option.label).tag(option.name)
+                    }
+                }
+                .pickerStyle(.menu)
+                .tint(.primary)
+                .frame(width: 180)
+                Picker("\(String(localized: "sort")):", selection: $vm.sortOption) {
                     ForEach(LibrarySortOption.allCases.filter { !offlineMode.isOffline || !$0.requiresServer }, id: \.self) { opt in
                         Text(opt.label).tag(opt)
                     }
                 }
                 .pickerStyle(.menu)
+                .tint(.primary)
                 .frame(width: 180)
                 if vm.sortOption != .name {
                     Button {
@@ -147,6 +182,7 @@ struct AlbumsView: View {
         .onReceive(vm.$sortedAlbums) { _ in rebuildDisplayAlbums() }
         .onReceive(downloadStore.$albums) { _ in rebuildDisplayAlbums() }
         .onChange(of: searchText) { _, _ in rebuildDisplayAlbums() }
+        .onChange(of: albumGenreFilter) { _, _ in rebuildDisplayAlbums() }
         .onChange(of: showDownloadsOnly) { _, _ in rebuildDisplayAlbums() }
         .onChange(of: offlineMode.isOffline) { _, isOffline in
             if isOffline && vm.sortOption.requiresServer {
