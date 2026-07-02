@@ -54,7 +54,7 @@ final class CarPlayDiscoverController {
                     self.showOffline()
                 } else {
                     self.rootTemplate.updateSections(self.buildSections())
-                    Task { await self.enrichWithCovers() }
+                    self.startCoverEnrichment()
                 }
             }
             .store(in: &cancellables)
@@ -106,10 +106,27 @@ final class CarPlayDiscoverController {
         rootTemplate.updateSections(sections)
     }
 
-    private func fetchAndBuild() async {
+    private func manualRefresh(completion: @escaping () -> Void) {
+        loadTask?.cancel()
+        loadTask = Task { @MainActor [weak self] in
+            guard let self else {
+                completion()
+                return
+            }
+            await self.fetchAndBuild(waitForNetworkReconnect: true)
+            completion()
+        }
+    }
+
+    private func fetchAndBuild(waitForNetworkReconnect: Bool = false) async {
+        if waitForNetworkReconnect {
+            _ = await NetworkStatus.shared.waitUntilNetworkAvailable()
+        } else {
+            await NetworkStatus.shared.waitUntilReady()
+        }
         async let discover: Void = LibraryStore.shared.loadDiscover()
         async let random:   Void = LibraryStore.shared.refreshRandomAlbums()
-        async let radio:    Void = RadioStationStore.shared.refresh()
+        async let radio:    Void = RadioStationStore.shared.refresh(waitForCloudMetadata: false)
         _ = await (discover, random, radio)
         guard !Task.isCancelled else { return }
 
@@ -124,7 +141,7 @@ final class CarPlayDiscoverController {
 
         rootTemplate.updateSections(buildSections())
         guard !Task.isCancelled else { return }
-        await enrichWithCovers()
+        startCoverEnrichment()
     }
 
     private func showNoConnection() {
@@ -135,11 +152,7 @@ final class CarPlayDiscoverController {
             c()
         }
         let refreshItem = actionListItem(title: String(localized: "refresh"), systemImage: "arrow.clockwise") { [weak self] _, c in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                await self.fetchAndBuild()
-            }
-            c()
+            self?.manualRefresh(completion: c) ?? c()
         }
         rootTemplate.updateSections([
             CPListSection(items: [enable], header: String(localized: "no_connection"), sectionIndexTitle: nil),
@@ -176,11 +189,7 @@ final class CarPlayDiscoverController {
 
         // Refresh-Button ganz unten, kein Header
         let refreshItem = actionListItem(title: String(localized: "refresh"), systemImage: "arrow.clockwise") { [weak self] _, c in
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                await self.fetchAndBuild()
-            }
-            c()
+            self?.manualRefresh(completion: c) ?? c()
         }
         sections.append(CPListSection(items: [refreshItem], header: nil, sectionIndexTitle: nil))
 
@@ -236,6 +245,11 @@ final class CarPlayDiscoverController {
         await applyCoversAsync(template: rootTemplate, coverArtIds: ids) { [weak self] map in
             self?.buildSections(imageMap: map) ?? []
         }
+    }
+
+    private func startCoverEnrichment() {
+        coverLoadTask?.cancel()
+        coverLoadTask = Task { await enrichWithCovers() }
     }
 
     private func makeOfflineMixItem(_ title: String, type: String) -> CPListItem {

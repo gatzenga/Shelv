@@ -31,6 +31,20 @@ nonisolated final class NetworkStatus: @unchecked Sendable {
         }
     }
 
+    func waitUntilNetworkAvailable(timeoutNanoseconds: UInt64 = 3_000_000_000) async -> Bool {
+        await waitUntilReady()
+        guard !hasNetwork else { return true }
+
+        let interval: UInt64 = 100_000_000
+        var elapsed: UInt64 = 0
+        while elapsed < timeoutNanoseconds {
+            try? await Task.sleep(nanoseconds: interval)
+            if hasNetwork { return true }
+            elapsed += interval
+        }
+        return hasNetwork
+    }
+
     private var isReady: Bool {
         lock.lock(); defer { lock.unlock() }
         return _isReady

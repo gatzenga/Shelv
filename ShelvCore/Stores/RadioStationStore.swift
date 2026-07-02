@@ -28,7 +28,7 @@ final class RadioStationStore: ObservableObject {
         errorMessage = nil
     }
 
-    func refresh() async {
+    func refresh(waitForCloudMetadata: Bool = true) async {
         refreshGeneration += 1
         let generation = refreshGeneration
         guard let serverId = activeServerId else {
@@ -56,10 +56,13 @@ final class RadioStationStore: ObservableObject {
             setItems(displayItems(for: stations, serverId: serverId, metadataByRecordName: localMetadata))
             errorMessage = nil
 
-            let mergedMetadata = await mergedMetadata(for: stations, serverId: serverId)
-            guard refreshGeneration == generation, activeServerId == serverId else { return }
-            setItems(displayItems(for: stations, serverId: serverId, metadataByRecordName: mergedMetadata))
-            errorMessage = nil
+            if waitForCloudMetadata {
+                await applyMergedMetadata(for: stations, serverId: serverId, generation: generation)
+            } else {
+                Task { @MainActor [weak self] in
+                    await self?.applyMergedMetadata(for: stations, serverId: serverId, generation: generation)
+                }
+            }
         } catch {
             guard refreshGeneration == generation else { return }
             if !(error is CancellationError) {
@@ -222,6 +225,13 @@ final class RadioStationStore: ObservableObject {
             await CloudKitSyncService.shared.saveRadioMetadata(metadata)
         }
         return local
+    }
+
+    private func applyMergedMetadata(for stations: [RadioStation], serverId: String, generation: Int) async {
+        let mergedMetadata = await mergedMetadata(for: stations, serverId: serverId)
+        guard refreshGeneration == generation, activeServerId == serverId else { return }
+        setItems(displayItems(for: stations, serverId: serverId, metadataByRecordName: mergedMetadata))
+        errorMessage = nil
     }
 
     private func shouldUploadLocalMetadata(_ local: RadioStationMetadata, remote: RadioStationMetadata?) -> Bool {

@@ -79,7 +79,7 @@ final class CarPlayRadioController {
                 rebuild()
                 return
             }
-            await RadioStationStore.shared.refresh()
+            await RadioStationStore.shared.refresh(waitForCloudMetadata: false)
             rebuild()
         }
     }
@@ -110,7 +110,7 @@ final class CarPlayRadioController {
             isShowingStations = false
             let item = CPListItem(text: String(localized: "error"), detailText: message)
             item.setImage(cpListIcon("exclamationmark.triangle"))
-            rootTemplate.updateSections([CPListSection(items: [item])])
+            rootTemplate.updateSections([CPListSection(items: [item, makeRefreshItem()])])
             return
         }
 
@@ -118,7 +118,7 @@ final class CarPlayRadioController {
             isShowingStations = false
             let item = CPListItem(text: String(localized: "no_radio_stations"), detailText: nil)
             item.setImage(cpListIcon("dot.radiowaves.left.and.right"))
-            rootTemplate.updateSections([CPListSection(items: [item])])
+            rootTemplate.updateSections([CPListSection(items: [item, makeRefreshItem()])])
             return
         }
 
@@ -131,6 +131,30 @@ final class CarPlayRadioController {
         guard !built.coverTargets.isEmpty else { return }
         coverTask = Task { @MainActor in
             await loadStationCovers(built.coverTargets, generation: generation)
+        }
+    }
+
+    private func makeRefreshItem() -> CPListItem {
+        actionListItem(title: String(localized: "refresh"), systemImage: "arrow.clockwise") { [weak self] _, completion in
+            self?.manualRefresh(completion: completion) ?? completion()
+        }
+    }
+
+    private func manualRefresh(completion: @escaping () -> Void) {
+        loadTask?.cancel()
+        loadTask = Task { @MainActor [weak self] in
+            guard let self else {
+                completion()
+                return
+            }
+            _ = await NetworkStatus.shared.waitUntilNetworkAvailable()
+            await RadioStationStore.shared.refresh(waitForCloudMetadata: false)
+            guard !Task.isCancelled else {
+                completion()
+                return
+            }
+            self.rebuild()
+            completion()
         }
     }
 
