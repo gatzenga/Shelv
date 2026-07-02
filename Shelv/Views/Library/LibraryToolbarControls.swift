@@ -43,6 +43,7 @@ struct LibraryViewToggleButton: View {
 struct LibraryGenreFilterMenu: View {
     @Binding var selectedGenre: String
     let options: [AlbumGenreFilterOption]
+    let accentColor: Color
 
     private var effectiveSelectedGenre: String? {
         AlbumGenreFilterOption.selectedGenre(selectedGenre, in: options)
@@ -78,17 +79,17 @@ struct LibraryGenreFilterMenu: View {
         } label: {
             ZStack(alignment: .topTrailing) {
                 Image(systemName: "guitars")
-                    .foregroundStyle(Color.primary)
+                    .foregroundStyle(accentColor)
 
                 if hasActiveFilter {
                     Circle()
-                        .fill(Color.secondary)
+                        .fill(accentColor)
                         .frame(width: 7, height: 7)
                         .offset(x: 4, y: -3)
                 }
             }
         }
-        .tint(.primary)
+        .tint(accentColor)
         .disabled(options.isEmpty && !hasActiveFilter)
         .accessibilityLabel(
             effectiveSelectedGenre.map {
@@ -106,6 +107,7 @@ struct LibrarySortMenu: View {
     @Binding var artistSortRaw: String
     @Binding var artistDirectionRaw: String
     let isOffline: Bool
+    let accentColor: Color
     let onAlbumSortChanged: (String) -> Void
 
     private var albumSortOption: AlbumSortOption {
@@ -154,9 +156,9 @@ struct LibrarySortMenu: View {
             }
         } label: {
             Image(systemName: "arrow.up.arrow.down")
-                .foregroundStyle(Color.primary)
+                .foregroundStyle(accentColor)
         }
-        .tint(.primary)
+        .tint(accentColor)
     }
 
     private var artistSortMenu: some View {
@@ -180,8 +182,8 @@ struct LibrarySortMenu: View {
             }
         } label: {
             Image(systemName: "arrow.up.arrow.down")
-                .foregroundStyle(Color.primary)
+                .foregroundStyle(accentColor)
         }
-        .tint(.primary)
+        .tint(accentColor)
     }
 }

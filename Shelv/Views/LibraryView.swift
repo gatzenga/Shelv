@@ -124,7 +124,8 @@ struct LibraryView: View {
                 if segment == .albums {
                     LibraryGenreFilterMenu(
                         selectedGenre: $albumGenreFilterRaw,
-                        options: albumGenreOptions
+                        options: albumGenreOptions,
+                        accentColor: accentColor
                     )
                 }
 
@@ -135,6 +136,7 @@ struct LibraryView: View {
                     artistSortRaw: $artistSortRaw,
                     artistDirectionRaw: $artistDirectionRaw,
                     isOffline: offlineMode.isOffline,
+                    accentColor: accentColor,
                     onAlbumSortChanged: { newValue in
                         Task { await libraryStore.applyAlbumSort(sortBy: newValue) }
                     }
