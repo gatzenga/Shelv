@@ -16,7 +16,8 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         _ templateApplicationScene: CPTemplateApplicationScene,
         didDisconnectInterfaceController interfaceController: CPInterfaceController
     ) {
-        Task { @MainActor in rootController?.disconnect() }
+        let controller = rootController
         rootController = nil
+        Task { @MainActor in controller?.disconnect() }
     }
 }

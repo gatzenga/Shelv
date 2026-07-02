@@ -108,6 +108,7 @@ final class CarPlayRootController: NSObject {
     func disconnect() {
         AudioPlayerService.shared.isCarPlayActive = false
         CPNowPlayingTemplate.shared.remove(self)
+        CarPlayNavigation.cancelTemplateTasks()
         cancellables.removeAll()
         discoverController?.cancel()
         libraryController?.cancel()

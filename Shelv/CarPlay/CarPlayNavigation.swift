@@ -1,8 +1,66 @@
 import CarPlay
 import Combine
 
+private final class CarPlayTemplateTaskBag {
+    var tasks: [Task<Void, Never>]
+
+    init(tasks: [Task<Void, Never>]) {
+        self.tasks = tasks
+    }
+
+    func cancel() {
+        tasks.forEach { $0.cancel() }
+        tasks.removeAll()
+    }
+
+    deinit {
+        cancel()
+    }
+}
+
+@MainActor
+private enum CarPlayTemplateTaskRegistry {
+    private static var bags: [ObjectIdentifier: CarPlayTemplateTaskBag] = [:]
+
+    static func setTasks(_ tasks: [Task<Void, Never>], for template: CPListTemplate, in ic: CPInterfaceController) {
+        let id = ObjectIdentifier(template)
+        bags[id]?.cancel()
+
+        let bag = CarPlayTemplateTaskBag(tasks: tasks)
+        bag.tasks.append(Task { @MainActor [weak template, weak ic] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                guard let template, let ic else {
+                    Self.cancel(id)
+                    return
+                }
+                guard ic.templates.contains(where: { $0 === template }) else {
+                    Self.cancel(id)
+                    return
+                }
+            }
+        })
+        bags[id] = bag
+    }
+
+    private static func cancel(_ id: ObjectIdentifier) {
+        let bag = bags.removeValue(forKey: id)
+        bag?.cancel()
+    }
+
+    static func cancelAll() {
+        let allBags = bags.values
+        bags.removeAll()
+        allBags.forEach { $0.cancel() }
+    }
+}
+
 @MainActor
 enum CarPlayNavigation {
+
+    static func cancelTemplateTasks() {
+        CarPlayTemplateTaskRegistry.cancelAll()
+    }
 
     // MARK: - Safe Push
 
@@ -166,43 +224,46 @@ enum CarPlayNavigation {
         }
         template.updateSections([makeActionsSection(), makeSongsSection()])
 
-        Task { @MainActor [weak template] in
-            var lastEnabled = UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showFavoriteActions)
-            var lastInstantMix = UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showInstantMixActions)
-            var lastTheme   = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
-            for await _ in NotificationCenter.default.notifications(named: UserDefaults.didChangeNotification) {
-                let currentEnabled = UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showFavoriteActions)
-                let currentInstantMix = UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showInstantMixActions)
-                let currentTheme   = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
-                guard currentEnabled != lastEnabled
-                        || currentInstantMix != lastInstantMix
-                        || currentTheme != lastTheme
-                else { continue }
-                lastEnabled = currentEnabled
-                lastInstantMix = currentInstantMix
-                lastTheme   = currentTheme
-                guard let t = template else { return }
-                let snap = t.sections
-                guard snap.count >= 2 else { return }
-                t.updateSections([makeActionsSection(), snap[1]])
+        let tasks = [
+            Task { @MainActor [weak template] in
+                var lastEnabled = UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showFavoriteActions)
+                var lastInstantMix = UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showInstantMixActions)
+                var lastTheme   = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
+                for await _ in NotificationCenter.default.notifications(named: UserDefaults.didChangeNotification) {
+                    let currentEnabled = UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showFavoriteActions)
+                    let currentInstantMix = UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showInstantMixActions)
+                    let currentTheme   = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
+                    guard currentEnabled != lastEnabled
+                            || currentInstantMix != lastInstantMix
+                            || currentTheme != lastTheme
+                    else { continue }
+                    lastEnabled = currentEnabled
+                    lastInstantMix = currentInstantMix
+                    lastTheme   = currentTheme
+                    guard let t = template else { return }
+                    let snap = t.sections
+                    guard snap.count >= 2 else { return }
+                    t.updateSections([makeActionsSection(), snap[1]])
+                }
+            },
+            Task { @MainActor [weak template] in
+                for await _ in LibraryStore.shared.$starredAlbums.dropFirst(1).values {
+                    guard let t = template else { return }
+                    let snap = t.sections
+                    guard snap.count >= 2 else { return }
+                    t.updateSections([makeActionsSection(), snap[1]])
+                }
+            },
+            Task { @MainActor [weak template] in
+                for await _ in OfflineModeService.shared.$isOffline.dropFirst(1).values {
+                    guard let t = template else { return }
+                    let snap = t.sections
+                    guard snap.count >= 2 else { return }
+                    t.updateSections([makeActionsSection(), snap[1]])
+                }
             }
-        }
-        Task { @MainActor [weak template] in
-            for await _ in LibraryStore.shared.$starredAlbums.dropFirst(1).values {
-                guard let t = template else { return }
-                let snap = t.sections
-                guard snap.count >= 2 else { return }
-                t.updateSections([makeActionsSection(), snap[1]])
-            }
-        }
-        Task { @MainActor [weak template] in
-            for await _ in OfflineModeService.shared.$isOffline.dropFirst(1).values {
-                guard let t = template else { return }
-                let snap = t.sections
-                guard snap.count >= 2 else { return }
-                t.updateSections([makeActionsSection(), snap[1]])
-            }
-        }
+        ]
+        CarPlayTemplateTaskRegistry.setTasks(tasks, for: template, in: ic)
     }
 
     // MARK: - Artist
@@ -318,47 +379,49 @@ enum CarPlayNavigation {
         let (albumsSection, initialCoverMap) = makeAlbumsSection()
         template.updateSections([makeActionsSection(), albumsSection])
 
-        Task {
-            await streamCovers(into: initialCoverMap)
-        }
-
-        Task { @MainActor [weak template] in
-            var lastEnabled = UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showFavoriteActions)
-            var lastInstantMix = UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showInstantMixActions)
-            var lastTheme   = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
-            for await _ in NotificationCenter.default.notifications(named: UserDefaults.didChangeNotification) {
-                let currentEnabled = UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showFavoriteActions)
-                let currentInstantMix = UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showInstantMixActions)
-                let currentTheme   = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
-                guard currentEnabled != lastEnabled
-                        || currentInstantMix != lastInstantMix
-                        || currentTheme != lastTheme
-                else { continue }
-                lastEnabled = currentEnabled
-                lastInstantMix = currentInstantMix
-                lastTheme   = currentTheme
-                guard let t = template else { return }
-                let snap = t.sections
-                guard snap.count >= 2 else { return }
-                t.updateSections([makeActionsSection(), snap[1]])
+        let tasks = [
+            Task { @MainActor in
+                await streamCovers(into: initialCoverMap)
+            },
+            Task { @MainActor [weak template] in
+                var lastEnabled = UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showFavoriteActions)
+                var lastInstantMix = UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showInstantMixActions)
+                var lastTheme   = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
+                for await _ in NotificationCenter.default.notifications(named: UserDefaults.didChangeNotification) {
+                    let currentEnabled = UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showFavoriteActions)
+                    let currentInstantMix = UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showInstantMixActions)
+                    let currentTheme   = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
+                    guard currentEnabled != lastEnabled
+                            || currentInstantMix != lastInstantMix
+                            || currentTheme != lastTheme
+                    else { continue }
+                    lastEnabled = currentEnabled
+                    lastInstantMix = currentInstantMix
+                    lastTheme   = currentTheme
+                    guard let t = template else { return }
+                    let snap = t.sections
+                    guard snap.count >= 2 else { return }
+                    t.updateSections([makeActionsSection(), snap[1]])
+                }
+            },
+            Task { @MainActor [weak template] in
+                for await _ in LibraryStore.shared.$starredArtists.dropFirst(1).values {
+                    guard let t = template else { return }
+                    let snap = t.sections
+                    guard snap.count >= 2 else { return }
+                    t.updateSections([makeActionsSection(), snap[1]])
+                }
+            },
+            Task { @MainActor [weak template] in
+                for await _ in OfflineModeService.shared.$isOffline.dropFirst(1).values {
+                    guard let t = template else { return }
+                    let snap = t.sections
+                    guard snap.count >= 2 else { return }
+                    t.updateSections([makeActionsSection(), snap[1]])
+                }
             }
-        }
-        Task { @MainActor [weak template] in
-            for await _ in LibraryStore.shared.$starredArtists.dropFirst(1).values {
-                guard let t = template else { return }
-                let snap = t.sections
-                guard snap.count >= 2 else { return }
-                t.updateSections([makeActionsSection(), snap[1]])
-            }
-        }
-        Task { @MainActor [weak template] in
-            for await _ in OfflineModeService.shared.$isOffline.dropFirst(1).values {
-                guard let t = template else { return }
-                let snap = t.sections
-                guard snap.count >= 2 else { return }
-                t.updateSections([makeActionsSection(), snap[1]])
-            }
-        }
+        ]
+        CarPlayTemplateTaskRegistry.setTasks(tasks, for: template, in: ic)
     }
 
     // MARK: - Playlist
@@ -459,22 +522,24 @@ enum CarPlayNavigation {
         let (songsSection, initialCoverMap) = makeSongsSection()
         template.updateSections([makeActionsSection(), songsSection])
 
-        Task {
-            await streamCovers(into: initialCoverMap)
-        }
-
-        Task { @MainActor [weak template] in
-            var lastTheme = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
-            for await _ in NotificationCenter.default.notifications(named: UserDefaults.didChangeNotification) {
-                let currentTheme = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
-                guard currentTheme != lastTheme else { continue }
-                lastTheme = currentTheme
-                guard let t = template else { return }
-                let snap = t.sections
-                guard snap.count >= 2 else { return }
-                t.updateSections([makeActionsSection(), snap[1]])
+        let tasks = [
+            Task { @MainActor in
+                await streamCovers(into: initialCoverMap)
+            },
+            Task { @MainActor [weak template] in
+                var lastTheme = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
+                for await _ in NotificationCenter.default.notifications(named: UserDefaults.didChangeNotification) {
+                    let currentTheme = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
+                    guard currentTheme != lastTheme else { continue }
+                    lastTheme = currentTheme
+                    guard let t = template else { return }
+                    let snap = t.sections
+                    guard snap.count >= 2 else { return }
+                    t.updateSections([makeActionsSection(), snap[1]])
+                }
             }
-        }
+        ]
+        CarPlayTemplateTaskRegistry.setTasks(tasks, for: template, in: ic)
     }
 
     // MARK: - Private
