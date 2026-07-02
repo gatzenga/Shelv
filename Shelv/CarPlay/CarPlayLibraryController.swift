@@ -245,11 +245,14 @@ final class CarPlayLibraryController {
         }
         let grouped = Dictionary(grouping: sorted) { firstSortLetter($0.name) }
         let letters = grouped.keys.sorted()
-        let cap = max(20, CPListTemplate.maximumItemCount / max(1, letters.count))
+        var remainingItems = CPListTemplate.maximumItemCount
         var itemsByCoverId: [String: [CPListItem]] = [:]
         var orderedCoverArtIds: [String] = []
         var sections: [CPListSection] = []
-        for letter in letters {
+        for (letterIndex, letter) in letters.enumerated() {
+            guard remainingItems > 0 else { break }
+            let remainingLetters = max(1, letters.count - letterIndex)
+            let cap = max(1, remainingItems / remainingLetters)
             var letterItems: [CPListItem] = []
             for album in (grouped[letter] ?? []).prefix(cap) {
                 let item = albumListItem(album) { [weak self] _, c in
@@ -261,6 +264,7 @@ final class CarPlayLibraryController {
                 registerCoverItem(item, coverArtId: album.coverArt, itemsByCoverId: &itemsByCoverId, orderedCoverArtIds: &orderedCoverArtIds)
                 letterItems.append(item)
             }
+            remainingItems -= letterItems.count
             sections.append(CPListSection(items: letterItems, header: letter, sectionIndexTitle: letter))
         }
         return CarPlaySectionBuild(sections: sections, itemsByCoverId: itemsByCoverId, orderedCoverArtIds: orderedCoverArtIds)
@@ -336,11 +340,14 @@ final class CarPlayLibraryController {
         }
         let grouped = Dictionary(grouping: sorted) { firstSortLetter($0.name) }
         let letters = grouped.keys.sorted()
-        let cap = max(20, CPListTemplate.maximumItemCount / max(1, letters.count))
+        var remainingItems = CPListTemplate.maximumItemCount
         var itemsByCoverId: [String: [CPListItem]] = [:]
         var orderedCoverArtIds: [String] = []
         var sections: [CPListSection] = []
-        for letter in letters {
+        for (letterIndex, letter) in letters.enumerated() {
+            guard remainingItems > 0 else { break }
+            let remainingLetters = max(1, letters.count - letterIndex)
+            let cap = max(1, remainingItems / remainingLetters)
             var letterItems: [CPListItem] = []
             for artist in (grouped[letter] ?? []).prefix(cap) {
                 let count = counts[artist.id] ?? 0
@@ -353,6 +360,7 @@ final class CarPlayLibraryController {
                 registerCoverItem(item, coverArtId: artist.coverArt, itemsByCoverId: &itemsByCoverId, orderedCoverArtIds: &orderedCoverArtIds)
                 letterItems.append(item)
             }
+            remainingItems -= letterItems.count
             sections.append(CPListSection(items: letterItems, header: letter, sectionIndexTitle: letter))
         }
         return CarPlaySectionBuild(sections: sections, itemsByCoverId: itemsByCoverId, orderedCoverArtIds: orderedCoverArtIds)
