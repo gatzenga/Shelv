@@ -35,7 +35,7 @@ final class AudioPlayerNowPlayingController {
     private static let nowPlayingArtworkSize = 600
     private var prewarmArtworkTask: Task<Void, Never>?
 
-    func update(song: Song, currentTime: Double) {
+    func update(song: Song, currentTime: Double, playbackRate: Double = 1.0) {
         cancelArtwork()
         currentArtwork = nil
         currentArtworkSource = nil
@@ -45,7 +45,7 @@ final class AudioPlayerNowPlayingController {
         info[MPMediaItemPropertyArtist] = song.artist ?? ""
         info[MPMediaItemPropertyAlbumTitle] = song.album ?? ""
         info[MPNowPlayingInfoPropertyIsLiveStream] = false
-        info[MPNowPlayingInfoPropertyPlaybackRate] = 1.0
+        info[MPNowPlayingInfoPropertyPlaybackRate] = playbackRate
         info[MPNowPlayingInfoPropertyDefaultPlaybackRate] = 1.0
         info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = currentTime
         info[MPNowPlayingInfoPropertyMediaType] = MPNowPlayingInfoMediaType.audio.rawValue as NSNumber
@@ -102,13 +102,13 @@ final class AudioPlayerNowPlayingController {
     }
 
     #if os(iOS)
-    func primeSong(song: Song, currentTime: Double) {
+    func primeSong(song: Song, currentTime: Double, playbackRate: Double = 1.0) {
         cancelArtwork()
         currentArtwork = nil
         currentArtworkSource = nil
         currentArtworkIsFallback = false
 
-        var info = Self.baseSongInfo(for: song, currentTime: currentTime)
+        var info = Self.baseSongInfo(for: song, currentTime: currentTime, playbackRate: playbackRate)
         guard let artId = song.coverArt else {
             Self.debugArtwork("prime miss: no cover id")
             MPNowPlayingInfoCenter.default().nowPlayingInfo = info
@@ -338,13 +338,17 @@ final class AudioPlayerNowPlayingController {
         "nowplaying:\(imageCacheKey)"
     }
 
-    private static func baseSongInfo(for song: Song, currentTime: Double) -> [String: Any] {
+    private static func baseSongInfo(
+        for song: Song,
+        currentTime: Double,
+        playbackRate: Double = 1.0
+    ) -> [String: Any] {
         var info: [String: Any] = [:]
         info[MPMediaItemPropertyTitle] = song.title
         info[MPMediaItemPropertyArtist] = song.artist ?? ""
         info[MPMediaItemPropertyAlbumTitle] = song.album ?? ""
         info[MPNowPlayingInfoPropertyIsLiveStream] = false
-        info[MPNowPlayingInfoPropertyPlaybackRate] = 1.0
+        info[MPNowPlayingInfoPropertyPlaybackRate] = playbackRate
         info[MPNowPlayingInfoPropertyDefaultPlaybackRate] = 1.0
         info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = currentTime
         info[MPNowPlayingInfoPropertyMediaType] = MPNowPlayingInfoMediaType.audio.rawValue as NSNumber
@@ -375,13 +379,13 @@ final class AudioPlayerNowPlayingController {
     #endif
 
     #if !os(iOS)
-    func primeSong(song: Song, currentTime: Double) {
+    func primeSong(song: Song, currentTime: Double, playbackRate: Double = 1.0) {
         cancelArtwork()
         currentArtwork = nil
         currentArtworkSource = nil
         currentArtworkIsFallback = false
 
-        var info = Self.baseSongInfo(for: song, currentTime: currentTime)
+        var info = Self.baseSongInfo(for: song, currentTime: currentTime, playbackRate: playbackRate)
         guard let artId = song.coverArt,
               let artURL = SubsonicAPIService.shared.coverArtURL(for: artId, size: Self.nowPlayingArtworkSize)
         else {
@@ -600,13 +604,17 @@ final class AudioPlayerNowPlayingController {
         "nowplaying:\(imageCacheKey)"
     }
 
-    private static func baseSongInfo(for song: Song, currentTime: Double) -> [String: Any] {
+    private static func baseSongInfo(
+        for song: Song,
+        currentTime: Double,
+        playbackRate: Double = 1.0
+    ) -> [String: Any] {
         var info: [String: Any] = [:]
         info[MPMediaItemPropertyTitle] = song.title
         info[MPMediaItemPropertyArtist] = song.artist ?? ""
         info[MPMediaItemPropertyAlbumTitle] = song.album ?? ""
         info[MPNowPlayingInfoPropertyIsLiveStream] = false
-        info[MPNowPlayingInfoPropertyPlaybackRate] = 1.0
+        info[MPNowPlayingInfoPropertyPlaybackRate] = playbackRate
         info[MPNowPlayingInfoPropertyDefaultPlaybackRate] = 1.0
         info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = currentTime
         info[MPNowPlayingInfoPropertyMediaType] = MPNowPlayingInfoMediaType.audio.rawValue as NSNumber

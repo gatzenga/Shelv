@@ -74,11 +74,15 @@ extension AudioPlayerService {
             guard let self else { return }
             switch type {
             case .began:
+                self.shouldResumeAfterAudioInterruption = self.isPlaying
                 if self.isPlaying { self.pause() }
             case .ended:
+                defer { self.shouldResumeAfterAudioInterruption = false }
                 if let optionsRaw = info[AVAudioSessionInterruptionOptionKey] as? UInt {
                     let options = AVAudioSession.InterruptionOptions(rawValue: optionsRaw)
-                    if options.contains(.shouldResume), self.currentSong != nil {
+                    if options.contains(.shouldResume),
+                       self.shouldResumeAfterAudioInterruption,
+                       self.hasActivePlayback {
                         // Audio-Session vor Resume reaktivieren: iOS deaktiviert sie bei Interruption.
                         self.resume()
                     }

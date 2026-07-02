@@ -85,8 +85,10 @@ class AudioPlayerService: ObservableObject {
     private var sleepCountdownTimer: Timer?
     private var currentStreamURL: URL?
     private var streamTimeOffset: Double = 0
+    private var pendingNowPlayingElapsedStartTime: Double?
     private var networkResumeSong: Song?
     private var networkResumeTime: Double = 0
+    var shouldResumeAfterAudioInterruption = false
 
     var hasNextTrack: Bool {
         guard playbackMode == .songs else { return false }
@@ -448,7 +450,7 @@ class AudioPlayerService: ObservableObject {
         volume = savedVolume > 0 ? Float(savedVolume) : 1.0
         #endif
 
-        if let song = currentSong { nowPlaying.update(song: song, currentTime: currentTime) }
+        if let song = currentSong { nowPlaying.update(song: song, currentTime: currentTime, playbackRate: 0) }
     }
 
     // MARK: - Queue-Sync (geräteübergreifend)
@@ -529,7 +531,7 @@ class AudioPlayerService: ObservableObject {
         resumeTime = 0
         currentTime = 0
         if let d = currentSong?.duration { duration = Double(d) }
-        if let song = currentSong { nowPlaying.update(song: song, currentTime: currentTime) }
+        if let song = currentSong { nowPlaying.update(song: song, currentTime: currentTime, playbackRate: 0) }
         saveState()
     }
 
@@ -833,8 +835,9 @@ class AudioPlayerService: ObservableObject {
 
         if let song = currentSong {
             prewarmNowPlayingArtwork(startingWith: song)
-            nowPlaying.update(song: song, currentTime: currentTime)
-            nowPlaying.updatePlaybackRate(isPlaying ? 1 : 0, currentTime: currentTime)
+            let rate = isPlaying && pendingNowPlayingElapsedStartTime == nil ? 1.0 : 0.0
+            nowPlaying.update(song: song, currentTime: currentTime, playbackRate: rate)
+            nowPlaying.updatePlaybackRate(rate, currentTime: currentTime)
             MPNowPlayingInfoCenter.default().playbackState = isPlaying ? .playing : .paused
             return
         }
@@ -924,13 +927,61 @@ class AudioPlayerService: ObservableObject {
         }
     }
 
+    private func waitForRealNowPlayingElapsedStart(at startTime: Double) {
+        pendingNowPlayingElapsedStartTime = max(0, startTime)
+    }
+
+    private func startNowPlayingElapsedClockIfNeeded(currentTime: Double) -> Bool {
+        guard let startTime = pendingNowPlayingElapsedStartTime,
+              isPlaying,
+              !isRadioPlayback
+        else { return false }
+
+        guard currentTime > startTime + 0.05 else { return false }
+        pendingNowPlayingElapsedStartTime = nil
+        nowPlaying.updatePlaybackRate(1, currentTime: currentTime)
+        return true
+    }
+
+    @MainActor
+    private func playCachedStreamIfAvailable(song: Song, songId: String, seekTo: Double, generation: Int) async -> Bool {
+        guard let local = await StreamCacheService.shared.localURL(for: songId) else { return false }
+        guard playbackGeneration == generation else { return true }
+
+        StreamCacheLog.register(songId: songId, title: song.title)
+        StreamCacheLog.log(songId: songId, message: "Using cached file")
+
+        let asset = AVURLAsset(url: local, options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])
+        let cmTime = try? await asset.load(.duration)
+        guard playbackGeneration == generation else { return true }
+
+        let precise = cmTime.flatMap { $0.isValid && !$0.isIndefinite ? CMTimeGetSeconds($0) : nil }
+        let resolvedDuration = (precise ?? 0) > 0 ? precise! : Double(song.duration ?? 0)
+
+        currentStreamURL = local
+        let cachedFormat = await StreamCacheService.shared.cachedFormat(for: songId)
+        guard playbackGeneration == generation else { return true }
+        if let cachedFormat {
+            actualStreamFormat = cachedFormat
+        }
+        probeStreamFormat(for: song, url: local)
+        engine.play(url: local)
+        if !isPlaying { engine.pause() }
+        engine.trustedDuration = resolvedDuration
+        duration = resolvedDuration
+        if seekTo > 0 { engine.seek(to: seekTo) }
+        isEngineLoaded = true
+        return true
+    }
+
     private func startPlayback(song: Song, seekTo: Double = 0) {
         prepareForSongPlayback()
         stopFastSeeking()
         #if os(iOS) || os(tvOS) || os(macOS)
         prewarmNowPlayingArtwork(startingWith: song)
         if resolveURL(for: song) != nil {
-            nowPlaying.primeSong(song: song, currentTime: seekTo)
+            waitForRealNowPlayingElapsedStart(at: seekTo)
+            nowPlaying.primeSong(song: song, currentTime: seekTo, playbackRate: 0)
         }
         #endif
         playbackGeneration += 1
@@ -951,6 +1002,7 @@ class AudioPlayerService: ObservableObject {
             guard self.playbackGeneration == gen else { return }
 
             guard let url = self.resolveURL(for: song) else {
+                self.pendingNowPlayingElapsedStartTime = nil
                 if OfflineModeService.shared.isOffline {
                     #if os(iOS)
                     NotificationCenter.default.post(name: .offlinePlaybackBlocked, object: nil)
@@ -976,9 +1028,11 @@ class AudioPlayerService: ObservableObject {
             self.isBuffering = false
             self.isBuffering = true
             self.isSeeking = false
-            self.currentTime = 0
+            let playbackStartTime = max(0, seekTo)
+            self.waitForRealNowPlayingElapsedStart(at: playbackStartTime)
+            self.currentTime = playbackStartTime
             if let d = song.duration { self.duration = Double(d) }
-            self.timePublisher.send((time: 0, duration: self.duration))
+            self.timePublisher.send((time: playbackStartTime, duration: self.duration))
 
             self.isPlaying = true
             if song.coverArt != self.lastArtworkCoverArt {
@@ -986,7 +1040,7 @@ class AudioPlayerService: ObservableObject {
                 self.lastArtworkCoverArt = song.coverArt
             }
             MPNowPlayingInfoCenter.default().playbackState = .playing
-            self.nowPlaying.update(song: song, currentTime: self.currentTime)
+            self.nowPlaying.update(song: song, currentTime: self.currentTime, playbackRate: 0)
             #if os(macOS)
             // Navidrome-„spielt gerade"-Anzeige (kein Play-Count): bisheriges Desktop-Verhalten.
             Task { try? await SubsonicAPIService.shared.scrobble(songId: song.id, submission: false) }
@@ -1001,6 +1055,10 @@ class AudioPlayerService: ObservableObject {
                     codecLabel: fmt.codec.rawValue.uppercased(),
                     bitrateKbps: fmt.bitrate
                 )
+                self.managedStreamCacheSongIds.insert(songId)
+                if await self.playCachedStreamIfAvailable(song: song, songId: songId, seekTo: seekTo, generation: gen) {
+                    return
+                }
                 await StreamCacheService.shared.prefetch(
                     songId: songId,
                     url: url,
@@ -1008,7 +1066,6 @@ class AudioPlayerService: ObservableObject {
                     bitrate: fmt.bitrate,
                     songTitle: song.title
                 )
-                self.managedStreamCacheSongIds.insert(songId)
                 #if os(iOS)
                 // Background-Task damit iOS den Download nicht einfriert wenn Handy gesperrt wird
                 // bevor der erste Song je gespielt hat (kein aktiver Audio-Kontext vorhanden)
@@ -1059,6 +1116,10 @@ class AudioPlayerService: ObservableObject {
                 self.engine.stop()
                 let songId = song.id
                 let suffix = song.suffix?.lowercased() ?? "audio"
+                self.managedStreamCacheSongIds.insert(songId)
+                if await self.playCachedStreamIfAvailable(song: song, songId: songId, seekTo: seekTo, generation: gen) {
+                    return
+                }
                 await StreamCacheService.shared.prefetch(
                     songId: songId,
                     url: url,
@@ -1066,7 +1127,6 @@ class AudioPlayerService: ObservableObject {
                     bitrate: 0,
                     songTitle: song.title
                 )
-                self.managedStreamCacheSongIds.insert(songId)
                 let deadline = Date().addingTimeInterval(60)
                 repeat {
                     try? await Task.sleep(nanoseconds: 200_000_000)
@@ -1136,10 +1196,12 @@ class AudioPlayerService: ObservableObject {
         formatProbe.cancel()
         actualStreamFormat = nil
         cancelSleepTimer()
+        pendingNowPlayingElapsedStartTime = nil
         nowPlaying.clear()
     }
 
     private func teardownPlayer() {
+        pendingNowPlayingElapsedStartTime = nil
         nowPlaying.cancelArtwork()
         engine.stop()
         isEngineLoaded = false
@@ -1151,6 +1213,7 @@ class AudioPlayerService: ObservableObject {
         resumeWatchdog?.cancel()
         #endif
         MPNowPlayingInfoCenter.default().playbackState = .paused
+        pendingNowPlayingElapsedStartTime = nil
         if isRadioPlayback, let station = currentRadioStation {
             cancelRadioReconnect()
             engine.stop()
@@ -1940,7 +2003,9 @@ class AudioPlayerService: ObservableObject {
                 let adjusted = time + self.streamTimeOffset
                 self.currentTime = adjusted
                 self.timePublisher.send((time: adjusted, duration: self.duration))
-                self.nowPlaying.updateTime(adjusted)
+                if !self.startNowPlayingElapsedClockIfNeeded(currentTime: adjusted) {
+                    self.nowPlaying.updateTime(adjusted)
+                }
                 self.checkGaplessTrigger(currentTime: adjusted)
             }
             .store(in: &engineSubscriptions)
