@@ -7,7 +7,8 @@ struct AlbumsView: View {
     @ObservedObject private var offlineMode = OfflineModeService.shared
     @AppStorage("albumViewIsGrid") private var isGrid: Bool = true
     @AppStorage("downloadsOnlyFilter") private var showDownloadsOnly: Bool = false
-    @AppStorage("albumGenreFilter") private var albumGenreFilter: String = ""
+    @AppStorage(PersonalizationPreferenceKey.showGenreFilter) private var showGenreFilter = true
+    @AppStorage(PersonalizationPreferenceKey.albumGenreFilter) private var albumGenreFilter: String = ""
     @State private var searchText: String = ""
     @State private var displayAlbums: [Album] = []
     @State private var genreOptions: [AlbumGenreFilterOption] = []
@@ -33,7 +34,9 @@ struct AlbumsView: View {
         let downloadedAlbums = downloadStore.albums.map { $0.asAlbum() }
         let downloadedIds = Set(downloadStore.albums.map { $0.albumId })
         let query = searchText
-        let selectedGenre = AlbumGenreFilterOption.normalizedGenre(albumGenreFilter)
+        let selectedGenre = showGenreFilter
+            ? AlbumGenreFilterOption.normalizedGenre(albumGenreFilter)
+            : nil
 
         displayRebuildTask = Task.detached(priority: .userInitiated) {
             let baseAlbums: [Album]
@@ -87,15 +90,17 @@ struct AlbumsView: View {
                     .textFieldStyle(.roundedBorder)
                     .frame(maxWidth: 220)
                 Spacer()
-                Picker("\(String(localized: "genre")):", selection: genreSelection) {
-                    Text(String(localized: "all_genres")).tag("")
-                    ForEach(genreOptions) { option in
-                        Text(option.label).tag(option.name)
+                if showGenreFilter {
+                    Picker("\(String(localized: "genre")):", selection: genreSelection) {
+                        Text(String(localized: "all_genres")).tag("")
+                        ForEach(genreOptions) { option in
+                            Text(option.label).tag(option.name)
+                        }
                     }
+                    .pickerStyle(.menu)
+                    .tint(.primary)
+                    .frame(width: 180)
                 }
-                .pickerStyle(.menu)
-                .tint(.primary)
-                .frame(width: 180)
                 Picker("\(String(localized: "sort")):", selection: $vm.sortOption) {
                     ForEach(LibrarySortOption.allCases.filter { !offlineMode.isOffline || !$0.requiresServer }, id: \.self) { opt in
                         Text(opt.label).tag(opt)
@@ -183,6 +188,10 @@ struct AlbumsView: View {
         .onReceive(downloadStore.$albums) { _ in rebuildDisplayAlbums() }
         .onChange(of: searchText) { _, _ in rebuildDisplayAlbums() }
         .onChange(of: albumGenreFilter) { _, _ in rebuildDisplayAlbums() }
+        .onChange(of: showGenreFilter) { _, enabled in
+            if !enabled { albumGenreFilter = "" }
+            rebuildDisplayAlbums()
+        }
         .onChange(of: showDownloadsOnly) { _, _ in rebuildDisplayAlbums() }
         .onChange(of: offlineMode.isOffline) { _, isOffline in
             if isOffline && vm.sortOption.requiresServer {

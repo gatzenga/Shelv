@@ -24,9 +24,10 @@ enum SortDirection: String, CaseIterable {
 struct LibraryView: View {
     @ObservedObject var store = LibraryStore.shared
     @AppStorage(PersonalizationPreferenceKey.showFavoritesInLibrary) private var showFavoritesInLibrary = true
+    @AppStorage(PersonalizationPreferenceKey.showGenreFilter) private var showGenreFilter = true
     @AppStorage("albumSortOption") private var albumSortRaw = "alphabeticalByName"
     @AppStorage("albumSortDirection") private var albumDirRaw = "ascending"
-    @AppStorage("albumGenreFilter") private var albumGenreFilterRaw = ""
+    @AppStorage(PersonalizationPreferenceKey.albumGenreFilter) private var albumGenreFilterRaw = ""
     @AppStorage("artistSortDirection") private var artistDirRaw = "ascending"
     @AppStorage("albumViewIsGrid") private var albumIsGrid = true
     @AppStorage("artistViewIsGrid") private var artistIsGrid = false
@@ -92,6 +93,10 @@ struct LibraryView: View {
             .onChange(of: albumSortRaw) { _, _ in rebuildDerivedLibraryState() }
             .onChange(of: albumDirRaw) { _, _ in rebuildDerivedLibraryState() }
             .onChange(of: albumGenreFilterRaw) { _, _ in rebuildDerivedLibraryState() }
+            .onChange(of: showGenreFilter) { _, enabled in
+                if !enabled { albumGenreFilterRaw = "" }
+                rebuildDerivedLibraryState()
+            }
             .onChange(of: artistDirRaw) { _, _ in rebuildDerivedLibraryState() }
             .onChange(of: showFavoritesInLibrary) { _, enabled in
                 if !enabled && segment == 2 { segment = 0 }
@@ -110,7 +115,9 @@ struct LibraryView: View {
         let artists = store.artists
         let sort = albumSort
         let albumDirection = albumDir
-        let selectedAlbumGenre = AlbumGenreFilterOption.normalizedGenre(albumGenreFilterRaw)
+        let selectedAlbumGenre = showGenreFilter
+            ? AlbumGenreFilterOption.normalizedGenre(albumGenreFilterRaw)
+            : nil
         let artistDirection = artistDir
 
         derivedRebuildTask = Task.detached(priority: .userInitiated) {
@@ -168,7 +175,9 @@ struct LibraryView: View {
 
     private var albumControls: some View {
         HStack(spacing: 24) {
-            albumGenreButton
+            if showGenreFilter {
+                albumGenreButton
+            }
             Menu {
                 ForEach(AlbumSortOption.allCases, id: \.rawValue) { opt in
                     Button { albumSortRaw = opt.rawValue } label: {

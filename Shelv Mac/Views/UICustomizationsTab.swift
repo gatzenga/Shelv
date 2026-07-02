@@ -7,6 +7,8 @@ struct UICustomizationsTab: View {
         case playlists
         case favorites
         case instantMix
+        case radio
+        case genre
 
         var id: String { rawValue }
 
@@ -15,6 +17,8 @@ struct UICustomizationsTab: View {
             case .playlists: return String(localized: "playlists")
             case .favorites: return String(localized: "favorites")
             case .instantMix: return String(localized: "instant_mix")
+            case .radio: return String(localized: "radio")
+            case .genre: return String(localized: "genre")
             }
         }
     }
@@ -38,6 +42,8 @@ struct UICustomizationsTab: View {
                 case .playlists: MacPlaylistsPersonalizationPanel()
                 case .favorites: MacFavoritesPersonalizationPanel()
                 case .instantMix: MacInstantMixPersonalizationPanel()
+                case .radio: MacRadioPersonalizationPanel()
+                case .genre: MacGenrePersonalizationPanel()
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -94,7 +100,6 @@ private struct MacFavoritesPersonalizationPanel: View {
 
 private struct MacInstantMixPersonalizationPanel: View {
     @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
-    @AppStorage(PersonalizationPreferenceKey.showRadio) private var showRadio = true
     @Environment(\.themeColor) private var themeColor
 
     var body: some View {
@@ -104,7 +109,19 @@ private struct MacInstantMixPersonalizationPanel: View {
                     Label(String(localized: "show_instant_mix_actions"), systemImage: "sparkles")
                 }
                 .tint(themeColor)
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
 
+private struct MacRadioPersonalizationPanel: View {
+    @AppStorage(PersonalizationPreferenceKey.showRadio) private var showRadio = true
+    @Environment(\.themeColor) private var themeColor
+
+    var body: some View {
+        Form {
+            Section {
                 Toggle(isOn: $showRadio) {
                     Label(String(localized: "show_radio"), systemImage: "dot.radiowaves.left.and.right")
                 }
@@ -112,5 +129,27 @@ private struct MacInstantMixPersonalizationPanel: View {
             }
         }
         .formStyle(.grouped)
+    }
+}
+
+private struct MacGenrePersonalizationPanel: View {
+    @AppStorage(PersonalizationPreferenceKey.showGenreFilter) private var showGenreFilter = true
+    @Environment(\.themeColor) private var themeColor
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle(isOn: $showGenreFilter) {
+                    Label(String(localized: "show_genre"), systemImage: "guitars")
+                }
+                .tint(themeColor)
+            }
+        }
+        .formStyle(.grouped)
+        .onChange(of: showGenreFilter) { _, enabled in
+            if !enabled {
+                PersonalizationSettings.clearAlbumGenreFilter()
+            }
+        }
     }
 }

@@ -336,6 +336,7 @@ private struct UICustomizationsSettingsView: View {
     @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     @AppStorage(PersonalizationPreferenceKey.showRadio) private var showRadio = true
+    @AppStorage(PersonalizationPreferenceKey.showGenreFilter) private var showGenreFilter = true
     @AppStorage(PersonalizationPreferenceKey.miniPlayerStyle) private var miniPlayerStyleRaw = PersonalizationMiniPlayerStyle.shelv.rawValue
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
@@ -374,6 +375,13 @@ private struct UICustomizationsSettingsView: View {
                     }
                 }
                 .tint(accentColor)
+
+                Toggle(isOn: $showGenreFilter) {
+                    Label { Text(String(localized: "show_genre")) } icon: {
+                        Image(systemName: "guitars").foregroundStyle(accentColor)
+                    }
+                }
+                .tint(accentColor)
             }
 
             Section {
@@ -401,6 +409,11 @@ private struct UICustomizationsSettingsView: View {
         .scrollIndicators(.hidden)
         .navigationTitle(String(localized: "ui_customizations"))
         .navigationBarTitleDisplayMode(.inline)
+        .onChange(of: showGenreFilter) { _, enabled in
+            if !enabled {
+                PersonalizationSettings.clearAlbumGenreFilter()
+            }
+        }
     }
 }
 

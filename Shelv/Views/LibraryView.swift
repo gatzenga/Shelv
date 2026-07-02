@@ -11,6 +11,7 @@ struct LibraryView: View {
     @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
     @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
     @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
+    @AppStorage(PersonalizationPreferenceKey.showGenreFilter) private var showGenreFilter = true
     @AppStorage("enableDownloads") private var enableDownloads = false
 
     @State private var segment: LibrarySegment = .albums
@@ -20,7 +21,7 @@ struct LibraryView: View {
     private var sortOption: AlbumSortOption { AlbumSortOption(rawValue: sortOptionRaw) ?? .alphabetical }
     @AppStorage("albumSortDirection") private var albumDirectionRaw: String = SortDirection.ascending.rawValue
     private var albumDirection: SortDirection { SortDirection(rawValue: albumDirectionRaw) ?? .ascending }
-    @AppStorage("albumGenreFilter") private var albumGenreFilterRaw = ""
+    @AppStorage(PersonalizationPreferenceKey.albumGenreFilter) private var albumGenreFilterRaw = ""
     @AppStorage("artistSortOption") private var artistSortRaw: String = ArtistSortOption.alphabetical.rawValue
     private var artistSortOption: ArtistSortOption { ArtistSortOption(rawValue: artistSortRaw) ?? .alphabetical }
     @AppStorage("artistSortDirection") private var artistDirectionRaw: String = SortDirection.ascending.rawValue
@@ -121,7 +122,7 @@ struct LibraryView: View {
     private var libraryToolbar: some ToolbarContent {
         if segment != .favorites {
             ToolbarItemGroup(placement: .topBarTrailing) {
-                if segment == .albums {
+                if segment == .albums && showGenreFilter {
                     LibraryGenreFilterMenu(
                         selectedGenre: $albumGenreFilterRaw,
                         options: albumGenreOptions,
@@ -202,6 +203,10 @@ struct LibraryView: View {
         }
         .onChange(of: albumDirectionRaw) { _, _ in rebuildGroups() }
         .onChange(of: albumGenreFilterRaw) { _, _ in rebuildGroups() }
+        .onChange(of: showGenreFilter) { _, enabled in
+            if !enabled { albumGenreFilterRaw = "" }
+            rebuildGroups()
+        }
         .onChange(of: artistSortRaw) { _, _ in rebuildGroups() }
         .onChange(of: artistDirectionRaw) { _, _ in rebuildGroups() }
         .onChange(of: showFavoritesInLibrary) { _, enabled in
@@ -226,7 +231,9 @@ struct LibraryView: View {
         let libraryAlbums = libraryStore.albums
         let sortOpt = sortOption
         let albumDir = albumDirection
-        let selectedAlbumGenre = AlbumGenreFilterOption.normalizedGenre(albumGenreFilterRaw)
+        let selectedAlbumGenre = showGenreFilter
+            ? AlbumGenreFilterOption.normalizedGenre(albumGenreFilterRaw)
+            : nil
         let artistSort = artistSortOption
         let artistDir = artistDirection
 

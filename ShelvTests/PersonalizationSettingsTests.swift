@@ -25,6 +25,8 @@ final class PersonalizationSettingsTests: XCTestCase {
         XCTAssertTrue(defaults.bool(forKey: PersonalizationPreferenceKey.showFavoritesInLibrary))
         XCTAssertTrue(defaults.bool(forKey: PersonalizationPreferenceKey.showFavoriteActions))
         XCTAssertTrue(defaults.bool(forKey: PersonalizationPreferenceKey.showInstantMixActions))
+        XCTAssertTrue(defaults.bool(forKey: PersonalizationPreferenceKey.showRadio))
+        XCTAssertTrue(defaults.bool(forKey: PersonalizationPreferenceKey.showGenreFilter))
         XCTAssertEqual(
             defaults.string(forKey: PersonalizationPreferenceKey.miniPlayerStyle),
             PersonalizationMiniPlayerStyle.shelv.rawValue
@@ -34,6 +36,14 @@ final class PersonalizationSettingsTests: XCTestCase {
         XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightPrimary, in: defaults), .playNext)
         XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightSecondary, in: defaults), .addToQueue)
         XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightTertiary, in: defaults), .instantMix)
+    }
+
+    func testClearAlbumGenreFilterResetsStoredSelection() {
+        defaults.set("Jazz", forKey: PersonalizationPreferenceKey.albumGenreFilter)
+
+        PersonalizationSettings.clearAlbumGenreFilter(in: defaults)
+
+        XCTAssertEqual(defaults.string(forKey: PersonalizationPreferenceKey.albumGenreFilter), "")
     }
 
     func testLegacyDisabledKeysMigrateToSeparateVisibilityAndActionKeys() {

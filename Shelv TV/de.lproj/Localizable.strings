@@ -460,6 +460,7 @@
 "already_used_in_format" = "Bereits verwendet in %@";
 "radio" = "Radio";
 "show_radio" = "Radio anzeigen";
+"show_genre" = "Genre anzeigen";
 "radio_stations" = "Radiosender";
 "no_radio_stations" = "Keine Radiosender";
 "add_a_radio_station_to_get_started" = "Füge einen Radiosender hinzu, um zu starten.";

@@ -80,6 +80,7 @@ struct SettingsView: View {
 private struct TVUICustomizationsSettingsView: View {
     @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     @AppStorage(PersonalizationPreferenceKey.showRadio) private var showRadio = true
+    @AppStorage(PersonalizationPreferenceKey.showGenreFilter) private var showGenreFilter = true
 
     var body: some View {
         Form {
@@ -96,9 +97,15 @@ private struct TVUICustomizationsSettingsView: View {
                 }
                 Toggle(String(localized: "show_instant_mix_actions"), isOn: $showInstantMixActions)
                 Toggle(String(localized: "show_radio"), isOn: $showRadio)
+                Toggle(String(localized: "show_genre"), isOn: $showGenreFilter)
             }
         }
         .toolbar(.hidden, for: .tabBar)
+        .onChange(of: showGenreFilter) { _, enabled in
+            if !enabled {
+                PersonalizationSettings.clearAlbumGenreFilter()
+            }
+        }
     }
 }
 

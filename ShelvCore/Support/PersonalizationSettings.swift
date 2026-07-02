@@ -9,6 +9,8 @@ nonisolated enum PersonalizationPreferenceKey {
     static let showFavoriteActions = "ui.showFavoriteActions"
     static let showInstantMixActions = "ui.showInstantMixActions"
     static let showRadio = "ui.showRadio"
+    static let showGenreFilter = "ui.showGenreFilter"
+    static let albumGenreFilter = "albumGenreFilter"
     static let miniPlayerStyle = "ui.miniPlayerStyle"
 
     static let swipeLeftPrimary = "ui.swipe.leftPrimary"
@@ -264,6 +266,7 @@ nonisolated enum PersonalizationSettings {
             PersonalizationPreferenceKey.showFavoriteActions: true,
             PersonalizationPreferenceKey.showInstantMixActions: true,
             PersonalizationPreferenceKey.showRadio: true,
+            PersonalizationPreferenceKey.showGenreFilter: true,
             PersonalizationPreferenceKey.miniPlayerStyle: PersonalizationMiniPlayerStyle.shelv.rawValue,
         ]
         for slot in PersonalizationSwipeSlot.allCases {
@@ -411,6 +414,10 @@ nonisolated enum PersonalizationSettings {
             defaults.set(slot.defaultAction.rawValue, forKey: slot.storageKey)
         }
         normalizeSwipeActions(for: group, in: defaults)
+    }
+
+    static func clearAlbumGenreFilter(in defaults: UserDefaults = .standard) {
+        defaults.set("", forKey: PersonalizationPreferenceKey.albumGenreFilter)
     }
 
     static func normalizeSwipeActions(in defaults: UserDefaults = .standard) {

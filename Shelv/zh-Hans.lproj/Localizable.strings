@@ -446,6 +446,7 @@
 "already_used_in_format" = "已在 %@ 中使用";
 "radio" = "电台";
 "show_radio" = "显示电台";
+"show_genre" = "显示流派";
 "radio_stations" = "电台";
 "no_radio_stations" = "没有电台";
 "add_a_radio_station_to_get_started" = "添加一个电台即可开始。";
