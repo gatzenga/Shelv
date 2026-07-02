@@ -250,47 +250,46 @@ private struct RemoteRadioArtworkView<Fallback: View>: View {
     @ViewBuilder var fallback: () -> Fallback
 
     @State private var image: UIImage?
-    @State private var didFail = false
+    @State private var loadedURLString: String?
+    @State private var activeLoadURLString: String?
 
     init(url: URL, size: CGFloat, cornerRadius: CGFloat, @ViewBuilder fallback: @escaping () -> Fallback) {
         self.url = url
         self.size = size
         self.cornerRadius = cornerRadius
         self.fallback = fallback
-        self._image = State(initialValue: ImageCacheService.shared.cachedImage(key: Self.cacheKey(for: url)))
+        let cachedImage = ImageCacheService.shared.cachedImage(key: Self.cacheKey(for: url))
+        self._image = State(initialValue: cachedImage)
+        self._loadedURLString = State(initialValue: cachedImage == nil ? nil : url.absoluteString)
     }
 
     var body: some View {
+        let urlString = url.absoluteString
         ZStack {
-            if let image {
+            if let image, loadedURLString == urlString {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
-            } else if didFail {
-                fallback()
             } else {
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(.secondary.opacity(0.14))
-                    .overlay {
-                        ProgressView()
-                            .tint(.secondary)
-                    }
+                fallback()
             }
         }
         .frame(width: size, height: size)
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-        .task(id: url.absoluteString) {
+        .task(id: urlString) {
             let key = Self.cacheKey(for: url)
+            activeLoadURLString = urlString
             if let cached = ImageCacheService.shared.cachedImage(key: key) {
                 image = cached
-                didFail = false
+                loadedURLString = urlString
                 return
             }
-            didFail = false
+            image = nil
+            loadedURLString = nil
             let loaded = await ImageCacheService.shared.image(url: url, key: key)
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, activeLoadURLString == urlString else { return }
             image = loaded
-            didFail = loaded == nil
+            loadedURLString = loaded == nil ? nil : urlString
         }
     }
 

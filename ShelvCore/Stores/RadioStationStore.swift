@@ -13,6 +13,7 @@ final class RadioStationStore: ObservableObject {
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
     private var refreshGeneration = 0
+    private var stationCoverPrewarmTask: Task<Void, Never>?
 
     private init() {}
 
@@ -23,6 +24,8 @@ final class RadioStationStore: ObservableObject {
 
     func resetInMemory() {
         refreshGeneration += 1
+        stationCoverPrewarmTask?.cancel()
+        stationCoverPrewarmTask = nil
         setItems([])
         isLoading = false
         errorMessage = nil
@@ -291,6 +294,52 @@ final class RadioStationStore: ObservableObject {
     private func setItems(_ newItems: [RadioStationDisplayItem]) {
         items = newItems
         AudioPlayerService.shared.updateRemoteCommandAvailability()
+        prewarmStationCovers(for: newItems)
+    }
+
+    private func prewarmStationCovers(for items: [RadioStationDisplayItem]) {
+        stationCoverPrewarmTask?.cancel()
+
+        var seen = Set<String>()
+        let coverArtIDs = items.compactMap(\.coverArt).filter { seen.insert($0).inserted }
+        guard !coverArtIDs.isEmpty, !OfflineModeService.shared.isOffline else {
+            stationCoverPrewarmTask = nil
+            return
+        }
+
+        stationCoverPrewarmTask = Task.detached(priority: .utility) {
+            await Self.prewarmStationCoverArtIDs(coverArtIDs)
+        }
+    }
+
+    private nonisolated static func prewarmStationCoverArtIDs(_ coverArtIDs: [String]) async {
+        let chunks = stride(from: 0, to: coverArtIDs.count, by: 4).map {
+            Array(coverArtIDs[$0..<min($0 + 4, coverArtIDs.count)])
+        }
+
+        for chunk in chunks {
+            if Task.isCancelled { return }
+            await withTaskGroup(of: Void.self) { group in
+                for coverArtID in chunk {
+                    group.addTask {
+                        guard !Task.isCancelled else { return }
+                        await prewarmStationCoverArt(coverArtID)
+                    }
+                }
+            }
+        }
+    }
+
+    private nonisolated static func prewarmStationCoverArt(_ coverArtID: String) async {
+        #if DEBUG
+        guard !coverArtID.hasPrefix("demo_") else { return }
+        #endif
+        guard let url = SubsonicAPIService.shared.coverArtURL(for: coverArtID, size: 600) else { return }
+        #if os(iOS)
+        _ = await ImageCacheService.shared.image(url: url, key: "\(coverArtID)_600")
+        #else
+        _ = await ImageCacheService.shared.image(url: url)
+        #endif
     }
 
     private func saveMetadata(_ metadata: RadioStationMetadata) async {

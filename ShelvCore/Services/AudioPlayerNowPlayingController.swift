@@ -708,52 +708,62 @@ final class AudioPlayerNowPlayingController {
         cancelArtwork()
         loadingArtworkSource = source
 
-        #if os(macOS)
+        let fallbackSources = Array(sources.dropFirst())
+        let alreadyShowsFallback = currentArtwork != nil
+            && currentArtworkSource != nil
+            && fallbackSources.contains { $0.identifier == currentArtworkSource }
+
         artworkTask = Task.detached(priority: .utility) { [weak self] in
-            guard let loaded = await Self.loadRadioArtworkImage(from: sources),
-                  !Task.isCancelled else {
+            let fallbackTask: Task<Void, Never>?
+            if alreadyShowsFallback || fallbackSources.isEmpty {
+                fallbackTask = nil
+            } else {
+                fallbackTask = Task.detached(priority: .utility) { [weak self] in
+                    guard let fallback = await Self.loadRadioArtworkImage(from: fallbackSources),
+                          !Task.isCancelled else { return }
+                    await MainActor.run { [weak self] in
+                        self?.applyLoadedRadioArtwork(
+                            fallback,
+                            loadingSource: source,
+                            finishLoading: false
+                        )
+                    }
+                }
+            }
+
+            let loaded = await Self.loadRadioArtworkImage(from: [primarySource])
+            guard !Task.isCancelled else {
+                fallbackTask?.cancel()
+                return
+            }
+
+            if let loaded {
+                fallbackTask?.cancel()
+                await MainActor.run { [weak self] in
+                    self?.applyLoadedRadioArtwork(
+                        loaded,
+                        loadingSource: source,
+                        finishLoading: true
+                    )
+                }
+                return
+            }
+
+            if let fallbackTask {
+                await fallbackTask.value
+                guard !Task.isCancelled else { return }
                 await MainActor.run { [weak self] in
                     self?.finishFailedRadioArtworkLoad(source: source)
                 }
                 return
             }
-            let artwork = MPMediaItemArtwork(boundsSize: CGSize(width: 600, height: 600)) { _ in loaded.image }
-            await MainActor.run { [weak self] in
-                guard let self else { return }
-                guard self.loadingArtworkSource == source else { return }
-                self.currentArtwork = artwork
-                self.currentArtworkSource = loaded.source
-                self.currentArtworkIsFallback = loaded.isFallback
-                self.loadingArtworkSource = nil
-                var updated = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
-                updated[MPMediaItemPropertyArtwork] = artwork
-                MPNowPlayingInfoCenter.default().nowPlayingInfo = updated
-            }
-        }
-        #else
-        artworkTask = Task.detached(priority: .utility) { [weak self] in
-            guard let loaded = await Self.loadRadioArtworkImage(from: sources),
-                  !Task.isCancelled else {
+
+            if !Task.isCancelled {
                 await MainActor.run { [weak self] in
                     self?.finishFailedRadioArtworkLoad(source: source)
                 }
-                return
-            }
-            let square = Self.squareCroppedArtworkImage(loaded.image)
-            let artwork = MPMediaItemArtwork(boundsSize: square.size) { _ in square }
-            await MainActor.run { [weak self] in
-                guard let self else { return }
-                guard self.loadingArtworkSource == source else { return }
-                self.currentArtwork = artwork
-                self.currentArtworkSource = loaded.source
-                self.currentArtworkIsFallback = loaded.isFallback
-                self.loadingArtworkSource = nil
-                var updated = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
-                updated[MPMediaItemPropertyArtwork] = artwork
-                MPNowPlayingInfoCenter.default().nowPlayingInfo = updated
             }
         }
-        #endif
     }
 
     private func radioArtworkSources(
@@ -792,7 +802,32 @@ final class AudioPlayerNowPlayingController {
         }
     }
 
+    @MainActor
+    private func applyLoadedRadioArtwork(
+        _ loaded: RadioLoadedArtwork,
+        loadingSource: String,
+        finishLoading: Bool
+    ) {
+        guard loadingArtworkSource == loadingSource else { return }
+        let artwork = Self.radioNowPlayingArtwork(for: loaded.image)
+        currentArtwork = artwork
+        currentArtworkSource = loaded.source
+        currentArtworkIsFallback = loaded.isFallback
+        if finishLoading {
+            loadingArtworkSource = nil
+        }
+        var updated = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
+        updated[MPMediaItemPropertyArtwork] = artwork
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = updated
+    }
+
     #if os(macOS)
+    private typealias RadioLoadedArtwork = (image: NSImage, source: String, isFallback: Bool)
+
+    private static func radioNowPlayingArtwork(for image: NSImage) -> MPMediaItemArtwork {
+        MPMediaItemArtwork(boundsSize: CGSize(width: 600, height: 600)) { _ in image }
+    }
+
     private static func cachedRadioArtwork(from sources: [RadioArtworkSource]) -> (artwork: MPMediaItemArtwork, source: String, isFallback: Bool)? {
         let fallbackSizes = ImageCacheService.coverFallbackSizes(preferred: nowPlayingArtworkSize)
         for source in sources {
@@ -829,6 +864,13 @@ final class AudioPlayerNowPlayingController {
         return nil
     }
     #elseif os(iOS)
+    private typealias RadioLoadedArtwork = (image: UIImage, source: String, isFallback: Bool)
+
+    private static func radioNowPlayingArtwork(for image: UIImage) -> MPMediaItemArtwork {
+        let square = squareCroppedArtworkImage(image)
+        return MPMediaItemArtwork(boundsSize: square.size) { _ in square }
+    }
+
     private static func cachedRadioArtwork(from sources: [RadioArtworkSource]) -> (artwork: MPMediaItemArtwork, source: String, isFallback: Bool)? {
         for source in sources {
             let keys = source.cacheKeys.isEmpty ? ["radio_remote_\(source.url.absoluteString)"] : source.cacheKeys
@@ -888,6 +930,13 @@ final class AudioPlayerNowPlayingController {
         return nil
     }
     #else
+    private typealias RadioLoadedArtwork = (image: UIImage, source: String, isFallback: Bool)
+
+    private static func radioNowPlayingArtwork(for image: UIImage) -> MPMediaItemArtwork {
+        let square = squareCroppedArtworkImage(image)
+        return MPMediaItemArtwork(boundsSize: square.size) { _ in square }
+    }
+
     private static func cachedRadioArtwork(from sources: [RadioArtworkSource]) -> (artwork: MPMediaItemArtwork, source: String, isFallback: Bool)? {
         let fallbackSizes = ImageCacheService.coverFallbackSizes(preferred: nowPlayingArtworkSize)
         for source in sources {
