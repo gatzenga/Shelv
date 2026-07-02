@@ -284,6 +284,7 @@ private struct NativeBottomRoot: View {
 
     @ObservedObject private var player = AudioPlayerService.shared
     @ObservedObject private var offlineMode = OfflineModeService.shared
+    @Environment(\.colorScheme) private var appColorScheme
     @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage(PersonalizationPreferenceKey.showPlaylistsTab) private var showPlaylistsTab = true
     @AppStorage("enableDownloads") private var enableDownloads = false
@@ -349,14 +350,14 @@ private struct NativeBottomRoot: View {
         if #available(iOS 26.1, *) {
             tabs
                 .tabViewBottomAccessory(isEnabled: player.hasActivePlayback) {
-                    NativeMiniPlayerAccessory(showPlayer: $showPlayer)
+                    NativeMiniPlayerAccessory(showPlayer: $showPlayer, appColorScheme: appColorScheme)
                         .padding(.horizontal, 12)
                         .padding(.bottom, 2)
                 }
         } else {
             tabs
                 .safeAreaInset(edge: .bottom, spacing: 0) {
-                    NativeMiniPlayerAccessory(showPlayer: $showPlayer)
+                    NativeMiniPlayerAccessory(showPlayer: $showPlayer, appColorScheme: appColorScheme)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
                         .background(.ultraThinMaterial, in: Capsule(style: .continuous))
@@ -392,12 +393,23 @@ private struct BottomBanners: View {
 @available(iOS 26.0, *)
 private struct NativeMiniPlayerAccessory: View {
     @Binding var showPlayer: Bool
+    let appColorScheme: ColorScheme
     @ObservedObject private var player = AudioPlayerService.shared
     @Environment(\.tabViewBottomAccessoryPlacement) private var accessoryPlacement
     @AppStorage("themeColor") private var themeColorName = "violet"
     @State private var dragX: CGFloat = 0
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
+    // Native tab accessories can use a contrasting glass color scheme; keep text tied to the app appearance.
+    private var primaryAccessoryText: Color {
+        appUsesDarkAppearance ? .white.opacity(0.92) : .black.opacity(0.90)
+    }
+    private var secondaryAccessoryText: Color {
+        appUsesDarkAppearance ? .white.opacity(0.62) : .black.opacity(0.56)
+    }
+    private var appUsesDarkAppearance: Bool {
+        appColorScheme == .dark
+    }
     private var showsSkipButtons: Bool {
         accessoryPlacement != .inline
     }
@@ -417,11 +429,11 @@ private struct NativeMiniPlayerAccessory: View {
                     VStack(alignment: .leading, spacing: 1) {
                         Text(player.displayTitle)
                             .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(primaryAccessoryText)
                             .lineLimit(1)
                         Text(player.displaySubtitleLine)
                             .font(.caption2)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(secondaryAccessoryText)
                             .lineLimit(1)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -469,7 +481,7 @@ private struct NativeMiniPlayerAccessory: View {
                 } label: {
                     Image(systemName: "backward.fill")
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(primaryAccessoryText)
                         .frame(width: 24, height: 36)
                         .contentShape(Rectangle())
                 }
@@ -497,7 +509,7 @@ private struct NativeMiniPlayerAccessory: View {
                 } label: {
                     Image(systemName: "forward.fill")
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(player.hasNextTrack ? Color.primary : Color.secondary)
+                        .foregroundStyle(player.hasNextTrack ? primaryAccessoryText : secondaryAccessoryText)
                         .frame(width: 24, height: 36)
                         .contentShape(Rectangle())
                 }

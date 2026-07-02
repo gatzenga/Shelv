@@ -18,6 +18,7 @@ private struct NativePlayerProgressSlider: View {
 
     @State private var isDragging = false
     @State private var dragValue: Double?
+    @State private var dragStartValue: Double?
 
     var body: some View {
         GeometryReader { geometry in
@@ -37,20 +38,29 @@ private struct NativePlayerProgressSlider: View {
             .frame(maxHeight: .infinity)
             .contentShape(Rectangle())
             .gesture(
-                DragGesture(minimumDistance: 0)
+                DragGesture(minimumDistance: 8)
                     .onChanged { gesture in
                         guard width > 0 else { return }
                         if !isDragging {
+                            dragStartValue = value
+                            dragValue = value
                             isDragging = true
                             onEditingChanged(true)
                         }
-                        let ratio = gesture.location.x / width
+                        let startValue = dragStartValue ?? value
+                        let ratio = startValue + gesture.translation.width / width
                         let clamped = min(1, max(0, ratio))
                         dragValue = clamped
                         value = clamped
                     }
                     .onEnded { _ in
+                        guard isDragging else {
+                            dragStartValue = nil
+                            dragValue = nil
+                            return
+                        }
                         isDragging = false
+                        dragStartValue = nil
                         dragValue = nil
                         onEditingChanged(false)
                     }
