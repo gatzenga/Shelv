@@ -446,6 +446,7 @@ private struct UICustomizationsSettingsView: View {
 private struct UIDiscoverSettingsView: View {
     @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage(PersonalizationPreferenceKey.discoverySectionOrder) private var sectionOrderRaw = PersonalizationSettings.defaultDiscoverySectionOrderRaw
+    @State private var editMode = EditMode.inactive
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
     private var sectionOrder: [PersonalizationDiscoverySection] {
@@ -470,13 +471,16 @@ private struct UIDiscoverSettingsView: View {
                 }
                 .onMove(perform: moveSections)
             }
-            .environment(\.editMode, .constant(.active))
         }
         .tint(accentColor)
         .listStyle(.insetGrouped)
         .scrollIndicators(.hidden)
         .navigationTitle(String(localized: "discover"))
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            EditButton()
+        }
+        .environment(\.editMode, $editMode)
         .onAppear(perform: normalizeSectionOrder)
     }
 
