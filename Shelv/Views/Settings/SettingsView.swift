@@ -470,13 +470,13 @@ private struct UIDiscoverSettingsView: View {
                 }
                 .onMove(perform: moveSections)
             }
+            .environment(\.editMode, .constant(.active))
         }
         .tint(accentColor)
         .listStyle(.insetGrouped)
         .scrollIndicators(.hidden)
         .navigationTitle(String(localized: "discover"))
         .navigationBarTitleDisplayMode(.inline)
-        .environment(\.editMode, .constant(.active))
         .onAppear(perform: normalizeSectionOrder)
     }
 
