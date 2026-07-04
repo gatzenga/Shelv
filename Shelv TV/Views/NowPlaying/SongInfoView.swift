@@ -263,13 +263,13 @@ private struct TVSongInfoCreditRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(item.name)
-                .font(.title3)
+                .font(.body)
                 .foregroundStyle(focused ? .black : .primary)
                 .lineLimit(2)
 
             if let detail = item.detail {
                 Text(detail)
-                    .font(.callout)
+                    .font(.body)
                     .foregroundStyle(focused ? .black.opacity(0.72) : .secondary)
                     .lineLimit(1)
             }
