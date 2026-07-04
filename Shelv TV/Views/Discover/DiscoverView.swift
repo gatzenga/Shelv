@@ -5,10 +5,27 @@ struct DiscoverView: View {
     @AppStorage("mixUseDatabase") private var mixUseDatabase = false
     @AppStorage("themeColor") private var themeColor = "violet"
     @AppStorage("recapEnabled") private var recapEnabled = false
+    @AppStorage(PersonalizationPreferenceKey.showSmartMixNewest) private var showSmartMixNewest = true
+    @AppStorage(PersonalizationPreferenceKey.showSmartMixFrequent) private var showSmartMixFrequent = true
+    @AppStorage(PersonalizationPreferenceKey.showSmartMixRecent) private var showSmartMixRecent = true
+    @AppStorage(PersonalizationPreferenceKey.showSmartMixRandom) private var showSmartMixRandom = true
+    @AppStorage(PersonalizationPreferenceKey.discoverySectionOrder) private var discoverySectionOrderRaw = PersonalizationSettings.defaultDiscoverySectionOrderRaw
     private let api = SubsonicAPIService.shared
     private let player = AudioPlayerService.shared
 
     private var accent: Color { AppTheme.color(for: themeColor) }
+
+    private var visibleSmartMixes: [PersonalizationSmartMix] {
+        PersonalizationSmartMix.allCases.filter(isSmartMixVisible)
+    }
+
+    private var orderedDiscoverySections: [PersonalizationDiscoverySection] {
+        PersonalizationSettings.discoverySectionOrder(from: discoverySectionOrderRaw)
+    }
+
+    private var visibleDiscoverySections: [PersonalizationDiscoverySection] {
+        orderedDiscoverySections.filter(isDiscoverySectionVisible)
+    }
 
     @State private var newest: [Album] = []
     @State private var recent: [Album] = []
@@ -52,20 +69,9 @@ struct DiscoverView: View {
                     .padding(.horizontal, 50)
                     .focusSection()
 
-                    // Smart-Mixe als saubere Akzent-Liste über die volle Breite (wie iOS/Mac)
-                    VStack(spacing: 16) {
-                        MixPill(title: String(localized: "mix_newest_tracks"), icon: "sparkles", accent: accent) { await play(.newest) }
-                        MixPill(title: String(localized: "mix_frequently_played"), icon: "chart.bar.fill", accent: accent) { await play(.frequent) }
-                        MixPill(title: String(localized: "mix_recently_played"), icon: "clock.fill", accent: accent) { await play(.recent) }
-                        MixPill(title: String(localized: "mix_shuffle_all"), icon: "shuffle", accent: accent) { await play(.random) }
+                    ForEach(Array(visibleDiscoverySections.enumerated()), id: \.element) { index, section in
+                        discoverySection(section, isFirstVisible: index == 0)
                     }
-                    .padding(.horizontal, 50)
-                    .focusSection()
-
-                    albumRow(String(localized: "recently_added"), newest)
-                    albumRow(String(localized: "recently_played"), recent)
-                    albumRow(String(localized: "frequently_played"), frequent)
-                    albumRow(String(localized: "random_albums"), random)
                 }
                 .padding(.vertical, 50)
             }
@@ -86,9 +92,7 @@ struct DiscoverView: View {
         random = await rnd ?? []
     }
 
-    private enum Mix { case newest, frequent, recent, random }
-
-    private func play(_ mix: Mix) async {
+    private func play(_ mix: PersonalizationSmartMix) async {
         let songs: [Song]
         switch mix {
         case .newest:   songs = (try? await api.getNewestSongs()) ?? []
@@ -121,6 +125,65 @@ struct DiscoverView: View {
     }
 
     // MARK: - UI
+
+    private func isSmartMixVisible(_ mix: PersonalizationSmartMix) -> Bool {
+        switch mix {
+        case .newest: return showSmartMixNewest
+        case .frequent: return showSmartMixFrequent
+        case .recent: return showSmartMixRecent
+        case .random: return showSmartMixRandom
+        }
+    }
+
+    private func isDiscoverySectionVisible(_ section: PersonalizationDiscoverySection) -> Bool {
+        switch section {
+        case .smartMixes:
+            return !visibleSmartMixes.isEmpty
+        case .recentlyAdded:
+            return !newest.isEmpty
+        case .recentlyPlayed:
+            return !recent.isEmpty
+        case .frequentlyPlayed:
+            return !frequent.isEmpty
+        case .randomAlbums:
+            return !random.isEmpty
+        }
+    }
+
+    @ViewBuilder
+    private func discoverySection(_ section: PersonalizationDiscoverySection, isFirstVisible: Bool) -> some View {
+        switch section {
+        case .smartMixes:
+            VStack(alignment: .leading, spacing: 16) {
+                if !isFirstVisible {
+                    Text(String(localized: "smart_mixes"))
+                        .font(.title2).bold()
+                        .padding(.horizontal, 50)
+                }
+                VStack(spacing: 16) {
+                    ForEach(visibleSmartMixes) { mix in
+                        MixPill(
+                            title: NSLocalizedString(mix.titleKey, comment: ""),
+                            icon: mix.systemImage,
+                            accent: accent
+                        ) {
+                            await play(mix)
+                        }
+                    }
+                }
+                .padding(.horizontal, 50)
+            }
+            .focusSection()
+        case .recentlyAdded:
+            albumRow(String(localized: "recently_added"), newest)
+        case .recentlyPlayed:
+            albumRow(String(localized: "recently_played"), recent)
+        case .frequentlyPlayed:
+            albumRow(String(localized: "frequently_played"), frequent)
+        case .randomAlbums:
+            albumRow(String(localized: "random_albums"), random)
+        }
+    }
 
     /// Album-Karussell: scrollt über die volle Bildschirmbreite (edge-to-edge),
     /// der Inhalt startet aber bündig mit Titel/Pillen (50er-Padding im Inneren).

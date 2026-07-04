@@ -1,9 +1,10 @@
 import SwiftUI
 
 struct UICustomizationsTab: View {
-    @State private var section: CustomizationSection = .playlists
+    @State private var section: CustomizationSection = .discover
 
     private enum CustomizationSection: String, CaseIterable, Identifiable {
+        case discover
         case playlists
         case favorites
         case instantMix
@@ -14,6 +15,7 @@ struct UICustomizationsTab: View {
 
         var title: String {
             switch self {
+            case .discover: return String(localized: "discover")
             case .playlists: return String(localized: "playlists")
             case .favorites: return String(localized: "favorites")
             case .instantMix: return String(localized: "instant_mix")
@@ -39,6 +41,7 @@ struct UICustomizationsTab: View {
 
             Group {
                 switch section {
+                case .discover: MacDiscoveryPersonalizationPanel()
                 case .playlists: MacPlaylistsPersonalizationPanel()
                 case .favorites: MacFavoritesPersonalizationPanel()
                 case .instantMix: MacInstantMixPersonalizationPanel()
@@ -49,6 +52,80 @@ struct UICustomizationsTab: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .transaction { $0.animation = nil }
+    }
+}
+
+private struct MacDiscoveryPersonalizationPanel: View {
+    @AppStorage(PersonalizationPreferenceKey.discoverySectionOrder) private var sectionOrderRaw = PersonalizationSettings.defaultDiscoverySectionOrderRaw
+    @Environment(\.themeColor) private var themeColor
+
+    private var sectionOrder: [PersonalizationDiscoverySection] {
+        PersonalizationSettings.discoverySectionOrder(from: sectionOrderRaw)
+    }
+
+    var body: some View {
+        List {
+            Section(String(localized: "smart_mixes")) {
+                ForEach(Array(PersonalizationSmartMix.allCases.enumerated()), id: \.element) { index, mix in
+                    MacSmartMixToggleRow(mix: mix)
+                        .listRowSeparator(index == 0 ? .hidden : .automatic, edges: .top)
+                }
+            }
+
+            Section(String(localized: "home_sections")) {
+                ForEach(Array(sectionOrder.enumerated()), id: \.element) { index, section in
+                    HStack(spacing: 10) {
+                        Image(systemName: section.systemImage)
+                            .foregroundStyle(themeColor)
+                            .frame(width: 20)
+                        Text(localized(section.titleKey))
+                        Spacer()
+                        Image(systemName: "line.3.horizontal")
+                            .foregroundStyle(.tertiary)
+                    }
+                    .listRowSeparator(index == 0 ? .hidden : .automatic, edges: .top)
+                }
+                .onMove(perform: moveSections)
+            }
+        }
+        .listStyle(.inset)
+        .onAppear(perform: normalizeSectionOrder)
+    }
+
+    private func moveSections(from source: IndexSet, to destination: Int) {
+        var updated = sectionOrder
+        updated.move(fromOffsets: source, toOffset: destination)
+        sectionOrderRaw = PersonalizationSettings.rawDiscoverySectionOrder(updated)
+    }
+
+    private func normalizeSectionOrder() {
+        let normalized = PersonalizationSettings.rawDiscoverySectionOrder(sectionOrder)
+        if normalized != sectionOrderRaw {
+            sectionOrderRaw = normalized
+        }
+    }
+}
+
+private struct MacSmartMixToggleRow: View {
+    let mix: PersonalizationSmartMix
+    @AppStorage private var isEnabled: Bool
+    @Environment(\.themeColor) private var themeColor
+
+    init(mix: PersonalizationSmartMix) {
+        self.mix = mix
+        _isEnabled = AppStorage(wrappedValue: true, mix.storageKey)
+    }
+
+    var body: some View {
+        Toggle(isOn: $isEnabled) {
+            Label {
+                Text(localized(mix.titleKey))
+            } icon: {
+                Image(systemName: mix.systemImage)
+                    .foregroundStyle(themeColor)
+            }
+        }
+        .tint(themeColor)
     }
 }
 
@@ -73,6 +150,10 @@ private struct MacPlaylistsPersonalizationPanel: View {
         }
         .formStyle(.grouped)
     }
+}
+
+private func localized(_ key: String) -> String {
+    NSLocalizedString(key, comment: "")
 }
 
 private struct MacFavoritesPersonalizationPanel: View {

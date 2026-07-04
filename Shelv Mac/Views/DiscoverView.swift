@@ -7,8 +7,25 @@ struct DiscoverView: View {
     @ObservedObject var offlineMode = OfflineModeService.shared
     @ObservedObject var downloadStore = DownloadStore.shared
     @AppStorage("recapEnabled") private var recapEnabled = false
+    @AppStorage(PersonalizationPreferenceKey.showSmartMixNewest) private var showSmartMixNewest = true
+    @AppStorage(PersonalizationPreferenceKey.showSmartMixFrequent) private var showSmartMixFrequent = true
+    @AppStorage(PersonalizationPreferenceKey.showSmartMixRecent) private var showSmartMixRecent = true
+    @AppStorage(PersonalizationPreferenceKey.showSmartMixRandom) private var showSmartMixRandom = true
+    @AppStorage(PersonalizationPreferenceKey.discoverySectionOrder) private var discoverySectionOrderRaw = PersonalizationSettings.defaultDiscoverySectionOrderRaw
     @State private var mixLoading: String?
     private let player = AudioPlayerService.shared
+
+    private var visibleSmartMixes: [PersonalizationSmartMix] {
+        PersonalizationSmartMix.allCases.filter(isSmartMixVisible)
+    }
+
+    private var orderedDiscoverySections: [PersonalizationDiscoverySection] {
+        PersonalizationSettings.discoverySectionOrder(from: discoverySectionOrderRaw)
+    }
+
+    private var visibleDiscoverySections: [PersonalizationDiscoverySection] {
+        orderedDiscoverySections.filter(isDiscoverySectionVisible)
+    }
 
     @ViewBuilder
     var body: some View {
@@ -143,74 +160,13 @@ struct DiscoverView: View {
     private var onlineBody: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 32) {
-
-                VStack(alignment: .leading, spacing: 12) {
-                    Text(String(localized: "smart_mixes"))
-                        .font(.title2).bold()
-                    VStack(spacing: 10) {
-                        MixButton(
-                            title: String(localized: "mix_newest_tracks"),
-                            icon: "sparkles",
-                            color: .blue,
-                            isLoading: mixLoading == "newest"
-                        ) {
-                            mixLoading = "newest"
-                            await vm.playMixNewest()
-                            mixLoading = nil
-                        }
-                        MixButton(
-                            title: String(localized: "mix_most_played"),
-                            icon: "chart.bar.fill",
-                            color: .orange,
-                            isLoading: mixLoading == "frequent"
-                        ) {
-                            mixLoading = "frequent"
-                            await vm.playMixFrequent()
-                            mixLoading = nil
-                        }
-                        MixButton(
-                            title: String(localized: "mix_recently_played"),
-                            icon: "clock.fill",
-                            color: .green,
-                            isLoading: mixLoading == "recent"
-                        ) {
-                            mixLoading = "recent"
-                            await vm.playMixRecent()
-                            mixLoading = nil
-                        }
-                        MixButton(
-                            title: String(localized: "mix_shuffle_all"),
-                            icon: "shuffle",
-                            color: .purple,
-                            isLoading: mixLoading == "random"
-                        ) {
-                            mixLoading = "random"
-                            await vm.playMixRandom()
-                            mixLoading = nil
-                        }
-                    }
-                }
-
                 if vm.isLoading {
                     ProgressView(String(localized: "loading"))
                         .frame(maxWidth: .infinity, alignment: .center)
                         .padding(.top, 40)
                 } else {
-                    if !vm.recentlyAdded.isEmpty {
-                        AlbumShelfSection(title: String(localized: "recently_added"), albums: vm.recentlyAdded)
-                    }
-                    if !vm.recentlyPlayed.isEmpty {
-                        AlbumShelfSection(title: String(localized: "recently_played"), albums: vm.recentlyPlayed)
-                    }
-                    if !vm.frequentlyPlayed.isEmpty {
-                        AlbumShelfSection(title: String(localized: "frequently_played"), albums: vm.frequentlyPlayed)
-                    }
-                    if !vm.randomAlbums.isEmpty {
-                        AlbumShelfSection(
-                            title: String(localized: "random_albums"),
-                            albums: vm.randomAlbums,
-                            refreshAction: { await vm.refreshRandom() }
-                        )
+                    ForEach(Array(visibleDiscoverySections.enumerated()), id: \.element) { index, section in
+                        discoveryAlbumSection(section, isFirstVisible: index == 0)
                     }
                 }
 
@@ -258,6 +214,104 @@ struct DiscoverView: View {
         .onChange(of: appState.serverStore.activeServerID) { _, _ in
             vm.reset()
             Task { await vm.load() }
+        }
+    }
+
+    private func isSmartMixVisible(_ mix: PersonalizationSmartMix) -> Bool {
+        switch mix {
+        case .newest: return showSmartMixNewest
+        case .frequent: return showSmartMixFrequent
+        case .recent: return showSmartMixRecent
+        case .random: return showSmartMixRandom
+        }
+    }
+
+    private func isDiscoverySectionVisible(_ section: PersonalizationDiscoverySection) -> Bool {
+        switch section {
+        case .smartMixes:
+            return !visibleSmartMixes.isEmpty
+        case .recentlyAdded:
+            return !vm.recentlyAdded.isEmpty
+        case .recentlyPlayed:
+            return !vm.recentlyPlayed.isEmpty
+        case .frequentlyPlayed:
+            return !vm.frequentlyPlayed.isEmpty
+        case .randomAlbums:
+            return !vm.randomAlbums.isEmpty
+        }
+    }
+
+    @ViewBuilder
+    private func smartMixButton(for mix: PersonalizationSmartMix) -> some View {
+        MixButton(
+            title: NSLocalizedString(mix.titleKey, comment: ""),
+            icon: mix.systemImage,
+            color: smartMixColor(for: mix),
+            isLoading: mixLoading == mix.playbackKey
+        ) {
+            mixLoading = mix.playbackKey
+            await playSmartMix(mix)
+            mixLoading = nil
+        }
+    }
+
+    private func smartMixColor(for mix: PersonalizationSmartMix) -> Color {
+        switch mix {
+        case .newest: return .blue
+        case .frequent: return .orange
+        case .recent: return .green
+        case .random: return .purple
+        }
+    }
+
+    private func playSmartMix(_ mix: PersonalizationSmartMix) async {
+        switch mix {
+        case .newest:
+            await vm.playMixNewest()
+        case .frequent:
+            await vm.playMixFrequent()
+        case .recent:
+            await vm.playMixRecent()
+        case .random:
+            await vm.playMixRandom()
+        }
+    }
+
+    @ViewBuilder
+    private func discoveryAlbumSection(_ section: PersonalizationDiscoverySection, isFirstVisible: Bool) -> some View {
+        switch section {
+        case .smartMixes:
+            VStack(alignment: .leading, spacing: 12) {
+                if !isFirstVisible {
+                    Text(String(localized: "smart_mixes"))
+                        .font(.title2).bold()
+                }
+                VStack(spacing: 10) {
+                    ForEach(visibleSmartMixes) { mix in
+                        smartMixButton(for: mix)
+                    }
+                }
+            }
+        case .recentlyAdded:
+            if !vm.recentlyAdded.isEmpty {
+                AlbumShelfSection(title: String(localized: "recently_added"), albums: vm.recentlyAdded)
+            }
+        case .recentlyPlayed:
+            if !vm.recentlyPlayed.isEmpty {
+                AlbumShelfSection(title: String(localized: "recently_played"), albums: vm.recentlyPlayed)
+            }
+        case .frequentlyPlayed:
+            if !vm.frequentlyPlayed.isEmpty {
+                AlbumShelfSection(title: String(localized: "frequently_played"), albums: vm.frequentlyPlayed)
+            }
+        case .randomAlbums:
+            if !vm.randomAlbums.isEmpty {
+                AlbumShelfSection(
+                    title: String(localized: "random_albums"),
+                    albums: vm.randomAlbums,
+                    refreshAction: { await vm.refreshRandom() }
+                )
+            }
         }
     }
 }

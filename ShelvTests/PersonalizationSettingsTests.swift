@@ -27,6 +27,16 @@ final class PersonalizationSettingsTests: XCTestCase {
         XCTAssertTrue(defaults.bool(forKey: PersonalizationPreferenceKey.showInstantMixActions))
         XCTAssertTrue(defaults.bool(forKey: PersonalizationPreferenceKey.showRadio))
         XCTAssertTrue(defaults.bool(forKey: PersonalizationPreferenceKey.showGenreFilter))
+        XCTAssertTrue(PersonalizationSettings.isSmartMixEnabled(.newest, in: defaults))
+        XCTAssertTrue(PersonalizationSettings.isSmartMixEnabled(.frequent, in: defaults))
+        XCTAssertTrue(PersonalizationSettings.isSmartMixEnabled(.recent, in: defaults))
+        XCTAssertTrue(PersonalizationSettings.isSmartMixEnabled(.random, in: defaults))
+        XCTAssertEqual(
+            PersonalizationSettings.discoverySectionOrder(
+                from: defaults.string(forKey: PersonalizationPreferenceKey.discoverySectionOrder)
+            ),
+            [.smartMixes, .recentlyAdded, .recentlyPlayed, .frequentlyPlayed, .randomAlbums]
+        )
         XCTAssertEqual(
             defaults.string(forKey: PersonalizationPreferenceKey.miniPlayerStyle),
             PersonalizationMiniPlayerStyle.shelv.rawValue
@@ -85,6 +95,49 @@ final class PersonalizationSettingsTests: XCTestCase {
         XCTAssertFalse(PersonalizationSettings.isAvailable(.addToPlaylist, in: defaults))
         XCTAssertEqual(PersonalizationSettings.swipeAction(for: .leftSecondary, in: defaults), .addToPlaylist)
         XCTAssertEqual(PersonalizationSettings.visibleSwipeAction(for: .leftSecondary, in: defaults), .none)
+    }
+
+    func testSmartMixVisibilityUsesRegisteredDefaultsAndStoredValues() {
+        PersonalizationSettings.registerDefaults(in: defaults)
+
+        XCTAssertTrue(PersonalizationSettings.isSmartMixEnabled(.newest, in: defaults))
+
+        defaults.set(false, forKey: PersonalizationSmartMix.newest.storageKey)
+
+        XCTAssertFalse(PersonalizationSettings.isSmartMixEnabled(.newest, in: defaults))
+        XCTAssertTrue(PersonalizationSettings.isSmartMixEnabled(.frequent, in: defaults))
+    }
+
+    func testDiscoverySectionOrderNormalizesInvalidStoredValues() {
+        let stored = [
+            PersonalizationDiscoverySection.randomAlbums.rawValue,
+            "legacy",
+            PersonalizationDiscoverySection.recentlyAdded.rawValue,
+            PersonalizationDiscoverySection.randomAlbums.rawValue,
+        ].joined(separator: ",")
+
+        XCTAssertEqual(
+            PersonalizationSettings.discoverySectionOrder(from: stored),
+            [.randomAlbums, .recentlyAdded, .smartMixes, .recentlyPlayed, .frequentlyPlayed]
+        )
+    }
+
+    func testSetDiscoverySectionOrderPersistsNormalizedRawValue() {
+        PersonalizationSettings.setDiscoverySectionOrder(
+            [.frequentlyPlayed, .smartMixes, .recentlyPlayed, .frequentlyPlayed],
+            in: defaults
+        )
+
+        XCTAssertEqual(
+            defaults.string(forKey: PersonalizationPreferenceKey.discoverySectionOrder),
+            [
+                PersonalizationDiscoverySection.frequentlyPlayed.rawValue,
+                PersonalizationDiscoverySection.smartMixes.rawValue,
+                PersonalizationDiscoverySection.recentlyPlayed.rawValue,
+                PersonalizationDiscoverySection.recentlyAdded.rawValue,
+                PersonalizationDiscoverySection.randomAlbums.rawValue,
+            ].joined(separator: ",")
+        )
     }
 
     func testDisabledFeatureActionsKeepConfiguredSwipeSlotsHidden() {

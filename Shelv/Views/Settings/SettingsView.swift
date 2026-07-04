@@ -287,8 +287,19 @@ struct SettingsView: View {
                             .foregroundStyle(accentColor)
                             .clipShape(Capsule())
                     }
+                    if server.hasSecondaryURL {
+                        Text(server.isUsingSecondaryURL
+                             ? String(localized: "secondary_url")
+                             : String(localized: "primary_url"))
+                            .font(.caption2)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.secondary.opacity(0.12))
+                            .foregroundStyle(.secondary)
+                            .clipShape(Capsule())
+                    }
                 }
-                Text(server.baseURL)
+                Text(server.activeBaseURL)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 HStack(spacing: 6) {
@@ -308,6 +319,13 @@ struct SettingsView: View {
                 }
                 Button(String(localized: "edit")) {
                     editingServer = server
+                }
+                if server.hasSecondaryURL {
+                    Button(server.isUsingSecondaryURL
+                           ? String(localized: "use_primary_url")
+                           : String(localized: "use_secondary_url")) {
+                        serverStore.toggleURLSlot(for: server)
+                    }
                 }
                 Divider()
                 Button(String(localized: "manage_server")) {
@@ -344,6 +362,14 @@ private struct UICustomizationsSettingsView: View {
     var body: some View {
         List {
             Section {
+                NavigationLink {
+                    UIDiscoverSettingsView()
+                } label: {
+                    Label { Text(String(localized: "discover")) } icon: {
+                        Image(systemName: "sparkles").foregroundStyle(accentColor)
+                    }
+                }
+
                 NavigationLink {
                     UIPlaylistsSettingsView()
                 } label: {
@@ -413,6 +439,109 @@ private struct UICustomizationsSettingsView: View {
             if !enabled {
                 PersonalizationSettings.clearAlbumGenreFilter()
             }
+        }
+    }
+}
+
+private struct UIDiscoverSettingsView: View {
+    @AppStorage("themeColor") private var themeColorName = "violet"
+    @AppStorage(PersonalizationPreferenceKey.discoverySectionOrder) private var sectionOrderRaw = PersonalizationSettings.defaultDiscoverySectionOrderRaw
+
+    private var accentColor: Color { AppTheme.color(for: themeColorName) }
+    private var sectionOrder: [PersonalizationDiscoverySection] {
+        PersonalizationSettings.discoverySectionOrder(from: sectionOrderRaw)
+    }
+
+    var body: some View {
+        List {
+            Section {
+                NavigationLink {
+                    UISmartMixesSettingsView()
+                } label: {
+                    Label { Text(String(localized: "smart_mixes")) } icon: {
+                        Image(systemName: "sparkles").foregroundStyle(accentColor)
+                    }
+                }
+            }
+
+            Section(String(localized: "home_sections")) {
+                ForEach(sectionOrder) { section in
+                    DiscoverySectionOrderRow(section: section, accentColor: accentColor)
+                }
+                .onMove(perform: moveSections)
+            }
+        }
+        .tint(accentColor)
+        .listStyle(.insetGrouped)
+        .scrollIndicators(.hidden)
+        .navigationTitle(String(localized: "discover"))
+        .navigationBarTitleDisplayMode(.inline)
+        .environment(\.editMode, .constant(.active))
+        .onAppear(perform: normalizeSectionOrder)
+    }
+
+    private func moveSections(from source: IndexSet, to destination: Int) {
+        var updated = sectionOrder
+        updated.move(fromOffsets: source, toOffset: destination)
+        sectionOrderRaw = PersonalizationSettings.rawDiscoverySectionOrder(updated)
+    }
+
+    private func normalizeSectionOrder() {
+        let normalized = PersonalizationSettings.rawDiscoverySectionOrder(sectionOrder)
+        if normalized != sectionOrderRaw {
+            sectionOrderRaw = normalized
+        }
+    }
+}
+
+private struct UISmartMixesSettingsView: View {
+    @AppStorage("themeColor") private var themeColorName = "violet"
+
+    private var accentColor: Color { AppTheme.color(for: themeColorName) }
+
+    var body: some View {
+        List {
+            Section {
+                ForEach(PersonalizationSmartMix.allCases) { mix in
+                    SmartMixToggleRow(mix: mix, accentColor: accentColor)
+                }
+            }
+        }
+        .tint(accentColor)
+        .listStyle(.insetGrouped)
+        .navigationTitle(String(localized: "smart_mixes"))
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct SmartMixToggleRow: View {
+    let mix: PersonalizationSmartMix
+    let accentColor: Color
+    @AppStorage private var isEnabled: Bool
+
+    init(mix: PersonalizationSmartMix, accentColor: Color) {
+        self.mix = mix
+        self.accentColor = accentColor
+        _isEnabled = AppStorage(wrappedValue: true, mix.storageKey)
+    }
+
+    var body: some View {
+        Toggle(isOn: $isEnabled) {
+            Label { Text(localized(mix.titleKey)) } icon: {
+                Image(systemName: mix.systemImage).foregroundStyle(accentColor)
+            }
+        }
+        .tint(accentColor)
+    }
+}
+
+private struct DiscoverySectionOrderRow: View {
+    let section: PersonalizationDiscoverySection
+    let accentColor: Color
+
+    var body: some View {
+        Label { Text(localized(section.titleKey)) } icon: {
+            Image(systemName: section.systemImage).foregroundStyle(accentColor)
         }
     }
 }

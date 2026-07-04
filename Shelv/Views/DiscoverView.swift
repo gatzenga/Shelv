@@ -10,6 +10,11 @@ struct DiscoverView: View {
     @AppStorage("recapEnabled") private var recapEnabled = false
     @AppStorage("mixUseDatabase") private var mixUseDatabase = false
     @AppStorage(PersonalizationPreferenceKey.showRadio) private var showRadio = true
+    @AppStorage(PersonalizationPreferenceKey.showSmartMixNewest) private var showSmartMixNewest = true
+    @AppStorage(PersonalizationPreferenceKey.showSmartMixFrequent) private var showSmartMixFrequent = true
+    @AppStorage(PersonalizationPreferenceKey.showSmartMixRecent) private var showSmartMixRecent = true
+    @AppStorage(PersonalizationPreferenceKey.showSmartMixRandom) private var showSmartMixRandom = true
+    @AppStorage(PersonalizationPreferenceKey.discoverySectionOrder) private var discoverySectionOrderRaw = PersonalizationSettings.defaultDiscoverySectionOrderRaw
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
     private var recapButtonVisible: Bool {
@@ -18,6 +23,18 @@ struct DiscoverView: View {
         if !offlineMode.isOffline { return true }
         // Offline: nur wenn mindestens eine Recap-Playlist heruntergeladen ist.
         return !recapStore.recapPlaylistIds.isDisjoint(with: downloadStore.offlinePlaylistIds)
+    }
+
+    private var visibleSmartMixes: [PersonalizationSmartMix] {
+        PersonalizationSmartMix.allCases.filter(isSmartMixVisible)
+    }
+
+    private var orderedDiscoverySections: [PersonalizationDiscoverySection] {
+        PersonalizationSettings.discoverySectionOrder(from: discoverySectionOrderRaw)
+    }
+
+    private var visibleDiscoverySections: [PersonalizationDiscoverySection] {
+        orderedDiscoverySections.filter(isDiscoverySectionVisible)
     }
 
     @State private var mixLoading: String?
@@ -61,46 +78,9 @@ struct DiscoverView: View {
                         }
                         .padding(.top, 60)
                     } else {
-                        VStack(spacing: 12) {
-                            mixButton(
-                                title: String(localized: "mix_newest_tracks"),
-                                icon: "sparkles",
-                                key: "newest"
-                            ) { await loadMix(type: "newest") }
-
-                            mixButton(
-                                title: String(localized: "mix_frequently_played"),
-                                icon: "chart.bar.fill",
-                                key: "frequent"
-                            ) { await loadMix(type: "frequent") }
-
-                            mixButton(
-                                title: String(localized: "mix_recently_played"),
-                                icon: "clock.fill",
-                                key: "recent"
-                            ) { await loadMix(type: "recent") }
-
-                            mixButton(
-                                title: String(localized: "mix_shuffle_all"),
-                                icon: "shuffle",
-                                key: "random"
-                            ) { await loadMix(type: "random") }
+                        ForEach(Array(visibleDiscoverySections.enumerated()), id: \.element) { index, section in
+                            discoveryAlbumSection(section, isFirstVisible: index == 0)
                         }
-                        .padding(.horizontal)
-
-                        albumSection(
-                            title: String(localized: "recently_added"),
-                            albums: libraryStore.recentlyAdded
-                        )
-                        albumSection(
-                            title: String(localized: "recently_played"),
-                            albums: libraryStore.recentlyPlayed
-                        )
-                        albumSection(
-                            title: String(localized: "frequently_played"),
-                            albums: libraryStore.frequentlyPlayed
-                        )
-                        randomAlbumSection
 
                         PlayerBottomSpacer()
                     }
@@ -292,6 +272,78 @@ struct DiscoverView: View {
             }
             .buttonStyle(.plain)
             .disabled(randomRefreshing)
+        }
+    }
+
+    private func isSmartMixVisible(_ mix: PersonalizationSmartMix) -> Bool {
+        switch mix {
+        case .newest: return showSmartMixNewest
+        case .frequent: return showSmartMixFrequent
+        case .recent: return showSmartMixRecent
+        case .random: return showSmartMixRandom
+        }
+    }
+
+    private func isDiscoverySectionVisible(_ section: PersonalizationDiscoverySection) -> Bool {
+        switch section {
+        case .smartMixes:
+            return !visibleSmartMixes.isEmpty
+        case .recentlyAdded:
+            return !libraryStore.recentlyAdded.isEmpty
+        case .recentlyPlayed:
+            return !libraryStore.recentlyPlayed.isEmpty
+        case .frequentlyPlayed:
+            return !libraryStore.frequentlyPlayed.isEmpty
+        case .randomAlbums:
+            return !libraryStore.randomAlbums.isEmpty
+        }
+    }
+
+    @ViewBuilder
+    private func smartMixButton(for mix: PersonalizationSmartMix) -> some View {
+        mixButton(
+            title: NSLocalizedString(mix.titleKey, comment: ""),
+            icon: mix.systemImage,
+            key: mix.playbackKey
+        ) {
+            await loadMix(type: mix.playbackKey)
+        }
+    }
+
+    @ViewBuilder
+    private func discoveryAlbumSection(_ section: PersonalizationDiscoverySection, isFirstVisible: Bool) -> some View {
+        switch section {
+        case .smartMixes:
+            VStack(alignment: .leading, spacing: 10) {
+                if !isFirstVisible {
+                    Text(String(localized: "smart_mixes"))
+                        .font(.title3).bold()
+                        .padding(.horizontal)
+                }
+                VStack(spacing: 12) {
+                    ForEach(visibleSmartMixes) { mix in
+                        smartMixButton(for: mix)
+                    }
+                }
+                .padding(.horizontal)
+            }
+        case .recentlyAdded:
+            albumSection(
+                title: String(localized: "recently_added"),
+                albums: libraryStore.recentlyAdded
+            )
+        case .recentlyPlayed:
+            albumSection(
+                title: String(localized: "recently_played"),
+                albums: libraryStore.recentlyPlayed
+            )
+        case .frequentlyPlayed:
+            albumSection(
+                title: String(localized: "frequently_played"),
+                albums: libraryStore.frequentlyPlayed
+            )
+        case .randomAlbums:
+            randomAlbumSection
         }
     }
 

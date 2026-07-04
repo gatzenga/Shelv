@@ -2,10 +2,16 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var serverStore: ServerStore
     @AppStorage("appColorScheme") private var colorScheme: AppColorScheme = .system
 
     var body: some View {
         TabView {
+            UICustomizationsTab()
+                .tabItem {
+                    Image(systemName: "slider.horizontal.3")
+                    Text(String(localized: "ui_customizations"))
+                }
             ServerTab()
                 .tabItem {
                     Image(systemName: "server.rack")
@@ -15,11 +21,6 @@ struct SettingsView: View {
                 .tabItem {
                     Image(systemName: "paintpalette")
                     Text(String(localized: "appearance"))
-                }
-            UICustomizationsTab()
-                .tabItem {
-                    Image(systemName: "slider.horizontal.3")
-                    Text(String(localized: "ui_customizations"))
                 }
             RecapTab()
                 .tabItem {
@@ -64,6 +65,7 @@ struct SettingsView: View {
         }
         .frame(width: 820, height: 660)
         .environmentObject(appState)
+        .environmentObject(serverStore)
         .transaction { $0.animation = nil }
     }
 }
@@ -71,5 +73,6 @@ struct SettingsView: View {
 #Preview {
     SettingsView()
         .environmentObject(AppState.shared)
+        .environmentObject(AppState.shared.serverStore)
         .environmentObject(LyricsStore.shared)
 }

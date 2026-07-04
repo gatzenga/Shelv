@@ -89,6 +89,9 @@ private struct TVUICustomizationsSettingsView: View {
                 .listRowBackground(Color.clear)
 
             Section(String(localized: "ui_customizations")) {
+                NavigationLink(String(localized: "discover")) {
+                    TVDiscoverPersonalizationView()
+                }
                 NavigationLink(String(localized: "playlists")) {
                     TVPlaylistsPersonalizationView()
                 }
@@ -104,6 +107,119 @@ private struct TVUICustomizationsSettingsView: View {
         .onChange(of: showGenreFilter) { _, enabled in
             if !enabled {
                 PersonalizationSettings.clearAlbumGenreFilter()
+            }
+        }
+    }
+}
+
+private struct TVDiscoverPersonalizationView: View {
+    @AppStorage(PersonalizationPreferenceKey.discoverySectionOrder) private var sectionOrderRaw = PersonalizationSettings.defaultDiscoverySectionOrderRaw
+
+    private var sectionOrder: [PersonalizationDiscoverySection] {
+        PersonalizationSettings.discoverySectionOrder(from: sectionOrderRaw)
+    }
+
+    var body: some View {
+        Form {
+            Text(String(localized: "discover"))
+                .font(.largeTitle).bold()
+                .listRowBackground(Color.clear)
+
+            Section(String(localized: "smart_mixes")) {
+                ForEach(PersonalizationSmartMix.allCases) { mix in
+                    TVSmartMixToggleRow(mix: mix)
+                }
+            }
+
+            Section(String(localized: "home_sections")) {
+                ForEach(Array(sectionOrder.enumerated()), id: \.element) { index, section in
+                    TVDiscoverySectionOrderRow(
+                        section: section,
+                        index: index,
+                        count: sectionOrder.count,
+                        moveSection: moveSection
+                    )
+                }
+            }
+        }
+        .toolbar(.hidden, for: .tabBar)
+        .onAppear(perform: normalizeSectionOrder)
+    }
+
+    private func moveSection(at index: Int, by offset: Int) {
+        let target = index + offset
+        guard sectionOrder.indices.contains(index), sectionOrder.indices.contains(target) else { return }
+        var updated = sectionOrder
+        updated.swapAt(index, target)
+        sectionOrderRaw = PersonalizationSettings.rawDiscoverySectionOrder(updated)
+    }
+
+    private func normalizeSectionOrder() {
+        let normalized = PersonalizationSettings.rawDiscoverySectionOrder(sectionOrder)
+        if normalized != sectionOrderRaw {
+            sectionOrderRaw = normalized
+        }
+    }
+}
+
+private struct TVDiscoverySectionOrderRow: View {
+    let section: PersonalizationDiscoverySection
+    let index: Int
+    let count: Int
+    let moveSection: (Int, Int) -> Void
+    @State private var showMoveOptions = false
+
+    var body: some View {
+        Button {
+            showMoveOptions = true
+        } label: {
+            HStack(spacing: 16) {
+                Label {
+                    Text(localized(section.titleKey))
+                } icon: {
+                    Image(systemName: section.systemImage)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 44)
+            }
+            .contentShape(Rectangle())
+        }
+        .confirmationDialog(localized(section.titleKey), isPresented: $showMoveOptions, titleVisibility: .visible) {
+            Button(String(localized: "move_up")) {
+                moveSection(index, -1)
+            }
+            .disabled(index == 0)
+
+            Button(String(localized: "move_down")) {
+                moveSection(index, 1)
+            }
+            .disabled(index == count - 1)
+
+            Button(String(localized: "cancel"), role: .cancel) {}
+        }
+    }
+}
+
+private struct TVSmartMixToggleRow: View {
+    let mix: PersonalizationSmartMix
+    @AppStorage private var isEnabled: Bool
+
+    init(mix: PersonalizationSmartMix) {
+        self.mix = mix
+        _isEnabled = AppStorage(wrappedValue: true, mix.storageKey)
+    }
+
+    var body: some View {
+        Toggle(isOn: $isEnabled) {
+            Label {
+                Text(localized(mix.titleKey))
+            } icon: {
+                Image(systemName: mix.systemImage)
             }
         }
     }
@@ -126,6 +242,10 @@ private struct TVPlaylistsPersonalizationView: View {
         }
         .toolbar(.hidden, for: .tabBar)
     }
+}
+
+private func localized(_ key: String) -> String {
+    NSLocalizedString(key, comment: "")
 }
 
 private struct TVFavoritesPersonalizationView: View {

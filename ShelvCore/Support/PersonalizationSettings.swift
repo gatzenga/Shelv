@@ -12,6 +12,11 @@ nonisolated enum PersonalizationPreferenceKey {
     static let showGenreFilter = "ui.showGenreFilter"
     static let albumGenreFilter = "albumGenreFilter"
     static let miniPlayerStyle = "ui.miniPlayerStyle"
+    static let showSmartMixNewest = "ui.discover.smartMix.newest"
+    static let showSmartMixFrequent = "ui.discover.smartMix.frequent"
+    static let showSmartMixRecent = "ui.discover.smartMix.recent"
+    static let showSmartMixRandom = "ui.discover.smartMix.random"
+    static let discoverySectionOrder = "ui.discover.sectionOrder"
 
     static let swipeLeftPrimary = "ui.swipe.leftPrimary"
     static let swipeLeftSecondary = "ui.swipe.leftSecondary"
@@ -79,6 +84,74 @@ nonisolated enum PersonalizationTab: Equatable {
     case playlists
     case settings
     case search
+}
+
+nonisolated enum PersonalizationSmartMix: String, CaseIterable, Identifiable, Hashable {
+    case newest
+    case frequent
+    case recent
+    case random
+
+    var id: String { rawValue }
+
+    var storageKey: String {
+        switch self {
+        case .newest: return PersonalizationPreferenceKey.showSmartMixNewest
+        case .frequent: return PersonalizationPreferenceKey.showSmartMixFrequent
+        case .recent: return PersonalizationPreferenceKey.showSmartMixRecent
+        case .random: return PersonalizationPreferenceKey.showSmartMixRandom
+        }
+    }
+
+    var titleKey: String {
+        switch self {
+        case .newest: return "mix_newest_tracks"
+        case .frequent: return "mix_most_played"
+        case .recent: return "mix_recently_played"
+        case .random: return "mix_shuffle_all"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .newest: return "sparkles"
+        case .frequent: return "chart.bar.fill"
+        case .recent: return "clock.fill"
+        case .random: return "shuffle"
+        }
+    }
+
+    var playbackKey: String { rawValue }
+}
+
+nonisolated enum PersonalizationDiscoverySection: String, CaseIterable, Identifiable, Hashable {
+    case smartMixes
+    case recentlyAdded
+    case recentlyPlayed
+    case frequentlyPlayed
+    case randomAlbums
+
+    var id: String { rawValue }
+
+    var titleKey: String {
+        switch self {
+        case .smartMixes: return "smart_mixes"
+        case .recentlyAdded: return "recently_added"
+        case .recentlyPlayed: return "recently_played"
+        case .frequentlyPlayed: return "frequently_played"
+        case .randomAlbums: return "random_albums"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .smartMixes: return "sparkles"
+        case .recentlyAdded: return "plus.circle"
+        case .recentlyPlayed: return "clock.arrow.circlepath"
+        case .frequentlyPlayed: return "chart.bar.fill"
+        case .randomAlbums: return "shuffle"
+        }
+    }
 }
 
 nonisolated enum PersonalizationSwipeSlot: String, CaseIterable, Hashable {
@@ -257,6 +330,9 @@ nonisolated enum PersonalizationMiniPlayerStyle: String, CaseIterable {
 
 nonisolated enum PersonalizationSettings {
     static let currentMigrationVersion = 3
+    static let defaultDiscoverySectionOrderRaw = PersonalizationDiscoverySection.allCases
+        .map(\.rawValue)
+        .joined(separator: ",")
 
     static let defaultValues: [String: Any] = {
         var values: [String: Any] = [
@@ -268,7 +344,11 @@ nonisolated enum PersonalizationSettings {
             PersonalizationPreferenceKey.showRadio: true,
             PersonalizationPreferenceKey.showGenreFilter: true,
             PersonalizationPreferenceKey.miniPlayerStyle: PersonalizationMiniPlayerStyle.shelv.rawValue,
+            PersonalizationPreferenceKey.discoverySectionOrder: defaultDiscoverySectionOrderRaw,
         ]
+        for mix in PersonalizationSmartMix.allCases {
+            values[mix.storageKey] = true
+        }
         for slot in PersonalizationSwipeSlot.allCases {
             values[slot.storageKey] = slot.defaultAction.rawValue
         }
@@ -377,6 +457,44 @@ nonisolated enum PersonalizationSettings {
             return [.discover, .library, .playlists, .settings, .search]
         }
         return [.discover, .library, .settings, .search]
+    }
+
+    static func isSmartMixEnabled(_ mix: PersonalizationSmartMix, in defaults: UserDefaults = .standard) -> Bool {
+        defaults.object(forKey: mix.storageKey) == nil ? true : defaults.bool(forKey: mix.storageKey)
+    }
+
+    static func discoverySectionOrder(from rawValue: String?) -> [PersonalizationDiscoverySection] {
+        let rawSections = rawValue?
+            .split(separator: ",")
+            .compactMap { PersonalizationDiscoverySection(rawValue: String($0)) } ?? []
+        return normalizedDiscoverySectionOrder(rawSections)
+    }
+
+    static func rawDiscoverySectionOrder(_ sections: [PersonalizationDiscoverySection]) -> String {
+        normalizedDiscoverySectionOrder(sections)
+            .map(\.rawValue)
+            .joined(separator: ",")
+    }
+
+    static func setDiscoverySectionOrder(_ sections: [PersonalizationDiscoverySection], in defaults: UserDefaults = .standard) {
+        defaults.set(rawDiscoverySectionOrder(sections), forKey: PersonalizationPreferenceKey.discoverySectionOrder)
+    }
+
+    private static func normalizedDiscoverySectionOrder(_ sections: [PersonalizationDiscoverySection]) -> [PersonalizationDiscoverySection] {
+        var result: [PersonalizationDiscoverySection] = []
+        var seen = Set<PersonalizationDiscoverySection>()
+
+        for section in sections where !seen.contains(section) {
+            result.append(section)
+            seen.insert(section)
+        }
+
+        for section in PersonalizationDiscoverySection.allCases where !seen.contains(section) {
+            result.append(section)
+            seen.insert(section)
+        }
+
+        return result
     }
 
     static func swipeAction(for slot: PersonalizationSwipeSlot, in defaults: UserDefaults = .standard) -> PersonalizationSwipeAction {
