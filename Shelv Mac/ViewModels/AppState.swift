@@ -19,9 +19,29 @@ class AppState: ObservableObject {
     @Published var navigationPath = NavigationPath()
     @Published var errorMessage: String?
     @Published var activePanel: SidePanel? = nil
+    @Published var songInfoSong: Song? = nil
 
     func togglePanel(_ panel: SidePanel) {
-        activePanel = (activePanel == panel) ? nil : panel
+        if activePanel == panel {
+            activePanel = nil
+            if panel == .songInfo {
+                songInfoSong = nil
+            }
+        } else {
+            activePanel = panel
+        }
+    }
+
+    func showSongInfo(_ song: Song) {
+        songInfoSong = song
+        activePanel = .songInfo
+    }
+
+    func closeSongInfo() {
+        if activePanel == .songInfo {
+            activePanel = nil
+        }
+        songInfoSong = nil
     }
 
     let api = SubsonicAPIService.shared

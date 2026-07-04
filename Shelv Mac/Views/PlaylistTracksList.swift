@@ -22,6 +22,7 @@ struct PlaylistTrackRow: View {
     var onMoveDown: () -> Void = {}
 
     @ObservedObject private var offlineMode = OfflineModeService.shared
+    @EnvironmentObject private var appState: AppState
     @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     @State private var isHovered = false
 
@@ -143,6 +144,10 @@ struct PlaylistTrackRow: View {
                         onAddToPlaylist()
                     }
                 }
+            }
+            Divider()
+            Button(String(localized: "song_info_details")) {
+                appState.showSongInfo(song)
             }
         }
     }

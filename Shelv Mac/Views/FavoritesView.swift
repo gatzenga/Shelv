@@ -141,6 +141,7 @@ struct FavoriteSongRow: View {
 
     @ObservedObject private var downloadStore = DownloadStore.shared
     @ObservedObject private var offlineMode = OfflineModeService.shared
+    @EnvironmentObject private var appState: AppState
     @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     @AppStorage("enableDownloads") private var enableDownloads = false
     @State private var isHovered = false
@@ -211,6 +212,10 @@ struct FavoriteSongRow: View {
             Button(String(localized: "remove_from_favorites")) { onRemoveFavorite() }
             if showPlaylist {
                 Button(String(localized: "add_to_playlist")) { onAddToPlaylist() }
+            }
+            Divider()
+            Button(String(localized: "song_info_details")) {
+                appState.showSongInfo(song)
             }
         }
     }

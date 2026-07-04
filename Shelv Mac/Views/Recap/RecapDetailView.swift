@@ -8,6 +8,7 @@ struct RecapDetailView: View {
     @ObservedObject private var downloadStore = DownloadStore.shared
     @ObservedObject private var offlineMode = OfflineModeService.shared
     @Environment(\.themeColor) private var themeColor
+    @EnvironmentObject private var appState: AppState
     @Environment(\.dismiss) private var dismiss
     @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
     @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
@@ -131,6 +132,10 @@ struct RecapDetailView: View {
                                         NotificationCenter.default.post(name: .addSongsToPlaylist, object: [entry.song.id])
                                     }
                                 }
+                            }
+                            Divider()
+                            Button(String(localized: "song_info_details")) {
+                                appState.showSongInfo(entry.song)
                             }
                         }
                     }

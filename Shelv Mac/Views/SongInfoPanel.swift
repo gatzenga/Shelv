@@ -3,11 +3,16 @@ import SwiftUI
 struct SongInfoPanel: View {
     @ObservedObject private var player = AudioPlayerService.shared
     @ObservedObject private var offlineMode = OfflineModeService.shared
+    @EnvironmentObject private var appState: AppState
     @Environment(\.themeColor) private var themeColor
 
     @State private var displayedSong: Song?
     @State private var selectedTab = SongInfoTab.credits
     @State private var isLoading = false
+
+    private var sourceSong: Song? {
+        appState.songInfoSong ?? player.currentSong
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -17,9 +22,9 @@ struct SongInfoPanel: View {
             tabContent
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .task(id: player.currentSong?.id) {
-            displayedSong = player.currentSong
-            await refreshSong()
+        .task(id: sourceSong?.id) {
+            displayedSong = sourceSong
+            await refreshSong(sourceSong)
         }
     }
 
@@ -57,6 +62,8 @@ struct SongInfoPanel: View {
                     ProgressView()
                         .controlSize(.small)
                 }
+
+                closeButton
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
@@ -65,10 +72,23 @@ struct SongInfoPanel: View {
                 Text(String(localized: "song_info"))
                     .font(.headline)
                 Spacer()
+                closeButton
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
         }
+    }
+
+    private var closeButton: some View {
+        Button {
+            appState.closeSongInfo()
+        } label: {
+            Image(systemName: "xmark.circle.fill")
+                .font(.title3)
+                .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+        .help(String(localized: "done"))
     }
 
     private var tabPicker: some View {
@@ -151,14 +171,14 @@ struct SongInfoPanel: View {
         .padding()
     }
 
-    private func refreshSong() async {
-        guard !offlineMode.isOffline, let song = player.currentSong else { return }
+    private func refreshSong(_ song: Song?) async {
+        guard !offlineMode.isOffline, let song else { return }
         isLoading = true
         defer { isLoading = false }
 
         do {
             let refreshed = try await SubsonicAPIService.shared.getSong(id: song.id)
-            guard !Task.isCancelled, refreshed.id == player.currentSong?.id else { return }
+            guard !Task.isCancelled, refreshed.id == sourceSong?.id else { return }
             displayedSong = refreshed
         } catch {
             // Keep the player metadata if the server cannot refresh richer details.

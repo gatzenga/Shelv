@@ -55,7 +55,7 @@ struct PlayerBarView: View {
                     if let song = player.currentSong {
                         VStack(alignment: .leading, spacing: 4) {
                             Button {
-                                appState.togglePanel(.songInfo)
+                                appState.showSongInfo(song)
                             } label: {
                                 Text(song.title)
                                     .font(.body.bold())

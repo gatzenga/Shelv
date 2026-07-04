@@ -88,6 +88,7 @@ struct SearchSongRow: View {
     var onAddToPlaylist: (() -> Void)? = nil
 
     @Environment(\.themeColor) private var themeColor
+    @EnvironmentObject private var appState: AppState
     @ObservedObject private var downloadStore = DownloadStore.shared
     @ObservedObject private var offlineMode = OfflineModeService.shared
     @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
@@ -147,6 +148,10 @@ struct SearchSongRow: View {
                     }
                 }
             }
+            Divider()
+            Button(String(localized: "song_info_details")) {
+                appState.showSongInfo(song)
+            }
         }
     }
 }
@@ -163,6 +168,7 @@ struct LyricsSearchRow: View {
     var onFavorite: (() -> Void)? = nil
     var onAddToPlaylist: (() -> Void)? = nil
     @Environment(\.themeColor) private var themeColor
+    @EnvironmentObject private var appState: AppState
     @ObservedObject private var downloadStore = DownloadStore.shared
     @ObservedObject private var offlineMode = OfflineModeService.shared
     @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
@@ -238,7 +244,21 @@ struct LyricsSearchRow: View {
                     Button(String(localized: "add_to_playlist")) { onAddToPlaylist() }
                 }
             }
+            Divider()
+            Button(String(localized: "song_info_details")) {
+                appState.showSongInfo(fallbackSong)
+            }
         }
+    }
+
+    private var fallbackSong: Song {
+        Song(
+            id: item.songId,
+            title: item.songTitle ?? item.songId,
+            artist: item.artistName,
+            duration: item.duration,
+            coverArt: item.coverArt
+        )
     }
 
     private func highlightedLyricsSnippet(_ snippet: String, query: String, accentColor: Color) -> Text {
