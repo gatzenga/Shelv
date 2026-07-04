@@ -5,8 +5,13 @@ import SwiftUI
 /// tabItem-API hatte auf tvOS kaputtes Menü-/Fokus-Verhalten (Tab-Bar unerreichbar,
 /// leerer Tab nach Feature-Toggle).
 struct MainTabView: View {
+    private static let nowPlayingTab = "nowplaying"
+    private static let discoverTab = "discover"
+    private static let idleNowPlayingDelay: Duration = .seconds(10)
+
     @AppStorage(PersonalizationPreferenceKey.showPlaylistsTab) private var showPlaylistsTab = true
     @AppStorage(PersonalizationPreferenceKey.showRadio) private var showRadio = true
+    @ObservedObject private var player = AudioPlayerService.shared
     @ObservedObject private var offlineMode = OfflineModeService.shared
     @ObservedObject private var queueSync = QueueSyncService.shared
     @State private var selection = MainTabView.initialSelection
@@ -15,6 +20,8 @@ struct MainTabView: View {
         default: true
     )
     @State private var visibleShowRadio = MainTabView.initialRadioVisible
+    @State private var showIdleNowPlaying = false
+    @State private var idleNowPlayingTask: Task<Void, Never>?
 
     private static var initialSelection: String {
         #if DEBUG
@@ -22,7 +29,7 @@ struct MainTabView: View {
             return "library"
         }
         #endif
-        return "discover"
+        return discoverTab
     }
 
     private static func initialBoolPreference(_ key: String, default defaultValue: Bool) -> Bool {
@@ -37,12 +44,98 @@ struct MainTabView: View {
     }
 
     var body: some View {
+        ZStack {
+            tabView
+
+            if showIdleNowPlaying {
+                TVIdleNowPlayingView {
+                    dismissIdleNowPlaying()
+                }
+                .transition(.opacity)
+                .zIndex(1)
+            }
+        }
+        .animation(.easeInOut(duration: 0.25), value: showIdleNowPlaying)
+        .simultaneousGesture(TapGesture().onEnded {
+            registerUserActivity()
+        })
+        .onMoveCommand { _ in
+            registerUserActivity()
+        }
+        .onExitCommand {
+            if showIdleNowPlaying {
+                dismissIdleNowPlaying()
+            }
+        }
+        .onPlayPauseCommand {
+            if showIdleNowPlaying {
+                dismissIdleNowPlaying()
+            } else {
+                registerUserActivity()
+                player.togglePlayPause()
+            }
+        }
+        .onChange(of: showPlaylistsTab) { _, _ in
+            syncVisibleTabsIfAllowed()
+        }
+        .onChange(of: showRadio) { _, _ in
+            syncVisibleTabsIfAllowed()
+        }
+        .onChange(of: offlineMode.isOffline) { _, _ in
+            syncVisibleTabs()
+        }
+        .onChange(of: selection) { _, newSelection in
+            if newSelection != "settings" {
+                syncVisibleTabs()
+            }
+            updateIdleNowPlayingAvailability()
+        }
+        .onChange(of: visibleShowPlaylistsTab) { _, on in
+            if !on && selection == "playlists" { selection = "settings" }
+        }
+        .onChange(of: visibleShowRadio) { _, on in
+            if !on && selection == "radio" { selection = "search" }
+        }
+        .onChange(of: player.isPlaying) { _, _ in
+            updateIdleNowPlayingAvailability()
+        }
+        .onChange(of: player.currentSong?.id) { _, _ in
+            updateIdleNowPlayingAvailability()
+        }
+        .onChange(of: player.currentRadioStation?.id) { _, _ in
+            updateIdleNowPlayingAvailability()
+        }
+        // Fremde Queue von einem anderen Gerät — auf tvOS als nativer Alert (zuverlässig
+        // fokussierbar, im Gegensatz zu einem Custom-Top-Banner). Nie automatisch.
+        .alert(String(localized: "queue_available_title"), isPresented: Binding(
+            get: { queueSync.pendingRemote != nil },
+            set: { if !$0 { queueSync.dismissPending() } }
+        )) {
+            Button(String(localized: "queue_take_over")) { queueSync.acceptPending() }
+            Button(String(localized: "cancel"), role: .cancel) { queueSync.dismissPending() }
+        } message: {
+            Text(String(localized: "queue_available_subtitle"))
+        }
+        .task(id: queueSync.pendingRemote != nil) {
+            guard queueSync.pendingRemote != nil else { return }
+            try? await Task.sleep(for: .seconds(6))
+            queueSync.dismissPending()
+        }
+        .onAppear {
+            scheduleIdleNowPlayingIfNeeded()
+        }
+        .onDisappear {
+            idleNowPlayingTask?.cancel()
+        }
+    }
+
+    private var tabView: some View {
         TabView(selection: $selection) {
-            Tab(String(localized: "now_playing"), systemImage: "play.circle", value: "nowplaying") {
+            Tab(String(localized: "now_playing"), systemImage: "play.circle", value: Self.nowPlayingTab) {
                 NowPlayingView()
             }
 
-            Tab(String(localized: "discover"), systemImage: "sparkles", value: "discover") {
+            Tab(String(localized: "discover"), systemImage: "sparkles", value: Self.discoverTab) {
                 DiscoverView()
             }
 
@@ -70,48 +163,6 @@ struct MainTabView: View {
                 SettingsView()
             }
         }
-        .onPlayPauseCommand {
-            // tvOS liefert die physische Play/Pause-Taste der Siri Remote im Vordergrund über
-            // diesen SwiftUI-Befehl. MPRemoteCommandCenter erreicht der Resume-Druck im
-            // Vordergrund nicht zuverlässig (Pause kommt an, Play nicht), daher hier abfangen.
-            AudioPlayerService.shared.togglePlayPause()
-        }
-        .onChange(of: showPlaylistsTab) { _, _ in
-            syncVisibleTabsIfAllowed()
-        }
-        .onChange(of: showRadio) { _, _ in
-            syncVisibleTabsIfAllowed()
-        }
-        .onChange(of: offlineMode.isOffline) { _, _ in
-            syncVisibleTabs()
-        }
-        .onChange(of: selection) { _, newSelection in
-            if newSelection != "settings" {
-                syncVisibleTabs()
-            }
-        }
-        .onChange(of: visibleShowPlaylistsTab) { _, on in
-            if !on && selection == "playlists" { selection = "settings" }
-        }
-        .onChange(of: visibleShowRadio) { _, on in
-            if !on && selection == "radio" { selection = "search" }
-        }
-        // Fremde Queue von einem anderen Gerät — auf tvOS als nativer Alert (zuverlässig
-        // fokussierbar, im Gegensatz zu einem Custom-Top-Banner). Nie automatisch.
-        .alert(String(localized: "queue_available_title"), isPresented: Binding(
-            get: { queueSync.pendingRemote != nil },
-            set: { if !$0 { queueSync.dismissPending() } }
-        )) {
-            Button(String(localized: "queue_take_over")) { queueSync.acceptPending() }
-            Button(String(localized: "cancel"), role: .cancel) { queueSync.dismissPending() }
-        } message: {
-            Text(String(localized: "queue_available_subtitle"))
-        }
-        .task(id: queueSync.pendingRemote != nil) {
-            guard queueSync.pendingRemote != nil else { return }
-            try? await Task.sleep(for: .seconds(6))
-            queueSync.dismissPending()
-        }
     }
 
     private func syncVisibleTabsIfAllowed() {
@@ -122,5 +173,178 @@ struct MainTabView: View {
     private func syncVisibleTabs() {
         visibleShowPlaylistsTab = showPlaylistsTab
         visibleShowRadio = showRadio && !offlineMode.isOffline
+    }
+
+    private var canShowIdleNowPlaying: Bool {
+        selection == Self.nowPlayingTab
+            && player.hasActivePlayback
+            && player.isPlaying
+    }
+
+    private func registerUserActivity() {
+        if showIdleNowPlaying {
+            dismissIdleNowPlaying()
+        } else {
+            scheduleIdleNowPlayingIfNeeded()
+        }
+    }
+
+    private func dismissIdleNowPlaying() {
+        showIdleNowPlaying = false
+        scheduleIdleNowPlayingIfNeeded()
+    }
+
+    private func updateIdleNowPlayingAvailability() {
+        if canShowIdleNowPlaying {
+            scheduleIdleNowPlayingIfNeeded()
+        } else {
+            showIdleNowPlaying = false
+            idleNowPlayingTask?.cancel()
+        }
+    }
+
+    private func scheduleIdleNowPlayingIfNeeded() {
+        idleNowPlayingTask?.cancel()
+        guard canShowIdleNowPlaying else {
+            showIdleNowPlaying = false
+            return
+        }
+        idleNowPlayingTask = Task {
+            try? await Task.sleep(for: Self.idleNowPlayingDelay)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                if canShowIdleNowPlaying {
+                    showIdleNowPlaying = true
+                }
+            }
+        }
+    }
+}
+
+private struct TVIdleNowPlayingView: View {
+    let onDismiss: () -> Void
+
+    @ObservedObject private var player = AudioPlayerService.shared
+    @AppStorage("themeColor") private var themeColor = "violet"
+    @FocusState private var isFocused: Bool
+    @State private var displayTime: Double = 0
+    @State private var displayDuration: Double = 0
+
+    private var accent: Color { AppTheme.color(for: themeColor) }
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+
+            HStack(alignment: .center, spacing: 86) {
+                artwork
+
+                VStack(alignment: .leading, spacing: 28) {
+                    metadata
+                    progress
+                }
+                .frame(width: 700, alignment: .leading)
+            }
+            .frame(maxWidth: 1500, maxHeight: .infinity)
+            .padding(.horizontal, 90)
+        }
+        .contentShape(Rectangle())
+        .focusable()
+        .focused($isFocused)
+        .onAppear {
+            isFocused = true
+            syncDisplayFromPlayer()
+        }
+        .onReceive(player.timePublisher) { t in
+            displayTime = t.time
+            displayDuration = t.duration
+        }
+        .onTapGesture(perform: onDismiss)
+        .onMoveCommand { _ in onDismiss() }
+        .onExitCommand(perform: onDismiss)
+        .onPlayPauseCommand(perform: onDismiss)
+    }
+
+    @ViewBuilder
+    private var artwork: some View {
+        if let station = player.currentRadioStation {
+            TVRadioStationArtworkView(item: station, size: 560, metadata: player.currentRadioMetadata)
+                .shadow(color: .black.opacity(0.45), radius: 30, y: 16)
+        } else {
+            CoverArtView(url: player.currentSong?.coverURL(900), size: 560, cornerRadius: 28)
+                .shadow(color: .black.opacity(0.45), radius: 30, y: 16)
+        }
+    }
+
+    private var metadata: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(player.displayTitle)
+                .font(.largeTitle.bold())
+                .lineLimit(2)
+                .minimumScaleFactor(0.72)
+                .foregroundStyle(.primary)
+
+            if let artist = currentArtist {
+                Text(artist)
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            if let subtitle = currentSubtitle {
+                Text(subtitle)
+                    .font(.title3)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var progress: some View {
+        if player.isRadioPlayback {
+            HStack(spacing: 12) {
+                Circle()
+                    .fill(player.isRadioConnecting ? .orange : .green)
+                    .frame(width: 10, height: 10)
+                Text(player.radioStatusText)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+        } else {
+            VStack(spacing: 10) {
+                ProgressView(value: displayDuration > 0 ? min(displayTime / displayDuration, 1) : 0)
+                    .tint(accent)
+                    .frame(width: 620)
+
+                HStack {
+                    Text(formatDuration(Int(displayTime)))
+                    Spacer()
+                    Text(formatDuration(Int(displayDuration)))
+                }
+                .font(.callout.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .frame(width: 620)
+            }
+        }
+    }
+
+    private var currentArtist: String? {
+        if player.isRadioPlayback {
+            return player.radioDisplayArtist.isEmpty ? nil : player.radioDisplayArtist
+        }
+        return player.currentSong?.displayArtist ?? player.currentSong?.artist
+    }
+
+    private var currentSubtitle: String? {
+        if player.isRadioPlayback {
+            return player.radioDisplayStationName
+        }
+        return player.currentSong?.album
+    }
+
+    private func syncDisplayFromPlayer() {
+        displayTime = player.currentTime
+        displayDuration = player.duration
     }
 }
