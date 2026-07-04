@@ -234,7 +234,7 @@ private struct TVIdleNowPlayingView: View {
 
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            background
 
             HStack(alignment: .center, spacing: 86) {
                 artwork
@@ -263,6 +263,41 @@ private struct TVIdleNowPlayingView: View {
         .onMoveCommand { _ in onDismiss() }
         .onExitCommand(perform: onDismiss)
         .onPlayPauseCommand(perform: onDismiss)
+    }
+
+    @ViewBuilder
+    private var background: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+
+            if let station = player.currentRadioStation {
+                TVRadioStationArtworkView(item: station, size: 2100, metadata: player.currentRadioMetadata)
+                    .blur(radius: 72)
+                    .opacity(0.28)
+                    .saturation(1.15)
+                    .ignoresSafeArea()
+            } else {
+                CoverArtView(url: player.currentSong?.coverURL(900), size: 2100, cornerRadius: 0)
+                    .blur(radius: 72)
+                    .opacity(0.28)
+                    .saturation(1.15)
+                    .ignoresSafeArea()
+            }
+
+            LinearGradient(
+                colors: [
+                    .black.opacity(0.88),
+                    .black.opacity(0.62),
+                    .black.opacity(0.86)
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+            .ignoresSafeArea()
+
+            Color.black.opacity(0.24)
+                .ignoresSafeArea()
+        }
     }
 
     @ViewBuilder
@@ -313,9 +348,11 @@ private struct TVIdleNowPlayingView: View {
             }
         } else {
             VStack(spacing: 10) {
-                ProgressView(value: displayDuration > 0 ? min(displayTime / displayDuration, 1) : 0)
-                    .tint(accent)
-                    .frame(width: 620)
+                TVIdleProgressBar(
+                    progress: displayDuration > 0 ? min(max(displayTime / displayDuration, 0), 1) : 0,
+                    accent: accent
+                )
+                .frame(width: 620, height: 8)
 
                 HStack {
                     Text(formatDuration(Int(displayTime)))
@@ -346,5 +383,26 @@ private struct TVIdleNowPlayingView: View {
     private func syncDisplayFromPlayer() {
         displayTime = player.currentTime
         displayDuration = player.duration
+    }
+}
+
+private struct TVIdleProgressBar: View {
+    let progress: Double
+    let accent: Color
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(.white.opacity(0.18))
+
+                if progress > 0 {
+                    Capsule()
+                        .fill(accent)
+                        .frame(width: proxy.size.width * progress)
+                }
+            }
+        }
+        .accessibilityElement(children: .ignore)
     }
 }
