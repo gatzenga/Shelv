@@ -91,7 +91,7 @@ struct TVSongInfoView: View {
                 if let artist = Self.trimmedNonEmpty(displayedSong.displayArtist)
                     ?? Self.trimmedNonEmpty(displayedSong.artist) {
                     Text(artist)
-                        .font(.title3)
+                        .font(.body)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
@@ -296,13 +296,13 @@ private struct TVSongInfoDetailRow: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 28) {
             Text(row.title)
-                .font(.callout)
+                .font(.body)
                 .foregroundStyle(focused ? .black.opacity(0.68) : .secondary)
                 .lineLimit(1)
                 .frame(width: 210, alignment: .leading)
 
             Text(row.value)
-                .font(.title3)
+                .font(.body)
                 .foregroundStyle(focused ? .black : .primary)
                 .multilineTextAlignment(.trailing)
                 .lineLimit(row.prefersSingleLineValue ? 1 : 2)
