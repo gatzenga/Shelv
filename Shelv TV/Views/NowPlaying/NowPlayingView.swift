@@ -1,8 +1,9 @@
 import SwiftUI
 
-private enum SidePanel { case lyrics, queue }
+private enum SidePanel: Equatable { case lyrics, queue }
 
 struct NowPlayingView: View {
+    @Binding private var isSidePanelOpen: Bool
     @ObservedObject var player = AudioPlayerService.shared
     @ObservedObject private var library = LibraryStore.shared
     @ObservedObject private var radioStore = RadioStationStore.shared
@@ -20,6 +21,10 @@ struct NowPlayingView: View {
     @State private var displayDuration: Double = 0
     @State private var panel: SidePanel?
     @State private var showSleepTimer = false
+
+    init(isSidePanelOpen: Binding<Bool> = .constant(false)) {
+        _isSidePanelOpen = isSidePanelOpen
+    }
 
     var body: some View {
         NavigationStack {
@@ -54,6 +59,15 @@ struct NowPlayingView: View {
                     )
                 }
             }
+        }
+        .onAppear {
+            isSidePanelOpen = panel != nil
+        }
+        .onDisappear {
+            isSidePanelOpen = false
+        }
+        .onChange(of: panel) { _, panel in
+            isSidePanelOpen = panel != nil
         }
     }
 

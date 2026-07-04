@@ -21,6 +21,7 @@ struct MainTabView: View {
     )
     @State private var visibleShowRadio = MainTabView.initialRadioVisible
     @State private var showIdleNowPlaying = false
+    @State private var nowPlayingSidePanelOpen = false
     @State private var idleNowPlayingTask: Task<Void, Never>?
 
     private static var initialSelection: String {
@@ -105,6 +106,9 @@ struct MainTabView: View {
         .onChange(of: player.currentRadioStation?.id) { _, _ in
             updateIdleNowPlayingAvailability()
         }
+        .onChange(of: nowPlayingSidePanelOpen) { _, _ in
+            updateIdleNowPlayingAvailability()
+        }
         // Fremde Queue von einem anderen Gerät — auf tvOS als nativer Alert (zuverlässig
         // fokussierbar, im Gegensatz zu einem Custom-Top-Banner). Nie automatisch.
         .alert(String(localized: "queue_available_title"), isPresented: Binding(
@@ -132,7 +136,7 @@ struct MainTabView: View {
     private var tabView: some View {
         TabView(selection: $selection) {
             Tab(String(localized: "now_playing"), systemImage: "play.circle", value: Self.nowPlayingTab) {
-                NowPlayingView()
+                NowPlayingView(isSidePanelOpen: $nowPlayingSidePanelOpen)
             }
 
             Tab(String(localized: "discover"), systemImage: "sparkles", value: Self.discoverTab) {
@@ -179,6 +183,7 @@ struct MainTabView: View {
         selection == Self.nowPlayingTab
             && player.hasActivePlayback
             && player.isPlaying
+            && !nowPlayingSidePanelOpen
     }
 
     private func registerUserActivity() {
@@ -273,29 +278,29 @@ private struct TVIdleNowPlayingView: View {
             if let station = player.currentRadioStation {
                 TVRadioStationArtworkView(item: station, size: 2100, metadata: player.currentRadioMetadata)
                     .blur(radius: 72)
-                    .opacity(0.28)
+                    .opacity(0.46)
                     .saturation(1.15)
                     .ignoresSafeArea()
             } else {
                 CoverArtView(url: player.currentSong?.coverURL(900), size: 2100, cornerRadius: 0)
                     .blur(radius: 72)
-                    .opacity(0.28)
+                    .opacity(0.46)
                     .saturation(1.15)
                     .ignoresSafeArea()
             }
 
             LinearGradient(
                 colors: [
-                    .black.opacity(0.88),
-                    .black.opacity(0.62),
-                    .black.opacity(0.86)
+                    .black.opacity(0.72),
+                    .black.opacity(0.38),
+                    .black.opacity(0.70)
                 ],
                 startPoint: .leading,
                 endPoint: .trailing
             )
             .ignoresSafeArea()
 
-            Color.black.opacity(0.24)
+            Color.black.opacity(0.08)
                 .ignoresSafeArea()
         }
     }
