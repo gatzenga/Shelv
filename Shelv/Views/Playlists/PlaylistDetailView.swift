@@ -122,6 +122,9 @@ struct PlaylistDetailView: View {
                             isOffline: offlineMode.isOffline,
                             isFavorite: libraryStore.isSongStarred(song),
                             accentColor: accentColor,
+                            onPlay: {
+                                player.play(songs: songs, startIndex: songsIndex)
+                            },
                             onFavorite: {
                                 haptic(.medium)
                                 Task { await libraryStore.toggleStarSong(song) }

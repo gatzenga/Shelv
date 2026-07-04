@@ -81,6 +81,7 @@ struct InsightsView: View {
                                         title: song.title, subtitle: song.artist, plays: song.playCount ?? 0,
                                         nowPlayingSongId: song.id)
                                 }
+                                .songContextMenu(song)
                             }
                         }
                     }

@@ -446,15 +446,20 @@ struct DownloadedSongRow: View {
     let playbackList: [DownloadedSong]
     var startIndex: Int? = nil
 
+    @ObservedObject private var offlineMode = OfflineModeService.shared
+    @ObservedObject private var libraryStore = LibraryStore.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
+    @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
+    @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
+    @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
     private let player = AudioPlayerService.shared
+    @State private var songInfoSong: Song?
+    @State private var showAddToPlaylist = false
 
     var body: some View {
         Button {
-            let songs = playbackList.map { $0.asSong() }
-            let idx = startIndex ?? playbackList.firstIndex(where: { $0.songId == song.songId }) ?? 0
-            player.play(songs: songs, startIndex: idx)
+            play()
         } label: {
             HStack(spacing: 12) {
                 AlbumArtView(coverArtId: song.coverArtId, size: 100, cornerRadius: 6)
@@ -477,6 +482,82 @@ struct DownloadedSongRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            Button {
+                play()
+            } label: {
+                Label(String(localized: "play"), systemImage: "play.fill")
+            }
+
+            if !offlineMode.isOffline && showInstantMixActions {
+                Button {
+                    InstantMixService.playSongMix(for: song.asSong())
+                } label: {
+                    Label(String(localized: "instant_mix"), systemImage: "sparkles")
+                }
+            }
+
+            Divider()
+
+            Button {
+                player.addPlayNext(song.asSong())
+            } label: {
+                Label(String(localized: "play_next"), systemImage: "text.insert")
+            }
+
+            Button {
+                player.addToQueue(song.asSong())
+            } label: {
+                Label(String(localized: "add_to_queue"), systemImage: "text.badge.plus")
+            }
+
+            if !offlineMode.isOffline && (showFavoriteActions || showPlaylistActions) {
+                Divider()
+
+                if showFavoriteActions {
+                    Button {
+                        Task { await libraryStore.toggleStarSong(song.asSong()) }
+                    } label: {
+                        Label(
+                            libraryStore.starredSongs.contains(where: { $0.id == song.songId })
+                                ? String(localized: "unfavorite")
+                                : String(localized: "favorite"),
+                            systemImage: libraryStore.starredSongs.contains(where: { $0.id == song.songId })
+                                ? "heart.slash"
+                                : "heart"
+                        )
+                    }
+                }
+
+                if showPlaylistActions {
+                    Button {
+                        showAddToPlaylist = true
+                    } label: {
+                        Label(String(localized: "add_to_playlist"), systemImage: "music.note.list")
+                    }
+                }
+            }
+
+            Divider()
+
+            Button {
+                songInfoSong = song.asSong()
+            } label: {
+                Label(String(localized: "song_info_details"), systemImage: "info.circle")
+            }
+        }
+        .sheet(item: $songInfoSong) { song in
+            SongInfoSheetView(song: song, initialTab: .details)
+        }
+        .sheet(isPresented: $showAddToPlaylist) {
+            AddToPlaylistSheet(songIds: [song.songId])
+        }
+    }
+
+    private func play() {
+        let songs = playbackList.map { $0.asSong() }
+        let idx = startIndex ?? playbackList.firstIndex(where: { $0.songId == song.songId }) ?? 0
+        player.play(songs: songs, startIndex: idx)
     }
 
     private func formatDuration(_ seconds: Int) -> String {

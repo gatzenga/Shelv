@@ -37,7 +37,10 @@ struct AlbumDetailView: View {
         VStack(alignment: .leading, spacing: 16) {
             CoverArtView(url: album.coverURL(600), size: 300, cornerRadius: 12)
             VStack(alignment: .leading, spacing: 6) {
-                Text(album.name).font(.title3).bold().lineLimit(2)
+                Text(album.name)
+                    .font(.headline.weight(.semibold))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.82)
                     .fixedSize(horizontal: false, vertical: true)
                 artistLink
                 if let year = album.year {

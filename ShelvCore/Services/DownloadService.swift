@@ -231,7 +231,7 @@ actor DownloadService {
                 albumId: song.albumId ?? "",
                 albumTitle: song.album ?? "",
                 artistName: song.artist ?? "",
-                artistId: nil,
+                artistId: song.artistId,
                 title: song.title,
                 track: song.track,
                 duration: song.duration,
@@ -256,11 +256,20 @@ actor DownloadService {
                 if song.artist != nil { return song }
                 return Song(
                     id: song.id, title: song.title,
-                    artist: detail.artist, album: song.album ?? detail.name,
+                    artist: detail.artist, artistId: song.artistId,
+                    album: song.album ?? detail.name,
                     albumId: song.albumId ?? detail.id, track: song.track, discNumber: song.discNumber,
                     duration: song.duration, coverArt: song.coverArt ?? detail.coverArt,
                     year: song.year, genre: song.genre, playCount: song.playCount,
-                    starred: song.starred, suffix: song.suffix, bitRate: song.bitRate,
+                    starred: song.starred, contentType: song.contentType, suffix: song.suffix,
+                    fileSize: song.fileSize, bitRate: song.bitRate, bitDepth: song.bitDepth,
+                    samplingRate: song.samplingRate, channelCount: song.channelCount, bpm: song.bpm,
+                    comment: song.comment, musicBrainzId: song.musicBrainzId, isrc: song.isrc,
+                    genres: song.genres, artists: song.artists, displayArtist: song.displayArtist,
+                    albumArtists: song.albumArtists, displayAlbumArtist: song.displayAlbumArtist,
+                    contributors: song.contributors, displayComposer: song.displayComposer,
+                    moods: song.moods, explicitStatus: song.explicitStatus, works: song.works,
+                    movements: song.movements, groupings: song.groupings,
                     replayGain: song.replayGain
                 )
             }
@@ -688,6 +697,10 @@ actor DownloadService {
             track: job.track,
             disc: job.song.discNumber,
             duration: job.duration,
+            year: job.song.year,
+            genre: job.song.genre,
+            playCount: job.song.playCount,
+            explicitStatus: job.song.explicitStatus,
             bytes: bytes,
             coverArtId: job.coverArtId,
             artistCoverArtId: job.artistCoverArtId,
@@ -696,6 +709,14 @@ actor DownloadService {
             isFavorite: job.isFavorite,
             filePath: finalURL.path,
             fileExtension: actualExt,
+            contentType: job.song.contentType,
+            bitRate: job.song.bitRate,
+            bitDepth: job.song.bitDepth,
+            samplingRate: job.song.samplingRate,
+            channelCount: job.song.channelCount,
+            bpm: job.song.bpm,
+            replayGainTrackGain: job.song.replayGain?.trackGain,
+            replayGainAlbumGain: job.song.replayGain?.albumGain,
             addedAt: Date().timeIntervalSince1970
         )
         await DownloadDatabase.shared.upsert(record)

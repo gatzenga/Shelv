@@ -239,6 +239,7 @@ private struct SongContextMenuModifier: ViewModifier {
     @ObservedObject private var library = LibraryStore.shared
     @ObservedObject private var offlineMode = OfflineModeService.shared
     @State private var showAddToPlaylist = false
+    @State private var songInfoSong: Song?
 
     func body(content: Content) -> some View {
         content
@@ -267,8 +268,15 @@ private struct SongContextMenuModifier: ViewModifier {
                         Label(String(localized: "add_to_playlist"), systemImage: "text.badge.plus")
                     }
                 }
+                Divider()
+                Button { songInfoSong = song } label: {
+                    Label(String(localized: "song_info_details"), systemImage: "info.circle")
+                }
             }
             .addToPlaylistDialog(isPresented: $showAddToPlaylist, songIds: [song.id])
+            .fullScreenCover(item: $songInfoSong) { song in
+                TVSongInfoView(song: song, initialTab: .details)
+            }
     }
 }
 

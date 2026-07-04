@@ -54,9 +54,19 @@ struct PlayerBarView: View {
 
                     if let song = player.currentSong {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(song.title)
-                                .font(.body.bold())
-                                .lineLimit(1)
+                            Button {
+                                appState.togglePanel(.songInfo)
+                            } label: {
+                                Text(song.title)
+                                    .font(.body.bold())
+                                    .lineLimit(1)
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(appState.activePanel == .songInfo ? themeColor : .primary)
+                            .help(String(localized: "song_info"))
+                            .onHover { inside in
+                                if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                            }
                             HStack(spacing: 0) {
                                 if let id = song.artistId, let name = song.artist {
                                     Button(name) {

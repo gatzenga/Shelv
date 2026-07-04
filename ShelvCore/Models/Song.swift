@@ -5,6 +5,28 @@ nonisolated struct ReplayGain: Codable, Hashable, Sendable {
     let albumGain: Float?
     let trackPeak: Float?
     let albumPeak: Float?
+    let baseGain: Float?
+}
+
+nonisolated struct SongGenre: Codable, Hashable, Sendable {
+    let name: String
+}
+
+nonisolated struct SongContributor: Codable, Hashable, Sendable {
+    let role: String
+    let subRole: String?
+    let artist: Artist
+}
+
+nonisolated struct SongWork: Codable, Hashable, Sendable {
+    let name: String
+    let musicBrainzId: String?
+}
+
+nonisolated struct SongMovement: Codable, Hashable, Sendable {
+    let name: String
+    let number: Int?
+    let count: Int?
 }
 
 nonisolated struct Song: Identifiable, Codable, Hashable, Sendable {
@@ -24,7 +46,27 @@ nonisolated struct Song: Identifiable, Codable, Hashable, Sendable {
     var starred: Date?
     let contentType: String?
     let suffix: String?
+    let fileSize: Int64?
     let bitRate: Int?
+    let bitDepth: Int?
+    let samplingRate: Int?
+    let channelCount: Int?
+    let bpm: Int?
+    let comment: String?
+    let musicBrainzId: String?
+    let isrc: [String]?
+    let genres: [SongGenre]?
+    let artists: [Artist]?
+    let displayArtist: String?
+    let albumArtists: [Artist]?
+    let displayAlbumArtist: String?
+    let contributors: [SongContributor]?
+    let displayComposer: String?
+    let moods: [String]?
+    let explicitStatus: String?
+    let works: [SongWork]?
+    let movements: [SongMovement]?
+    let groupings: [String]?
     let replayGain: ReplayGain?
 
     var isStarred: Bool { starred != nil }
@@ -47,7 +89,7 @@ nonisolated struct Song: Identifiable, Codable, Hashable, Sendable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, title, artist, artistId, album, albumId, track, discNumber, duration, coverArt, year, genre, playCount, starred, contentType, suffix, bitRate, replayGain
+        case id, title, artist, artistId, album, albumId, track, discNumber, duration, coverArt, year, genre, playCount, starred, contentType, suffix, fileSize = "size", bitRate, bitDepth, samplingRate, channelCount, bpm, comment, musicBrainzId, isrc, genres, artists, displayArtist, albumArtists, displayAlbumArtist, contributors, displayComposer, moods, explicitStatus, works, movements, groupings, replayGain
     }
 
     init(
@@ -67,7 +109,27 @@ nonisolated struct Song: Identifiable, Codable, Hashable, Sendable {
         starred: Date? = nil,
         contentType: String? = nil,
         suffix: String? = nil,
+        fileSize: Int64? = nil,
         bitRate: Int? = nil,
+        bitDepth: Int? = nil,
+        samplingRate: Int? = nil,
+        channelCount: Int? = nil,
+        bpm: Int? = nil,
+        comment: String? = nil,
+        musicBrainzId: String? = nil,
+        isrc: [String]? = nil,
+        genres: [SongGenre]? = nil,
+        artists: [Artist]? = nil,
+        displayArtist: String? = nil,
+        albumArtists: [Artist]? = nil,
+        displayAlbumArtist: String? = nil,
+        contributors: [SongContributor]? = nil,
+        displayComposer: String? = nil,
+        moods: [String]? = nil,
+        explicitStatus: String? = nil,
+        works: [SongWork]? = nil,
+        movements: [SongMovement]? = nil,
+        groupings: [String]? = nil,
         replayGain: ReplayGain? = nil
     ) {
         self.id = id
@@ -86,7 +148,27 @@ nonisolated struct Song: Identifiable, Codable, Hashable, Sendable {
         self.starred = starred
         self.contentType = contentType
         self.suffix = suffix
+        self.fileSize = fileSize
         self.bitRate = bitRate
+        self.bitDepth = bitDepth
+        self.samplingRate = samplingRate
+        self.channelCount = channelCount
+        self.bpm = bpm
+        self.comment = comment
+        self.musicBrainzId = musicBrainzId
+        self.isrc = isrc
+        self.genres = genres
+        self.artists = artists
+        self.displayArtist = displayArtist
+        self.albumArtists = albumArtists
+        self.displayAlbumArtist = displayAlbumArtist
+        self.contributors = contributors
+        self.displayComposer = displayComposer
+        self.moods = moods
+        self.explicitStatus = explicitStatus
+        self.works = works
+        self.movements = movements
+        self.groupings = groupings
         self.replayGain = replayGain
     }
 
@@ -108,7 +190,27 @@ nonisolated struct Song: Identifiable, Codable, Hashable, Sendable {
         starred = FlexibleDate.decode(c, .starred)
         contentType = try c.decodeIfPresent(String.self, forKey: .contentType)
         suffix = try c.decodeIfPresent(String.self, forKey: .suffix)
+        fileSize = try c.decodeIfPresent(Int64.self, forKey: .fileSize)
         bitRate = try c.decodeIfPresent(Int.self, forKey: .bitRate)
+        bitDepth = try c.decodeIfPresent(Int.self, forKey: .bitDepth)
+        samplingRate = try c.decodeIfPresent(Int.self, forKey: .samplingRate)
+        channelCount = try c.decodeIfPresent(Int.self, forKey: .channelCount)
+        bpm = try c.decodeIfPresent(Int.self, forKey: .bpm)
+        comment = try c.decodeIfPresent(String.self, forKey: .comment)
+        musicBrainzId = try c.decodeIfPresent(String.self, forKey: .musicBrainzId)
+        isrc = try c.decodeIfPresent([String].self, forKey: .isrc)
+        genres = try c.decodeIfPresent([SongGenre].self, forKey: .genres)
+        artists = try c.decodeIfPresent([Artist].self, forKey: .artists)
+        displayArtist = try c.decodeIfPresent(String.self, forKey: .displayArtist)
+        albumArtists = try c.decodeIfPresent([Artist].self, forKey: .albumArtists)
+        displayAlbumArtist = try c.decodeIfPresent(String.self, forKey: .displayAlbumArtist)
+        contributors = try c.decodeIfPresent([SongContributor].self, forKey: .contributors)
+        displayComposer = try c.decodeIfPresent(String.self, forKey: .displayComposer)
+        moods = try c.decodeIfPresent([String].self, forKey: .moods)
+        explicitStatus = try c.decodeIfPresent(String.self, forKey: .explicitStatus)
+        works = try c.decodeIfPresent([SongWork].self, forKey: .works)
+        movements = try c.decodeIfPresent([SongMovement].self, forKey: .movements)
+        groupings = try c.decodeIfPresent([String].self, forKey: .groupings)
         replayGain = try c.decodeIfPresent(ReplayGain.self, forKey: .replayGain)
     }
 }

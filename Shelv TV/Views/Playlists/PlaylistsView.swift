@@ -201,7 +201,10 @@ struct PlaylistDetailView: View {
         VStack(alignment: .leading, spacing: 16) {
             CoverArtView(url: current.coverURL(600), size: 300, cornerRadius: 12)
             VStack(alignment: .leading, spacing: 6) {
-                Text(displayName).font(.title3).bold().lineLimit(2)
+                Text(displayName)
+                    .font(.headline.weight(.semibold))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.82)
                     .fixedSize(horizontal: false, vertical: true)
                 if let comment = current.comment, !comment.isEmpty {
                     Text(comment).font(.callout).foregroundStyle(.secondary).lineLimit(2)

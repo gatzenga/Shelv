@@ -415,6 +415,9 @@ struct AlbumDetailView: View {
             isOffline: offlineMode.isOffline,
             isFavorite: libraryStore.isSongStarred(song),
             accentColor: accentColor,
+            onPlay: {
+                player.play(songs: allSongs, startIndex: startIndex)
+            },
             onFavorite: {
                 haptic(.medium)
                 Task { await libraryStore.toggleStarSong(song) }

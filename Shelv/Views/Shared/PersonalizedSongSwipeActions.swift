@@ -5,11 +5,13 @@ struct PersonalizedSongSwipeActionsModifier: ViewModifier {
     let isOffline: Bool
     let isFavorite: Bool
     let accentColor: Color
+    let onPlay: () -> Void
     let onFavorite: () -> Void
     let onAddToPlaylist: () -> Void
     let onPlayNext: () -> Void
     let onAddToQueue: () -> Void
 
+    @State private var songInfoSong: Song?
     @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
     @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
     @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
@@ -21,6 +23,12 @@ struct PersonalizedSongSwipeActionsModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            .contextMenu {
+                songContextMenuItems
+            }
+            .sheet(item: $songInfoSong) { song in
+                SongInfoSheetView(song: song, initialTab: .details)
+            }
             .swipeActions(edge: .leading, allowsFullSwipe: false) {
                 swipeButton(for: .leftPrimary)
                 swipeButton(for: .leftSecondary)
@@ -30,6 +38,68 @@ struct PersonalizedSongSwipeActionsModifier: ViewModifier {
                 swipeButton(for: .rightSecondary)
                 swipeButton(for: .rightTertiary)
             }
+    }
+
+    @ViewBuilder
+    private var songContextMenuItems: some View {
+        Button {
+            onPlay()
+        } label: {
+            Label(String(localized: "play"), systemImage: "play.fill")
+        }
+
+        if !isOffline && showInstantMixActions {
+            Button {
+                InstantMixService.playSongMix(for: song)
+            } label: {
+                Label(String(localized: "instant_mix"), systemImage: "sparkles")
+            }
+        }
+
+        Divider()
+
+        Button {
+            onPlayNext()
+        } label: {
+            Label(String(localized: "play_next"), systemImage: "text.insert")
+        }
+
+        Button {
+            onAddToQueue()
+        } label: {
+            Label(String(localized: "add_to_queue"), systemImage: "text.badge.plus")
+        }
+
+        if !isOffline && (showFavoriteActions || showPlaylistActions) {
+            Divider()
+
+            if showFavoriteActions {
+                Button {
+                    onFavorite()
+                } label: {
+                    Label(
+                        isFavorite ? String(localized: "unfavorite") : String(localized: "favorite"),
+                        systemImage: isFavorite ? "heart.slash" : "heart"
+                    )
+                }
+            }
+
+            if showPlaylistActions {
+                Button {
+                    onAddToPlaylist()
+                } label: {
+                    Label(String(localized: "add_to_playlist"), systemImage: "music.note.list")
+                }
+            }
+        }
+
+        Divider()
+
+        Button {
+            songInfoSong = song
+        } label: {
+            Label(String(localized: "song_info_details"), systemImage: "info.circle")
+        }
     }
 
     @ViewBuilder
@@ -120,6 +190,7 @@ extension View {
         isOffline: Bool,
         isFavorite: Bool,
         accentColor: Color,
+        onPlay: @escaping () -> Void,
         onFavorite: @escaping () -> Void,
         onAddToPlaylist: @escaping () -> Void,
         onPlayNext: @escaping () -> Void,
@@ -131,6 +202,7 @@ extension View {
                 isOffline: isOffline,
                 isFavorite: isFavorite,
                 accentColor: accentColor,
+                onPlay: onPlay,
                 onFavorite: onFavorite,
                 onAddToPlaylist: onAddToPlaylist,
                 onPlayNext: onPlayNext,

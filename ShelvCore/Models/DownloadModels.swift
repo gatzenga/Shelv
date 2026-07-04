@@ -30,12 +30,24 @@ nonisolated struct DownloadedSong: Identifiable, Hashable {
     let track: Int?
     let disc: Int?
     let duration: Int?
+    let year: Int?
+    let genre: String?
+    let playCount: Int?
+    let explicitStatus: String?
     let bytes: Int64
     let coverArtId: String?
     let artistCoverArtId: String?
     let isFavorite: Bool
     let filePath: String
     let fileExtension: String
+    let contentType: String?
+    let bitRate: Int?
+    let bitDepth: Int?
+    let samplingRate: Int?
+    let channelCount: Int?
+    let bpm: Int?
+    let replayGainTrackGain: Float?
+    let replayGainAlbumGain: Float?
     let addedAt: Date
 
     var id: String { "\(serverId)::\(songId)" }
@@ -46,7 +58,11 @@ nonisolated struct DownloadedSong: Identifiable, Hashable {
 
     /// Konvertiert zurück in ein Subsonic Song-Modell für Player/Queue.
     func asSong() -> Song {
-        Song(
+        let albumArtist = Self.trimmedNonEmpty(albumArtistName)
+        let genreValue = Self.trimmedNonEmpty(genre)
+        let estimatedBitRate = Self.estimatedBitRateKbps(bytes: bytes, duration: duration)
+        let replayGain = Self.replayGain(trackGain: replayGainTrackGain, albumGain: replayGainAlbumGain)
+        return Song(
             id: songId,
             title: title,
             artist: artistName,
@@ -57,13 +73,48 @@ nonisolated struct DownloadedSong: Identifiable, Hashable {
             discNumber: disc,
             duration: duration,
             coverArt: coverArtId,
-            year: nil,
-            genre: nil,
-            playCount: nil,
+            year: year,
+            genre: genreValue,
+            playCount: playCount,
             starred: isFavorite ? Date() : nil,
+            contentType: contentType,
             suffix: fileExtension,
-            bitRate: nil,
-            replayGain: nil
+            fileSize: bytes > 0 ? bytes : nil,
+            bitRate: bitRate ?? estimatedBitRate,
+            bitDepth: bitDepth,
+            samplingRate: samplingRate,
+            channelCount: channelCount,
+            bpm: bpm,
+            genres: genreValue.map { [SongGenre(name: $0)] },
+            albumArtists: albumArtist.map {
+                [Artist(id: "album-artist:\($0)", name: $0, coverArt: albumCoverArtId)]
+            },
+            displayAlbumArtist: albumArtist,
+            explicitStatus: Self.trimmedNonEmpty(explicitStatus),
+            replayGain: replayGain
+        )
+    }
+
+    private static func estimatedBitRateKbps(bytes: Int64, duration: Int?) -> Int? {
+        guard bytes > 0, let duration, duration > 0 else { return nil }
+        return max(1, Int((Double(bytes) * 8.0 / Double(duration) / 1_000.0).rounded()))
+    }
+
+    private static func trimmedNonEmpty(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty
+        else { return nil }
+        return trimmed
+    }
+
+    private static func replayGain(trackGain: Float?, albumGain: Float?) -> ReplayGain? {
+        guard trackGain != nil || albumGain != nil else { return nil }
+        return ReplayGain(
+            trackGain: trackGain,
+            albumGain: albumGain,
+            trackPeak: nil,
+            albumPeak: nil,
+            baseGain: nil
         )
     }
 }

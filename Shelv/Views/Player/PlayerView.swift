@@ -111,6 +111,7 @@ struct PlayerView: View {
     @State private var showQueue: Bool = false
     @State private var showAddToPlaylist = false
     @State private var showLyricsSheet: Bool = false
+    @State private var songInfoSong: Song?
     @State private var showSleepTimer = false
     @State private var artistDestination: Artist?
     @State private var isResolvingArtist = false
@@ -180,8 +181,20 @@ struct PlayerView: View {
     @ViewBuilder
     private var trackInfo: some View {
         VStack(spacing: isPad ? 6 : 8) {
-            MarqueeText(text: player.displayTitle,
-                        uiFont: .preferred(isPad ? .title1 : .title2, bold: true))
+            if let song = player.currentSong {
+                Button {
+                    songInfoSong = song
+                } label: {
+                    MarqueeText(text: player.displayTitle,
+                                uiFont: .preferred(isPad ? .title1 : .title2, bold: true))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(String(localized: "song_info"))
+                .accessibilityHint(String(localized: "song_info_open_accessibility"))
+            } else {
+                MarqueeText(text: player.displayTitle,
+                            uiFont: .preferred(isPad ? .title1 : .title2, bold: true))
+            }
 
             if let artistName = player.currentSong?.artist {
                 Button { resolveArtist(artistName) } label: {
@@ -522,6 +535,13 @@ struct PlayerView: View {
                 .onDisappear { artistResolveTask?.cancel(); artistResolveTask = nil }
                 .sheet(isPresented: $showQueue) {
                     QueueView()
+                        .presentationSizing(.page)
+                        .presentationCornerRadius(24)
+                        .presentationDragIndicator(.visible)
+                        .tint(accentColor)
+                }
+                .sheet(item: $songInfoSong) { song in
+                    SongInfoSheetView(song: song)
                         .presentationSizing(.page)
                         .presentationCornerRadius(24)
                         .presentationDragIndicator(.visible)

@@ -14,6 +14,10 @@ struct DownloadRecord: Codable, FetchableRecord, PersistableRecord {
     var track: Int?
     var disc: Int?
     var duration: Int?
+    var year: Int?
+    var genre: String?
+    var playCount: Int?
+    var explicitStatus: String?
     var bytes: Int64
     var coverArtId: String?
     var artistCoverArtId: String?
@@ -22,6 +26,14 @@ struct DownloadRecord: Codable, FetchableRecord, PersistableRecord {
     var isFavorite: Bool
     var filePath: String
     var fileExtension: String
+    var contentType: String?
+    var bitRate: Int?
+    var bitDepth: Int?
+    var samplingRate: Int?
+    var channelCount: Int?
+    var bpm: Int?
+    var replayGainTrackGain: Float?
+    var replayGainAlbumGain: Float?
     var addedAt: Double
 
     static let databaseTableName = "downloads"
@@ -40,12 +52,24 @@ struct DownloadRecord: Codable, FetchableRecord, PersistableRecord {
             track: track,
             disc: disc,
             duration: duration,
+            year: year,
+            genre: genre,
+            playCount: playCount,
+            explicitStatus: explicitStatus,
             bytes: bytes,
             coverArtId: coverArtId,
             artistCoverArtId: artistCoverArtId,
             isFavorite: isFavorite,
             filePath: filePath,
             fileExtension: fileExtension,
+            contentType: contentType,
+            bitRate: bitRate,
+            bitDepth: bitDepth,
+            samplingRate: samplingRate,
+            channelCount: channelCount,
+            bpm: bpm,
+            replayGainTrackGain: replayGainTrackGain,
+            replayGainAlbumGain: replayGainAlbumGain,
             addedAt: Date(timeIntervalSince1970: addedAt)
         )
     }
@@ -185,6 +209,47 @@ actor DownloadDatabase {
                 t.column("playlist_id", .text).primaryKey()
                 t.column("playlist_name", .text).notNull()
                 t.column("downloaded_at", .integer).notNull()
+            }
+        }
+        m.registerMigration("v5_add_song_detail_metadata") { db in
+            let cols = try db.columns(in: "downloads").map(\.name)
+            try db.alter(table: "downloads") { t in
+                if !cols.contains("year") {
+                    t.add(column: "year", .integer)
+                }
+                if !cols.contains("genre") {
+                    t.add(column: "genre", .text)
+                }
+                if !cols.contains("playCount") {
+                    t.add(column: "playCount", .integer)
+                }
+                if !cols.contains("explicitStatus") {
+                    t.add(column: "explicitStatus", .text)
+                }
+                if !cols.contains("contentType") {
+                    t.add(column: "contentType", .text)
+                }
+                if !cols.contains("bitRate") {
+                    t.add(column: "bitRate", .integer)
+                }
+                if !cols.contains("bitDepth") {
+                    t.add(column: "bitDepth", .integer)
+                }
+                if !cols.contains("samplingRate") {
+                    t.add(column: "samplingRate", .integer)
+                }
+                if !cols.contains("channelCount") {
+                    t.add(column: "channelCount", .integer)
+                }
+                if !cols.contains("bpm") {
+                    t.add(column: "bpm", .integer)
+                }
+                if !cols.contains("replayGainTrackGain") {
+                    t.add(column: "replayGainTrackGain", .double)
+                }
+                if !cols.contains("replayGainAlbumGain") {
+                    t.add(column: "replayGainAlbumGain", .double)
+                }
             }
         }
         try m.migrate(p)

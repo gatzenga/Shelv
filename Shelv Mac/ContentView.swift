@@ -43,6 +43,7 @@ struct ToastView: View {
 
 struct MainWindowView: View {
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var serverStore: ServerStore
     @EnvironmentObject var lyricsStore: LyricsStore
     @ObservedObject var libraryStore = LibraryViewModel.shared
     @ObservedObject var offlineMode = OfflineModeService.shared
@@ -77,7 +78,7 @@ struct MainWindowView: View {
                     }
                     .environmentObject(libraryStore)
                 }
-                .onChange(of: appState.serverStore.activeServerID) { _, _ in
+                .onChange(of: serverStore.activeServerID) { _, _ in
                     appState.player.stop()
                     QueueSyncService.shared.handleServerChange()
                     libraryStore.reset()
@@ -165,6 +166,8 @@ struct MainWindowView: View {
                 .environmentObject(lyricsStore)
         case .queue:
             QueuePopover()
+        case .songInfo:
+            SongInfoPanel()
         case .none:
             EmptyView()
         }
@@ -191,5 +194,6 @@ struct MainWindowView: View {
 #Preview {
     ContentView()
         .environmentObject(AppState.shared)
+        .environmentObject(AppState.shared.serverStore)
         .frame(width: 1200, height: 760)
 }

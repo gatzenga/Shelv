@@ -250,47 +250,14 @@ struct SearchView: View {
                                         .contentShape(Rectangle())
                                     }
                                     .buttonStyle(.plain)
-                                    .contextMenu {
-                                        Button {
-                                            player.playSong(song)
-                                        } label: { Label(String(localized: "play"), systemImage: "play.fill") }
-                                        Button {
-                                            player.addPlayNext(song)
-                                            currentToast = ShelveToast(message: String(localized: "plays_next"))
-                                        } label: { Label(String(localized: "play_next"), systemImage: "text.insert") }
-                                        Button {
-                                            player.addToQueue(song)
-                                            currentToast = ShelveToast(message: String(localized: "added_to_queue"))
-                                        } label: { Label(String(localized: "add_to_queue"), systemImage: "text.badge.plus") }
-                                        if !offlineMode.isOffline && (showFavoriteActions || showPlaylistActions) {
-                                            Divider()
-                                            if showFavoriteActions {
-                                                Button {
-                                                    haptic(.medium); Task { await libraryStore.toggleStarSong(song) }
-                                                } label: {
-                                                    Label(
-                                                        libraryStore.isSongStarred(song)
-                                                            ? String(localized: "unfavorite")
-                                                            : String(localized: "favorite"),
-                                                        systemImage: libraryStore.isSongStarred(song) ? "heart.slash" : "heart"
-                                                    )
-                                                }
-                                            }
-                                            if showPlaylistActions {
-                                                Button {
-                                                    playlistSongIds = [song.id]
-                                                    showAddToPlaylist = true
-                                                } label: {
-                                                    Label(String(localized: "add_to_playlist"), systemImage: "music.note.list")
-                                                }
-                                            }
-                                        }
-                                    }
                                     .personalizedSongSwipeActions(
                                         song: song,
                                         isOffline: offlineMode.isOffline,
                                         isFavorite: libraryStore.isSongStarred(song),
                                         accentColor: accentColor,
+                                        onPlay: {
+                                            player.playSong(song)
+                                        },
                                         onFavorite: {
                                             haptic(.medium)
                                             Task { await libraryStore.toggleStarSong(song) }
@@ -373,6 +340,9 @@ struct SearchView: View {
                                         isOffline: offlineMode.isOffline,
                                         isFavorite: libraryStore.isSongStarred(song),
                                         accentColor: accentColor,
+                                        onPlay: {
+                                            playLyricsResult(item)
+                                        },
                                         onFavorite: {
                                             haptic(.medium)
                                             Task { await libraryStore.toggleStarSong(song) }
@@ -511,6 +481,9 @@ struct SearchView: View {
                                         isOffline: offlineMode.isOffline,
                                         isFavorite: true,
                                         accentColor: accentColor,
+                                        onPlay: {
+                                            player.playSong(song)
+                                        },
                                         onFavorite: {
                                             haptic(.medium)
                                             Task { await libraryStore.toggleStarSong(song) }

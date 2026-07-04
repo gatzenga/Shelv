@@ -68,7 +68,10 @@ struct ArtistDetailView: View {
     private var header: some View {
         VStack(spacing: 18) {
             CoverArtView(url: artist.coverURL(600), size: 260, isCircle: true)
-            Text(artist.name).font(.largeTitle).bold()
+            Text(artist.name)
+                .font(.title2.weight(.semibold))
+                .lineLimit(2)
+                .minimumScaleFactor(0.82)
             Text("\(albums.count) \(String(localized: "albums"))")
                 .font(.callout).foregroundStyle(.secondary)
             HStack(spacing: 20) {
