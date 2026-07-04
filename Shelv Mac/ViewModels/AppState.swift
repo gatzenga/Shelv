@@ -6,6 +6,7 @@ import Combine
 enum SidePanel {
     case lyrics
     case queue
+    case songInfo
 }
 
 @MainActor
@@ -41,14 +42,26 @@ class AppState: ObservableObject {
     // MARK: - Server Management
 
     /// Testet die Verbindung und fügt den Server zur Liste hinzu.
-    func addServer(name: String, serverURL: String, username: String, password: String) async -> Bool {
+    func addServer(
+        name: String,
+        serverURL: String,
+        username: String,
+        password: String,
+        secondaryServerURL: String? = nil
+    ) async -> Bool {
         let normalizedURL = serverURL.hasPrefix("http://") || serverURL.hasPrefix("https://")
             ? serverURL : "https://" + serverURL
+        let trimmedSecondary = secondaryServerURL?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let config = ServerConfig(serverURL: normalizedURL, username: username, password: password)
         api.setConfig(config)
         do {
             try await api.ping()
-            var server = SubsonicServer(name: name, baseURL: normalizedURL, username: username)
+            var server = SubsonicServer(
+                name: name,
+                baseURL: normalizedURL,
+                username: username,
+                secondaryBaseURL: trimmedSecondary.isEmpty ? nil : trimmedSecondary
+            )
             server.remoteUserId = try await api.authLogin()
             serverStore.add(server: server, password: password)
             isLoggedIn = true

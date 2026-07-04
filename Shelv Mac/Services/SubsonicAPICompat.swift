@@ -43,7 +43,7 @@ extension SubsonicAPIService {
 
     var currentConfig: ServerConfig? {
         guard let server = activeServer, let password = activePassword else { return nil }
-        return ServerConfig(serverURL: server.baseURL, username: server.username, password: password)
+        return ServerConfig(serverURL: server.activeBaseURL, username: server.username, password: password)
     }
 
     /// auth/login mit den aktiven Credentials (Navidrome-User-ID für stableId).

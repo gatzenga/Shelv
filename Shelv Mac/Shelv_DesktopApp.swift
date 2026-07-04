@@ -47,6 +47,7 @@ struct Shelv_DesktopApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(appState)
+                .environmentObject(appState.serverStore)
                 .environmentObject(LyricsStore.shared)
                 .environmentObject(CloudKitSyncService.shared.status)
                 .environmentObject(RecapStore.shared)
@@ -71,7 +72,7 @@ struct Shelv_DesktopApp: App {
                     let api = SubsonicAPIService.shared
                     for server in appState.serverStore.servers where server.remoteUserId == nil {
                         guard let pw = appState.serverStore.password(for: server) else { continue }
-                        let cfg = ServerConfig(serverURL: server.baseURL, username: server.username, password: pw)
+                        let cfg = ServerConfig(serverURL: server.activeBaseURL, username: server.username, password: pw)
                         api.setConfig(cfg)
                         do {
                             let uid = try await api.authLogin()
@@ -172,6 +173,7 @@ struct Shelv_DesktopApp: App {
         Window(String(localized: "insights"), id: "insights") {
             InsightsView()
                 .environmentObject(appState)
+                .environmentObject(appState.serverStore)
                 .tint(AppTheme.color(for: themeColorName))
                 .environment(\.themeColor, AppTheme.color(for: themeColorName))
         }
@@ -180,6 +182,7 @@ struct Shelv_DesktopApp: App {
         Window(String(localized: "recap"), id: "recap") {
             RecapView()
                 .environmentObject(appState)
+                .environmentObject(appState.serverStore)
                 .environmentObject(RecapStore.shared)
                 .environmentObject(LibraryViewModel.shared)
                 .tint(AppTheme.color(for: themeColorName))
@@ -191,6 +194,7 @@ struct Shelv_DesktopApp: App {
         Window(String(localized: "manage_servers"), id: "server-management") {
             ServerManagementView()
                 .environmentObject(appState)
+                .environmentObject(appState.serverStore)
         }
         .windowResizability(.contentSize)
         .defaultSize(width: 660, height: 660)
@@ -198,6 +202,7 @@ struct Shelv_DesktopApp: App {
         Settings {
             SettingsView()
                 .environmentObject(appState)
+                .environmentObject(appState.serverStore)
                 .environmentObject(LyricsStore.shared)
                 .tint(AppTheme.color(for: themeColorName))
                 .environment(\.themeColor, AppTheme.color(for: themeColorName))

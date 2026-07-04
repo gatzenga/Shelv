@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ServerManagementView: View {
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var serverStore: ServerStore
 
     @State private var serverInfo: ServerInfo?
     @State private var scanStatus: ScanStatus?
@@ -21,7 +22,7 @@ struct ServerManagementView: View {
             // MARK: Server Info
             Section(String(localized: "connected_server")) {
                 LabeledContent("URL") {
-                    Text(appState.serverDisplayName)
+                    Text(serverStore.activeServer?.activeBaseURL ?? appState.serverDisplayName)
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
                 }
@@ -175,4 +176,5 @@ struct ServerManagementView: View {
 #Preview {
     ServerManagementView()
         .environmentObject(AppState.shared)
+        .environmentObject(AppState.shared.serverStore)
 }

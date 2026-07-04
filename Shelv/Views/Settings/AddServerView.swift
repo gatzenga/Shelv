@@ -5,11 +5,14 @@ struct AddServerView: View {
     @Environment(\.dismiss) var dismiss
     @AppStorage("themeColor") private var themeColorName = "violet"
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
+    private let serverURLPlaceholder = "https://music.example.com"
 
     var editingServer: SubsonicServer? = nil
 
     @State private var name = ""
     @State private var baseURL = ""
+    @State private var useSecondaryURL = false
+    @State private var secondaryBaseURL = ""
     @State private var username = ""
     @State private var password = ""
     @State private var showPassword = false
@@ -19,10 +22,18 @@ struct AddServerView: View {
     @State private var testSuccess = false
     @FocusState private var focusedField: Field?
 
-    private enum Field { case name, url, username, password }
+    private enum Field { case name, url, secondaryURL, username, password }
 
     private var isEditing: Bool { editingServer != nil }
-    private var canSave: Bool { !baseURL.trimmingCharacters(in: .whitespaces).isEmpty && !username.isEmpty && !password.isEmpty }
+    private var trimmedSecondaryBaseURL: String {
+        secondaryBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    private var canSave: Bool {
+        !baseURL.trimmingCharacters(in: .whitespaces).isEmpty
+        && !username.isEmpty
+        && !password.isEmpty
+        && (!useSecondaryURL || !trimmedSecondaryBaseURL.isEmpty)
+    }
 
     var body: some View {
         NavigationStack {
@@ -32,11 +43,30 @@ struct AddServerView: View {
                         .focused($focusedField, equals: .name)
                         .autocorrectionDisabled()
 
-                    TextField(String(localized: "url_eg_httpsmusicexamplecom"), text: $baseURL)
+                    TextField(
+                        String(localized: "url_eg_httpsmusicexamplecom"),
+                        text: $baseURL,
+                        prompt: Text(serverURLPlaceholder).foregroundStyle(.secondary)
+                    )
                         .focused($focusedField, equals: .url)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
                         .keyboardType(.URL)
+
+                    Toggle(String(localized: "use_secondary_url"), isOn: $useSecondaryURL)
+                        .tint(accentColor)
+
+                    if useSecondaryURL {
+                        TextField(
+                            String(localized: "secondary_url"),
+                            text: $secondaryBaseURL,
+                            prompt: Text(serverURLPlaceholder).foregroundStyle(.secondary)
+                        )
+                            .focused($focusedField, equals: .secondaryURL)
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                            .keyboardType(.URL)
+                    }
                 }
 
                 Section(String(localized: "account")) {
@@ -117,6 +147,8 @@ struct AddServerView: View {
                 if let server = editingServer {
                     name = server.name
                     baseURL = server.baseURL
+                    useSecondaryURL = server.hasSecondaryURL
+                    secondaryBaseURL = server.secondaryURL ?? ""
                     username = server.username
                     password = serverStore.password(for: server) ?? ""
                 }
@@ -152,11 +184,20 @@ struct AddServerView: View {
             var updated = existing
             updated.name = name
             updated.baseURL = baseURL
+            updated.secondaryBaseURL = useSecondaryURL ? trimmedSecondaryBaseURL : nil
+            if !useSecondaryURL {
+                updated.activeURLSlot = .primary
+            }
             updated.username = username
             serverStore.update(server: updated, password: password.isEmpty ? nil : password)
             dismiss()
         } else {
-            let tempServer = SubsonicServer(name: name, baseURL: baseURL, username: username)
+            let tempServer = SubsonicServer(
+                name: name,
+                baseURL: baseURL,
+                username: username,
+                secondaryBaseURL: useSecondaryURL ? trimmedSecondaryBaseURL : nil
+            )
             do {
                 let uid = try await SubsonicAPIService.shared.authLogin(server: tempServer, password: password)
                 var server = tempServer

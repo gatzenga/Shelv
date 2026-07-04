@@ -445,7 +445,7 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
 
     private func buildURL(path: String, extra: [URLQueryItem] = []) throws -> URL {
         let creds = try resolveCredentials()
-        var base = creds.server.baseURL
+        var base = creds.server.activeBaseURL
         if base.hasSuffix("/") { base.removeLast() }
         guard var comps = URLComponents(string: "\(base)/rest/\(path)") else {
             throw SubsonicAPIError.invalidURL
@@ -508,7 +508,7 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
     }
 
     nonisolated private func buildURL(for server: SubsonicServer, password: String, path: String, extra: [URLQueryItem] = []) throws -> URL {
-        var base = server.baseURL
+        var base = server.activeBaseURL
         if base.hasSuffix("/") { base.removeLast() }
         guard var comps = URLComponents(string: "\(base)/rest/\(path)") else {
             throw SubsonicAPIError.invalidURL
@@ -861,7 +861,7 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
     }
 
     func authLogin(server: SubsonicServer, password: String) async throws -> String {
-        var base = server.baseURL
+        var base = server.activeBaseURL
         if base.hasSuffix("/") { base.removeLast() }
         guard let url = URL(string: "\(base)/auth/login") else { throw SubsonicAPIError.invalidURL }
         var request = URLRequest(url: url)

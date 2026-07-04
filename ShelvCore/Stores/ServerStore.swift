@@ -71,24 +71,52 @@ class ServerStore: ObservableObject {
     }
 
     func add(server: SubsonicServer, password: String) {
+        var server = server
+        server.sanitizeURLSlots()
         KeychainService.save(password: password, for: server.id)
-        servers.append(server)
+        servers = servers + [server]
         save()
         if servers.count == 1 { activate(server: server) }
     }
 
     func update(server: SubsonicServer, password: String?) {
         if let idx = servers.firstIndex(where: { $0.id == server.id }) {
-            servers[idx] = server
+            var updated = server
+            updated.sanitizeURLSlots()
+            var updatedServers = servers
+            updatedServers[idx] = updated
+            servers = updatedServers
             if let pw = password { KeychainService.save(password: pw, for: server.id) }
             save()
-            if activeServerID == server.id { applyToAPIService(server: server) }
+            if activeServerID == server.id { applyToAPIService(server: updated) }
         }
+    }
+
+    func setURLSlot(for serverID: UUID, slot: ServerURLSlot) {
+        guard let idx = servers.firstIndex(where: { $0.id == serverID }) else { return }
+        if slot == .secondary && !servers[idx].hasSecondaryURL { return }
+
+        var updated = servers[idx]
+        updated.activeURLSlot = slot
+        updated.sanitizeURLSlots()
+        var updatedServers = servers
+        updatedServers[idx] = updated
+        servers = updatedServers
+        save()
+
+        if activeServerID == serverID {
+            applyToAPIService(server: updated)
+        }
+    }
+
+    func toggleURLSlot(for server: SubsonicServer) {
+        let target: ServerURLSlot = server.isUsingSecondaryURL ? .primary : .secondary
+        setURLSlot(for: server.id, slot: target)
     }
 
     func delete(server: SubsonicServer) {
         KeychainService.delete(for: server.id)
-        servers.removeAll { $0.id == server.id }
+        servers = servers.filter { $0.id != server.id }
         save()
         if activeServerID == server.id {
             activateStoredServer()
@@ -174,7 +202,11 @@ class ServerStore: ObservableObject {
         if let data = UserDefaults.standard.data(forKey: saveKey),
            let decoded = try? JSONDecoder().decode([SubsonicServer].self, from: data) {
             // Etwaige persistierte Demo-Server immer verwerfen (auch im Release).
-            servers = decoded.filter { $0.baseURL != demoBaseURL }
+            servers = decoded.filter { $0.baseURL != demoBaseURL }.map {
+                var server = $0
+                server.sanitizeURLSlots()
+                return server
+            }
         }
         #if DEBUG
         // Frischen Demo-Server rein in-memory anhängen — nur in Debug-Builds.
