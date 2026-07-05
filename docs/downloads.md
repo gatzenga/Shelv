@@ -28,14 +28,15 @@ In Offline Mode, the Playlists tab shows **only** playlists that have been downl
 
 When the local download index is reloaded, Shelv removes a playlist's offline marker only if none of the playlist's saved songs are still present locally. If a playlist is only partially downloaded, the marker is kept and the UI can offer downloading the missing songs.
 
-### Bulk download
+### Download Everything
 
-Settings → Downloads → **Bulk Download** queues your entire library for download in one step. Shelv prioritises which songs to download first based on what you actually listen to:
+Settings → Downloads → **Download Everything** queues your entire library for download in one step. Shelv prioritises which songs to download first based on what you actually listen to:
 
 1. Albums you play most frequently
 2. Albums you played most recently
-3. Starred / favourited items
-4. Everything else, alphabetically
+3. Starred / favourited items, when Favorites are enabled
+4. Recap playlists, when Recap is enabled and Recap playlists exist
+5. Everything else, alphabetically by artist → album → track
 
 A configurable storage limit (default: 10 GB) acts as a ceiling. Once the limit is reached, Shelv stops queuing new songs — already-queued downloads finish normally.
 
@@ -62,7 +63,7 @@ Exit Offline Mode the same way to reconnect to the server and resume normal stre
 
 ## Transcoding
 
-By default, Shelv requests audio from your Navidrome server in its original format (`raw`). If your server or connection can't handle lossless files well, you can enable transcoding in **Settings → Transcoding**.
+By default, Shelv requests audio from your Navidrome server in its original format (`raw`). If your server or connection can't handle lossless files well, you can enable transcoding in **Settings → Playback → Transcoding**. The Transcoding settings link appears after the main Transcoding toggle is enabled.
 
 Shelv applies separate policies for three situations:
 
@@ -73,7 +74,7 @@ Shelv applies separate policies for three situations:
 | **Downloads** | Format and bitrate when saving songs to your device |
 
 For each situation you can choose:
-- **Format** — `raw` (original file, no re-encoding), `mp3`, or `opus`
+- **Format** — `raw` (original file, no re-encoding), `opus`, or `mp3`
 - **Bitrate** — the target bitrate for the chosen format (only relevant if the format is not `raw`)
 
 Setting the download format to something other than `raw` is useful if you want to save storage — a 192 kbps MP3 takes significantly less space than a lossless FLAC file.
@@ -84,10 +85,11 @@ Transcoding requires your Navidrome server to support it. If the server doesn't 
 
 ## Storage management
 
-The Downloads tab shows:
-- Total number of downloaded songs
+The Downloads tab shows downloaded albums, artists, playlists, and songs. Settings → Downloads shows storage stats:
+
 - Total storage used by downloads
-- A breakdown by artist and by album
+- Free space on the device
+- Downloaded song, album, and artist counts
 
 Individual albums and artists can be deleted from the Downloads tab or from their detail pages. To clear all downloads at once, use **Settings → Downloads → Delete All Downloads**.
 
@@ -99,8 +101,9 @@ Individual albums and artists can be deleted from the Downloads tab or from thei
 |---------|-------------|
 | Enable Downloads | Master switch. When off, no download UI is shown anywhere in the app. |
 | Offline Mode | When on, Shelv plays only from local downloads and hides all server-dependent UI. |
+| Prevent Sleep During Downloads | Keeps the device awake while downloads are active. |
 | Storage limit | Maximum storage Shelv will use for the bulk download queue. Songs already queued finish even if the limit is reached mid-batch. |
-| Enable Transcoding | When off, all streams and downloads use the original file format from the server. |
+| Enable Transcoding | Playback setting. When off, all streams and downloads use the original file format from the server. |
 | Wi-Fi format / bitrate | Codec and bitrate used when streaming over Wi-Fi (if transcoding is on). |
 | Cellular format / bitrate | Codec and bitrate used when streaming over cellular (if transcoding is on). |
 | Download format / bitrate | Codec and bitrate used when saving songs to the device (if transcoding is on). |

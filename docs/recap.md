@@ -1,6 +1,6 @@
 # Shelv Recap
 
-Recap automatically creates playlists of your most-played songs — weekly, monthly, and yearly. With iCloud sync enabled, your listening history stays in sync across all your devices.
+Recap automatically creates playlists of your most-played songs — weekly, monthly, and yearly. With iCloud Play History sync enabled, your listening history stays in sync across all your devices.
 
 ---
 
@@ -8,7 +8,7 @@ Recap automatically creates playlists of your most-played songs — weekly, mont
 
 ### Tracking what you listen to
 
-Shelv watches how much of each song you actually listen to. When a song ends or you skip to the next one, Shelv checks whether you heard enough of it to count. "Enough" is configurable — the default is 30%, but you can adjust this in Settings between 10% and 50%.
+Shelv watches how much of each song you actually listen to. When a song ends or you skip to the next one, Shelv checks whether you heard enough of it to count. "Enough" is configurable in Settings → Playback → Scrobble — the default is 30%, adjustable between 10% and 50%.
 
 If the threshold is met, the play is recorded locally in a small database on your device. This database stores:
 
@@ -21,22 +21,26 @@ Tracking only runs while playback is active — seeking forward doesn't inflate 
 
 ### Syncing between devices via iCloud
 
-When iCloud sync is enabled, every recorded play is immediately uploaded to iCloud. If you're offline, it queues the upload and retries as soon as the network is available again.
+When global iCloud sync and the Play History sync category are enabled, every recorded play is uploaded to iCloud. If you're offline, it queues the upload and retries as soon as the network is available again.
 
-When you open the app on another device — or switch back to it — Shelv downloads any new plays from iCloud that it hasn't seen yet. This means that even if you listened on your iPhone while offline and only connected later, those plays will eventually appear on your Mac and vice versa.
+When you open the app on another device — or switch back to it — Shelv downloads any new plays from iCloud that it hasn't seen yet. This means that even if you listened on your iPhone while offline and only connected later, those plays will eventually appear on your Mac and vice versa, as long as Play History sync is enabled on those devices.
 
 The sync uses iCloud's private database, so your listening history is only visible to you and your own devices.
 
 #### iCloud Sync toggle
 
-You can disable iCloud sync in Settings → Recap. When off:
+You can disable iCloud sync in Settings → iCloud. The page has a global iCloud Sync toggle and separate categories for Play History, Recap, Lyrics Server, and Radio Stations.
+
+When the global toggle is off:
 
 - Plays stay only on this device
-- No records are uploaded or downloaded
+- No enabled iCloud categories upload or download records
 - Multiple devices can create independent Recap playlists with the same name
 - Backups must be handled manually via export/import
 
-When turning iCloud sync back on, Shelv treats the local database as the source of truth: it deletes the Shelv iCloud zone, marks local plays and recap markers for re-upload, then uploads the local state again. Other devices recover from the missing zone on their next sync and re-upload their local state as well. This avoids adopting stale recap markers from periods where sync was disabled.
+When only Play History is off, plays stay local but Recap markers can still sync if the Recap category is on. When only Recap is off, listening history can still sync but Recap playlist markers and shared retention settings stay local, so multiple devices may create duplicate Recap playlists.
+
+When turning the global iCloud Sync toggle back on, Shelv treats the local database as the source of truth: it deletes the Shelv iCloud zone, marks local plays and recap markers for re-upload, then uploads the local state again. Other devices recover from the missing zone on their next sync and re-upload their local state as well. This avoids adopting stale recap markers from periods where sync was disabled. Changing individual sync categories does not purge the zone.
 
 #### Cross-device identity
 
@@ -62,7 +66,7 @@ The Recap is a **snapshot** at creation time — adding more plays later (for ex
 
 ### Avoiding duplicate Recaps across devices
 
-When a Recap playlist is created, a marker is written to iCloud. If another device tries to generate the same Recap — because it synced the plays too — it sees the marker and uses the existing playlist instead of creating a duplicate. If there's a race condition and both devices create a playlist at the same moment, the one that "loses" deletes its own playlist and adopts the other's.
+When a Recap playlist is created and Recap sync is enabled, a marker is written to iCloud. If another device tries to generate the same Recap — because it synced the plays too — it sees the marker and uses the existing playlist instead of creating a duplicate. If there's a race condition and both devices create a playlist at the same moment, the one that "loses" deletes its own playlist and adopts the other's.
 
 ### Retention
 
@@ -74,7 +78,7 @@ Shelv keeps a configurable number of Recaps per period type. Once the limit is e
 | Monthly | 12 |
 | Yearly | 3 |
 
-You can change these limits in Settings.
+You can change these limits in Recap Settings. Retention changes are synced through iCloud when the Recap sync category is enabled.
 
 ### Missing playlists
 
@@ -109,25 +113,39 @@ This is a manual tool only — it is not triggered automatically by any other op
 
 ## Managing data
 
-Beyond the main settings, Shelv offers several tools in *Recap Settings*:
+Beyond the main settings, Shelv splits Recap-related tools across Recap Settings, Database, and iCloud.
 
-### Logs
+### Recap Settings
 
-- **Recent plays** — the last 100 plays, with per-entry delete. Useful for spot-checking what's being counted.
+Recap Settings contains:
+
+- **Periods** — enable or disable weekly, monthly, and yearly Recaps, and choose how many playlists to keep for each period type.
 - **Registry** — all active Recap playlist entries, with per-entry delete (deletes the Navidrome playlist + local entry + iCloud marker).
-- **Sync log** — verbose CloudKit debug output, useful when troubleshooting sync behaviour.
+- **Recap log** — generation/debug output for automatic and manual Recap creation.
+- **Autogen markers** — shows which recent periods are already marked as processed.
+- **Sync with Navidrome** — opens the manual verification tool described above.
+- **Advanced** — test and reset tools for Recap generation.
 
-### Advanced (destructive)
+### Advanced
 
-Three clearly separated reset options, each with confirmation:
+- **Generate test recap** — creates a test weekly Recap for the current calendar week so far. Useful for testing the end-to-end flow.
+- **Reset latest weekly/monthly/yearly Recap** — deletes the newest playlist, local registry entry, and iCloud marker for that period type, and clears its processed marker so it can be generated again later.
 
-- **Reset local database** — clears only the local cache on this device. Nothing on iCloud or Navidrome is touched. On the next sync, the local database is re-filled from iCloud.
-- **Delete iCloud data** — wipes all Recap data from iCloud for the current server. Local databases and Navidrome playlists stay intact on every device. On the next sync, each device automatically re-uploads its local plays, so iCloud refills with the union of all devices' histories. Useful when iCloud's state is corrupted or you want to start the cloud side fresh without losing anything.
-- **Delete everything** — removes the Navidrome Recap playlists, the local database, and the iCloud data — **on this device**. Other devices keep their local plays and will re-upload them on the next sync, and those plays then flow back down to this device. This is not a cross-device wipe; to fully clear history across all devices, run *Delete everything* on each device. Bypasses the iCloud sync toggle.
+### Database
 
-### Generate test recap
+Settings → Database contains:
 
-A manual trigger for creating a Recap from the last 7 days' plays. Useful for testing the end-to-end flow.
+- **Export database** and **Import database** — file-based backup and restore for the local play log database.
+- **Recent plays** — the last 100 plays, with per-entry delete. Useful for spot-checking what's being counted.
+- **Database errors** — local database error log.
+- **Database cleanup** — checks logged songs against the server and removes entries for songs that definitely no longer exist.
+- **Reset local database** — clears only the local play log and local Recap registry for the current server. Nothing on iCloud or Navidrome is touched. On the next sync, the local database can be re-filled from iCloud if sync is enabled.
+- **Delete iCloud data** — wipes the Shelv iCloud zone, keeps local databases and Navidrome playlists intact, and marks local data for re-upload.
+- **Delete everything** — removes Navidrome Recap playlists known to this device, the local play log, the local Recap registry, local scrobbles, and the Shelv iCloud zone. Other devices may still have local plays and can re-upload them on their next sync, so this is not a cross-device wipe unless repeated everywhere.
+
+### iCloud
+
+Settings → iCloud contains the global iCloud Sync toggle, per-category sync toggles, manual Sync Now, pending upload count, and the verbose Sync log.
 
 ---
 
@@ -136,8 +154,10 @@ A manual trigger for creating a Recap from the last 7 days' plays. Useful for te
 | Setting | Description |
 |---------|-------------|
 | Recap enabled | Master switch for Recap playlist generation and Recap UI. Play logging and scrobbling still run because mixes, insights, and sync also consume the play log. |
-| iCloud Sync | Enables automatic sync of plays and Recap markers across your devices via iCloud. When off, data stays local. |
-| Play threshold | How much of a song must be heard for it to count (10–50%). |
+| iCloud Sync | Global iCloud switch in Settings → iCloud. When off, all iCloud-backed categories stay local. |
+| Play History Sync | Category toggle in Settings → iCloud. Enables automatic sync of play log records. |
+| Recap Sync | Category toggle in Settings → iCloud. Enables sync of Recap markers and shared retention settings. |
+| Play threshold | How much of a song must be heard for it to count (10–50%), configured in Settings → Playback → Scrobble. |
 | Weekly Recap | Generates a playlist for each completed calendar week (Monday–Sunday). |
 | Monthly Recap | Generates a playlist for each completed calendar month. |
 | Yearly Recap | Generates a playlist for each completed calendar year. |
@@ -158,6 +178,6 @@ Shelv replaces the local database with the imported one, then automatically:
 1. Rewrites all entries to belong to the currently active server account
 2. Uploads any plays that iCloud doesn't have yet
 3. Downloads any plays from iCloud that weren't in the imported database
-4. Checks registry entries against Navidrome so missing Recap playlists can be reviewed and recreated manually
+4. Checks registry entries against Navidrome and automatically recreates missing Recap playlists when the imported play log still has enough data for them
 
-Nothing is deleted during import — only uploaded and downloaded. If the backup contains plays from a different Navidrome account, they're reassigned to the current account, since the intention of importing is always to bring your history to the current user.
+Existing Navidrome playlists are not deleted during import. If the backup contains plays from a different Navidrome account, they're reassigned to the current account, since the intention of importing is always to bring your history to the current user.

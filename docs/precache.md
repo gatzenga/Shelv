@@ -68,10 +68,10 @@ The same cache logic applies when starting the current song:
 
 | AppStorage key | Default | Effect |
 |----------------|---------|--------|
-| `transcodingEnabled` | `false` | Enables server-side transcoding; pre-cache always runs in this mode |
-| `streamPreCacheEnabled` | `false` | Pre-cache for raw remote streams; required for reliable gapless without transcoding |
-| `streamPreCacheAheadCount` | `1` | Number of upcoming songs to keep cached when pre-cache is enabled (`1` through `5`) |
-| `gaplessEnabled` | `false` | Activates the gapless preload in Phase 2 |
+| `transcodingEnabled` | `false` | Settings → Playback. Enables server-side transcoding; pre-cache always runs in this mode |
+| `streamPreCacheEnabled` | `false` | Settings → Cache. Pre-cache for raw remote streams; required for reliable gapless without transcoding |
+| `streamPreCacheAheadCount` | `1` | Settings → Cache. Number of upcoming songs to keep cached when pre-cache is enabled (`1` through `5`) |
+| `gaplessEnabled` | `false` | Settings → Playback. Activates the gapless preload in Phase 2 |
 
 > **Gapless with RAW files:** `gaplessEnabled` alone is not enough. AVPlayer reinitialises internally for a remote URL and produces a small gap. With `streamPreCacheEnabled = true`, gapless waits for the completed local file and hands that to AVQueuePlayer — making the transition truly seamless.
 
