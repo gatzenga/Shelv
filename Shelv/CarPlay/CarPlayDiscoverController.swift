@@ -43,13 +43,19 @@ final class CarPlayDiscoverController {
             .store(in: &cancellables)
 
         var lastThemeColor = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
+        var lastShowInstantMixActions = UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showInstantMixActions)
         NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self else { return }
-                let current = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
-                guard current != lastThemeColor else { return }
-                lastThemeColor = current
+                let currentThemeColor = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
+                let currentShowInstantMixActions = UserDefaults.standard.bool(
+                    forKey: PersonalizationPreferenceKey.showInstantMixActions
+                )
+                guard currentThemeColor != lastThemeColor
+                    || currentShowInstantMixActions != lastShowInstantMixActions else { return }
+                lastThemeColor = currentThemeColor
+                lastShowInstantMixActions = currentShowInstantMixActions
                 if OfflineModeService.shared.isOffline {
                     self.showOffline()
                 } else {
@@ -163,13 +169,15 @@ final class CarPlayDiscoverController {
     private func buildSections(imageMap: [String: UIImage] = [:]) -> [CPListSection] {
         var sections: [CPListSection] = []
 
-        // Mixes — reine Textzeilen, sauber untereinander
-        sections.append(CPListSection(items: [
-            makeMixItem(String(localized: "mix_newest_tracks"),     type: "newest",   icon: "sparkles"),
-            makeMixItem(String(localized: "mix_frequently_played"), type: "frequent", icon: "chart.bar.fill"),
-            makeMixItem(String(localized: "mix_recently_played"),   type: "recent",   icon: "clock.fill"),
-            makeMixItem(String(localized: "mix_shuffle_all"),       type: "random",   icon: "shuffle"),
-        ], header: "Mixes", sectionIndexTitle: nil))
+        if UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showInstantMixActions) {
+            // Mixes — reine Textzeilen, sauber untereinander
+            sections.append(CPListSection(items: [
+                makeMixItem(String(localized: "mix_newest_tracks"),     type: "newest",   icon: "sparkles"),
+                makeMixItem(String(localized: "mix_frequently_played"), type: "frequent", icon: "chart.bar.fill"),
+                makeMixItem(String(localized: "mix_recently_played"),   type: "recent",   icon: "clock.fill"),
+                makeMixItem(String(localized: "mix_shuffle_all"),       type: "random",   icon: "shuffle"),
+            ], header: "Mixes", sectionIndexTitle: nil))
+        }
 
         // 4 Kategorien als Cover-Rows, kein Section-Header
         let categories: [(String, [Album])] = [
@@ -369,17 +377,8 @@ final class CarPlayDiscoverController {
                     await MainActor.run {
                         AudioPlayerService.shared.playShuffled(songs: songs)
                         CarPlayNavigation.presentNowPlaying(on: self.interfaceController)
-                        let snap = self.rootTemplate.sections
-                        if !snap.isEmpty {
-                            var freshSections = snap
-                            freshSections[0] = CPListSection(items: [
-                                self.makeMixItem(String(localized: "mix_newest_tracks"),     type: "newest",   icon: "sparkles"),
-                                self.makeMixItem(String(localized: "mix_frequently_played"), type: "frequent", icon: "chart.bar.fill"),
-                                self.makeMixItem(String(localized: "mix_recently_played"),   type: "recent",   icon: "clock.fill"),
-                                self.makeMixItem(String(localized: "mix_shuffle_all"),       type: "random",   icon: "shuffle"),
-                            ], header: "Mixes", sectionIndexTitle: nil)
-                            self.rootTemplate.updateSections(freshSections)
-                        }
+                        self.rootTemplate.updateSections(self.buildSections())
+                        self.startCoverEnrichment()
                     }
                 } catch {
                     await MainActor.run { self?.presentMixError(title: title, message: error.localizedDescription) }

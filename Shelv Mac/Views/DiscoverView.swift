@@ -7,6 +7,7 @@ struct DiscoverView: View {
     @ObservedObject var offlineMode = OfflineModeService.shared
     @ObservedObject var downloadStore = DownloadStore.shared
     @AppStorage("recapEnabled") private var recapEnabled = false
+    @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     @State private var mixLoading: String?
     private let player = AudioPlayerService.shared
 
@@ -144,49 +145,51 @@ struct DiscoverView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 32) {
 
-                VStack(alignment: .leading, spacing: 12) {
-                    Text(String(localized: "smart_mixes"))
-                        .font(.title2).bold()
-                    VStack(spacing: 10) {
-                        MixButton(
-                            title: String(localized: "mix_newest_tracks"),
-                            icon: "sparkles",
-                            color: .blue,
-                            isLoading: mixLoading == "newest"
-                        ) {
-                            mixLoading = "newest"
-                            await vm.playMixNewest()
-                            mixLoading = nil
-                        }
-                        MixButton(
-                            title: String(localized: "mix_most_played"),
-                            icon: "chart.bar.fill",
-                            color: .orange,
-                            isLoading: mixLoading == "frequent"
-                        ) {
-                            mixLoading = "frequent"
-                            await vm.playMixFrequent()
-                            mixLoading = nil
-                        }
-                        MixButton(
-                            title: String(localized: "mix_recently_played"),
-                            icon: "clock.fill",
-                            color: .green,
-                            isLoading: mixLoading == "recent"
-                        ) {
-                            mixLoading = "recent"
-                            await vm.playMixRecent()
-                            mixLoading = nil
-                        }
-                        MixButton(
-                            title: String(localized: "mix_shuffle_all"),
-                            icon: "shuffle",
-                            color: .purple,
-                            isLoading: mixLoading == "random"
-                        ) {
-                            mixLoading = "random"
-                            await vm.playMixRandom()
-                            mixLoading = nil
+                if showInstantMixActions {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(String(localized: "smart_mixes"))
+                            .font(.title2).bold()
+                        VStack(spacing: 10) {
+                            MixButton(
+                                title: String(localized: "mix_newest_tracks"),
+                                icon: "sparkles",
+                                color: .blue,
+                                isLoading: mixLoading == "newest"
+                            ) {
+                                mixLoading = "newest"
+                                await vm.playMixNewest()
+                                mixLoading = nil
+                            }
+                            MixButton(
+                                title: String(localized: "mix_most_played"),
+                                icon: "chart.bar.fill",
+                                color: .orange,
+                                isLoading: mixLoading == "frequent"
+                            ) {
+                                mixLoading = "frequent"
+                                await vm.playMixFrequent()
+                                mixLoading = nil
+                            }
+                            MixButton(
+                                title: String(localized: "mix_recently_played"),
+                                icon: "clock.fill",
+                                color: .green,
+                                isLoading: mixLoading == "recent"
+                            ) {
+                                mixLoading = "recent"
+                                await vm.playMixRecent()
+                                mixLoading = nil
+                            }
+                            MixButton(
+                                title: String(localized: "mix_shuffle_all"),
+                                icon: "shuffle",
+                                color: .purple,
+                                isLoading: mixLoading == "random"
+                            ) {
+                                mixLoading = "random"
+                                await vm.playMixRandom()
+                                mixLoading = nil
+                            }
                         }
                     }
                 }

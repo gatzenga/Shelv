@@ -5,6 +5,7 @@ struct DiscoverView: View {
     @AppStorage("mixUseDatabase") private var mixUseDatabase = false
     @AppStorage("themeColor") private var themeColor = "violet"
     @AppStorage("recapEnabled") private var recapEnabled = false
+    @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     private let api = SubsonicAPIService.shared
     private let player = AudioPlayerService.shared
 
@@ -52,15 +53,17 @@ struct DiscoverView: View {
                     .padding(.horizontal, 50)
                     .focusSection()
 
-                    // Smart-Mixe als saubere Akzent-Liste über die volle Breite (wie iOS/Mac)
-                    VStack(spacing: 16) {
-                        MixPill(title: String(localized: "mix_newest_tracks"), icon: "sparkles", accent: accent) { await play(.newest) }
-                        MixPill(title: String(localized: "mix_frequently_played"), icon: "chart.bar.fill", accent: accent) { await play(.frequent) }
-                        MixPill(title: String(localized: "mix_recently_played"), icon: "clock.fill", accent: accent) { await play(.recent) }
-                        MixPill(title: String(localized: "mix_shuffle_all"), icon: "shuffle", accent: accent) { await play(.random) }
+                    if showInstantMixActions {
+                        // Smart-Mixe als saubere Akzent-Liste über die volle Breite (wie iOS/Mac)
+                        VStack(spacing: 16) {
+                            MixPill(title: String(localized: "mix_newest_tracks"), icon: "sparkles", accent: accent) { await play(.newest) }
+                            MixPill(title: String(localized: "mix_frequently_played"), icon: "chart.bar.fill", accent: accent) { await play(.frequent) }
+                            MixPill(title: String(localized: "mix_recently_played"), icon: "clock.fill", accent: accent) { await play(.recent) }
+                            MixPill(title: String(localized: "mix_shuffle_all"), icon: "shuffle", accent: accent) { await play(.random) }
+                        }
+                        .padding(.horizontal, 50)
+                        .focusSection()
                     }
-                    .padding(.horizontal, 50)
-                    .focusSection()
 
                     albumRow(String(localized: "recently_added"), newest)
                     albumRow(String(localized: "recently_played"), recent)

@@ -10,6 +10,7 @@ struct DiscoverView: View {
     @AppStorage("recapEnabled") private var recapEnabled = false
     @AppStorage("mixUseDatabase") private var mixUseDatabase = false
     @AppStorage(PersonalizationPreferenceKey.showRadio) private var showRadio = true
+    @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
     private var recapButtonVisible: Bool {
@@ -61,32 +62,34 @@ struct DiscoverView: View {
                         }
                         .padding(.top, 60)
                     } else {
-                        VStack(spacing: 12) {
-                            mixButton(
-                                title: String(localized: "mix_newest_tracks"),
-                                icon: "sparkles",
-                                key: "newest"
-                            ) { await loadMix(type: "newest") }
+                        if showInstantMixActions {
+                            VStack(spacing: 12) {
+                                mixButton(
+                                    title: String(localized: "mix_newest_tracks"),
+                                    icon: "sparkles",
+                                    key: "newest"
+                                ) { await loadMix(type: "newest") }
 
-                            mixButton(
-                                title: String(localized: "mix_frequently_played"),
-                                icon: "chart.bar.fill",
-                                key: "frequent"
-                            ) { await loadMix(type: "frequent") }
+                                mixButton(
+                                    title: String(localized: "mix_frequently_played"),
+                                    icon: "chart.bar.fill",
+                                    key: "frequent"
+                                ) { await loadMix(type: "frequent") }
 
-                            mixButton(
-                                title: String(localized: "mix_recently_played"),
-                                icon: "clock.fill",
-                                key: "recent"
-                            ) { await loadMix(type: "recent") }
+                                mixButton(
+                                    title: String(localized: "mix_recently_played"),
+                                    icon: "clock.fill",
+                                    key: "recent"
+                                ) { await loadMix(type: "recent") }
 
-                            mixButton(
-                                title: String(localized: "mix_shuffle_all"),
-                                icon: "shuffle",
-                                key: "random"
-                            ) { await loadMix(type: "random") }
+                                mixButton(
+                                    title: String(localized: "mix_shuffle_all"),
+                                    icon: "shuffle",
+                                    key: "random"
+                                ) { await loadMix(type: "random") }
+                            }
+                            .padding(.horizontal)
                         }
-                        .padding(.horizontal)
 
                         albumSection(
                             title: String(localized: "recently_added"),
