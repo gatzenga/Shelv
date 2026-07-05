@@ -43,13 +43,16 @@ final class CarPlayDiscoverController {
             .store(in: &cancellables)
 
         var lastThemeColor = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
+        var lastDiscoveryPersonalization = Self.discoveryPersonalizationSignature()
         NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self else { return }
                 let current = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
-                guard current != lastThemeColor else { return }
+                let personalization = Self.discoveryPersonalizationSignature()
+                guard current != lastThemeColor || personalization != lastDiscoveryPersonalization else { return }
                 lastThemeColor = current
+                lastDiscoveryPersonalization = personalization
                 if OfflineModeService.shared.isOffline {
                     self.showOffline()
                 } else {
@@ -163,28 +166,30 @@ final class CarPlayDiscoverController {
     private func buildSections(imageMap: [String: UIImage] = [:]) -> [CPListSection] {
         var sections: [CPListSection] = []
 
-        // Mixes — reine Textzeilen, sauber untereinander
-        sections.append(CPListSection(items: [
-            makeMixItem(String(localized: "mix_newest_tracks"),     type: "newest",   icon: "sparkles"),
-            makeMixItem(String(localized: "mix_frequently_played"), type: "frequent", icon: "chart.bar.fill"),
-            makeMixItem(String(localized: "mix_recently_played"),   type: "recent",   icon: "clock.fill"),
-            makeMixItem(String(localized: "mix_shuffle_all"),       type: "random",   icon: "shuffle"),
-        ], header: "Mixes", sectionIndexTitle: nil))
-
-        // 4 Kategorien als Cover-Rows, kein Section-Header
-        let categories: [(String, [Album])] = [
-            (String(localized: "recently_added"), LibraryStore.shared.recentlyAdded),
-            (String(localized: "recently_played"),    LibraryStore.shared.recentlyPlayed),
-            (String(localized: "frequently_played"),     LibraryStore.shared.frequentlyPlayed),
-            (String(localized: "random"),            LibraryStore.shared.randomAlbums),
-        ]
-
-        var categoryRows: [any CPListTemplateItem] = []
-        for (title, albums) in categories where !albums.isEmpty {
-            categoryRows.append(coverRowItem(title: title, albums: albums, imageMap: imageMap))
-        }
-        if !categoryRows.isEmpty {
-            sections.append(CPListSection(items: categoryRows, header: nil, sectionIndexTitle: nil))
+        let visibleSections = visibleDiscoverySections()
+        for (index, section) in visibleSections.enumerated() {
+            switch section {
+            case .smartMixes:
+                let mixes = visibleSmartMixes().map {
+                    makeMixItem(
+                        NSLocalizedString($0.titleKey, comment: ""),
+                        type: $0.playbackKey,
+                        icon: $0.systemImage
+                    )
+                }
+                guard !mixes.isEmpty else { continue }
+                let header = index == 0 ? nil : String(localized: "smart_mixes")
+                sections.append(CPListSection(items: mixes, header: header, sectionIndexTitle: nil))
+            case .recentlyAdded, .recentlyPlayed, .frequentlyPlayed, .randomAlbums:
+                let albums = albums(for: section)
+                guard !albums.isEmpty else { continue }
+                let title = NSLocalizedString(section.titleKey, comment: "")
+                sections.append(CPListSection(
+                    items: [coverRowItem(title: title, albums: albums, imageMap: imageMap)],
+                    header: nil,
+                    sectionIndexTitle: nil
+                ))
+            }
         }
 
         // Refresh-Button ganz unten, kein Header
@@ -194,6 +199,54 @@ final class CarPlayDiscoverController {
         sections.append(CPListSection(items: [refreshItem], header: nil, sectionIndexTitle: nil))
 
         return sections
+    }
+
+    private func visibleSmartMixes() -> [PersonalizationSmartMix] {
+        PersonalizationSmartMix.allCases.filter {
+            PersonalizationSettings.isSmartMixEnabled($0)
+        }
+    }
+
+    private func visibleDiscoverySections() -> [PersonalizationDiscoverySection] {
+        let rawOrder = UserDefaults.standard.string(forKey: PersonalizationPreferenceKey.discoverySectionOrder)
+        return PersonalizationSettings.discoverySectionOrder(from: rawOrder)
+            .filter(isDiscoverySectionVisible)
+    }
+
+    private func isDiscoverySectionVisible(_ section: PersonalizationDiscoverySection) -> Bool {
+        switch section {
+        case .smartMixes:
+            return !visibleSmartMixes().isEmpty
+        case .recentlyAdded, .recentlyPlayed, .frequentlyPlayed, .randomAlbums:
+            return !albums(for: section).isEmpty
+        }
+    }
+
+    private func albums(for section: PersonalizationDiscoverySection) -> [Album] {
+        switch section {
+        case .smartMixes:
+            return []
+        case .recentlyAdded:
+            return LibraryStore.shared.recentlyAdded
+        case .recentlyPlayed:
+            return LibraryStore.shared.recentlyPlayed
+        case .frequentlyPlayed:
+            return LibraryStore.shared.frequentlyPlayed
+        case .randomAlbums:
+            return LibraryStore.shared.randomAlbums
+        }
+    }
+
+    private static func discoveryPersonalizationSignature(
+        defaults: UserDefaults = .standard
+    ) -> String {
+        let order = defaults.string(forKey: PersonalizationPreferenceKey.discoverySectionOrder) ?? ""
+        let mixes = PersonalizationSmartMix.allCases
+            .map { mix in
+                "\(mix.rawValue)=\(PersonalizationSettings.isSmartMixEnabled(mix, in: defaults))"
+            }
+            .joined(separator: ";")
+        return "\(order)|\(mixes)"
     }
 
     private func coverRowItem(title: String, albums: [Album], imageMap: [String: UIImage]) -> CPListImageRowItem {
@@ -369,17 +422,8 @@ final class CarPlayDiscoverController {
                     await MainActor.run {
                         AudioPlayerService.shared.playShuffled(songs: songs)
                         CarPlayNavigation.presentNowPlaying(on: self.interfaceController)
-                        let snap = self.rootTemplate.sections
-                        if !snap.isEmpty {
-                            var freshSections = snap
-                            freshSections[0] = CPListSection(items: [
-                                self.makeMixItem(String(localized: "mix_newest_tracks"),     type: "newest",   icon: "sparkles"),
-                                self.makeMixItem(String(localized: "mix_frequently_played"), type: "frequent", icon: "chart.bar.fill"),
-                                self.makeMixItem(String(localized: "mix_recently_played"),   type: "recent",   icon: "clock.fill"),
-                                self.makeMixItem(String(localized: "mix_shuffle_all"),       type: "random",   icon: "shuffle"),
-                            ], header: "Mixes", sectionIndexTitle: nil)
-                            self.rootTemplate.updateSections(freshSections)
-                        }
+                        self.rootTemplate.updateSections(self.buildSections())
+                        self.startCoverEnrichment()
                     }
                 } catch {
                     await MainActor.run { self?.presentMixError(title: title, message: error.localizedDescription) }
