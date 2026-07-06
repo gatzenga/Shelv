@@ -245,17 +245,29 @@ private struct SongContextMenuModifier: ViewModifier {
         content
             .contextMenu {
                 let player = AudioPlayerService.shared
+                Button { player.playSong(song) } label: {
+                    Label(String(localized: "play"), systemImage: "play.fill")
+                }
+
+                if showInstantMixActions && !offlineMode.isOffline {
+                    Button { InstantMixService.playSongMix(for: song, player: player) } label: {
+                        Label(String(localized: "instant_mix"), systemImage: "sparkles")
+                    }
+                }
+
+                Divider()
+
                 Button { player.addPlayNext(song) } label: {
                     Label(String(localized: "play_next"), systemImage: "text.line.first.and.arrowtriangle.forward")
                 }
                 Button { player.addToQueue(song) } label: {
                     Label(String(localized: "add_to_queue"), systemImage: "text.append")
                 }
-                if showInstantMixActions && !offlineMode.isOffline {
-                    Button { InstantMixService.playSongMix(for: song, player: player) } label: {
-                        Label(String(localized: "instant_mix"), systemImage: "sparkles")
-                    }
+
+                if showFavoriteActions || showPlaylistActions {
+                    Divider()
                 }
+
                 if showFavoriteActions {
                     let starred = library.isSongStarred(song)
                     Button { Task { await library.toggleStarSong(song) } } label: {
@@ -268,6 +280,7 @@ private struct SongContextMenuModifier: ViewModifier {
                         Label(String(localized: "add_to_playlist"), systemImage: "text.badge.plus")
                     }
                 }
+
                 Divider()
                 Button { songInfoSong = song } label: {
                     Label(String(localized: "song_info_details"), systemImage: "info.circle")
