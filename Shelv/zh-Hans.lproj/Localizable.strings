@@ -262,6 +262,7 @@
 "then_recently_played" = "然后最近播放";
 "then_favorites" = "然后收藏";
 "then_recap_playlists" = "然后回顾播放列表";
+"then_playlists" = "然后播放列表";
 "then_alphabetical_by_artist" = "然后按艺术家字母顺序";
 "no_cache_events_yet" = "暂无缓存事件。";
 "cache_log" = "缓存日志";
@@ -398,6 +399,7 @@
 "include_navidrome_lyrics" = "包含 Navidrome 歌词";
 "use_custom_lrclib_server" = "使用自定义 LRCLIB 服务器";
 "lrclib_server_url" = "LRCLIB 服务器 URL";
+"lrclib_online_fallback" = "LRCLIB.org 回退";
 "about" = "关于";
 "queue_sync" = "队列同步";
 "queue_sync_off" = "关闭";
@@ -533,3 +535,14 @@
 "song_info_groupings" = "分组";
 "song_info_works" = "作品";
 "song_info_movements" = "乐章";
+"download_format" = "下载格式";
+"keep_library_offline" = "保持资料库离线";
+"keep_library_offline_active" = "保持资料库离线已开启";
+"keep_library_offline_paused_storage" = "已暂停：存储空间不足";
+"keep_library_offline_storage_title" = "存储空间不足";
+"keep_library_offline_storage_message" = "请释放空间，以继续保持资料库离线。";
+"keep_library_offline_storage_warning" = "有些歌曲无法在预留 10% 可用空间内下载。";
+"library_already_offline" = "你的资料库已可离线使用。";
+"then_recently_added" = "然后下载最近添加";
+"available_storage" = "可用存储空间";
+"inactive" = "未启用";

@@ -259,6 +259,7 @@
 "then_recently_played" = "然后最近播放";
 "then_favorites" = "然后收藏";
 "then_recap_playlists" = "然后回顾播放列表";
+"then_playlists" = "然后播放列表";
 "then_alphabetical_by_artist" = "然后按艺术家字母顺序";
 "no_cache_events_yet" = "暂无缓存事件。";
 "cache_log" = "缓存日志";
@@ -393,6 +394,7 @@
 "include_navidrome_lyrics" = "包含 Navidrome 歌词";
 "use_custom_lrclib_server" = "使用自定义 LRCLIB 服务器";
 "lrclib_server_url" = "LRCLIB 服务器 URL";
+"lrclib_online_fallback" = "LRCLIB.org 回退";
 
 "now_playing" = "正在播放";
 "no_server_yet" = "尚未连接服务器";

@@ -262,6 +262,7 @@
 "then_recently_played" = "Dann kürzlich gespielt";
 "then_favorites" = "Dann Favoriten";
 "then_recap_playlists" = "Dann Recap-Playlists";
+"then_playlists" = "Dann Playlists";
 "then_alphabetical_by_artist" = "Dann alphabetisch";
 "no_cache_events_yet" = "Noch keine Cache-Ereignisse.";
 "cache_log" = "Cache-Log";
@@ -396,6 +397,7 @@
 "include_navidrome_lyrics" = "Navidrome-Lyrics einbeziehen";
 "use_custom_lrclib_server" = "Eigenen LRCLIB-Server verwenden";
 "lrclib_server_url" = "LRCLIB-Server-URL";
+"lrclib_online_fallback" = "LRCLIB.org-Fallback";
 "artist_bio_show_more" = "Mehr anzeigen";
 "artist_bio_show_less" = "Weniger anzeigen";
 "about" = "Info";
@@ -533,3 +535,14 @@
 "song_info_groupings" = "Groupings";
 "song_info_works" = "Werke";
 "song_info_movements" = "Sätze";
+"download_format" = "Download-Format";
+"keep_library_offline" = "Mediathek offline halten";
+"keep_library_offline_active" = "Mediathek offline halten ist aktiv";
+"keep_library_offline_paused_storage" = "Pausiert: zu wenig Speicher";
+"keep_library_offline_storage_title" = "Zu wenig Speicher";
+"keep_library_offline_storage_message" = "Gib Speicher frei, damit die Mediathek weiter offline gehalten werden kann.";
+"keep_library_offline_storage_warning" = "Einige Songs passen nicht mehr in die 10%-Speicherreserve.";
+"library_already_offline" = "Deine Mediathek ist bereits offline.";
+"then_recently_added" = "Dann neu hinzugefügt";
+"available_storage" = "Verfügbarer Speicher";
+"inactive" = "Inaktiv";

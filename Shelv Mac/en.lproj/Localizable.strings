@@ -138,6 +138,7 @@
 "then_recently_played" = "Then recently played";
 "then_favorites" = "Then favorites";
 "then_recap_playlists" = "Then recap playlists";
+"then_playlists" = "Then playlists";
 "then_alphabetical_by_artist" = "Then alphabetical by artist";
 "calculating" = "Calculating…";
 "start" = "Start";
@@ -166,6 +167,7 @@
 "include_navidrome_lyrics" = "Include Navidrome Lyrics";
 "use_custom_lrclib_server" = "Use custom LRCLIB server";
 "lrclib_server_url" = "LRCLIB server URL";
+"lrclib_online_fallback" = "LRCLIB.org fallback";
 "database" = "Database";
 "stored" = "Stored";
 "download_all_lyrics" = "Download all lyrics";
@@ -535,3 +537,15 @@
 "secondary_url" = "Secondary URL";
 "use_primary_url" = "Use Primary URL";
 "use_secondary_url" = "Use Secondary URL";
+"download_format" = "Download Format";
+"keep_library_offline" = "Keep Library Offline";
+"keep_library_offline_active" = "Keep Library Offline is active";
+"keep_library_offline_paused_storage" = "Paused: not enough storage";
+"keep_library_offline_storage_title" = "Not enough storage";
+"keep_library_offline_storage_message" = "Free up space to continue keeping your library offline.";
+"keep_library_offline_storage_warning" = "Some songs do not fit within the 10% free-space reserve.";
+"library_already_offline" = "Your library is already offline.";
+"then_recently_added" = "Then recently added";
+"available_storage" = "Available Storage";
+"inactive" = "Inactive";
+"downloading" = "Downloading";

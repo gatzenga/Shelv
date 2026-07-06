@@ -259,6 +259,7 @@
 "then_recently_played" = "Then recently played";
 "then_favorites" = "Then favorites";
 "then_recap_playlists" = "Then recap playlists";
+"then_playlists" = "Then playlists";
 "then_alphabetical_by_artist" = "Then alphabetical by artist";
 "no_cache_events_yet" = "No cache events yet.";
 "cache_log" = "Cache Log";
@@ -391,6 +392,7 @@
 "include_navidrome_lyrics" = "Include Navidrome Lyrics";
 "use_custom_lrclib_server" = "Use custom LRCLIB server";
 "lrclib_server_url" = "LRCLIB server URL";
+"lrclib_online_fallback" = "LRCLIB.org fallback";
 "artist_bio_show_more" = "Show more";
 "artist_bio_show_less" = "Show less";
 
