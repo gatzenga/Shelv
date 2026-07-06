@@ -15,7 +15,7 @@ struct ServerTab: View {
                         server: server,
                         isActive: serverStore.activeServerID == server.id,
                         onActivate: { appState.switchServer(server) },
-                        onToggleURLSlot: { serverStore.toggleURLSlot(for: server) },
+                        onToggleURLSlot: { Task { await switchServerURLSlot(from: server) } },
                         onEdit: { serverToEdit = server },
                         onDelete: { serverToDelete = server }
                     )
@@ -61,6 +61,23 @@ struct ServerTab: View {
         } message: { server in
             Text(String(format: String(localized: "server_will_be_removed_format"), server.displayName))
         }
+    }
+
+    @MainActor
+    private func switchServerURLSlot(from server: SubsonicServer) async {
+        serverStore.toggleURLSlot(for: server)
+        guard serverStore.activeServerID == server.id else { return }
+
+        LibraryViewModel.shared.reset()
+        RadioStationStore.shared.resetInMemory()
+
+        if await OfflineModeService.shared.beginUserInitiatedServerRefresh() { return }
+        defer { OfflineModeService.shared.finishUserInitiatedServerRefresh() }
+
+        await LibraryViewModel.shared.loadAlbums()
+        await LibraryViewModel.shared.loadArtists()
+        await LibraryViewModel.shared.loadPlaylists(force: true)
+        await RadioStationStore.shared.refresh()
     }
 }
 

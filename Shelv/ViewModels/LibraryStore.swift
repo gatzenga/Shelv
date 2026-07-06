@@ -31,6 +31,7 @@ class LibraryStore: ObservableObject {
 
     private let api = SubsonicAPIService.shared
     private let libraryRepository = LibraryRepository.shared
+    private var discoverLoadGeneration = 0
 
     nonisolated static var libraryDir: URL {
         FileManager.default
@@ -63,6 +64,11 @@ class LibraryStore: ObservableObject {
     }
 
     private var activeServerID: UUID? { api.activeServer?.id }
+
+    private var activeServerSignature: String? {
+        guard let server = api.activeServer else { return nil }
+        return "\(server.id.uuidString)|\(server.activeBaseURL)"
+    }
 
     private var activeServerKeys: (serverKey: String, stableId: String?)? {
         guard let server = api.activeServer else { return nil }
@@ -104,30 +110,50 @@ class LibraryStore: ObservableObject {
     }
     #endif
 
-    func loadDiscover() async {
-        guard !OfflineModeService.shared.isOffline else { return }
+    @discardableResult
+    func loadDiscover() async -> Bool {
+        guard !OfflineModeService.shared.isOffline else { return false }
+        discoverLoadGeneration += 1
+        let generation = discoverLoadGeneration
+        let requestSignature = activeServerSignature
         isLoadingDiscover = true
+        errorMessage = nil
+        defer {
+            if generation == discoverLoadGeneration {
+                isLoadingDiscover = false
+            }
+        }
+
         do {
             async let added    = api.getRecentlyAdded(size: 20)
             async let played   = api.getRecentlyPlayed(size: 20)
             async let frequent = api.getFrequentlyPlayed(size: 20)
             let (a, p, f) = try await (added, played, frequent)
+            guard generation == discoverLoadGeneration, requestSignature == activeServerSignature else { return false }
             recentlyAdded    = a
             recentlyPlayed   = p
             frequentlyPlayed = f
             if randomAlbums.isEmpty {
-                randomAlbums = try await api.getAlbumList(type: "random", size: 20)
+                let random = try await api.getAlbumList(type: "random", size: 20)
+                guard generation == discoverLoadGeneration, requestSignature == activeServerSignature else { return false }
+                randomAlbums = random
             }
+            return true
         } catch {
-            if !(error is CancellationError) { errorMessage = error.localizedDescription }
+            if generation == discoverLoadGeneration, !(error is CancellationError) {
+                errorMessage = error.localizedDescription
+            }
+            return false
         }
-        isLoadingDiscover = false
     }
 
     func refreshRandomAlbums() async {
         guard !OfflineModeService.shared.isOffline else { return }
+        let requestSignature = activeServerSignature
         do {
-            randomAlbums = try await api.getAlbumList(type: "random", size: 20)
+            let random = try await api.getAlbumList(type: "random", size: 20)
+            guard requestSignature == activeServerSignature else { return }
+            randomAlbums = random
         } catch {
             if !(error is CancellationError) { errorMessage = error.localizedDescription }
         }
@@ -286,17 +312,30 @@ class LibraryStore: ObservableObject {
     }
 
     func resetInMemory() {
+        resetDiscoverInMemory()
         albums = []
         artists = []
-        recentlyAdded = []
-        recentlyPlayed = []
-        frequentlyPlayed = []
-        randomAlbums = []
         starredSongs = []
         starredAlbums = []
         starredArtists = []
         playlists = []
         reloadID = UUID()
+    }
+
+    func resetDiscoverInMemory() {
+        discoverLoadGeneration += 1
+        recentlyAdded = []
+        recentlyPlayed = []
+        frequentlyPlayed = []
+        randomAlbums = []
+        errorMessage = nil
+        isLoadingDiscover = false
+    }
+
+    func stopDiscoverLoadingForConnectionRecovery() {
+        discoverLoadGeneration += 1
+        errorMessage = nil
+        isLoadingDiscover = false
     }
 
     func clearCache() {

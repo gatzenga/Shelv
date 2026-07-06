@@ -177,7 +177,7 @@ struct ServerDetailView: View {
             await withTaskGroup(of: Void.self) { group in
                 group.addTask { await libraryStore.loadAlbums() }
                 group.addTask { await libraryStore.loadArtists() }
-                group.addTask { await libraryStore.loadDiscover() }
+                group.addTask { _ = await libraryStore.loadDiscover() }
             }
             isScanning = false
             scanDone = true

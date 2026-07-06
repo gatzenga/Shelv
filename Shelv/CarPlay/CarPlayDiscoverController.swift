@@ -6,19 +6,38 @@ private let kPreviewCount = 4
 @MainActor
 final class CarPlayDiscoverController {
     private let interfaceController: CPInterfaceController
+    private let serverStore: ServerStore
     let rootTemplate: CPListTemplate
     private var loadTask: Task<Void, Never>?
     private var coverLoadTask: Task<Void, Never>?
     private var cancellables = Set<AnyCancellable>()
+    private var loadGeneration = 0
+    private var lastActiveURLSignature: String?
+    private var isSwitchingServerURL = false
 
-    init(interfaceController: CPInterfaceController) {
+    private var discoverContentIsEmpty: Bool {
+        LibraryStore.shared.recentlyAdded.isEmpty
+            && LibraryStore.shared.recentlyPlayed.isEmpty
+            && LibraryStore.shared.frequentlyPlayed.isEmpty
+            && LibraryStore.shared.randomAlbums.isEmpty
+    }
+
+    private var activeURLSignature: String? {
+        guard let server = serverStore.activeServer else { return nil }
+        return "\(server.id.uuidString)|\(server.activeURLSlot.rawValue)|\(server.activeBaseURL)"
+    }
+
+    init(interfaceController: CPInterfaceController, serverStore: ServerStore) {
         self.interfaceController = interfaceController
+        self.serverStore = serverStore
         let t = CPListTemplate(title: String(localized: "discover"), sections: [])
         t.tabImage = UIImage(systemName: "sparkles")
         rootTemplate = t
     }
 
     func load() {
+        lastActiveURLSignature = activeURLSignature
+
         OfflineModeService.shared.$isOffline
             .receive(on: DispatchQueue.main)
             .dropFirst()
@@ -40,6 +59,18 @@ final class CarPlayDiscoverController {
                 guard OfflineModeService.shared.isOffline else { return }
                 self?.showOffline()
             }
+            .store(in: &cancellables)
+
+        serverStore.$servers
+            .receive(on: DispatchQueue.main)
+            .dropFirst()
+            .sink { [weak self] _ in self?.handleActiveURLSlotChanged() }
+            .store(in: &cancellables)
+
+        serverStore.$activeServerID
+            .receive(on: DispatchQueue.main)
+            .dropFirst()
+            .sink { [weak self] _ in self?.handleActiveURLSlotChanged() }
             .store(in: &cancellables)
 
         var lastThemeColor = UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
@@ -75,14 +106,17 @@ final class CarPlayDiscoverController {
 
     private func reload() {
         loadTask?.cancel()
+        let generation = nextLoadGeneration()
         if OfflineModeService.shared.isOffline {
             showOffline()
             return
         }
-        loadTask = Task { await fetchAndBuild() }
+        showLoading()
+        loadTask = Task { await fetchAndBuild(generation: generation) }
     }
 
     private func showOffline() {
+        setLoadingState(false)
         let allDownloads = DownloadStore.shared.songs
         var sections: [CPListSection] = []
 
@@ -94,9 +128,7 @@ final class CarPlayDiscoverController {
             ], header: "Mixes", sectionIndexTitle: nil))
         }
 
-        let goOnline = CPListItem(text: String(localized: "go_online"), detailText: nil)
-        goOnline.setImage(cpIcon("wifi"))
-        goOnline.handler = { _, c in
+        let goOnline = actionListItem(title: String(localized: "go_online"), systemImage: "wifi") { _, c in
             Task { @MainActor in OfflineModeService.shared.exitOfflineMode() }
             c()
         }
@@ -111,59 +143,181 @@ final class CarPlayDiscoverController {
 
     private func manualRefresh(completion: @escaping () -> Void) {
         loadTask?.cancel()
+        let generation = nextLoadGeneration()
+        showLoading()
+        completion()
         loadTask = Task { @MainActor [weak self] in
             guard let self else {
-                completion()
                 return
             }
-            await self.fetchAndBuild(waitForNetworkReconnect: true)
-            completion()
+            if await OfflineModeService.shared.beginUserInitiatedServerRefresh() {
+                guard self.isCurrentLoad(generation) else { return }
+                showNoConnection()
+                return
+            }
+            defer { OfflineModeService.shared.finishUserInitiatedServerRefresh() }
+            await self.fetchAndBuild(generation: generation, waitForNetworkReconnect: true)
         }
     }
 
-    private func fetchAndBuild(waitForNetworkReconnect: Bool = false) async {
+    private func fetchAndBuild(generation: Int, waitForNetworkReconnect: Bool = false) async {
         if waitForNetworkReconnect {
             _ = await NetworkStatus.shared.waitUntilNetworkAvailable()
         } else {
             await NetworkStatus.shared.waitUntilReady()
         }
-        async let discover: Void = LibraryStore.shared.loadDiscover()
+        guard isCurrentLoad(generation) else { return }
+        guard NetworkStatus.shared.hasNetwork else {
+            let message = SubsonicAPIError.networkError(URLError(.notConnectedToInternet)).localizedDescription
+            OfflineModeService.shared.notifyServerErrorIfPresentationAllowed(message)
+            showNoConnection()
+            return
+        }
+        async let discover: Bool = LibraryStore.shared.loadDiscover()
         async let random:   Void = LibraryStore.shared.refreshRandomAlbums()
         async let radio:    Void = RadioStationStore.shared.refresh(waitForCloudMetadata: false)
         _ = await (discover, random, radio)
-        guard !Task.isCancelled else { return }
+        guard isCurrentLoad(generation) else { return }
 
-        let allEmpty = LibraryStore.shared.recentlyAdded.isEmpty
-            && LibraryStore.shared.recentlyPlayed.isEmpty
-            && LibraryStore.shared.frequentlyPlayed.isEmpty
-        if allEmpty, LibraryStore.shared.errorMessage != nil {
+        if discoverContentIsEmpty {
             showNoConnection()
             LibraryStore.shared.errorMessage = nil
             return
         }
 
+        setLoadingState(false)
         rootTemplate.updateSections(buildSections())
-        guard !Task.isCancelled else { return }
+        guard isCurrentLoad(generation) else { return }
         startCoverEnrichment()
     }
 
+    private func showLoading() {
+        coverLoadTask?.cancel()
+        if #available(iOS 18.4, *) {
+            setLoadingState(true)
+            rootTemplate.updateSections([])
+        } else {
+            setLoadingState(false)
+            let item = CPListItem(text: String(localized: "loading"), detailText: nil)
+            item.setImage(cpListIcon("arrow.clockwise"))
+            rootTemplate.updateSections([
+                CPListSection(items: [item], header: nil, sectionIndexTitle: nil)
+            ])
+        }
+    }
+
     private func showNoConnection() {
-        let enable = CPListItem(text: String(localized: "enable_offline_mode"), detailText: nil)
-        enable.setImage(cpIcon("wifi.slash"))
-        enable.handler = { _, c in
-            Task { @MainActor in OfflineModeService.shared.enterOfflineMode() }
-            c()
+        setLoadingState(false)
+        var items: [CPListItem] = [
+            actionListItem(title: String(localized: "enable_offline_mode"), systemImage: "wifi.slash") { _, completion in
+                Task { @MainActor in OfflineModeService.shared.enterOfflineMode() }
+                completion()
+            }
+        ]
+        if let switchItem = makeServerURLSwitchItem() {
+            items.append(switchItem)
         }
-        let refreshItem = actionListItem(title: String(localized: "refresh"), systemImage: "arrow.clockwise") { [weak self] _, c in
+        items.append(actionListItem(title: String(localized: "refresh"), systemImage: "arrow.clockwise") { [weak self] _, c in
             self?.manualRefresh(completion: c) ?? c()
-        }
+        })
         rootTemplate.updateSections([
-            CPListSection(items: [enable], header: String(localized: "no_connection"), sectionIndexTitle: nil),
-            CPListSection(items: [refreshItem], header: nil, sectionIndexTitle: nil),
+            CPListSection(items: items, header: String(localized: "no_connection"), sectionIndexTitle: nil)
         ])
     }
 
+    private func setLoadingState(_ isLoading: Bool) {
+        rootTemplate.emptyViewTitleVariants = []
+        rootTemplate.emptyViewSubtitleVariants = []
+        if #available(iOS 18.4, *) {
+            rootTemplate.showsSpinnerWhileEmpty = isLoading
+        }
+    }
+
+    private func makeServerURLSwitchItem() -> CPListItem? {
+        guard let server = serverStore.activeServer, server.hasSecondaryURL else { return nil }
+        let target: ServerURLSlot = server.isUsingSecondaryURL ? .primary : .secondary
+        let title = target == .primary
+            ? String(localized: "switch_to_primary_url")
+            : String(localized: "switch_to_secondary_url")
+        return actionListItem(title: title, systemImage: "arrow.triangle.2.circlepath") { [weak self] _, completion in
+            self?.switchServerURLSlot(to: target, completion: completion) ?? completion()
+        }
+    }
+
+    private func switchServerURLSlot(to slot: ServerURLSlot, completion: @escaping () -> Void) {
+        loadTask?.cancel()
+        let generation = nextLoadGeneration()
+        guard let server = serverStore.activeServer else {
+            completion()
+            return
+        }
+        guard slot == .primary || server.hasSecondaryURL else {
+            completion()
+            return
+        }
+
+        showLoading()
+        isSwitchingServerURL = true
+        serverStore.setURLSlot(for: server.id, slot: slot)
+        lastActiveURLSignature = activeURLSignature
+        LibraryStore.shared.resetInMemory()
+        RadioStationStore.shared.resetInMemory()
+        completion()
+
+        loadTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer {
+                if self.isCurrentLoad(generation) {
+                    self.isSwitchingServerURL = false
+                }
+            }
+            if await OfflineModeService.shared.beginUserInitiatedServerRefresh() {
+                guard self.isCurrentLoad(generation) else { return }
+                showNoConnection()
+                return
+            }
+            defer { OfflineModeService.shared.finishUserInitiatedServerRefresh() }
+            await self.fetchAndBuild(generation: generation, waitForNetworkReconnect: true)
+        }
+    }
+
+    private func handleActiveURLSlotChanged() {
+        let signature = activeURLSignature
+        guard signature != lastActiveURLSignature else { return }
+        lastActiveURLSignature = signature
+        guard !isSwitchingServerURL else { return }
+        reloadAfterExternalServerURLChange()
+    }
+
+    private func reloadAfterExternalServerURLChange() {
+        loadTask?.cancel()
+        let generation = nextLoadGeneration()
+        showLoading()
+        LibraryStore.shared.resetInMemory()
+        RadioStationStore.shared.resetInMemory()
+        loadTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            if await OfflineModeService.shared.beginUserInitiatedServerRefresh(presentsServerError: false) {
+                guard self.isCurrentLoad(generation) else { return }
+                showNoConnection()
+                return
+            }
+            defer { OfflineModeService.shared.finishUserInitiatedServerRefresh() }
+            await self.fetchAndBuild(generation: generation, waitForNetworkReconnect: true)
+        }
+    }
+
+    private func nextLoadGeneration() -> Int {
+        loadGeneration += 1
+        return loadGeneration
+    }
+
+    private func isCurrentLoad(_ generation: Int) -> Bool {
+        generation == loadGeneration && !Task.isCancelled
+    }
+
     private func buildSections(imageMap: [String: UIImage] = [:]) -> [CPListSection] {
+        setLoadingState(false)
         var sections: [CPListSection] = []
 
         let visibleSections = visibleDiscoverySections()
@@ -216,7 +370,7 @@ final class CarPlayDiscoverController {
     private func isDiscoverySectionVisible(_ section: PersonalizationDiscoverySection) -> Bool {
         switch section {
         case .smartMixes:
-            return !visibleSmartMixes().isEmpty
+            return !visibleSmartMixes().isEmpty && !discoverContentIsEmpty
         case .recentlyAdded, .recentlyPlayed, .frequentlyPlayed, .randomAlbums:
             return !albums(for: section).isEmpty
         }

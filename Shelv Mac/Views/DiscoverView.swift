@@ -3,9 +3,11 @@ import SwiftUI
 struct DiscoverView: View {
     @StateObject private var vm = DiscoverViewModel()
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var serverStore: ServerStore
     @ObservedObject var libraryStore = LibraryViewModel.shared
     @ObservedObject var offlineMode = OfflineModeService.shared
     @ObservedObject var downloadStore = DownloadStore.shared
+    @AppStorage("themeColor") private var themeColorName: String = "violet"
     @AppStorage("recapEnabled") private var recapEnabled = false
     @AppStorage(PersonalizationPreferenceKey.showSmartMixNewest) private var showSmartMixNewest = true
     @AppStorage(PersonalizationPreferenceKey.showSmartMixFrequent) private var showSmartMixFrequent = true
@@ -13,7 +15,26 @@ struct DiscoverView: View {
     @AppStorage(PersonalizationPreferenceKey.showSmartMixRandom) private var showSmartMixRandom = true
     @AppStorage(PersonalizationPreferenceKey.discoverySectionOrder) private var discoverySectionOrderRaw = PersonalizationSettings.defaultDiscoverySectionOrderRaw
     @State private var mixLoading: String?
+    @State private var deviceHasNetwork = true
+    @State private var showConnectionRecoveryState = false
+    @State private var isCheckingConnection = false
+    @State private var isSwitchingServerURL = false
     private let player = AudioPlayerService.shared
+
+    private var accentColor: Color { AppTheme.color(for: themeColorName) }
+
+    private var activeServer: SubsonicServer? {
+        serverStore.activeServer
+    }
+
+    private var discoverTitle: String {
+        let name = activeServer?.name.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return name.isEmpty ? "Shelv" : name
+    }
+
+    private var canSwitchServerURL: Bool {
+        activeServer?.hasSecondaryURL == true
+    }
 
     private var visibleSmartMixes: [PersonalizationSmartMix] {
         PersonalizationSmartMix.allCases.filter(isSmartMixVisible)
@@ -27,15 +48,43 @@ struct DiscoverView: View {
         orderedDiscoverySections.filter(isDiscoverySectionVisible)
     }
 
+    private var discoverContentIsEmpty: Bool {
+        vm.recentlyAdded.isEmpty
+            && vm.recentlyPlayed.isEmpty
+            && vm.frequentlyPlayed.isEmpty
+            && vm.randomAlbums.isEmpty
+    }
+
+    private var shouldShowDiscoverLoadingState: Bool {
+        !offlineMode.isOffline
+            && discoverContentIsEmpty
+            && !shouldShowConnectionRecoveryState
+            && (vm.isLoading || isCheckingConnection)
+    }
+
+    private var shouldShowConnectionRecoveryState: Bool {
+        !offlineMode.isOffline
+            && !isCheckingConnection
+            && discoverContentIsEmpty
+            && (showConnectionRecoveryState || offlineMode.serverErrorBannerVisible)
+    }
+
     @ViewBuilder
     var body: some View {
         if offlineMode.isOffline {
-            Group {
-                if downloadStore.songs.isEmpty {
-                    offlineEmptyState
-                } else {
-                    offlineMixState
+            ScrollView {
+                VStack(alignment: .leading, spacing: 32) {
+                    discoverHeader
+
+                    Group {
+                        if downloadStore.songs.isEmpty {
+                            offlineEmptyState
+                        } else {
+                            offlineMixState
+                        }
+                    }
                 }
+                .padding(24)
             }
             .navigationTitle(String(localized: "discover"))
             .toolbar {
@@ -47,7 +96,9 @@ struct DiscoverView: View {
                 }
             }
             .onChange(of: offlineMode.isOffline) { _, isOffline in
-                if !isOffline { Task { await vm.load() } }
+                if !isOffline {
+                    Task { await loadOnlineDiscoverContent(verifyReachabilityFirst: discoverContentIsEmpty) }
+                }
             }
         } else {
             onlineBody
@@ -160,20 +211,16 @@ struct DiscoverView: View {
     private var onlineBody: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 32) {
-                if vm.isLoading {
-                    ProgressView(String(localized: "loading"))
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding(.top, 40)
+                discoverHeader
+
+                if shouldShowDiscoverLoadingState {
+                    discoverLoadingState
+                } else if shouldShowConnectionRecoveryState {
+                    connectionRecoveryState
                 } else {
                     ForEach(Array(visibleDiscoverySections.enumerated()), id: \.element) { index, section in
                         discoveryAlbumSection(section, isFirstVisible: index == 0)
                     }
-                }
-
-                if let err = vm.errorMessage {
-                    Label(err, systemImage: "exclamationmark.triangle")
-                        .foregroundStyle(.red)
-                        .frame(maxWidth: .infinity, alignment: .center)
                 }
             }
             .padding(24)
@@ -185,17 +232,11 @@ struct DiscoverView: View {
             }
             ToolbarItem(placement: .automatic) {
                 Button {
-                    Task {
-                        async let discover:  Void = vm.load()
-                        async let playlists: Void = libraryStore.loadPlaylists(force: true)
-                        async let radio:     Void = RadioStationStore.shared.refresh()
-                        async let sync:      Void = CloudKitSyncService.shared.syncNow()
-                        _ = await (discover, playlists, radio, sync)
-                    }
+                    Task { await refreshOnlineDiscoverContent() }
                 } label: {
                     Image(systemName: "arrow.clockwise")
                 }
-                .disabled(vm.isLoading)
+                .disabled(isCheckingConnection || isSwitchingServerURL || (vm.isLoading && !shouldShowConnectionRecoveryState))
                 .help(String(localized: "reload"))
             }
             ToolbarItem(placement: .automatic) {
@@ -210,11 +251,235 @@ struct DiscoverView: View {
                 InsightsToolbarButton()
             }
         }
-        .task { await vm.load() }
-        .onChange(of: appState.serverStore.activeServerID) { _, _ in
-            vm.reset()
-            Task { await vm.load() }
+        .task { await loadOnlineDiscoverContent(verifyReachabilityFirst: discoverContentIsEmpty) }
+        .task {
+            await updateDeviceNetworkState()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .networkStatusChanged)) { _ in
+            Task { await handleNetworkStatusChanged() }
+        }
+        .onChange(of: offlineMode.serverErrorBannerVisible) { _, visible in
+            guard visible, discoverContentIsEmpty else { return }
+            presentConnectionRecoveryState()
+        }
+        .onChange(of: serverStore.activeServerID) { _, _ in
+            vm.reset()
+            Task { await loadOnlineDiscoverContent(verifyReachabilityFirst: true) }
+        }
+        .onChange(of: activeServer?.activeURLSlot) { _, _ in
+            guard !isSwitchingServerURL else { return }
+            vm.reset()
+            libraryStore.reset()
+            RadioStationStore.shared.resetInMemory()
+            Task { await loadOnlineDiscoverContent(verifyReachabilityFirst: true) }
+        }
+    }
+
+    @ViewBuilder
+    private var discoverHeader: some View {
+        Group {
+            if canSwitchServerURL, let activeServer {
+                Menu {
+                    serverURLSlotMenuButton(slot: .primary, server: activeServer)
+                    serverURLSlotMenuButton(slot: .secondary, server: activeServer)
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(discoverTitle)
+                            .font(.title2.bold())
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                        Image(systemName: "chevron.down")
+                            .font(.subheadline.weight(.semibold))
+                            .padding(.top, 2)
+                    }
+                    .foregroundStyle(.primary)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            } else {
+                Text(discoverTitle)
+                    .font(.title2.bold())
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func serverURLSlotMenuButton(slot: ServerURLSlot, server: SubsonicServer) -> some View {
+        let isActive = activeURLSlot(for: server) == slot
+        Button {
+            guard !isActive, !isSwitchingServerURL else { return }
+            Task { await switchServerURLSlot(slot) }
+        } label: {
+            HStack(spacing: 16) {
+                Text(title(for: slot))
+                Spacer()
+                Image(systemName: "checkmark")
+                    .opacity(isActive ? 1 : 0)
+            }
+        }
+            .foregroundStyle(isActive ? .secondary : .primary)
+            .disabled(isActive)
+    }
+
+    private func activeURLSlot(for server: SubsonicServer) -> ServerURLSlot {
+        server.isUsingSecondaryURL ? .secondary : .primary
+    }
+
+    private func title(for slot: ServerURLSlot) -> String {
+        switch slot {
+        case .primary:
+            String(localized: "primary_url")
+        case .secondary:
+            String(localized: "secondary_url")
+        }
+    }
+
+    @MainActor
+    private func switchServerURLSlot(_ slot: ServerURLSlot) async {
+        guard let server = activeServer else { return }
+        guard activeURLSlot(for: server) != slot else { return }
+        guard slot == .primary || server.hasSecondaryURL else { return }
+
+        isSwitchingServerURL = true
+        isCheckingConnection = true
+        showConnectionRecoveryState = false
+        defer {
+            isSwitchingServerURL = false
+            isCheckingConnection = false
+        }
+
+        serverStore.setURLSlot(for: server.id, slot: slot)
+
+        if await offlineMode.beginUserInitiatedServerRefresh() {
+            await updateDeviceNetworkState()
+            presentConnectionRecoveryState()
+            return
+        }
+        defer { offlineMode.finishUserInitiatedServerRefresh() }
+
+        vm.reset()
+        await loadOnlineDiscoverContent(verifyReachabilityFirst: false)
+        await RadioStationStore.shared.refresh()
+    }
+
+    @MainActor
+    private func refreshOnlineDiscoverContent() async {
+        guard !isCheckingConnection, !isSwitchingServerURL else { return }
+        guard !vm.isLoading || shouldShowConnectionRecoveryState else { return }
+
+        showConnectionRecoveryState = false
+        isCheckingConnection = true
+        defer { isCheckingConnection = false }
+        if await offlineMode.beginUserInitiatedServerRefresh() {
+            await updateDeviceNetworkState()
+            presentConnectionRecoveryState()
+            return
+        }
+        defer { offlineMode.finishUserInitiatedServerRefresh() }
+
+        Task { await CloudKitSyncService.shared.syncNow() }
+        async let discover:  Void = loadOnlineDiscoverContent(verifyReachabilityFirst: false)
+        async let playlists: Void = libraryStore.loadPlaylists(force: true)
+        async let radio:     Void = RadioStationStore.shared.refresh()
+        _ = await (discover, playlists, radio)
+    }
+
+    @MainActor
+    private func loadOnlineDiscoverContent(verifyReachabilityFirst: Bool = false) async {
+        showConnectionRecoveryState = false
+        await updateDeviceNetworkState()
+        guard deviceHasNetwork else {
+            let message = SubsonicAPIError.networkError(URLError(.notConnectedToInternet)).localizedDescription
+            offlineMode.notifyServerErrorIfPresentationAllowed(message)
+            presentConnectionRecoveryState()
+            return
+        }
+
+        if offlineMode.serverErrorBannerVisible && discoverContentIsEmpty {
+            presentConnectionRecoveryState()
+            return
+        }
+
+        var shouldFinishReachabilityCheck = false
+        defer {
+            if shouldFinishReachabilityCheck {
+                offlineMode.finishUserInitiatedServerRefresh()
+            }
+        }
+
+        if verifyReachabilityFirst && discoverContentIsEmpty {
+            isCheckingConnection = true
+            if await offlineMode.beginVisibleServerReachabilityCheck() {
+                isCheckingConnection = false
+                await updateDeviceNetworkState()
+                presentConnectionRecoveryState()
+                return
+            }
+            isCheckingConnection = false
+            shouldFinishReachabilityCheck = true
+        }
+
+        let didLoadDiscover = await vm.load()
+
+        await updateDeviceNetworkState()
+        showConnectionRecoveryState = discoverContentIsEmpty
+            && (!deviceHasNetwork || offlineMode.serverErrorBannerVisible || !didLoadDiscover)
+    }
+
+    @MainActor
+    private func updateDeviceNetworkState() async {
+        await NetworkStatus.shared.waitUntilReady()
+        deviceHasNetwork = NetworkStatus.shared.hasNetwork
+    }
+
+    @MainActor
+    private func handleNetworkStatusChanged() async {
+        let wasOffline = !deviceHasNetwork
+        await updateDeviceNetworkState()
+        if !deviceHasNetwork {
+            presentConnectionRecoveryState()
+        }
+        guard wasOffline, deviceHasNetwork, !offlineMode.isOffline, discoverContentIsEmpty else { return }
+        await loadOnlineDiscoverContent(verifyReachabilityFirst: true)
+    }
+
+    @MainActor
+    private func presentConnectionRecoveryState() {
+        guard discoverContentIsEmpty else { return }
+        isCheckingConnection = false
+        vm.stopLoadingForConnectionRecovery()
+        showConnectionRecoveryState = true
+    }
+
+    @ViewBuilder
+    private var discoverLoadingState: some View {
+        VStack(spacing: 12) {
+            ProgressView()
+                .controlSize(.large)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 80)
+    }
+
+    @ViewBuilder
+    private var connectionRecoveryState: some View {
+        VStack(spacing: 0) {
+            Button {
+                offlineMode.enterOfflineMode()
+            } label: {
+                Label(String(localized: "go_offline"), systemImage: "wifi.slash")
+                    .font(.subheadline.bold())
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 8)
+                    .background(accentColor.opacity(0.15), in: Capsule())
+                    .foregroundStyle(accentColor)
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 80)
     }
 
     private func isSmartMixVisible(_ mix: PersonalizationSmartMix) -> Bool {
@@ -229,7 +494,7 @@ struct DiscoverView: View {
     private func isDiscoverySectionVisible(_ section: PersonalizationDiscoverySection) -> Bool {
         switch section {
         case .smartMixes:
-            return !visibleSmartMixes.isEmpty
+            return !visibleSmartMixes.isEmpty && !discoverContentIsEmpty
         case .recentlyAdded:
             return !vm.recentlyAdded.isEmpty
         case .recentlyPlayed:
@@ -594,4 +859,5 @@ private func desktopStripArticle(_ title: String) -> String {
     DiscoverView()
         .frame(width: 900, height: 700)
         .environmentObject(AppState.shared)
+        .environmentObject(AppState.shared.serverStore)
 }

@@ -485,6 +485,8 @@
 "secondary_url" = "Secondary URL";
 "use_primary_url" = "Primary URL verwenden";
 "use_secondary_url" = "Secondary URL verwenden";
+"switch_to_primary_url" = "Zur Primary URL wechseln";
+"switch_to_secondary_url" = "Zur Secondary URL wechseln";
 "song_info" = "Song-Info";
 "song_info_open_accessibility" = "Zeigt Credits und Trackdetails.";
 "song_info_credits" = "Credits";

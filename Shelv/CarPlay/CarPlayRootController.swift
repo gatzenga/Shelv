@@ -16,6 +16,7 @@ final class CarPlayRootController: NSObject {
     private var lastShowPlaylistsTab: Bool = UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showPlaylistsTab)
     private var lastShowRadio: Bool = CarPlayRootController.radioTabEnabled
     private var lastRecapTabVisible: Bool = false
+    private var isPresentingServerErrorAlert = false
 
     // Apple's System-Buttons. EINMAL gebaut und stabil geteilt — Apple liest deren Selected-State
     // autonom aus MPRemoteCommandCenter, der State wird in `applyPlaybackModeToNowPlayingInfo`
@@ -33,7 +34,8 @@ final class CarPlayRootController: NSObject {
     }
 
     func connect() {
-        let discover  = CarPlayDiscoverController(interfaceController: interfaceController)
+        let carPlayServerStore = ServerStore.shared
+        let discover  = CarPlayDiscoverController(interfaceController: interfaceController, serverStore: carPlayServerStore)
         let library   = CarPlayLibraryController(interfaceController: interfaceController)
         let playlists = CarPlayPlaylistsController(interfaceController: interfaceController)
         let radio     = CarPlayRadioController(interfaceController: interfaceController)
@@ -52,17 +54,20 @@ final class CarPlayRootController: NSObject {
         let tabs = CPTabBarTemplate(templates: visibleTabTemplates())
         tabBar = tabs
         interfaceController.setRootTemplate(tabs, animated: false, completion: nil)
+        observeServerErrors()
 
         // CarPlay-only-Start: ShelvApp's .task läuft auf dem UIWindowScene-Lifecycle.
         // Bei reinem CarPlay-Start (iPhone-Screen bleibt dunkel) kann DownloadStore
         // noch kein serverId haben, weil setActiveServer noch nicht aufgerufen wurde.
         // Hier explizit bootstrappen — alle Operationen sind idempotent.
+        if carPlayServerStore.activeServer != nil {
+            OfflineModeService.shared.prepareInitialServerErrorPresentation()
+        }
         Task { @MainActor in
             await DownloadDatabase.shared.setup()
             await DownloadService.shared.setup()
             await PlayLogService.shared.setup()
-            let tempStore = ServerStore()
-            if let server = tempStore.activeServer, !server.stableId.isEmpty {
+            if let server = carPlayServerStore.activeServer, !server.stableId.isEmpty {
                 await DownloadStore.shared.setActiveServer(server.stableId)
                 // Offline-Modus: Playlists und Recap aus Disk-Cache / SQLite laden,
                 // da ShelvApp's .task bei reinem CarPlay-Start ggf. nicht läuft.
@@ -200,6 +205,46 @@ final class CarPlayRootController: NSObject {
                 self.refreshTabs()
             }
             .store(in: &cancellables)
+    }
+
+    private func observeServerErrors() {
+        OfflineModeService.shared.$serverErrorBannerVisible
+            .receive(on: DispatchQueue.main)
+            .dropFirst()
+            .sink { [weak self] visible in
+                guard let self else { return }
+                if visible {
+                    self.presentServerErrorAlert()
+                } else if self.isPresentingServerErrorAlert {
+                    self.isPresentingServerErrorAlert = false
+                    self.interfaceController.dismissTemplate(animated: true, completion: nil)
+                }
+            }
+            .store(in: &cancellables)
+    }
+
+    private func presentServerErrorAlert() {
+        guard !isPresentingServerErrorAlert else { return }
+        isPresentingServerErrorAlert = true
+        let title = OfflineModeService.shared.lastServerErrorWasDeviceOffline
+            ? String(localized: "you_are_offline")
+            : String(localized: "server_unreachable")
+        let titleVariants = [title]
+        var actions: [CPAlertAction] = []
+        if OfflineModeService.shared.downloadsFeatureEnabled {
+            actions.append(CPAlertAction(title: String(localized: "go_offline"), style: .default) { [weak self] _ in
+                OfflineModeService.shared.enterOfflineMode()
+                self?.isPresentingServerErrorAlert = false
+                self?.interfaceController.dismissTemplate(animated: true, completion: nil)
+            })
+        }
+        actions.append(CPAlertAction(title: String(localized: "ok"), style: .default) { [weak self] _ in
+            OfflineModeService.shared.dismissBanner()
+            self?.isPresentingServerErrorAlert = false
+            self?.interfaceController.dismissTemplate(animated: true, completion: nil)
+        })
+        let alert = CPAlertTemplate(titleVariants: titleVariants, actions: actions)
+        interfaceController.presentTemplate(alert, animated: true, completion: nil)
     }
 
     private func refreshTabs() {

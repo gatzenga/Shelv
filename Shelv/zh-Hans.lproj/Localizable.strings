@@ -485,6 +485,8 @@
 "secondary_url" = "备用 URL";
 "use_primary_url" = "使用主 URL";
 "use_secondary_url" = "使用备用 URL";
+"switch_to_primary_url" = "切换到主 URL";
+"switch_to_secondary_url" = "切换到备用 URL";
 "song_info" = "歌曲信息";
 "song_info_open_accessibility" = "显示制作人员和曲目信息。";
 "song_info_credits" = "制作人员";

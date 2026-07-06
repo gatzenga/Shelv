@@ -4,6 +4,8 @@ import Combine
 
 @MainActor
 class ServerStore: ObservableObject {
+    static let shared = ServerStore()
+
     @Published var servers: [SubsonicServer] = []
     @Published var activeServerID: UUID?
 

@@ -13,31 +13,55 @@ class DiscoverViewModel: ObservableObject {
     private let api = SubsonicAPIService.shared
     private let player = AudioPlayerService.shared
     private static let shelfSize = 20
+    private var loadGeneration = 0
 
-    func load(force: Bool = false) async {
-        guard !isLoading else { return }
+    @discardableResult
+    func load(force: Bool = false) async -> Bool {
+        guard !isLoading else { return !recentlyAdded.isEmpty || !recentlyPlayed.isEmpty || !frequentlyPlayed.isEmpty || !randomAlbums.isEmpty }
+        loadGeneration += 1
+        let generation = loadGeneration
         isLoading = true
         errorMessage = nil
+        defer {
+            if loadGeneration == generation {
+                isLoading = false
+            }
+        }
+
         async let newest   = api.getAlbumList(type: .newest,         size: Self.shelfSize)
         async let recent   = api.getAlbumList(type: .recentlyPlayed, size: Self.shelfSize)
         async let frequent = api.getAlbumList(type: .frequent,       size: Self.shelfSize)
         async let random   = api.getAlbumList(type: .random,         size: Self.shelfSize)
         do {
-            recentlyAdded    = try await newest
-            recentlyPlayed   = try await recent
-            frequentlyPlayed = try await frequent
-            randomAlbums     = try await random
+            let loadedNewest = try await newest
+            let loadedRecent = try await recent
+            let loadedFrequent = try await frequent
+            let loadedRandom = try await random
+            guard loadGeneration == generation else { return false }
+            recentlyAdded    = loadedNewest
+            recentlyPlayed   = loadedRecent
+            frequentlyPlayed = loadedFrequent
+            randomAlbums     = loadedRandom
+            return true
         } catch {
+            guard loadGeneration == generation else { return false }
             errorMessage = error.localizedDescription
+            return false
         }
-        isLoading = false
     }
 
     func reset() {
+        loadGeneration += 1
         recentlyAdded = []
         recentlyPlayed = []
         frequentlyPlayed = []
         randomAlbums = []
+        errorMessage = nil
+        isLoading = false
+    }
+
+    func stopLoadingForConnectionRecovery() {
+        loadGeneration += 1
         errorMessage = nil
         isLoading = false
     }

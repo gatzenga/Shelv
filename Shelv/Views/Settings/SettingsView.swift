@@ -324,7 +324,7 @@ struct SettingsView: View {
                     Button(server.isUsingSecondaryURL
                            ? String(localized: "use_primary_url")
                            : String(localized: "use_secondary_url")) {
-                        serverStore.toggleURLSlot(for: server)
+                        Task { await switchServerURLSlot(from: server) }
                     }
                 }
                 Divider()
@@ -346,6 +346,21 @@ struct SettingsView: View {
         .onTapGesture {
             serverStore.activate(server: server)
         }
+    }
+
+    @MainActor
+    private func switchServerURLSlot(from server: SubsonicServer) async {
+        serverStore.toggleURLSlot(for: server)
+        guard serverStore.activeServerID == server.id else { return }
+
+        LibraryStore.shared.resetInMemory()
+        RadioStationStore.shared.resetInMemory()
+
+        if await OfflineModeService.shared.beginUserInitiatedServerRefresh() { return }
+        defer { OfflineModeService.shared.finishUserInitiatedServerRefresh() }
+
+        await LibraryStore.shared.loadDiscover()
+        await RadioStationStore.shared.refresh()
     }
 
 }
