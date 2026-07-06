@@ -146,11 +146,14 @@ actor LyricsBackgroundService {
         let includeNavidrome: Bool = await MainActor.run {
             UserDefaults.standard.bool(forKey: "includeNavidromeLyrics")
         }
+        let customLrcLibEnabled = LrcLibEndpoint.isCustomEnabled
+        let onlineFallbackEnabled = LrcLibEndpoint.isOnlineFallbackEnabled
 
         if cachedSongIdsSnapshot == nil {
             cachedSongIdsSnapshot = await LyricsService.shared.cachedSongIds(serverId: serverId)
         }
         let cached = cachedSongIdsSnapshot ?? []
+        var enqueuedCount = 0
 
         for song in songs {
             let key = "\(serverId)::\(song.id)"
@@ -167,7 +170,8 @@ actor LyricsBackgroundService {
             let lrcGetRequest = Self.buildLrcLibRequest(cached: false,
                                                         title: song.title, artist: song.artist,
                                                         album: song.album, duration: song.duration)
-            let needsOnlineFallback = (lrcCachedRequest?.isCustom == true) || (lrcGetRequest?.isCustom == true)
+            let needsOnlineFallback = onlineFallbackEnabled
+                && ((lrcCachedRequest?.isCustom == true) || (lrcGetRequest?.isCustom == true))
             let lrcOnlineCachedURL = needsOnlineFallback
                 ? Self.buildLrcLibRequest(cached: true,
                                           title: song.title, artist: song.artist,
@@ -203,8 +207,15 @@ actor LyricsBackgroundService {
             pending.append(job)
             trackedKeys.insert(key)
             totalCount += 1
+            enqueuedCount += 1
         }
 
+        let navidromeStatus = includeNavidrome ? "on" : "off"
+        let customStatus = customLrcLibEnabled ? "on" : "off"
+        let fallbackStatus = customLrcLibEnabled ? (onlineFallbackEnabled ? "on" : "off") : "n/a"
+        DBErrorLog.logLyrics(
+            "Bulk plan → queue \(enqueuedCount)/\(songs.count), Navidrome \(navidromeStatus), LRCLIB custom \(customStatus), LRCLIB.org fallback \(fallbackStatus)"
+        )
         publishProgress()
         startNextJobs()
     }
@@ -309,18 +320,21 @@ actor LyricsBackgroundService {
             var next = job
             next.layer = .lrcCached
             next.retryCount = 0
-            DBErrorLog.logLyrics("Bulk next → LRCLIB cached: \(job.songTitle)")
+            DBErrorLog.logLyrics("Bulk next → \(layerDescription(.lrcCached)): \(job.songTitle)")
             pending.insert(next, at: 0)
             startNextJobs()
         case .lrcCached:
             var next = job
             next.layer = .lrcGet
             next.retryCount = 0
-            DBErrorLog.logLyrics("Bulk next → LRCLIB full: \(job.songTitle)")
+            DBErrorLog.logLyrics("Bulk next → \(layerDescription(.lrcGet)): \(job.songTitle)")
             pending.insert(next, at: 0)
             startNextJobs()
         case .lrcGet:
             guard job.lrcOnlineCachedURL != nil else {
+                if LrcLibEndpoint.isCustomEnabled && !LrcLibEndpoint.isOnlineFallbackEnabled {
+                    DBErrorLog.logLyrics("Bulk fallback off → LRCLIB online skipped: \(job.songTitle)")
+                }
                 saveNone(job: job)
                 return
             }
@@ -410,15 +424,8 @@ actor LyricsBackgroundService {
         startNextJobs()
     }
 
-    private func logRequest(job: LyricsJob, url: URL) {
-        let source: String
-        switch job.layer {
-        case .navidrome:
-            source = "Navidrome"
-        case .lrcCached, .lrcGet, .lrcOnlineCached, .lrcOnlineGet:
-            source = LrcLibEndpoint.sourceDescription(for: url)
-        }
-        DBErrorLog.logLyrics("Bulk request → \(source): \(displayURL(url, for: job.layer))")
+    private func logRequest(job: LyricsJob, url _: URL) {
+        DBErrorLog.logLyrics("Bulk request → \(layerDescription(job.layer)): \(job.songTitle)")
     }
 
     private func logNoMatch(job: LyricsJob, statusCode: Int) {
@@ -431,26 +438,14 @@ actor LyricsBackgroundService {
         case .navidrome:
             return "Navidrome"
         case .lrcCached:
-            return "LRCLIB cached"
+            return LrcLibEndpoint.isCustomEnabled ? "LRCLIB custom cached" : "LRCLIB online cached"
         case .lrcGet:
-            return "LRCLIB full"
+            return LrcLibEndpoint.isCustomEnabled ? "LRCLIB custom full" : "LRCLIB online full"
         case .lrcOnlineCached:
             return "LRCLIB online cached"
         case .lrcOnlineGet:
             return "LRCLIB online full"
         }
-    }
-
-    private func displayURL(_ url: URL, for layer: LyricsJob.Layer) -> String {
-        guard layer == .navidrome,
-              var comps = URLComponents(url: url, resolvingAgainstBaseURL: false)
-        else { return url.absoluteString }
-
-        let safeItems = (comps.queryItems ?? []).filter { item in
-            item.name == "id" || item.name == "v" || item.name == "c" || item.name == "f"
-        }
-        comps.queryItems = safeItems.isEmpty ? nil : safeItems
-        return comps.url?.absoluteString ?? url.host ?? "Navidrome"
     }
 
     // MARK: - Parsing

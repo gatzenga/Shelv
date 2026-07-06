@@ -8,6 +8,7 @@ struct LyricsSettingsPanel: View {
     @AppStorage("includeNavidromeLyrics") private var includeNavidromeLyrics = false
     @AppStorage("useCustomLrcLibServer") private var useCustomLrcLibServer = false
     @AppStorage("customLrcLibBaseURL") private var customLrcLibBaseURL = ""
+    @AppStorage(LrcLibEndpoint.onlineFallbackEnabledKey) private var lrcLibOnlineFallbackEnabled = true
 
     @State private var showResetConfirm = false
 
@@ -58,6 +59,19 @@ struct LyricsSettingsPanel: View {
                         .onChange(of: customLrcLibBaseURL) { _, _ in
                             Task { await CloudKitSyncService.shared.recordLyricsServerSettingsChange() }
                         }
+
+                    Toggle(isOn: $lrcLibOnlineFallbackEnabled) {
+                        Label {
+                            Text(String(localized: "lrclib_online_fallback"))
+                        } icon: {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                                .foregroundStyle(themeColor)
+                        }
+                    }
+                    .tint(themeColor)
+                    .onChange(of: lrcLibOnlineFallbackEnabled) { _, _ in
+                        Task { await CloudKitSyncService.shared.recordLyricsServerSettingsChange() }
+                    }
                 }
             }
 

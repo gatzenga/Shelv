@@ -162,6 +162,8 @@ struct LyricsSheetView: View {
             Divider()
             bottomControls
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .ignoresSafeArea(.keyboard)
         .navigationTitle(String(localized: "lyrics"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.visible, for: .navigationBar)

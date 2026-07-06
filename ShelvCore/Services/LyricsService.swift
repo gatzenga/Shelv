@@ -46,6 +46,7 @@ enum LrcLibEndpoint {
     nonisolated static let defaultBaseURL = "https://lrclib.net"
     nonisolated static let useCustomKey = "useCustomLrcLibServer"
     nonisolated static let customBaseURLKey = "customLrcLibBaseURL"
+    nonisolated static let onlineFallbackEnabledKey = "lrcLibOnlineFallbackEnabled"
 
     nonisolated static func apiURL(queryItems: [URLQueryItem]) -> URL? {
         apiRequest(queryItems: queryItems)?.url
@@ -56,7 +57,7 @@ enum LrcLibEndpoint {
     }
 
     nonisolated static func apiRequest(queryItems: [URLQueryItem], forceOnline: Bool = false) -> RequestInfo? {
-        let resolved = selectedBaseURL(forceOnline: forceOnline)
+        guard let resolved = selectedBaseURL(forceOnline: forceOnline) else { return nil }
         let base = resolved.url
         let source = resolved.isCustom ? "LRCLIB custom" : "LRCLIB online"
         var endpoint = base
@@ -92,7 +93,13 @@ enum LrcLibEndpoint {
         UserDefaults.standard.bool(forKey: useCustomKey)
     }
 
-    nonisolated private static func selectedBaseURL(forceOnline: Bool = false) -> (url: URL, isCustom: Bool, fallbackReason: String?) {
+    nonisolated static var isOnlineFallbackEnabled: Bool {
+        let defaults = UserDefaults.standard
+        guard defaults.object(forKey: onlineFallbackEnabledKey) != nil else { return true }
+        return defaults.bool(forKey: onlineFallbackEnabledKey)
+    }
+
+    nonisolated private static func selectedBaseURL(forceOnline: Bool = false) -> (url: URL, isCustom: Bool, fallbackReason: String?)? {
         if forceOnline {
             return (URL(string: defaultBaseURL)!, false, nil)
         }
@@ -101,6 +108,7 @@ enum LrcLibEndpoint {
             if let custom = normalizedBaseURL(from: defaults.string(forKey: customBaseURLKey) ?? "") {
                 return (custom, true, nil)
             }
+            guard isOnlineFallbackEnabled else { return nil }
             return (URL(string: defaultBaseURL)!, false, "custom server URL is invalid or empty")
         }
         return (URL(string: defaultBaseURL)!, false, nil)
@@ -490,6 +498,9 @@ actor LyricsService {
         if let a = song.album   { items.append(URLQueryItem(name: "album_name",  value: a)) }
         if let d = song.duration { items.append(URLQueryItem(name: "duration",   value: "\(d)")) }
         guard let requestInfo = LrcLibEndpoint.apiRequest(queryItems: items) else {
+            if LrcLibEndpoint.isCustomEnabled && !LrcLibEndpoint.isOnlineFallbackEnabled {
+                DBErrorLog.logLyrics("Fallback off → LRCLIB skipped: custom URL invalid or empty")
+            }
             return .indeterminate
         }
         if let fallbackReason = requestInfo.fallbackReason {
@@ -498,14 +509,21 @@ actor LyricsService {
         let outcome = await fetchFromLrcLib(song: song, serverId: serverId, requestInfo: requestInfo)
         guard requestInfo.isCustom else { return outcome }
 
+        let fallbackReason: String
         switch outcome {
         case .found:
             return outcome
         case .notFound:
-            DBErrorLog.logLyrics("Fallback → LRCLIB online: custom server had no match")
+            fallbackReason = "custom no match"
         case .indeterminate:
-            DBErrorLog.logLyrics("Fallback → LRCLIB online: custom server failed")
+            fallbackReason = "custom failed"
         }
+
+        guard LrcLibEndpoint.isOnlineFallbackEnabled else {
+            DBErrorLog.logLyrics("Fallback off → LRCLIB online skipped (\(fallbackReason)): \(song.title)")
+            return outcome
+        }
+        DBErrorLog.logLyrics("Fallback → LRCLIB online (\(fallbackReason)): \(song.title)")
 
         guard let onlineRequest = LrcLibEndpoint.apiRequest(queryItems: items, forceOnline: true) else {
             return outcome
@@ -515,7 +533,7 @@ actor LyricsService {
 
     private func fetchFromLrcLib(song: Song, serverId: String, requestInfo: LrcLibEndpoint.RequestInfo) async -> LrcLibOutcome {
         let url = requestInfo.url
-        DBErrorLog.logLyrics("Request → \(requestInfo.source): \(url.absoluteString)")
+        DBErrorLog.logLyrics("Request → \(requestInfo.source): \(song.title)")
 
         var req = URLRequest(url: url, timeoutInterval: 10)
         req.setValue("Shelv/1.0 (https://github.com/gatzenga/Shelv)", forHTTPHeaderField: "User-Agent")
@@ -564,6 +582,7 @@ actor LyricsService {
         }
 
         if lrc.instrumental == true {
+            DBErrorLog.logLyrics("Found → \(requestInfo.source): \(song.title)")
             return .found(LyricsRecord(
                 songId: song.id, serverId: serverId, source: "lrclib",
                 plainText: nil, syncedLrc: nil, isSynced: false,
@@ -578,6 +597,7 @@ actor LyricsService {
             return .notFound
         }
 
+        DBErrorLog.logLyrics("Found → \(requestInfo.source): \(song.title)")
         return .found(LyricsRecord(
             songId: song.id, serverId: serverId, source: "lrclib",
             plainText: lrc.plainLyrics,

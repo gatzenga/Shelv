@@ -562,7 +562,10 @@ struct PlayerView: View {
                         .tint(accentColor)
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .ignoresSafeArea(.keyboard)
     }
     }
 

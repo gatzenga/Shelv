@@ -129,6 +129,9 @@ class LyricsStore: ObservableObject {
 
             let cachedSongIds = await LyricsService.shared.cachedSongIds(serverId: serverId)
             let songsToDownload = allSongs.filter { !cachedSongIds.contains($0.id) }
+            DBErrorLog.logLyrics(
+                "Bulk scan → library \(allSongs.count), local DB \(cachedSongIds.count), queue \(songsToDownload.count)"
+            )
 
             await MainActor.run { [weak self] in
                 self?.downloadTotal = songsToDownload.count
