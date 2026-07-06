@@ -92,6 +92,7 @@ struct Shelv_DesktopApp: App {
                 }
                 .task(id: appState.serverStore.activeServerID) {
                     guard let server = appState.serverStore.activeServer else { return }
+                    OfflineModeService.shared.prepareInitialServerErrorPresentation()
                     await RecapStore.shared.setup(serverId: server.stableId)
                     await DownloadStore.shared.setActiveServer(server.stableId)
                     PinnedPlaylistStore.shared.setActiveServer(server.stableId)

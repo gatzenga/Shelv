@@ -209,9 +209,10 @@ struct PlaylistDetailView: View {
             Task { await loadDetail() }
         }
         .refreshable {
-            async let detail: Void = loadDetail()
-            async let sync:   Void = CloudKitSyncService.shared.syncNow()
-            _ = await (detail, sync)
+            if await offlineMode.beginUserInitiatedServerRefresh() { return }
+            defer { offlineMode.finishUserInitiatedServerRefresh() }
+            Task { await CloudKitSyncService.shared.syncNow() }
+            await loadDetail()
         }
     }
 

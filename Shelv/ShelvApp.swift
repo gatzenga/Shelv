@@ -36,7 +36,7 @@ func haptic(_ style: UIImpactFeedbackGenerator.FeedbackStyle = .light) {
 @main
 struct ShelvApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    @StateObject private var serverStore = ServerStore()
+    @StateObject private var serverStore = ServerStore.shared
     @ObservedObject private var downloadStore = DownloadStore.shared
     private let _playTracker = PlayTracker.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
@@ -99,6 +99,7 @@ struct ShelvApp: App {
                 }
                 .task(id: serverStore.activeServerID) {
                     guard let server = serverStore.activeServer else { return }
+                    OfflineModeService.shared.prepareInitialServerErrorPresentation()
                     await PlayLogService.shared.setup()
                     await DownloadDatabase.shared.setup()
                     await RecapStore.shared.setup(serverId: server.stableId)

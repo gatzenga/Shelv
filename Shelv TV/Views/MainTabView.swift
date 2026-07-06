@@ -24,6 +24,13 @@ struct MainTabView: View {
     @State private var nowPlayingSidePanelOpen = false
     @State private var idleNowPlayingTask: Task<Void, Never>?
 
+    private var serverErrorAlertTitle: String {
+        if offlineMode.lastServerErrorWasDeviceOffline {
+            return String(localized: "you_are_offline")
+        }
+        return String(localized: "server_unreachable")
+    }
+
     private static var initialSelection: String {
         #if DEBUG
         if DemoContent.isLargeLibraryFixtureEnabled {
@@ -124,6 +131,21 @@ struct MainTabView: View {
             guard queueSync.pendingRemote != nil else { return }
             try? await Task.sleep(for: .seconds(6))
             queueSync.dismissPending()
+        }
+        .alert(serverErrorAlertTitle, isPresented: Binding(
+            get: { offlineMode.serverErrorBannerVisible },
+            set: { if !$0 { offlineMode.dismissBanner() } }
+        )) {
+            if offlineMode.downloadsFeatureEnabled {
+                Button(String(localized: "go_offline")) {
+                    offlineMode.enterOfflineMode()
+                }
+            }
+            Button(String(localized: "ok"), role: .cancel) {
+                offlineMode.dismissBanner()
+            }
+        } message: {
+            Text(offlineMode.lastServerErrorMessage ?? String(localized: "switch_to_offline_mode_to_use_your_downloads"))
         }
         .onAppear {
             scheduleIdleNowPlayingIfNeeded()

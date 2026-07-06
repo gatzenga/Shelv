@@ -66,9 +66,10 @@ struct RadioStationsView: View {
             }
             .task { await store.refresh() }
             .refreshable {
-                async let reload: Void = store.refresh()
-                async let sync: Void = CloudKitSyncService.shared.syncNow()
-                _ = await (reload, sync)
+                if await OfflineModeService.shared.beginUserInitiatedServerRefresh() { return }
+                defer { OfflineModeService.shared.finishUserInitiatedServerRefresh() }
+                Task { await CloudKitSyncService.shared.syncNow() }
+                await store.refresh()
             }
             .onChange(of: store.errorMessage) { _, message in
                 guard let message else { return }

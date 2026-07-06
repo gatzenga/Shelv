@@ -124,7 +124,10 @@ struct MainWindowView: View {
         .animation(.spring(duration: 0.35), value: toastMessage)
         .onChange(of: libraryStore.errorMessage) { _, msg in
             guard let msg else { return }
-            offlineMode.notifyServerError(msg)
+            Task { @MainActor in
+                await Task.yield()
+                offlineMode.notifyServerErrorIfPresentationAllowed(msg)
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .addSongsToPlaylist)) { notification in
             if let ids = notification.object as? [String] {

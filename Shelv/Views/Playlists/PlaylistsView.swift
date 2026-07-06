@@ -56,7 +56,6 @@ struct PlaylistsView: View {
     @State private var playlistToDelete: Playlist?
     @State private var currentToast: ShelveToast?
     @State private var playlistToDeleteDownloads: Playlist?
-    @State private var refreshContinuation: CheckedContinuation<Void, Never>?
 
     var body: some View {
         NavigationStack {
@@ -147,24 +146,10 @@ struct PlaylistsView: View {
                 await libraryStore.loadPlaylists()
             }
             .refreshable {
-                await withCheckedContinuation { cont in
-                    refreshContinuation = cont
-                    Task { @MainActor in
-                        async let reload: Void = libraryStore.loadPlaylists()
-                        async let sync:   Void = CloudKitSyncService.shared.syncNow()
-                        _ = await (reload, sync)
-                        if let cont = refreshContinuation {
-                            refreshContinuation = nil
-                            cont.resume()
-                        }
-                    }
-                }
-            }
-            .onChange(of: offlineMode.isOffline) { _, isOffline in
-                if isOffline, let cont = refreshContinuation {
-                    refreshContinuation = nil
-                    cont.resume()
-                }
+                if await offlineMode.beginUserInitiatedServerRefresh() { return }
+                defer { offlineMode.finishUserInitiatedServerRefresh() }
+                Task { await CloudKitSyncService.shared.syncNow() }
+                await libraryStore.loadPlaylists()
             }
             .alert(
                 String(localized: "delete_playlist_2"),

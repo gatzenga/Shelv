@@ -101,6 +101,7 @@
 "shuffle_all_downloads" = "Shuffle: Alle Downloads";
 "mix_latest_downloads" = "Mix: Neueste Downloads";
 "go_online" = "Online gehen";
+"go_offline" = "Offline gehen";
 "you_are_offline" = "Du bist offline";
 "smart_mixes" = "Smart Mixes";
 "mix_newest_tracks" = "Mix: Neueste Titel";

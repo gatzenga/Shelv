@@ -147,6 +147,11 @@ final class CarPlayRadioController {
                 completion()
                 return
             }
+            if await OfflineModeService.shared.beginUserInitiatedServerRefresh() {
+                completion()
+                return
+            }
+            defer { OfflineModeService.shared.finishUserInitiatedServerRefresh() }
             _ = await NetworkStatus.shared.waitUntilNetworkAvailable()
             await RadioStationStore.shared.refresh(waitForCloudMetadata: false)
             guard !Task.isCancelled else {

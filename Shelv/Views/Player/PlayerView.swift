@@ -562,8 +562,8 @@ struct PlayerView: View {
                         .tint(accentColor)
                 }
             }
-            }
         }
+    }
     }
 
     @ViewBuilder

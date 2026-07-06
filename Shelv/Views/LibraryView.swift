@@ -37,7 +37,6 @@ struct LibraryView: View {
     @State private var albumGenreOptions: [AlbumGenreFilterOption] = []
     @State private var artistGroups: [(letter: String, items: [Artist])] = []
     @State private var albumCountByArtist: [String: Int] = [:]
-    @State private var refreshContinuation: CheckedContinuation<Void, Never>?
     @ObservedObject private var downloadStore = DownloadStore.shared
     @State private var albumToDeleteDownloads: Album?
     @State private var artistToDeleteDownloads: Artist?
@@ -189,10 +188,6 @@ struct LibraryView: View {
         .onReceive(downloadStore.$artists) { _ in Task { @MainActor in rebuildGroups() } }
         .onChange(of: offlineMode.isOffline) { _, isOffline in
             if isOffline {
-                if let cont = refreshContinuation {
-                    refreshContinuation = nil
-                    cont.resume()
-                }
                 if sortOption.requiresServer { sortOptionRaw = AlbumSortOption.alphabetical.rawValue }
                 if artistSortOption.requiresServer { artistSortRaw = ArtistSortOption.alphabetical.rawValue }
             }
@@ -375,22 +370,15 @@ struct LibraryView: View {
     private var mainContent: some View {
         stackContent
         .refreshable {
+            if await offlineMode.beginUserInitiatedServerRefresh() { return }
+            defer { offlineMode.finishUserInitiatedServerRefresh() }
             let currentSegment = segment
             let currentSort = sortOption.rawValue
-            await withCheckedContinuation { cont in
-                refreshContinuation = cont
-                Task { @MainActor in
-                    switch currentSegment {
-                    case .albums:    await libraryStore.loadAlbums(sortBy: currentSort)
-                    case .artists:   await libraryStore.loadArtists()
-                    case .favorites: await libraryStore.loadStarred()
-                    }
-                    await CloudKitSyncService.shared.syncNow()
-                    if let cont = refreshContinuation {
-                        refreshContinuation = nil
-                        cont.resume()
-                    }
-                }
+            Task { await CloudKitSyncService.shared.syncNow() }
+            switch currentSegment {
+            case .albums:    await libraryStore.loadAlbums(sortBy: currentSort)
+            case .artists:   await libraryStore.loadArtists()
+            case .favorites: await libraryStore.loadStarred()
             }
         }
         .shelveToast($currentToast)

@@ -101,6 +101,7 @@
 "shuffle_all_downloads" = "随机：所有下载";
 "mix_latest_downloads" = "混音：最新下载";
 "go_online" = "上线";
+"go_offline" = "离线";
 "you_are_offline" = "您处于离线状态";
 "smart_mixes" = "智能混音";
 "mix_newest_tracks" = "混音：最新曲目";

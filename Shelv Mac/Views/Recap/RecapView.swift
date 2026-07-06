@@ -169,11 +169,13 @@ struct RecapView: View {
                 ToolbarItem(placement: .automatic) {
                     Button {
                         Task {
+                            if await OfflineModeService.shared.beginUserInitiatedServerRefresh() { return }
+                            defer { OfflineModeService.shared.finishUserInitiatedServerRefresh() }
                             guard let sid = appState.serverStore.activeServer?.stableId else { return }
+                            Task { await CloudKitSyncService.shared.syncNow() }
                             async let cleanup:   Void = recapStore.refreshWithCleanup(serverId: sid)
-                            async let sync:      Void = CloudKitSyncService.shared.syncNow()
                             async let playlists: Void = libraryStore.loadPlaylists()
-                            _ = await (cleanup, sync, playlists)
+                            _ = await (cleanup, playlists)
                         }
                     } label: {
                         Image(systemName: "arrow.clockwise")

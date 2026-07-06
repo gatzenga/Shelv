@@ -111,9 +111,8 @@ final class CarPlayPlaylistsController {
         let offlineIds = DownloadStore.shared.offlinePlaylistIds
         let recapIds = RecapStore.shared.recapPlaylistIds
         let hasDownloads = !DownloadStore.shared.songs.isEmpty
-        // Marker bleibt nach "Delete All" bestehen (iPhone-Logik räumt ihn nicht auf).
-        // Wenn keine Downloads mehr existieren, kann auch keine Playlist offline gespielt
-        // werden — also gar nicht erst anzeigen.
+        // Falls lokale Daten extern oder während einer Migration verschwinden, keine
+        // Offline-Playlist anbieten, die nicht mehr abgespielt werden kann.
         let playlists: [Playlist] = hasDownloads
             ? LibraryStore.shared.playlists.filter { offlineIds.contains($0.id) && !recapIds.contains($0.id) }
             : []

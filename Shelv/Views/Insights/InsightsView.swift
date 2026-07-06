@@ -77,10 +77,11 @@ struct InsightsView: View {
         .tint(accentColor)
         .task { await loadIfNeeded() }
         .refreshable {
+            if await OfflineModeService.shared.beginUserInitiatedServerRefresh() { return }
+            defer { OfflineModeService.shared.finishUserInitiatedServerRefresh() }
             lastLoadDate = nil
-            async let reload: Void = loadData(keepExisting: true)
-            async let sync:   Void = CloudKitSyncService.shared.syncNow()
-            _ = await (reload, sync)
+            Task { await CloudKitSyncService.shared.syncNow() }
+            await loadData(keepExisting: true)
         }
     }
 

@@ -51,6 +51,8 @@ struct RecapRegistryView: View {
                 .listRowSeparator(.hidden)
         }
         .refreshable {
+            if await OfflineModeService.shared.beginUserInitiatedServerRefresh() { return }
+            defer { OfflineModeService.shared.finishUserInitiatedServerRefresh() }
             await recapStore.refreshWithCleanup(serverId: serverId)
         }
         .navigationTitle(String(localized: "registry"))
@@ -58,7 +60,11 @@ struct RecapRegistryView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
-                    Task { await recapStore.refreshWithCleanup(serverId: serverId) }
+                    Task {
+                        if await OfflineModeService.shared.beginUserInitiatedServerRefresh() { return }
+                        defer { OfflineModeService.shared.finishUserInitiatedServerRefresh() }
+                        await recapStore.refreshWithCleanup(serverId: serverId)
+                    }
                 } label: {
                     Image(systemName: "arrow.clockwise")
                 }

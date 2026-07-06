@@ -27,6 +27,13 @@ struct DiscoverView: View {
         orderedDiscoverySections.filter(isDiscoverySectionVisible)
     }
 
+    private var discoverContentIsEmpty: Bool {
+        newest.isEmpty
+            && recent.isEmpty
+            && frequent.isEmpty
+            && random.isEmpty
+    }
+
     @State private var newest: [Album] = []
     @State private var recent: [Album] = []
     @State private var frequent: [Album] = []
@@ -36,17 +43,16 @@ struct DiscoverView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 40) {
-                    // Links Refresh (Reload + iCloud-Sync inkl. Queue-Check), rechts Discover-Aktionen.
                     HStack {
                         Button {
-                            // Wie der Mac-Refresh: Server neu kontaktieren (Discover + Playlists)
-                            // und iCloud-Sync inkl. Queue-Check.
                             Task {
+                                if await OfflineModeService.shared.beginUserInitiatedServerRefresh() { return }
+                                defer { OfflineModeService.shared.finishUserInitiatedServerRefresh() }
+                                Task { await CloudKitSyncService.shared.syncNow() }
                                 async let discover:  Void = load()
                                 async let playlists: Void = LibraryStore.shared.loadPlaylists()
                                 async let radio:     Void = RadioStationStore.shared.refresh()
-                                async let sync:      Void = CloudKitSyncService.shared.syncNow()
-                                _ = await (discover, playlists, radio, sync)
+                                _ = await (discover, playlists, radio)
                             }
                         } label: {
                             Label(String(localized: "refresh"), systemImage: "arrow.clockwise")
@@ -109,10 +115,7 @@ struct DiscoverView: View {
             let counts = await PlayLogService.shared.topSongs(serverId: sid, from: .distantPast, to: Date(), limit: 50)
             if !counts.isEmpty, let songs = try? await api.getSongsOrdered(ids: counts.map(\.songId)) { return songs }
         }
-        let albums = (try? await api.getAlbumList(type: "frequent", size: 100)) ?? []
-        var out: [Song] = []
-        for a in albums.prefix(20) { out += (try? await api.getAlbum(id: a.id).song) ?? [] }
-        return out
+        return (try? await api.frequentMixFallbackSongs()) ?? []
     }
 
     private func recentMix() async -> [Song] {
@@ -138,7 +141,7 @@ struct DiscoverView: View {
     private func isDiscoverySectionVisible(_ section: PersonalizationDiscoverySection) -> Bool {
         switch section {
         case .smartMixes:
-            return !visibleSmartMixes.isEmpty
+            return !visibleSmartMixes.isEmpty && !discoverContentIsEmpty
         case .recentlyAdded:
             return !newest.isEmpty
         case .recentlyPlayed:

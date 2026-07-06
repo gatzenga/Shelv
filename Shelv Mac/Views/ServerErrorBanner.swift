@@ -3,6 +3,13 @@ import SwiftUI
 struct ServerErrorBanner: View {
     @ObservedObject var offlineMode = OfflineModeService.shared
 
+    private var title: String {
+        if offlineMode.lastServerErrorWasDeviceOffline {
+            return String(localized: "you_are_offline")
+        }
+        return String(localized: "server_unreachable")
+    }
+
     var body: some View {
         if offlineMode.serverErrorBannerVisible {
             HStack(spacing: 12) {
@@ -10,7 +17,7 @@ struct ServerErrorBanner: View {
                     .font(.headline)
                     .foregroundStyle(.white)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(String(localized: "server_unreachable"))
+                    Text(title)
                         .font(.subheadline.bold())
                         .foregroundStyle(.white)
                     Text(String(localized: "switch_to_offline_mode_to_use_your_downloads"))

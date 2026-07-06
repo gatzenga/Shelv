@@ -96,7 +96,7 @@ struct ShelvPlaylistQuery: EntityStringQuery {
     @MainActor
     private func fetchPlaylists() async -> [ShelvPlaylistEntity] {
         if SubsonicAPIService.shared.activeServer == nil {
-            _ = ServerStore()
+            _ = ServerStore.shared
         }
         let store = LibraryStore.shared
         if store.playlists.isEmpty {
@@ -267,7 +267,7 @@ struct ShelvShufflePlaylistIntent: AppIntent, AudioPlaybackIntent {
 @MainActor
 private func playPlaylist(_ entity: ShelvPlaylistEntity, shuffled: Bool) async -> ShelvPlaylistIntentResult {
     if SubsonicAPIService.shared.activeServer == nil {
-        _ = ServerStore()
+        _ = ServerStore.shared
     }
     guard SubsonicAPIService.shared.activeServer != nil else { return .noServer }
 

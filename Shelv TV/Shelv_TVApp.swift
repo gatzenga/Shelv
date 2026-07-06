@@ -35,6 +35,7 @@ struct Shelv_TVApp: App {
                 // Pro aktivem Server: Tracking-DB + Recap-Registry (NUR laden, nie generieren) + Pins.
                 .task(id: serverStore.activeServerID) {
                     guard let server = serverStore.activeServer else { return }
+                    OfflineModeService.shared.prepareInitialServerErrorPresentation()
                     #if DEBUG
                     AudioPlayerService.shared.ensureDemoStandby()
                     #endif

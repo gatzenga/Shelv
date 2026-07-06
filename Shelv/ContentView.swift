@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 extension Notification.Name {
     static let addSongsToPlaylist = Notification.Name("addSongsToPlaylist")
@@ -37,11 +38,17 @@ struct ContentView: View {
 
     var body: some View {
         rootContent
+            .background(ServerErrorBannerWindowPresenter())
             .ignoresSafeArea(.keyboard)
             .onChange(of: libraryStore.errorMessage) { _, msg in
                 guard let msg else { return }
-                libraryStore.errorMessage = nil
-                offlineMode.notifyServerError(msg)
+                Task { @MainActor in
+                    await Task.yield()
+                    if libraryStore.errorMessage == msg {
+                        libraryStore.errorMessage = nil
+                    }
+                    offlineMode.notifyServerErrorIfPresentationAllowed(msg)
+                }
             }
             .sheet(isPresented: $showPlayer) {
                 PlayerView()
@@ -373,20 +380,132 @@ private struct NativeBottomRoot: View {
 private struct BottomBanners: View {
     let topInset: CGFloat
 
-    @ObservedObject private var offlineMode = OfflineModeService.shared
     @ObservedObject private var queueSync = QueueSyncService.shared
 
     var body: some View {
         VStack(spacing: 8) {
-            ServerErrorBanner()
-                .animation(.easeInOut, value: offlineMode.serverErrorBannerVisible)
             QueueSyncBanner()
                 .animation(.easeInOut, value: queueSync.pendingRemote != nil)
         }
         .padding(.top, topInset + 12)
         .frame(maxWidth: .infinity, alignment: .top)
-        .allowsHitTesting(offlineMode.serverErrorBannerVisible || queueSync.pendingRemote != nil)
+        .allowsHitTesting(queueSync.pendingRemote != nil)
         .ignoresSafeArea(edges: .top)
+    }
+}
+
+private struct ServerErrorBannerWindowPresenter: UIViewRepresentable {
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView(frame: .zero)
+        view.isUserInteractionEnabled = false
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {
+        DispatchQueue.main.async {
+            context.coordinator.attachIfNeeded(from: uiView)
+        }
+    }
+
+    static func dismantleUIView(_ uiView: UIView, coordinator: Coordinator) {
+        coordinator.detach()
+    }
+
+    final class Coordinator {
+        private var overlayWindow: UIWindow?
+        private weak var attachedScene: UIWindowScene?
+
+        func attachIfNeeded(from view: UIView) {
+            guard let scene = view.window?.windowScene else { return }
+            guard overlayWindow == nil || attachedScene !== scene else { return }
+
+            detach()
+
+            let window = PassthroughWindow(windowScene: scene)
+            window.windowLevel = .alert + 1
+            window.backgroundColor = .clear
+            window.rootViewController = ServerErrorBannerWindowController()
+            window.isHidden = false
+
+            overlayWindow = window
+            attachedScene = scene
+        }
+
+        func detach() {
+            overlayWindow?.isHidden = true
+            overlayWindow = nil
+            attachedScene = nil
+        }
+    }
+}
+
+private final class ServerErrorBannerWindowController: UIViewController {
+    private let hostingController = UIHostingController(rootView: ServerErrorBannerWindowContent())
+    private var heightConstraint: NSLayoutConstraint?
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .clear
+
+        hostingController.view.backgroundColor = .clear
+        hostingController.view.translatesAutoresizingMaskIntoConstraints = false
+
+        addChild(hostingController)
+        view.addSubview(hostingController.view)
+
+        let height = hostingController.view.heightAnchor.constraint(equalToConstant: 150)
+        NSLayoutConstraint.activate([
+            hostingController.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            hostingController.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            hostingController.view.topAnchor.constraint(equalTo: view.topAnchor),
+            height
+        ])
+        heightConstraint = height
+        hostingController.didMove(toParent: self)
+        updateBannerHostHeight()
+    }
+
+    override func viewSafeAreaInsetsDidChange() {
+        super.viewSafeAreaInsetsDidChange()
+        updateBannerHostHeight()
+    }
+
+    private func updateBannerHostHeight() {
+        heightConstraint?.constant = view.safeAreaInsets.top + 130
+    }
+}
+
+private final class PassthroughWindow: UIWindow {
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        guard OfflineModeService.shared.serverErrorBannerVisible else { return nil }
+        let hitView = super.hitTest(point, with: event)
+        if hitView === rootViewController?.view {
+            return nil
+        }
+        return hitView
+    }
+}
+
+private struct ServerErrorBannerWindowContent: View {
+    @ObservedObject private var offlineMode = OfflineModeService.shared
+
+    var body: some View {
+        GeometryReader { geometry in
+            VStack(spacing: 0) {
+                ServerErrorBanner()
+                    .padding(.top, geometry.safeAreaInsets.top + 12)
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .allowsHitTesting(offlineMode.serverErrorBannerVisible)
+            .accessibilityHidden(!offlineMode.serverErrorBannerVisible)
+            .ignoresSafeArea(edges: .top)
+        }
+        .background(Color.clear)
     }
 }
 
