@@ -6,8 +6,6 @@ struct TranscodingSettingsView: View {
     @AppStorage("transcodingWifiBitrate") private var wifiBitrate: Int = 256
     @AppStorage("transcodingCellularCodec") private var cellularCodecRaw: String = "raw"
     @AppStorage("transcodingCellularBitrate") private var cellularBitrate: Int = 128
-    @AppStorage("transcodingDownloadCodec") private var downloadCodecRaw: String = "raw"
-    @AppStorage("transcodingDownloadBitrate") private var downloadBitrate: Int = 192
 
     @State private var showInfo = false
 
@@ -33,14 +31,6 @@ struct TranscodingSettingsView: View {
                 codecBinding: $cellularCodecRaw,
                 bitrateBinding: $cellularBitrate,
                 options: TranscodingCodec.streamingOptions
-            )
-
-            transcodingSection(
-                title: String(localized: "downloads"),
-                icon: "arrow.down.circle",
-                codecBinding: $downloadCodecRaw,
-                bitrateBinding: $downloadBitrate,
-                options: TranscodingCodec.downloadOptions
             )
 
             Section {

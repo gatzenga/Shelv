@@ -15,6 +15,7 @@ struct PlaybackSettingsView: View {
     @AppStorage("includeNavidromeLyrics") private var includeNavidromeLyrics = false
     @AppStorage("useCustomLrcLibServer") private var useCustomLrcLibServer = false
     @AppStorage("customLrcLibBaseURL") private var customLrcLibBaseURL = ""
+    @AppStorage(LrcLibEndpoint.onlineFallbackEnabledKey) private var lrcLibOnlineFallbackEnabled = true
 
     @State private var showLrcLibServerEditor = false
     @State private var draftLrcLibBaseURL = ""
@@ -119,6 +120,11 @@ struct PlaybackSettingsView: View {
                                 .lineLimit(1)
                         }
                     }
+
+                    Toggle(String(localized: "lrclib_online_fallback"), isOn: $lrcLibOnlineFallbackEnabled)
+                        .onChange(of: lrcLibOnlineFallbackEnabled) { _, _ in
+                            Task { await CloudKitSyncService.shared.recordLyricsServerSettingsChange() }
+                        }
                 }
             }
 

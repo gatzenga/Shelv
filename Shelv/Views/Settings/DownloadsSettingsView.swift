@@ -1,16 +1,20 @@
 import SwiftUI
 
 struct DownloadsSettingsView: View {
+    @EnvironmentObject var serverStore: ServerStore
     @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage("enableDownloads") private var enableDownloads = false
     @AppStorage("maxBulkDownloadStorageGB") private var maxBulkStorageGB = 10
     @AppStorage("preventSleepDuringDownloads") private var preventSleepDuringDownloads = false
     @ObservedObject var offlineMode = OfflineModeService.shared
+    @ObservedObject private var keepOffline = KeepLibraryOfflineService.shared
 
     @State private var showBulkDownloadSheet = false
+    @State private var showKeepLibraryOfflineSheet = false
     @State private var showDeleteAllDownloadsConfirm = false
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
+    private var activeServerId: String? { serverStore.activeServer?.stableId }
 
     private var maxAllowedStorageGB: Int {
         guard let values = try? URL(fileURLWithPath: NSHomeDirectory())
@@ -29,6 +33,10 @@ struct DownloadsSettingsView: View {
                     }
                 }
                 .tint(accentColor)
+
+                if enableDownloads {
+                    DownloadFormatRows(accentColor: accentColor)
+                }
             }
 
             if enableDownloads {
@@ -52,31 +60,55 @@ struct DownloadsSettingsView: View {
                     }
                     .tint(accentColor)
 
-                    Button {
-                        showBulkDownloadSheet = true
-                    } label: {
-                        Label { Text(String(localized: "download_everything")) } icon: {
-                            Image(systemName: "square.and.arrow.down.on.square").foregroundStyle(accentColor)
+                    Toggle(isOn: Binding(
+                        get: { keepOffline.isEnabled(serverId: activeServerId) },
+                        set: { newValue in
+                            guard let activeServerId else { return }
+                            if newValue {
+                                showKeepLibraryOfflineSheet = true
+                            } else {
+                                keepOffline.disableAndCancel(serverId: activeServerId)
+                            }
+                        }
+                    )) {
+                        Label { Text(String(localized: "keep_library_offline")) } icon: {
+                            Image(systemName: "externaldrive.badge.checkmark").foregroundStyle(accentColor)
                         }
                     }
-                    .disabled(offlineMode.isOffline)
+                    .tint(accentColor)
+                    .disabled(offlineMode.isOffline || activeServerId == nil)
 
-                    HStack {
-                        Label { Text(String(localized: "max_storage")) } icon: {
-                            Image(systemName: "externaldrive").foregroundStyle(accentColor)
+                    if keepOffline.isEnabled(serverId: activeServerId) {
+                        Label { Text(keepOfflineStatusText) } icon: {
+                            Image(systemName: keepOfflineStatusIcon).foregroundStyle(keepOfflineStatusColor)
                         }
-                        Spacer()
-                        Stepper("\(maxBulkStorageGB) GB",
-                                value: $maxBulkStorageGB,
-                                in: 10...maxAllowedStorageGB,
-                                step: 10)
-                            .labelsHidden()
-                        Text("\(maxBulkStorageGB) GB")
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
-                    }
-                    .onAppear {
-                        maxBulkStorageGB = min(maxBulkStorageGB, maxAllowedStorageGB)
+                    } else {
+                        Button {
+                            showBulkDownloadSheet = true
+                        } label: {
+                            Label { Text(String(localized: "download_everything")) } icon: {
+                                Image(systemName: "square.and.arrow.down.on.square").foregroundStyle(accentColor)
+                            }
+                        }
+                        .disabled(offlineMode.isOffline)
+
+                        HStack {
+                            Label { Text(String(localized: "max_storage")) } icon: {
+                                Image(systemName: "externaldrive").foregroundStyle(accentColor)
+                            }
+                            Spacer()
+                            Stepper("\(maxBulkStorageGB) GB",
+                                    value: $maxBulkStorageGB,
+                                    in: 10...maxAllowedStorageGB,
+                                    step: 10)
+                                .labelsHidden()
+                            Text("\(maxBulkStorageGB) GB")
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                        }
+                        .onAppear {
+                            maxBulkStorageGB = min(maxBulkStorageGB, maxAllowedStorageGB)
+                        }
                     }
 
                     Button(role: .destructive) {
@@ -90,7 +122,7 @@ struct DownloadsSettingsView: View {
                     .tint(.red)
                 }
 
-                ActiveDownloadProgressCell()
+                ActiveDownloadProgressCell(serverId: activeServerId)
 
                 DownloadStatsCell()
 
@@ -110,6 +142,12 @@ struct DownloadsSettingsView: View {
                 .presentationCornerRadius(24)
                 .tint(accentColor)
         }
+        .sheet(isPresented: $showKeepLibraryOfflineSheet) {
+            BulkDownloadSheet(mode: .keepLibraryOffline)
+                .presentationDetents([.large])
+                .presentationCornerRadius(24)
+                .tint(accentColor)
+        }
         .alert(
             String(localized: "delete_all_downloads_2"),
             isPresented: $showDeleteAllDownloadsConfirm
@@ -124,6 +162,85 @@ struct DownloadsSettingsView: View {
         .task(id: enableDownloads) {
             guard enableDownloads, LibraryStore.shared.albums.isEmpty else { return }
             await LibraryStore.shared.loadAlbums()
+        }
+        .task(id: activeServerId) {
+            if let activeServerId {
+                keepOffline.prepare(serverId: activeServerId)
+            }
+        }
+    }
+
+    private var keepOfflineStatusText: String {
+        switch keepOffline.status {
+        case .inactive:
+            return String(localized: "inactive")
+        case .idle:
+            return String(localized: "keep_library_offline_active")
+        case .checking:
+            return String(localized: "checking")
+        case .downloading:
+            return String(localized: "downloading")
+        case .pausedLowStorage:
+            return String(localized: "keep_library_offline_paused_storage")
+        case .failed(let message):
+            return message
+        }
+    }
+
+    private var keepOfflineStatusIcon: String {
+        switch keepOffline.status {
+        case .pausedLowStorage, .failed:
+            return "exclamationmark.triangle"
+        case .checking:
+            return "arrow.triangle.2.circlepath"
+        case .downloading:
+            return "arrow.down.circle"
+        default:
+            return "checkmark.circle"
+        }
+    }
+
+    private var keepOfflineStatusColor: Color {
+        switch keepOffline.status {
+        case .pausedLowStorage, .failed:
+            return .red
+        default:
+            return accentColor
+        }
+    }
+}
+
+private struct DownloadFormatRows: View {
+    let accentColor: Color
+
+    @AppStorage("transcodingDownloadCodec") private var downloadCodecRaw: String = "raw"
+    @AppStorage("transcodingDownloadBitrate") private var downloadBitrate: Int = 192
+
+    private var codec: TranscodingCodec {
+        TranscodingCodec(rawValue: downloadCodecRaw) ?? .raw
+    }
+
+    var body: some View {
+        Picker(selection: $downloadCodecRaw) {
+            ForEach(TranscodingCodec.downloadOptions) { option in
+                Text(option.label).tag(option.rawValue)
+            }
+        } label: {
+            Label { Text(String(localized: "download_format")) } icon: {
+                Image(systemName: "waveform.badge.magnifyingglass").foregroundStyle(accentColor)
+            }
+        }
+
+        if codec != .raw {
+            Picker(selection: $downloadBitrate) {
+                ForEach(TranscodingBitrate.allCases) { bitrate in
+                    Text(bitrate.label).tag(bitrate.rawValue)
+                }
+            } label: {
+                Label { Text(String(localized: "bitrate")) } icon: {
+                    Image(systemName: "speedometer").foregroundStyle(accentColor)
+                }
+            }
         }
     }
 }
@@ -199,6 +316,8 @@ private struct DownloadStatsCell: View {
 private struct ActiveDownloadProgressCell: View {
     @ObservedObject private var store = DownloadStore.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
+    let serverId: String?
+
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
     var body: some View {
@@ -224,13 +343,21 @@ private struct ActiveDownloadProgressCell: View {
                         }
                         Spacer()
                         Button(String(localized: "cancel_download")) {
-                            Task { await DownloadService.shared.cancelBatch() }
+                            cancelDownload()
                         }
                         .font(.caption)
                         .foregroundStyle(.red)
                     }
                 }
             }
+        }
+    }
+
+    private func cancelDownload() {
+        if let serverId, KeepLibraryOfflineService.shared.isEnabled(serverId: serverId) {
+            KeepLibraryOfflineService.shared.cancelCurrentRun(serverId: serverId)
+        } else {
+            Task { await DownloadService.shared.cancelBatch() }
         }
     }
 }

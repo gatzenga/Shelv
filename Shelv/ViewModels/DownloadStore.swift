@@ -545,7 +545,33 @@ final class DownloadStore: ObservableObject {
         playlistSongIds = [:]
         UserDefaults.standard.removeObject(forKey: "shelv_offline_playlists_\(serverId)")
         UserDefaults.standard.removeObject(forKey: "shelv_offline_playlist_songs_\(serverId)")
-        Task { await DownloadService.shared.deleteAll() }
+        clearLocalDownloadState()
+        Task {
+            await DownloadService.shared.deleteAll()
+            await reload()
+        }
+    }
+
+    private func clearLocalDownloadState() {
+        flushTask?.cancel()
+        flushTask = nil
+        pendingInserts = []
+        songs = []
+        albums = []
+        artists = []
+        favoriteSongs = []
+        totalBytes = 0
+        songById = [:]
+        recordsByAlbumId = [:]
+        inFlightProgress = [:]
+        inFlightStates = [:]
+        batchProgress = nil
+        pendingReload = false
+        protectedPlaylistIds = []
+        DownloadStatusCache.shared.rebuild(albumIds: [])
+        LocalDownloadIndex.shared.update(paths: [:])
+        LocalArtworkIndex.shared.update(paths: [:])
+        progressPublisher.send(())
     }
 
     // MARK: - Stats

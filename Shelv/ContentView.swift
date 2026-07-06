@@ -191,6 +191,7 @@ struct ContentView: View {
             showRecap = true
         case .nowPlaying:
             if AudioPlayerService.shared.hasActivePlayback {
+                dismissKeyboard()
                 showPlayer = true
             } else {
                 selectedTab = 0
@@ -244,9 +245,6 @@ private struct ShelvBottomRoot: View {
                 )
             }
             .wrappedInGlassContainer()
-            .overlay(alignment: .top) {
-                BottomBanners(topInset: geometry.safeAreaInsets.top)
-            }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             PlayerBarInset(isRegularWidth: isRegularWidth, showPlayer: $showPlayer)
@@ -319,9 +317,6 @@ private struct NativeBottomRoot: View {
                     EmptyView()
                 }
             }
-            .overlay(alignment: .top) {
-                BottomBanners(topInset: geometry.safeAreaInsets.top)
-            }
         }
     }
 
@@ -377,20 +372,59 @@ private struct NativeBottomRoot: View {
     }
 }
 
-private struct BottomBanners: View {
-    let topInset: CGFloat
-
-    @ObservedObject private var queueSync = QueueSyncService.shared
+private struct KeepLibraryOfflineBanner: View {
+    @ObservedObject private var keepOffline = KeepLibraryOfflineService.shared
+    @State private var dragOffset: CGFloat = 0
 
     var body: some View {
-        VStack(spacing: 8) {
-            QueueSyncBanner()
-                .animation(.easeInOut, value: queueSync.pendingRemote != nil)
+        if keepOffline.lowStorageBannerVisible {
+            HStack(spacing: 12) {
+                Image(systemName: "externaldrive.badge.exclamationmark")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(String(localized: "keep_library_offline_storage_title"))
+                        .font(.subheadline.bold())
+                        .foregroundStyle(.white)
+                    Text(String(localized: "keep_library_offline_storage_message"))
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.85))
+                }
+                Spacer()
+                Button {
+                    keepOffline.dismissLowStorageBanner()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.caption.bold())
+                        .foregroundStyle(.white)
+                        .padding(8)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(Color.red.gradient, in: RoundedRectangle(cornerRadius: 14))
+            .shadow(color: .black.opacity(0.2), radius: 10, y: 4)
+            .padding(.horizontal)
+            .transition(.move(edge: .top).combined(with: .opacity))
+            .offset(y: dragOffset)
+            .gesture(
+                DragGesture()
+                    .onChanged { value in
+                        if value.translation.height < 0 { dragOffset = value.translation.height }
+                    }
+                    .onEnded { value in
+                        if value.translation.height < -30 {
+                            withAnimation(.easeOut(duration: 0.2)) { dragOffset = -300 }
+                            Task {
+                                try? await Task.sleep(for: .milliseconds(200))
+                                keepOffline.dismissLowStorageBanner()
+                            }
+                        } else {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) { dragOffset = 0 }
+                        }
+                    }
+            )
         }
-        .padding(.top, topInset + 12)
-        .frame(maxWidth: .infinity, alignment: .top)
-        .allowsHitTesting(queueSync.pendingRemote != nil)
-        .ignoresSafeArea(edges: .top)
     }
 }
 
@@ -457,7 +491,7 @@ private final class ServerErrorBannerWindowController: UIViewController {
         addChild(hostingController)
         view.addSubview(hostingController.view)
 
-        let height = hostingController.view.heightAnchor.constraint(equalToConstant: 150)
+        let height = hostingController.view.heightAnchor.constraint(equalToConstant: 280)
         NSLayoutConstraint.activate([
             hostingController.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             hostingController.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
@@ -475,13 +509,16 @@ private final class ServerErrorBannerWindowController: UIViewController {
     }
 
     private func updateBannerHostHeight() {
-        heightConstraint?.constant = view.safeAreaInsets.top + 130
+        heightConstraint?.constant = view.safeAreaInsets.top + 260
     }
 }
 
 private final class PassthroughWindow: UIWindow {
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-        guard OfflineModeService.shared.serverErrorBannerVisible else { return nil }
+        let hasVisibleBanner = OfflineModeService.shared.serverErrorBannerVisible
+            || QueueSyncService.shared.pendingRemote != nil
+            || KeepLibraryOfflineService.shared.lowStorageBannerVisible
+        guard hasVisibleBanner else { return nil }
         let hitView = super.hitTest(point, with: event)
         if hitView === rootViewController?.view {
             return nil
@@ -492,17 +529,21 @@ private final class PassthroughWindow: UIWindow {
 
 private struct ServerErrorBannerWindowContent: View {
     @ObservedObject private var offlineMode = OfflineModeService.shared
+    @ObservedObject private var queueSync = QueueSyncService.shared
+    @ObservedObject private var keepOffline = KeepLibraryOfflineService.shared
 
     var body: some View {
         GeometryReader { geometry in
-            VStack(spacing: 0) {
+            VStack(spacing: 8) {
                 ServerErrorBanner()
-                    .padding(.top, geometry.safeAreaInsets.top + 12)
+                QueueSyncBanner()
+                KeepLibraryOfflineBanner()
                 Spacer(minLength: 0)
             }
+            .padding(.top, geometry.safeAreaInsets.top + 12)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .allowsHitTesting(offlineMode.serverErrorBannerVisible)
-            .accessibilityHidden(!offlineMode.serverErrorBannerVisible)
+            .allowsHitTesting(offlineMode.serverErrorBannerVisible || queueSync.pendingRemote != nil || keepOffline.lowStorageBannerVisible)
+            .accessibilityHidden(!(offlineMode.serverErrorBannerVisible || queueSync.pendingRemote != nil || keepOffline.lowStorageBannerVisible))
             .ignoresSafeArea(edges: .top)
         }
         .background(Color.clear)
@@ -640,6 +681,7 @@ private struct NativeMiniPlayerAccessory: View {
     }
 
     private func presentPlayer() {
+        dismissKeyboard()
         withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
             showPlayer = true
         }
@@ -668,6 +710,7 @@ private struct PlayerBarOverlay: View {
                 Spacer()
                 PlayerBarView()
                     .onTapGesture {
+                        dismissKeyboard()
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                             showPlayer = true
                         }
@@ -736,6 +779,7 @@ private struct PlayerBarInset: View {
         if player.hasActivePlayback && isRegularWidth {
             PlayerBarView()
                 .onTapGesture {
+                    dismissKeyboard()
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                         showPlayer = true
                     }
@@ -744,4 +788,13 @@ private struct PlayerBarInset: View {
                 .padding(.vertical, 8)
         }
     }
+}
+
+private func dismissKeyboard() {
+    UIApplication.shared.sendAction(
+        #selector(UIResponder.resignFirstResponder),
+        to: nil,
+        from: nil,
+        for: nil
+    )
 }

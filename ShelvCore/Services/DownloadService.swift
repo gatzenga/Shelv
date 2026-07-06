@@ -41,6 +41,12 @@ private nonisolated struct DownloadJob: Codable {
     var queuedAt: Date = Date()
 }
 
+private nonisolated struct BulkDownloadUnit: Sendable {
+    let priority: Int
+    let songs: [Song]
+    let playlistMarker: BulkDownloadPlaylistMarker?
+}
+
 // MARK: - DownloadService
 
 actor DownloadService {
@@ -91,6 +97,8 @@ actor DownloadService {
     private var batchTotal = 0
     private var batchCompleted = 0
     private var batchFailed = 0
+    private var didRestoreExistingTasks = false
+    private var restoreWaiters: [CheckedContinuation<Void, Never>] = []
 
     private init() {
         coordinator.service = self
@@ -122,8 +130,20 @@ actor DownloadService {
             let s = URLSession(configuration: cfg, delegate: coordinator, delegateQueue: nil)
             session = s
             s.getAllTasks { [weak self] tasks in
-                Task { await self?.restoreInflightTasks(tasks) }
+                Task {
+                    guard let self else { return }
+                    await self.restoreInflightTasks(tasks)
+                    await self.markExistingTasksRestored()
+                }
             }
+        }
+    }
+
+    func waitForRestoredInflightTasks() async {
+        setup()
+        if didRestoreExistingTasks { return }
+        await withCheckedContinuation { continuation in
+            restoreWaiters.append(continuation)
         }
     }
 
@@ -141,6 +161,15 @@ actor DownloadService {
         }
     }
 
+    private func markExistingTasksRestored() {
+        didRestoreExistingTasks = true
+        let waiters = restoreWaiters
+        restoreWaiters.removeAll()
+        for waiter in waiters {
+            waiter.resume()
+        }
+    }
+
     private func encodeJob(_ job: DownloadJob) -> String? {
         guard let data = try? JSONEncoder().encode(job) else { return nil }
         return String(data: data, encoding: .utf8)
@@ -154,6 +183,7 @@ actor DownloadService {
     // MARK: - Enqueueing
 
     func enqueue(songs: [Song], serverId: String, albumArtistOverride: String? = nil, albumCoverArtIdOverride: String? = nil) async {
+        guard await canStartDownloads() else { return }
         guard !songs.isEmpty else { return }
         guard let api = await currentAPI(for: serverId) else { return }
         let downloadedIds = await DownloadDatabase.shared.allSongIds(serverId: serverId)
@@ -249,6 +279,7 @@ actor DownloadService {
     }
 
     func enqueueAlbum(album: Album, serverId: String) async {
+        guard await canStartDownloads() else { return }
         guard let api = await currentAPI(for: serverId) else { return }
         do {
             let detail = try await api.api.getAlbum(id: album.id)
@@ -283,6 +314,7 @@ actor DownloadService {
     }
 
     func enqueueArtist(artist: Artist, serverId: String) async {
+        guard await canStartDownloads() else { return }
         guard let api = await currentAPI(for: serverId) else { return }
         do {
             let detail = try await api.api.getArtist(id: artist.id)
@@ -292,6 +324,10 @@ actor DownloadService {
         } catch {
             DBErrorLog.logPlayLog("DownloadService.enqueueArtist: \(error.localizedDescription)")
         }
+    }
+
+    private func canStartDownloads() async -> Bool {
+        await MainActor.run { !OfflineModeService.shared.isOffline }
     }
 
     // MARK: - Cancel / Delete
@@ -466,120 +502,280 @@ actor DownloadService {
             return BulkDownloadPlan(planned: [], skipped: [], totalBytes: 0, limitBytes: maxBytes)
         }
         let alreadyDownloaded = await DownloadDatabase.shared.allSongIds(serverId: serverId)
+        let apiService = api.api
 
-        // Discover-Listen und alle Album-Songs parallel laden
-        async let discoverFreqTask = (try? await api.api.getAlbumList(type: "frequent", size: 20)) ?? []
-        async let discoverRecentTask = (try? await api.api.getAlbumList(type: "recent", size: 20)) ?? []
+        async let discoverFreqTask = (try? await apiService.getAlbumList(type: "frequent", size: 20)) ?? []
+        async let discoverRecentTask = (try? await apiService.getAlbumList(type: "recent", size: 20)) ?? []
+        async let discoverNewestTask = (try? await apiService.getAlbumList(type: "newest", size: 50)) ?? []
+        async let albumPairsTask = fetchAlbumSongPairs(api: apiService, albums: libraryAlbums)
+        async let playlistPairsTask = fetchPlaylistSongPairs(api: apiService, recapPlaylistIds: recapPlaylistIds)
 
-        let allSongs: [Song] = await withTaskGroup(of: [Song].self) { group in
+        let discoverFreq = await discoverFreqTask
+        let discoverRecent = await discoverRecentTask
+        let discoverNewest = await discoverNewestTask
+        let albumPairs = await albumPairsTask
+        let playlistPairs = await playlistPairsTask
+
+        let albumSongsById = Dictionary(albumPairs.map { ($0.album.id, sortAlbumSongs($0.songs)) },
+                                        uniquingKeysWith: { first, _ in first })
+
+        var units: [BulkDownloadUnit] = []
+        var usedAlbumIds = Set<String>()
+
+        func addAlbumUnit(albumId: String, priority: Int) {
+            guard usedAlbumIds.insert(albumId).inserted,
+                  let songs = albumSongsById[albumId],
+                  !songs.isEmpty
+            else { return }
+            units.append(BulkDownloadUnit(
+                priority: priority,
+                songs: songs,
+                playlistMarker: nil
+            ))
+        }
+
+        for album in discoverFreq.enumerated() {
+            addAlbumUnit(albumId: album.element.id, priority: 0 + album.offset)
+        }
+        for album in discoverRecent.enumerated() {
+            addAlbumUnit(albumId: album.element.id, priority: 1_000 + album.offset)
+        }
+
+        if enabled {
+            let favoriteAlbums = albumPairs
+                .compactMap { pair -> (albumId: String, starred: Date)? in
+                    let newestStar = pair.songs.compactMap(\.starred).max()
+                    return newestStar.map { (pair.album.id, $0) }
+                }
+                .sorted { $0.starred > $1.starred }
+            for item in favoriteAlbums.enumerated() {
+                addAlbumUnit(albumId: item.element.albumId, priority: 2_000 + item.offset)
+            }
+        }
+
+        for album in discoverNewest.enumerated() {
+            addAlbumUnit(albumId: album.element.id, priority: 3_000 + album.offset)
+        }
+
+        var recapPlaylistSongIdsMap: [String: [String]] = [:]
+        for playlist in playlistPairs.recap.enumerated() {
+            let songs = playlist.element.songs
+            recapPlaylistSongIdsMap[playlist.element.id] = songs.map(\.id)
+            guard !songs.isEmpty else { continue }
+            units.append(BulkDownloadUnit(
+                priority: 4_000 + playlist.offset,
+                songs: songs,
+                playlistMarker: BulkDownloadPlaylistMarker(
+                    id: playlist.element.id,
+                    name: playlist.element.name,
+                    songIds: songs.map(\.id)
+                )
+            ))
+        }
+
+        for playlist in playlistPairs.normal.enumerated() {
+            let songs = playlist.element.songs
+            guard !songs.isEmpty else { continue }
+            units.append(BulkDownloadUnit(
+                priority: 5_000 + playlist.offset,
+                songs: songs,
+                playlistMarker: BulkDownloadPlaylistMarker(
+                    id: playlist.element.id,
+                    name: playlist.element.name,
+                    songIds: songs.map(\.id)
+                )
+            ))
+        }
+
+        let remainingAlbums = albumPairs
+            .filter { !usedAlbumIds.contains($0.album.id) && !$0.songs.isEmpty }
+            .sorted {
+                let aArtist = ($0.album.artist ?? "").lowercased()
+                let bArtist = ($1.album.artist ?? "").lowercased()
+                if aArtist != bArtist { return aArtist < bArtist }
+                return $0.album.name.lowercased() < $1.album.name.lowercased()
+            }
+        for album in remainingAlbums.enumerated() {
+            addAlbumUnit(albumId: album.element.album.id, priority: 6_000 + album.offset)
+        }
+
+        let targetBitrate = TranscodingPolicy.currentDownloadFormat()?.bitrate
+        var planned: [Song] = []
+        var skipped: [Song] = []
+        var plannedIds = Set<String>()
+        var skippedIds = Set<String>()
+        var playlistMarkers: [BulkDownloadPlaylistMarker] = []
+        var playlistMarkerIds = Set<String>()
+        var totalBytes: Int64 = 0
+
+        func appendPlaylistMarker(_ marker: BulkDownloadPlaylistMarker?) {
+            guard let marker, playlistMarkerIds.insert(marker.id).inserted else { return }
+            playlistMarkers.append(marker)
+        }
+
+        for unit in units.sorted(by: { $0.priority < $1.priority }) {
+            let missingSongs = unit.songs.filter {
+                !alreadyDownloaded.contains($0.id) && !plannedIds.contains($0.id)
+            }
+            if missingSongs.isEmpty {
+                appendPlaylistMarker(unit.playlistMarker)
+                continue
+            }
+            let packageBytes = missingSongs.reduce(Int64(0)) {
+                $0 + estimatedBytes(for: $1, targetBitrate: targetBitrate)
+            }
+            if totalBytes + packageBytes <= maxBytes {
+                planned.append(contentsOf: missingSongs)
+                plannedIds.formUnion(missingSongs.map(\.id))
+                totalBytes += packageBytes
+                appendPlaylistMarker(unit.playlistMarker)
+            } else {
+                for song in missingSongs where skippedIds.insert(song.id).inserted {
+                    skipped.append(song)
+                }
+            }
+        }
+
+        return BulkDownloadPlan(
+            planned: planned,
+            skipped: skipped,
+            totalBytes: totalBytes,
+            limitBytes: maxBytes,
+            playlistMarkers: playlistMarkers,
+            recapPlaylistSongIds: recapPlaylistSongIdsMap
+        )
+    }
+
+    func planKeepLibraryOffline(
+        serverId: String,
+        maxBytes: Int64,
+        favorites enabled: Bool,
+        recapPlaylistIds: [String] = [],
+        libraryAlbums: [Album],
+        forceFullScan: Bool = false
+    ) async -> BulkDownloadPlan {
+        let countsByAlbum = await DownloadDatabase.shared.songCountsByAlbum(serverId: serverId)
+        let candidateAlbums = libraryAlbums.filter { album in
+            if forceFullScan { return true }
+            guard let expected = album.songCount, expected > 0 else { return true }
+            return (countsByAlbum[album.id] ?? 0) < expected
+        }
+
+        var plan = await planBulkDownload(
+            serverId: serverId,
+            maxBytes: maxBytes,
+            favorites: enabled,
+            recapPlaylistIds: recapPlaylistIds,
+            libraryAlbums: candidateAlbums
+        )
+        plan = BulkDownloadPlan(
+            planned: plan.planned,
+            skipped: plan.skipped,
+            totalBytes: plan.totalBytes,
+            limitBytes: maxBytes,
+            isKeepLibraryOffline: true,
+            playlistMarkers: plan.playlistMarkers,
+            recapPlaylistSongIds: plan.recapPlaylistSongIds
+        )
+        return plan
+    }
+
+    private func fetchAlbumSongPairs(api: SubsonicAPIService, albums: [Album]) async -> [(album: Album, songs: [Song])] {
+        await withTaskGroup(of: (Album, [Song]).self) { group in
             let limit = 10
             var index = 0
-            var result: [Song] = []
-            for album in libraryAlbums.prefix(limit) {
-                group.addTask { (try? await api.api.getAlbum(id: album.id))?.song ?? [] }
+            var result: [(Album, [Song])] = []
+            for album in albums.prefix(limit) {
+                group.addTask { (album, (try? await api.getAlbum(id: album.id))?.song ?? []) }
                 index += 1
             }
-            for await songs in group {
-                result.append(contentsOf: songs)
-                if index < libraryAlbums.count {
-                    let next = libraryAlbums[index]
-                    group.addTask { (try? await api.api.getAlbum(id: next.id))?.song ?? [] }
+            for await pair in group {
+                result.append(pair)
+                if index < albums.count {
+                    let next = albums[index]
+                    group.addTask { (next, (try? await api.getAlbum(id: next.id))?.song ?? []) }
                     index += 1
                 }
             }
             return result
         }
+    }
 
-        let discoverFreq = await discoverFreqTask
-        let discoverRecent = await discoverRecentTask
+    private func fetchPlaylistSongPairs(
+        api: SubsonicAPIService,
+        recapPlaylistIds: [String]
+    ) async -> (recap: [(id: String, name: String, songs: [Song])], normal: [(id: String, name: String, songs: [Song])]) {
+        let recapIdSet = Set(recapPlaylistIds)
+        async let recapTask = fetchPlaylistDetails(api: api, playlists: recapPlaylistIds.map { (id: $0, name: "") })
+        async let normalTask = fetchNormalPlaylistDetails(api: api, excluding: recapIdSet)
+        return (await recapTask, await normalTask)
+    }
 
-        var recapSongIds: [String] = []
-        var recapSongsExtra: [Song] = []
-        var recapPlaylistSongIdsMap: [String: [String]] = [:]
-        if !recapPlaylistIds.isEmpty {
-            let fetched: [(String, [Song])] = await withTaskGroup(of: (String, [Song]).self) { group in
-                for id in recapPlaylistIds {
-                    group.addTask { (id, (try? await api.api.getPlaylist(id: id))?.songs ?? []) }
+    private func fetchNormalPlaylistDetails(
+        api: SubsonicAPIService,
+        excluding excludedIds: Set<String>
+    ) async -> [(id: String, name: String, songs: [Song])] {
+        let playlists = (try? await api.getPlaylists()) ?? []
+        let normal = playlists
+            .filter { !excludedIds.contains($0.id) }
+            .map { (id: $0.id, name: $0.name) }
+        return await fetchPlaylistDetails(api: api, playlists: normal)
+    }
+
+    private func fetchPlaylistDetails(
+        api: SubsonicAPIService,
+        playlists: [(id: String, name: String)]
+    ) async -> [(id: String, name: String, songs: [Song])] {
+        await withTaskGroup(of: (Int, String, String, [Song]).self) { group in
+            let limit = 8
+            var index = 0
+            var result: [(Int, String, String, [Song])] = []
+            for playlist in playlists.prefix(limit) {
+                let currentIndex = index
+                group.addTask {
+                    let detail = try? await api.getPlaylist(id: playlist.id)
+                    return (
+                        currentIndex,
+                        playlist.id,
+                        detail?.name ?? playlist.name,
+                        detail?.songs ?? []
+                    )
                 }
-                var result: [(String, [Song])] = []
-                for await pair in group { result.append(pair) }
-                return result
+                index += 1
             }
-            var seenRecap = Set<String>()
-            for (playlistId, songs) in fetched {
-                recapPlaylistSongIdsMap[playlistId] = songs.map(\.id)
-                for song in songs where seenRecap.insert(song.id).inserted {
-                    recapSongIds.append(song.id)
-                    recapSongsExtra.append(song)
+            for await item in group {
+                result.append(item)
+                if index < playlists.count {
+                    let playlist = playlists[index]
+                    let currentIndex = index
+                    group.addTask {
+                        let detail = try? await api.getPlaylist(id: playlist.id)
+                        return (
+                            currentIndex,
+                            playlist.id,
+                            detail?.name ?? playlist.name,
+                            detail?.songs ?? []
+                        )
+                    }
+                    index += 1
                 }
             }
+            return result
+                .sorted { $0.0 < $1.0 }
+                .map { (_, id, name, songs) in (id, name, songs) }
         }
+    }
 
-        // Reihenfolge: Discover (häufig→kürzlich) → Favoriten → Recap → Rest A-Z
-        var discoverPriority: [String: Int] = [:]
-        for (i, album) in discoverFreq.enumerated() {
-            discoverPriority[album.id] = i
+    private func sortAlbumSongs(_ songs: [Song]) -> [Song] {
+        songs.sorted {
+            let aDisc = $0.discNumber ?? 0
+            let bDisc = $1.discNumber ?? 0
+            if aDisc != bDisc { return aDisc < bDisc }
+            let aTrack = $0.track ?? 0
+            let bTrack = $1.track ?? 0
+            if aTrack != bTrack { return aTrack < bTrack }
+            return $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
         }
-        for (i, album) in discoverRecent.enumerated() where discoverPriority[album.id] == nil {
-            discoverPriority[album.id] = 100 + i
-        }
-
-        let discoverSongs = allSongs
-            .compactMap { song -> (id: String, key: Int)? in
-                guard let albumId = song.albumId, let pri = discoverPriority[albumId] else { return nil }
-                return (song.id, pri * 100 + (song.track ?? 0))
-            }
-            .sorted { $0.key < $1.key }
-            .map(\.id)
-
-        let starred = enabled
-            ? allSongs.filter { $0.starred != nil }
-                .sorted { ($0.starred ?? .distantPast) > ($1.starred ?? .distantPast) }
-                .map(\.id)
-            : []
-
-        let alphabetical = allSongs.sorted {
-            let a = ($0.artist ?? "").lowercased()
-            let b = ($1.artist ?? "").lowercased()
-            if a != b { return a < b }
-            let aa = ($0.album ?? "").lowercased()
-            let bb = ($1.album ?? "").lowercased()
-            if aa != bb { return aa < bb }
-            return ($0.track ?? 0) < ($1.track ?? 0)
-        }.map(\.id)
-
-        var ordered: [String] = []
-        var seen = Set<String>()
-        func appendUnique(_ ids: [String]) {
-            for id in ids where !seen.contains(id) {
-                ordered.append(id); seen.insert(id)
-            }
-        }
-        appendUnique(discoverSongs)
-        appendUnique(starred)
-        appendUnique(recapSongIds)
-        appendUnique(alphabetical)
-
-        var songsById = Dictionary(allSongs.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        for song in recapSongsExtra where songsById[song.id] == nil {
-            songsById[song.id] = song
-        }
-        let targetBitrate = TranscodingPolicy.currentDownloadFormat()?.bitrate
-        var planned: [Song] = []
-        var skipped: [Song] = []
-        var totalBytes: Int64 = 0
-        for songId in ordered {
-            guard let song = songsById[songId] else { continue }
-            if alreadyDownloaded.contains(song.id) { continue }
-            let estBytes = estimatedBytes(for: song, targetBitrate: targetBitrate)
-            if totalBytes + estBytes > maxBytes {
-                skipped.append(song)
-                continue
-            }
-            planned.append(song)
-            totalBytes += estBytes
-        }
-        return BulkDownloadPlan(planned: planned, skipped: skipped, totalBytes: totalBytes, limitBytes: maxBytes, recapPlaylistSongIds: recapPlaylistSongIdsMap)
     }
 
     private func estimatedBytes(for song: Song, targetBitrate: Int? = nil) -> Int64 {
@@ -625,7 +821,7 @@ actor DownloadService {
         stateSubject.send((key, .downloading(progress: p)))
     }
 
-    func handleCompletion(taskIdentifier: Int, tempURL: URL, byteSize: Int64, mimeType: String?, taskDescription: String?) async {
+    func handleCompletion(taskIdentifier: Int, tempURL: URL, byteSize: Int64, statusCode: Int?, mimeType: String?, taskDescription: String?) async {
         let job: DownloadJob
         if let existing = inflightJobs[taskIdentifier] {
             job = existing
@@ -642,12 +838,6 @@ actor DownloadService {
         inCompletionJobs[key] = job
         defer { inCompletionJobs.removeValue(forKey: key) }
 
-        let serverDir = Self.serverDirectory(serverId: job.serverId)
-        // Wenn der Server nicht das angeforderte Format liefert, mit korrekter Extension speichern.
-        let actualExt = (TranscodingPolicy.extensionFor(mimeType: mimeType) ?? job.fileExtension)
-            .pathSafeFileExtension()
-        let finalURL = serverDir.appendingPathComponent("\(job.song.id.pathSafeComponent).\(actualExt)")
-
         // Race-Window 1: User cancel-te zwischen erstem `await` und jetzt.
         if cancelledKeys.contains(key) {
             cancelledKeys.remove(key)
@@ -656,6 +846,34 @@ actor DownloadService {
             stateSubject.send((key, .none))
             return
         }
+
+        let validation: DownloadPayloadValidation
+        do {
+            validation = try await DownloadPayloadValidator.validate(
+                fileURL: tempURL,
+                byteSize: byteSize,
+                statusCode: statusCode,
+                mimeType: mimeType,
+                fallbackFileExtension: job.fileExtension
+            )
+        } catch {
+            DBErrorLog.logPlayLog("DownloadService validation failed for \(job.title): \(error.localizedDescription)")
+            try? FileManager.default.removeItem(at: tempURL)
+            await retryOrFail(job: job, error: error)
+            return
+        }
+
+        if cancelledKeys.contains(key) {
+            cancelledKeys.remove(key)
+            try? FileManager.default.removeItem(at: tempURL)
+            publishProgress(key: key, value: nil)
+            stateSubject.send((key, .none))
+            return
+        }
+
+        let serverDir = Self.serverDirectory(serverId: job.serverId)
+        let actualExt = (validation.fileExtension ?? job.fileExtension).pathSafeFileExtension()
+        let finalURL = serverDir.appendingPathComponent("\(job.song.id.pathSafeComponent).\(actualExt)")
 
         do {
             try FileManager.default.createDirectory(at: serverDir, withIntermediateDirectories: true)
@@ -709,7 +927,7 @@ actor DownloadService {
             isFavorite: job.isFavorite,
             filePath: finalURL.path,
             fileExtension: actualExt,
-            contentType: job.song.contentType,
+            contentType: validation.contentType ?? job.song.contentType,
             bitRate: job.song.bitRate,
             bitDepth: job.song.bitDepth,
             samplingRate: job.song.samplingRate,
@@ -775,6 +993,12 @@ actor DownloadService {
             startNextJobs()
             return
         }
+
+        if isStorageCapacityError(error) {
+            await pauseKeepOfflineForStorageFailure(job: job, error: error)
+            return
+        }
+
         var next = job
         next.attempt += 1
         if next.attempt < maxAttempts {
@@ -819,6 +1043,40 @@ actor DownloadService {
         publishProgress(key: key, value: nil)
         stateSubject.send((key, .failed(message: error.localizedDescription)))
         incrementBatchFailed()
+    }
+
+    private func pauseKeepOfflineForStorageFailure(job: DownloadJob, error: Error) async {
+        let key = Self.key(songId: job.song.id, serverId: job.serverId)
+        DBErrorLog.logPlayLog("DownloadService paused Keep Library Offline because storage is low while downloading \(job.title): \(error.localizedDescription)")
+        publishProgress(key: key, value: nil)
+        stateSubject.send((key, .failed(message: error.localizedDescription)))
+        await MainActor.run {
+            KeepLibraryOfflineService.shared.markDownloadStorageFailure(serverId: job.serverId, failedSong: job.song)
+        }
+        cancelBatch()
+    }
+
+    private func isStorageCapacityError(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        if nsError.domain == NSCocoaErrorDomain,
+           nsError.code == CocoaError.fileWriteOutOfSpace.rawValue {
+            return true
+        }
+        if nsError.domain == NSPOSIXErrorDomain,
+           nsError.code == Int(POSIXErrorCode.ENOSPC.rawValue) {
+            return true
+        }
+        if let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? Error,
+           isStorageCapacityError(underlying) {
+            return true
+        }
+
+        let message = nsError.localizedDescription.lowercased()
+        return message.contains("no space left")
+            || message.contains("not enough space")
+            || message.contains("disk full")
+            || message.contains("zu wenig speicher")
+            || message.contains("nicht genügend speicher")
     }
 
     // MARK: - Batch Tracking
@@ -978,10 +1236,12 @@ private final class DownloadSessionCoordinator: NSObject, URLSessionDownloadDele
             return
         }
         let bytes = (try? FileManager.default.attributesOfItem(atPath: safeURL.path)[.size] as? NSNumber)?.int64Value ?? 0
-        let mime = (downloadTask.response as? HTTPURLResponse)?.mimeType
+        let http = downloadTask.response as? HTTPURLResponse
+        let status = http?.statusCode
+        let mime = http?.mimeType
         let desc = downloadTask.taskDescription
         Task { [weak service] in
-            await service?.handleCompletion(taskIdentifier: id, tempURL: safeURL, byteSize: bytes, mimeType: mime, taskDescription: desc)
+            await service?.handleCompletion(taskIdentifier: id, tempURL: safeURL, byteSize: bytes, statusCode: status, mimeType: mime, taskDescription: desc)
         }
     }
 

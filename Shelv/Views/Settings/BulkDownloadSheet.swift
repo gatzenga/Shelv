@@ -1,12 +1,30 @@
 import SwiftUI
 
+enum BulkDownloadMode {
+    case limited(maxBytes: Int64)
+    case keepLibraryOffline
+
+    var isKeepLibraryOffline: Bool {
+        if case .keepLibraryOffline = self { return true }
+        return false
+    }
+
+    var title: String {
+        isKeepLibraryOffline
+            ? String(localized: "keep_library_offline")
+            : String(localized: "download_everything")
+    }
+}
+
 struct BulkDownloadSheet: View {
-    let maxBytes: Int64
+    let mode: BulkDownloadMode
 
     @ObservedObject var libraryStore = LibraryStore.shared
     @EnvironmentObject var serverStore: ServerStore
     @EnvironmentObject var recapStore: RecapStore
     @ObservedObject var downloadStore = DownloadStore.shared
+    @ObservedObject private var keepOffline = KeepLibraryOfflineService.shared
+    @ObservedObject private var offlineMode = OfflineModeService.shared
     @Environment(\.dismiss) private var dismiss
     @AppStorage("enableFavorites") private var enableFavorites = true
     @AppStorage("recapEnabled") private var recapEnabled = false
@@ -16,6 +34,14 @@ struct BulkDownloadSheet: View {
     @State private var isPlanning = false
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
+
+    init(maxBytes: Int64) {
+        self.mode = .limited(maxBytes: maxBytes)
+    }
+
+    init(mode: BulkDownloadMode) {
+        self.mode = mode
+    }
 
     var body: some View {
         NavigationStack {
@@ -29,7 +55,7 @@ struct BulkDownloadSheet: View {
                     ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
-            .navigationTitle(String(localized: "download_everything"))
+            .navigationTitle(mode.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -37,18 +63,27 @@ struct BulkDownloadSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(String(localized: "start")) {
-                        guard let plan else { return }
+                        guard let plan, !offlineMode.isOffline else { return }
+                        if mode.isKeepLibraryOffline,
+                           let stable = serverStore.activeServer?.stableId {
+                            keepOffline.setEnabled(true, serverId: stable)
+                            if !plan.planned.isEmpty {
+                                keepOffline.markDownloadsStarted(serverId: stable)
+                            } else if !plan.skipped.isEmpty {
+                                keepOffline.markPausedLowStorage(serverId: stable, skippedSongs: plan.skipped)
+                            }
+                        }
                         downloadStore.enqueueSongs(plan.planned)
                         let plannedIds = Set(plan.planned.map(\.id))
-                        for (playlistId, songIds) in plan.recapPlaylistSongIds {
-                            let allCovered = songIds.allSatisfy { downloadStore.isDownloaded(songId: $0) || plannedIds.contains($0) }
+                        for marker in plan.playlistMarkers {
+                            let allCovered = marker.songIds.allSatisfy { downloadStore.isDownloaded(songId: $0) || plannedIds.contains($0) }
                             if allCovered {
-                                downloadStore.addOfflinePlaylist(playlistId, songIds: songIds)
+                                downloadStore.addOfflinePlaylist(marker.id, songIds: marker.songIds)
                             }
                         }
                         dismiss()
                     }
-                    .disabled(plan?.isEmpty ?? true)
+                    .disabled(offlineMode.isOffline || plan == nil || (!mode.isKeepLibraryOffline && (plan?.isEmpty ?? true)))
                 }
             }
             .task(id: serverStore.activeServer?.stableId) { await recompute() }
@@ -74,26 +109,49 @@ struct BulkDownloadSheet: View {
                         .foregroundStyle(.secondary)
                 }
                 HStack {
-                    Text(String(localized: "storage_limit")).font(.subheadline)
+                    Text(String(localized: "download_format")).font(.subheadline)
                     Spacer()
-                    Text(ByteCountFormatter.string(fromByteCount: plan.limitBytes, countStyle: .file))
-                        .monospacedDigit()
+                    Text(downloadFormatDescription)
                         .foregroundStyle(.secondary)
                 }
-                if !plan.skipped.isEmpty {
+                if mode.isKeepLibraryOffline {
                     HStack {
-                        Text(String(localized: "skipped_over_limit")).font(.subheadline)
+                        Text(String(localized: "available_storage")).font(.subheadline)
                         Spacer()
-                        Text("\(plan.skipped.count)")
+                        Text(ByteCountFormatter.string(fromByteCount: plan.availableBytes ?? 0, countStyle: .file))
                             .monospacedDigit()
                             .foregroundStyle(.secondary)
                     }
+                } else {
+                    HStack {
+                        Text(String(localized: "storage_limit")).font(.subheadline)
+                        Spacer()
+                        Text(ByteCountFormatter.string(fromByteCount: plan.limitBytes, countStyle: .file))
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                    }
+                    if !plan.skipped.isEmpty {
+                        HStack {
+                            Text(String(localized: "skipped_over_limit")).font(.subheadline)
+                            Spacer()
+                            Text("\(plan.skipped.count)")
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                if mode.isKeepLibraryOffline && !plan.skipped.isEmpty {
+                    Text(String(localized: "keep_library_offline_storage_warning"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
 
             if plan.isEmpty {
                 Section {
-                    Text(String(localized: "nothing_new_fits_in_the_configured_storage_limit"))
+                    Text(mode.isKeepLibraryOffline
+                         ? String(localized: "library_already_offline")
+                         : String(localized: "nothing_new_fits_in_the_configured_storage_limit"))
                     .foregroundStyle(.secondary)
                 }
             } else {
@@ -106,10 +164,14 @@ struct BulkDownloadSheet: View {
                         Label(String(localized: "then_favorites"),
                               systemImage: "heart")
                     }
+                    Label(String(localized: "then_recently_added"),
+                          systemImage: "sparkles")
                     if recapEnabled && !recapStore.recapPlaylistIds.isEmpty {
                         Label(String(localized: "then_recap_playlists"),
                               systemImage: "calendar.badge.clock")
                     }
+                    Label(String(localized: "then_playlists"),
+                          systemImage: "music.note.list")
                     Label(String(localized: "then_alphabetical_by_artist"),
                           systemImage: "textformat")
                 }
@@ -118,6 +180,14 @@ struct BulkDownloadSheet: View {
                 .font(.caption)
             }
         }
+    }
+
+    private var downloadFormatDescription: String {
+        let codecRaw = UserDefaults.standard.string(forKey: "transcodingDownloadCodec") ?? "raw"
+        let codec = TranscodingCodec(rawValue: codecRaw) ?? .raw
+        guard codec != .raw else { return codec.label }
+        let bitrate = UserDefaults.standard.integer(forKey: "transcodingDownloadBitrate")
+        return "\(codec.label) · \(bitrate > 0 ? bitrate : 192) kbps"
     }
 
     private func recompute() async {
@@ -131,12 +201,35 @@ struct BulkDownloadSheet: View {
         let albums = libraryStore.albums
         guard !albums.isEmpty else { return }
         let recapIds = await MainActor.run { recapEnabled ? Array(recapStore.recapPlaylistIds) : [] }
-        let computed = await DownloadService.shared.planBulkDownload(
-            serverId: stable, maxBytes: maxBytes,
-            favorites: enableFavorites,
-            recapPlaylistIds: recapIds,
-            libraryAlbums: albums
-        )
+        let computed: BulkDownloadPlan
+        switch mode {
+        case .limited(let maxBytes):
+            computed = await DownloadService.shared.planBulkDownload(
+                serverId: stable, maxBytes: maxBytes,
+                favorites: enableFavorites,
+                recapPlaylistIds: recapIds,
+                libraryAlbums: albums
+            )
+        case .keepLibraryOffline:
+            let available = KeepLibraryOfflineService.availableDiskBytes()
+            let maxBytes = KeepLibraryOfflineService.keepOfflineBudgetBytes(availableBytes: available)
+            let planned = await DownloadService.shared.planKeepLibraryOffline(
+                serverId: stable, maxBytes: maxBytes,
+                favorites: enableFavorites,
+                recapPlaylistIds: recapIds,
+                libraryAlbums: albums
+            )
+            computed = BulkDownloadPlan(
+                planned: planned.planned,
+                skipped: planned.skipped,
+                totalBytes: planned.totalBytes,
+                limitBytes: maxBytes,
+                availableBytes: available,
+                isKeepLibraryOffline: true,
+                playlistMarkers: planned.playlistMarkers,
+                recapPlaylistSongIds: planned.recapPlaylistSongIds
+            )
+        }
         guard !Task.isCancelled else { return }
         plan = computed
     }

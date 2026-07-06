@@ -213,14 +213,32 @@ struct BatchProgress: Equatable {
     var remaining: Int { max(0, total - completed - failed) }
 }
 
+nonisolated struct BulkDownloadPlaylistMarker: Hashable, Sendable {
+    let id: String
+    let name: String
+    let songIds: [String]
+}
+
 struct BulkDownloadPlan {
     let planned: [Song]
     let skipped: [Song]
     let totalBytes: Int64
     let limitBytes: Int64
+    var availableBytes: Int64? = nil
+    var isKeepLibraryOffline: Bool = false
+    var playlistMarkers: [BulkDownloadPlaylistMarker] = []
     var recapPlaylistSongIds: [String: [String]] = [:]
 
     var isEmpty: Bool { planned.isEmpty }
+}
+
+enum KeepLibraryOfflineStatus: Equatable {
+    case inactive
+    case idle
+    case checking
+    case downloading
+    case pausedLowStorage
+    case failed(String)
 }
 
 struct DownloadStorageStats {

@@ -97,14 +97,21 @@ struct Shelv_DesktopApp: App {
                     await DownloadStore.shared.setActiveServer(server.stableId)
                     PinnedPlaylistStore.shared.setActiveServer(server.stableId)
                     await QueueSyncService.shared.checkForRemoteQueue()
+                    await runKeepLibraryOfflineCheck(serverId: server.stableId)
                 }
                 .onChange(of: scenePhase) { _, phase in
                     guard phase == .active else { return }
                     // syncNow prüft die Remote-Queue automatisch mit.
                     Task { await CloudKitSyncService.shared.syncNow() }
+                    if let active = appState.serverStore.activeServer {
+                        Task { await runKeepLibraryOfflineCheck(serverId: active.stableId) }
+                    }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                     Task { await CloudKitSyncService.shared.syncNow() }
+                    if let active = appState.serverStore.activeServer {
+                        Task { await runKeepLibraryOfflineCheck(serverId: active.stableId) }
+                    }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .recapRegistryUpdated)) { _ in
                     guard let server = appState.serverStore.activeServer else { return }
@@ -168,9 +175,8 @@ struct Shelv_DesktopApp: App {
                 DataSaverMenuItem()
                 Divider()
                 OfflineModeMenuItem()
-            }
         }
-
+    }
         Window(String(localized: "insights"), id: "insights") {
             InsightsView()
                 .environmentObject(appState)
@@ -208,6 +214,25 @@ struct Shelv_DesktopApp: App {
                 .tint(AppTheme.color(for: themeColorName))
                 .environment(\.themeColor, AppTheme.color(for: themeColorName))
         }
+    }
+
+    @MainActor
+    private func runKeepLibraryOfflineCheck(serverId: String, force: Bool = false) async {
+        guard UserDefaults.standard.bool(forKey: "enableDownloads") else { return }
+        guard KeepLibraryOfflineService.shared.isEnabled(serverId: serverId) else { return }
+        await DownloadService.shared.waitForRestoredInflightTasks()
+        await LibraryViewModel.shared.loadAlbums()
+        let recapIds = UserDefaults.standard.bool(forKey: "recapEnabled")
+            ? Array(RecapStore.shared.recapPlaylistIds)
+            : []
+        let favorites = UserDefaults.standard.object(forKey: "enableFavorites") as? Bool ?? true
+        await KeepLibraryOfflineService.shared.checkAndDownload(
+            serverId: serverId,
+            libraryAlbums: LibraryViewModel.shared.albums,
+            favorites: favorites,
+            recapPlaylistIds: recapIds,
+            force: force
+        )
     }
 }
 

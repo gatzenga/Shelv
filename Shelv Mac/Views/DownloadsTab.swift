@@ -1,11 +1,29 @@
 import SwiftUI
+@preconcurrency import Combine
+
+@MainActor
+private final class SettingsBatchProgressModel: ObservableObject {
+    @Published private(set) var progress: BatchProgress?
+
+    private var cancellable: AnyCancellable?
+
+    init() {
+        cancellable = DownloadService.shared.batchUpdates
+            .removeDuplicates()
+            .throttle(for: .milliseconds(750), scheduler: DispatchQueue.main, latest: true)
+            .sink { [weak self] progress in
+                self?.progress = progress
+            }
+    }
+}
 
 private struct BatchProgressSection: View {
-    @ObservedObject private var downloadStore = DownloadStore.shared
+    @StateObject private var progressModel = SettingsBatchProgressModel()
     @Environment(\.themeColor) private var themeColor
+    let serverId: String?
 
     var body: some View {
-        if let progress = downloadStore.batchProgress {
+        if let progress = progressModel.progress {
             Section(String(localized: "active_downloads")) {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
@@ -22,7 +40,7 @@ private struct BatchProgressSection: View {
                     HStack {
                         Spacer()
                         Button(String(localized: "cancel_download")) {
-                            Task { await DownloadService.shared.cancelBatch() }
+                            cancelDownload()
                         }
                         .buttonStyle(.borderless)
                         .foregroundStyle(.red)
@@ -32,9 +50,18 @@ private struct BatchProgressSection: View {
             }
         }
     }
+
+    private func cancelDownload() {
+        if let serverId, KeepLibraryOfflineService.shared.isEnabled(serverId: serverId) {
+            KeepLibraryOfflineService.shared.cancelCurrentRun(serverId: serverId)
+        } else {
+            Task { await DownloadService.shared.cancelBatch() }
+        }
+    }
 }
 
 private struct DownloadStatsSection: View {
+    @StateObject private var progressModel = SettingsBatchProgressModel()
     @ObservedObject private var downloadStore = DownloadStore.shared
     @ObservedObject private var libraryStore = LibraryViewModel.shared
     @State private var stats: DownloadStorageStats?
@@ -58,6 +85,14 @@ private struct DownloadStatsSection: View {
         .task { await refreshStats() }
         .onChange(of: downloadStore.totalBytes) { _, _ in Task { await refreshStats() } }
         .onChange(of: downloadStore.songs.count) { _, _ in Task { await refreshStats() } }
+        .onChange(of: progressModel.progress) { oldValue, newValue in
+            if oldValue != nil, newValue == nil {
+                Task { await refreshStats() }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .downloadsLibraryChanged)) { _ in
+            Task { await refreshStats() }
+        }
     }
 
     @MainActor private func refreshStats() async {
@@ -79,11 +114,13 @@ private struct DownloadStatsSection: View {
 struct DownloadsTab: View {
     @EnvironmentObject var appState: AppState
     @ObservedObject var offlineMode = OfflineModeService.shared
+    @ObservedObject private var keepOffline = KeepLibraryOfflineService.shared
     @AppStorage("enableDownloads") private var enableDownloads = false
     @AppStorage("offlineModeEnabled") private var offlineModeEnabled = false
     @AppStorage("maxBulkDownloadStorageGB") private var maxBulkStorageGB = 10
 
     @State private var showBulkSheet = false
+    @State private var showKeepLibraryOfflineSheet = false
     @State private var showDeleteAllConfirm = false
 
     private var maxAllowedStorageGB: Int {
@@ -98,57 +135,80 @@ struct DownloadsTab: View {
         Form {
             Section {
                 Toggle(String(localized: "enable_downloads"), isOn: $enableDownloads)
-                Toggle(String(localized: "offline_mode"),
-                       isOn: Binding(
-                            get: { offlineMode.isOffline },
-                            set: { newValue in
-                                if newValue { offlineMode.enterOfflineMode() } else { offlineMode.exitOfflineMode() }
-                            }
-                       ))
-                    .disabled(!enableDownloads)
+                if enableDownloads {
+                    DownloadFormatRows()
+                }
             }
 
             if enableDownloads {
-                BatchProgressSection()
-
-                Section(String(localized: "bulk_download")) {
-                    Button {
-                        showBulkSheet = true
-                    } label: {
-                        Label(String(localized: "download_everything"),
-                              systemImage: "square.and.arrow.down.on.square")
-                    }
-                    .disabled(offlineMode.isOffline)
-
-                    HStack {
-                        Text(String(localized: "max_storage"))
-                        Spacer()
-                        Stepper("\(maxBulkStorageGB) GB",
-                                value: $maxBulkStorageGB,
-                                in: 10...maxAllowedStorageGB,
-                                step: 10)
-                            .labelsHidden()
-                        Text("\(maxBulkStorageGB) GB")
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
-                    }
-                    .onAppear {
-                        maxBulkStorageGB = min(maxBulkStorageGB, maxAllowedStorageGB)
-                    }
-                }
-
-                DownloadStatsSection()
-
                 Section {
+                    Toggle(String(localized: "offline_mode"),
+                           isOn: Binding(
+                                get: { offlineMode.isOffline },
+                                set: { newValue in
+                                    if newValue { offlineMode.enterOfflineMode() } else { offlineMode.exitOfflineMode() }
+                                }
+                           ))
+
+                    Toggle(String(localized: "keep_library_offline"), isOn: Binding(
+                        get: { keepOffline.isEnabled(serverId: appState.serverStore.activeServer?.stableId) },
+                        set: { newValue in
+                            guard let stable = appState.serverStore.activeServer?.stableId else { return }
+                            if newValue {
+                                showKeepLibraryOfflineSheet = true
+                            } else {
+                                keepOffline.disableAndCancel(serverId: stable)
+                            }
+                        }
+                    ))
+                    .disabled(offlineMode.isOffline || appState.serverStore.activeServer?.stableId == nil)
+
+                    if keepOffline.isEnabled(serverId: appState.serverStore.activeServer?.stableId) {
+                        Label(keepOfflineStatusText, systemImage: keepOfflineStatusIcon)
+                            .foregroundStyle(keepOfflineStatusColor)
+                    } else {
+                        Button {
+                            showBulkSheet = true
+                        } label: {
+                            Label(String(localized: "download_everything"),
+                                  systemImage: "square.and.arrow.down.on.square")
+                        }
+                        .disabled(offlineMode.isOffline)
+
+                        HStack {
+                            Text(String(localized: "max_storage"))
+                            Spacer()
+                            Stepper("\(maxBulkStorageGB) GB",
+                                    value: $maxBulkStorageGB,
+                                    in: 10...maxAllowedStorageGB,
+                                    step: 10)
+                                .labelsHidden()
+                            Text("\(maxBulkStorageGB) GB")
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                        }
+                        .onAppear {
+                            maxBulkStorageGB = min(maxBulkStorageGB, maxAllowedStorageGB)
+                        }
+                    }
+
                     Button(role: .destructive) {
                         showDeleteAllConfirm = true
                     } label: {
                         Label(String(localized: "delete_all_downloads"), systemImage: "trash")
                     }
                 }
+
+                BatchProgressSection(serverId: appState.serverStore.activeServer?.stableId)
+
+                DownloadStatsSection()
             }
         }
         .formStyle(.grouped)
+        .transaction {
+            $0.animation = nil
+            $0.disablesAnimations = true
+        }
         .confirmationDialog(
             String(localized: "delete_all_downloaded_songs"),
             isPresented: $showDeleteAllConfirm,
@@ -162,17 +222,109 @@ struct DownloadsTab: View {
         .sheet(isPresented: $showBulkSheet) {
             BulkDownloadSheet(maxBytes: Int64(maxBulkStorageGB) * 1_000_000_000)
                 .environmentObject(appState)
-                .frame(width: 520, height: 540)
+                .frame(width: 520, height: 620)
+        }
+        .sheet(isPresented: $showKeepLibraryOfflineSheet) {
+            BulkDownloadSheet(mode: .keepLibraryOffline)
+                .environmentObject(appState)
+                .frame(width: 520, height: 620)
+        }
+        .task(id: appState.serverStore.activeServer?.stableId) {
+            if let stable = appState.serverStore.activeServer?.stableId {
+                keepOffline.prepare(serverId: stable)
+            }
+        }
+    }
+
+    private var keepOfflineStatusText: String {
+        switch keepOffline.status {
+        case .inactive:
+            return String(localized: "inactive")
+        case .idle:
+            return String(localized: "keep_library_offline_active")
+        case .checking:
+            return String(localized: "checking")
+        case .downloading:
+            return String(localized: "downloading")
+        case .pausedLowStorage:
+            return String(localized: "keep_library_offline_paused_storage")
+        case .failed(let message):
+            return message
+        }
+    }
+
+    private var keepOfflineStatusIcon: String {
+        switch keepOffline.status {
+        case .pausedLowStorage, .failed:
+            return "exclamationmark.triangle"
+        case .checking:
+            return "arrow.triangle.2.circlepath"
+        case .downloading:
+            return "arrow.down.circle"
+        default:
+            return "checkmark.circle"
+        }
+    }
+
+    private var keepOfflineStatusColor: Color {
+        switch keepOffline.status {
+        case .pausedLowStorage, .failed:
+            return .red
+        default:
+            return .primary
         }
     }
 }
 
+private struct DownloadFormatRows: View {
+    @AppStorage("transcodingDownloadCodec") private var downloadCodecRaw: String = "raw"
+    @AppStorage("transcodingDownloadBitrate") private var downloadBitrate: Int = 192
+
+    private var codec: TranscodingCodec {
+        TranscodingCodec(rawValue: downloadCodecRaw) ?? .raw
+    }
+
+    var body: some View {
+        Picker(String(localized: "download_format"), selection: $downloadCodecRaw) {
+            ForEach(TranscodingCodec.downloadOptions) { option in
+                Text(option.label).tag(option.rawValue)
+            }
+        }
+
+        if codec != .raw {
+            Picker(String(localized: "bitrate"), selection: $downloadBitrate) {
+                ForEach(TranscodingBitrate.allCases) { bitrate in
+                    Text(bitrate.label).tag(bitrate.rawValue)
+                }
+            }
+        }
+    }
+}
+
+enum BulkDownloadMode {
+    case limited(maxBytes: Int64)
+    case keepLibraryOffline
+
+    var isKeepLibraryOffline: Bool {
+        if case .keepLibraryOffline = self { return true }
+        return false
+    }
+
+    var title: String {
+        isKeepLibraryOffline
+            ? String(localized: "keep_library_offline")
+            : String(localized: "download_everything_2")
+    }
+}
+
 struct BulkDownloadSheet: View {
-    let maxBytes: Int64
+    let mode: BulkDownloadMode
     @EnvironmentObject var appState: AppState
     @ObservedObject var libraryStore = LibraryViewModel.shared
     @ObservedObject var downloadStore = DownloadStore.shared
     @ObservedObject var recapStore = RecapStore.shared
+    @ObservedObject private var keepOffline = KeepLibraryOfflineService.shared
+    @ObservedObject private var offlineMode = OfflineModeService.shared
     @Environment(\.dismiss) private var dismiss
     @AppStorage("enableFavorites") private var enableFavorites = true
     @AppStorage("recapEnabled") private var recapEnabled = false
@@ -180,13 +332,21 @@ struct BulkDownloadSheet: View {
     @State private var plan: BulkDownloadPlan?
     @State private var isPlanning = false
 
+    init(maxBytes: Int64) {
+        self.mode = .limited(maxBytes: maxBytes)
+    }
+
+    init(mode: BulkDownloadMode) {
+        self.mode = mode
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             HStack {
                 Image(systemName: "square.and.arrow.down.on.square")
                     .font(.title2)
                     .foregroundStyle(.secondary)
-                Text(String(localized: "download_everything_2"))
+                Text(mode.title)
                     .font(.title3).bold()
                 Spacer()
             }
@@ -202,18 +362,32 @@ struct BulkDownloadSheet: View {
                                        value: "\(plan.planned.count)")
                         LabeledContent(String(localized: "estimated_size"),
                                        value: ByteCountFormatter.string(fromByteCount: plan.totalBytes, countStyle: .file))
-                        LabeledContent(String(localized: "storage_limit"),
-                                       value: ByteCountFormatter.string(fromByteCount: plan.limitBytes, countStyle: .file))
-                        if !plan.skipped.isEmpty {
-                            LabeledContent(String(localized: "skipped_over_limit"),
-                                           value: "\(plan.skipped.count)")
-                                .foregroundStyle(.secondary)
+                        LabeledContent(String(localized: "download_format"),
+                                       value: downloadFormatDescription)
+                        if mode.isKeepLibraryOffline {
+                            LabeledContent(String(localized: "available_storage"),
+                                           value: ByteCountFormatter.string(fromByteCount: plan.availableBytes ?? 0, countStyle: .file))
+                            if !plan.skipped.isEmpty {
+                                Text(String(localized: "keep_library_offline_storage_warning"))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        } else {
+                            LabeledContent(String(localized: "storage_limit"),
+                                           value: ByteCountFormatter.string(fromByteCount: plan.limitBytes, countStyle: .file))
+                            if !plan.skipped.isEmpty {
+                                LabeledContent(String(localized: "skipped_over_limit"),
+                                               value: "\(plan.skipped.count)")
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
 
                     if plan.isEmpty {
                         Section {
-                            Text(String(localized: "nothing_new_fits_in_the_configured_storage_limit"))
+                            Text(mode.isKeepLibraryOffline
+                                 ? String(localized: "library_already_offline")
+                                 : String(localized: "nothing_new_fits_in_the_configured_storage_limit"))
                             .foregroundStyle(.secondary)
                         }
                     } else {
@@ -226,10 +400,14 @@ struct BulkDownloadSheet: View {
                                 Label(String(localized: "then_favorites"),
                                       systemImage: "heart")
                             }
+                            Label(String(localized: "then_recently_added"),
+                                  systemImage: "sparkles")
                             if recapEnabled && !recapStore.recapPlaylistIds.isEmpty {
                                 Label(String(localized: "then_recap_playlists"),
                                       systemImage: "calendar.badge.clock")
                             }
+                            Label(String(localized: "then_playlists"),
+                                  systemImage: "music.note.list")
                             Label(String(localized: "then_alphabetical_by_artist"),
                                   systemImage: "textformat")
                         }
@@ -258,25 +436,42 @@ struct BulkDownloadSheet: View {
                     .keyboardShortcut(.cancelAction)
                 Spacer()
                 Button(String(localized: "start")) {
-                    guard let plan else { return }
+                    guard let plan, !offlineMode.isOffline else { return }
+                    if mode.isKeepLibraryOffline,
+                       let stable = appState.serverStore.activeServer?.stableId {
+                        keepOffline.setEnabled(true, serverId: stable)
+                        if !plan.planned.isEmpty {
+                            keepOffline.markDownloadsStarted(serverId: stable)
+                        } else if !plan.skipped.isEmpty {
+                            keepOffline.markPausedLowStorage(serverId: stable, skippedSongs: plan.skipped)
+                        }
+                    }
                     downloadStore.enqueueSongs(plan.planned)
                     let plannedIds = Set(plan.planned.map(\.id))
-                    for (playlistId, songIds) in plan.recapPlaylistSongIds {
-                        let allCovered = songIds.allSatisfy { downloadStore.isDownloaded(songId: $0) || plannedIds.contains($0) }
+                    for marker in plan.playlistMarkers {
+                        let allCovered = marker.songIds.allSatisfy { downloadStore.isDownloaded(songId: $0) || plannedIds.contains($0) }
                         if allCovered {
-                            downloadStore.markPlaylistDownloaded(id: playlistId, name: "", songIds: songIds)
+                            downloadStore.markPlaylistDownloaded(id: marker.id, name: marker.name, songIds: marker.songIds)
                         }
                     }
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
                 .buttonStyle(.borderedProminent)
-                .disabled(plan?.isEmpty ?? true)
+                .disabled(offlineMode.isOffline || plan == nil || (!mode.isKeepLibraryOffline && (plan?.isEmpty ?? true)))
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 14)
         }
         .task { await recompute() }
+    }
+
+    private var downloadFormatDescription: String {
+        let codecRaw = UserDefaults.standard.string(forKey: "transcodingDownloadCodec") ?? "raw"
+        let codec = TranscodingCodec(rawValue: codecRaw) ?? .raw
+        guard codec != .raw else { return codec.label }
+        let bitrate = UserDefaults.standard.integer(forKey: "transcodingDownloadBitrate")
+        return "\(codec.label) · \(bitrate > 0 ? bitrate : 192) kbps"
     }
 
     private func recompute() async {
@@ -286,12 +481,36 @@ struct BulkDownloadSheet: View {
             await libraryStore.loadAlbums()
         }
         let recapIds = recapEnabled ? Array(recapStore.recapPlaylistIds) : []
-        let computed = await DownloadService.shared.planBulkDownload(
-            serverId: stable, maxBytes: maxBytes,
-            favorites: enableFavorites,
-            recapPlaylistIds: recapIds,
-            libraryAlbums: libraryStore.albums
-        )
+        let computed: BulkDownloadPlan
+        switch mode {
+        case .limited(let maxBytes):
+            computed = await DownloadService.shared.planBulkDownload(
+                serverId: stable, maxBytes: maxBytes,
+                favorites: enableFavorites,
+                recapPlaylistIds: recapIds,
+                libraryAlbums: libraryStore.albums
+            )
+        case .keepLibraryOffline:
+            let available = KeepLibraryOfflineService.availableDiskBytes()
+            let maxBytes = KeepLibraryOfflineService.keepOfflineBudgetBytes(availableBytes: available)
+            let planned = await DownloadService.shared.planKeepLibraryOffline(
+                serverId: stable,
+                maxBytes: maxBytes,
+                favorites: enableFavorites,
+                recapPlaylistIds: recapIds,
+                libraryAlbums: libraryStore.albums
+            )
+            computed = BulkDownloadPlan(
+                planned: planned.planned,
+                skipped: planned.skipped,
+                totalBytes: planned.totalBytes,
+                limitBytes: maxBytes,
+                availableBytes: available,
+                isKeepLibraryOffline: true,
+                playlistMarkers: planned.playlistMarkers,
+                recapPlaylistSongIds: planned.recapPlaylistSongIds
+            )
+        }
         plan = computed
         isPlanning = false
     }

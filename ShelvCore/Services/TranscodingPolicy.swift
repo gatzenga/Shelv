@@ -51,7 +51,6 @@ nonisolated struct TranscodingPolicy {
 
     /// Liefert das gewünschte Download-Format. `nil` = Original (`/download` Endpoint).
     static func currentDownloadFormat() -> (codec: TranscodingCodec, bitrate: Int)? {
-        guard UserDefaults.standard.bool(forKey: "transcodingEnabled") else { return nil }
         let codecRaw = UserDefaults.standard.string(forKey: "transcodingDownloadCodec") ?? "raw"
         guard let codec = TranscodingCodec(rawValue: codecRaw), codec != .raw else { return nil }
         let rate = UserDefaults.standard.integer(forKey: "transcodingDownloadBitrate")

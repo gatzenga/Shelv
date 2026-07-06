@@ -496,7 +496,29 @@ final class DownloadStore: ObservableObject {
         playlistSongIds = [:]
         protectedPlaylistIds = []
         UserDefaults.standard.removeObject(forKey: "shelv_mac_playlist_song_ids_\(serverId)")
-        Task { await DownloadService.shared.deleteAll() }
+        clearLocalDownloadState()
+        Task {
+            await DownloadService.shared.deleteAll()
+            await reload()
+        }
+    }
+
+    private func clearLocalDownloadState() {
+        songs = []
+        albums = []
+        artists = []
+        favoriteSongs = []
+        totalBytes = 0
+        songById = [:]
+        recordsByAlbumId = [:]
+        inFlightProgress = [:]
+        inFlightStates = [:]
+        batchProgress = nil
+        pendingReload = false
+        DownloadStatusCache.shared.rebuild(albumIds: [])
+        LocalDownloadIndex.shared.update(paths: [:])
+        LocalArtworkIndex.shared.update(paths: [:])
+        progressPublisher.send(())
     }
 
     func markPlaylistDownloaded(id: String, name: String, songIds: [String] = []) {

@@ -87,10 +87,20 @@ struct MissingStrikeRecord: Codable, FetchableRecord, PersistableRecord {
 // MARK: - DownloadDatabase
 
 actor DownloadDatabase {
-    static let shared = DownloadDatabase()
+    static let shared = DownloadDatabase(databaseURL: DownloadDatabase.dbURL)
 
     private var pool: DatabasePool?
-    private init() {}
+    private let databaseURL: URL
+
+    private init(databaseURL: URL) {
+        self.databaseURL = databaseURL
+    }
+
+    #if SHELV_LOGIC_TESTS
+    init(testDatabaseURL: URL) {
+        self.databaseURL = testDatabaseURL
+    }
+    #endif
 
     static var dbURL: URL {
         FileManager.default
@@ -99,7 +109,7 @@ actor DownloadDatabase {
     }
 
     func setup() {
-        let url = Self.dbURL
+        let url = databaseURL
         let dir = url.deletingLastPathComponent()
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         Self.applyDataProtection(at: url)
@@ -281,7 +291,7 @@ actor DownloadDatabase {
             consecutiveIOErrors = 0
             // WAL wird von GRDB lazy beim ersten Write erstellt — Schutz einmalig nachholen
             if !walProtectionApplied {
-                Self.applyDataProtection(at: Self.dbURL)
+                Self.applyDataProtection(at: databaseURL)
                 walProtectionApplied = true
             }
         } catch {
@@ -320,7 +330,7 @@ actor DownloadDatabase {
     }
 
     private func reopenPool(deleteCorruptFiles: Bool) {
-        let url = Self.dbURL
+        let url = databaseURL
         pool = nil
         walProtectionApplied = false
         if deleteCorruptFiles {
@@ -470,6 +480,25 @@ actor DownloadDatabase {
                                 arguments: [serverId])
         }) ?? []
         return Set(ids)
+    }
+
+    func songCountsByAlbum(serverId: String) -> [String: Int] {
+        guard let pool else { return [:] }
+        return (try? pool.read { db in
+            let rows = try Row.fetchAll(
+                db,
+                sql: """
+                SELECT albumId, COUNT(*) AS count
+                FROM downloads
+                WHERE serverId = ? AND albumId != ''
+                GROUP BY albumId
+                """,
+                arguments: [serverId]
+            )
+            return Dictionary(uniqueKeysWithValues: rows.map { row in
+                (row["albumId"] as String, row["count"] as Int)
+            })
+        }) ?? [:]
     }
 
     func isDownloaded(songId: String, serverId: String) -> Bool {

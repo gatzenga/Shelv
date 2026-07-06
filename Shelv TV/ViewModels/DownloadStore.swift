@@ -12,6 +12,7 @@ final class DownloadStore {
     static let shared = DownloadStore()
     private init() {}
 
+    func enqueueSongs(_ songs: [Song]) {}
     func insertRecord(_ record: DownloadRecord) {}
     func removeRecord(songId: String) {}
 }

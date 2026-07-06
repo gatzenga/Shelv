@@ -166,6 +166,11 @@ final class QueueSyncService: ObservableObject {
             appendLog("Check skipped — no active server (stableId empty)")
             return
         }
+        guard !OfflineModeService.shared.isOffline else {
+            pendingRemote = nil
+            appendLog("Check skipped — offline mode")
+            return
+        }
         // Überlappende Checks vermeiden (syncNow kann von mehreren Auslösern gleichzeitig kommen).
         guard !isChecking else { return }
         // Trigger-Bursts (z.B. Netz-Flapping) zusammenfassen — nicht öfter als alle 2 s prüfen.
@@ -173,6 +178,11 @@ final class QueueSyncService: ObservableObject {
         lastCheckAt = Date()
         isChecking = true
         defer { isChecking = false }
+        guard await serverIsReachableForRemoteQueueCheck() else {
+            pendingRemote = nil
+            appendLog("Check skipped — server unreachable")
+            return
+        }
 
         let remote: QueueSnapshot?
         switch m {
@@ -268,5 +278,14 @@ final class QueueSyncService: ObservableObject {
     func handleServerChange() {
         uploadTask?.cancel()
         pendingRemote = nil
+    }
+
+    private func serverIsReachableForRemoteQueueCheck() async -> Bool {
+        do {
+            try await SubsonicAPIService.shared.ping()
+            return true
+        } catch {
+            return false
+        }
     }
 }

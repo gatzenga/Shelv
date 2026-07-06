@@ -6,8 +6,6 @@ struct TranscodingPanel: View {
     @AppStorage("transcodingWifiBitrate") private var wifiBitrate: Int = 256
     @AppStorage("transcodingCellularCodec") private var cellularCodecRaw: String = "raw"
     @AppStorage("transcodingCellularBitrate") private var cellularBitrate: Int = 128
-    @AppStorage("transcodingDownloadCodec") private var downloadCodecRaw: String = "raw"
-    @AppStorage("transcodingDownloadBitrate") private var downloadBitrate: Int = 192
     @Environment(\.themeColor) private var themeColor
 
     var body: some View {
@@ -36,10 +34,6 @@ struct TranscodingPanel: View {
                            codecBinding: $cellularCodecRaw,
                            bitrateBinding: $cellularBitrate,
                            options: TranscodingCodec.streamingOptions)
-                subsection(title: String(localized: "downloads"),
-                           codecBinding: $downloadCodecRaw,
-                           bitrateBinding: $downloadBitrate,
-                           options: TranscodingCodec.downloadOptions)
             }
         }
         .formStyle(.grouped)

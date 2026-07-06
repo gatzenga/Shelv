@@ -111,6 +111,7 @@ struct ShelvApp: App {
                     await LibraryStore.shared.loadStarred()
                     // Nach App-Start / Server-Wechsel: auf eine fremde Remote-Queue prüfen.
                     await QueueSyncService.shared.checkForRemoteQueue()
+                    await runKeepLibraryOfflineCheck(serverId: server.stableId)
                 }
                 .task {
                     Task.detached(priority: .utility) {
@@ -144,6 +145,9 @@ struct ShelvApp: App {
                     guard phase == .active else { return }
                     // syncNow prüft die Remote-Queue automatisch mit.
                     Task { await CloudKitSyncService.shared.syncNow() }
+                    if let active = serverStore.activeServer {
+                        Task { await runKeepLibraryOfflineCheck(serverId: active.stableId) }
+                    }
                 }
                 .onChange(of: downloadStore.batchProgress) { _, _ in
                     updateIdleTimer(phase: scenePhase)
@@ -168,5 +172,24 @@ struct ShelvApp: App {
             && phase == .active
             && hasRunningDownloads
         UIApplication.shared.isIdleTimerDisabled = shouldPrevent
+    }
+
+    @MainActor
+    private func runKeepLibraryOfflineCheck(serverId: String, force: Bool = false) async {
+        guard UserDefaults.standard.bool(forKey: "enableDownloads") else { return }
+        guard KeepLibraryOfflineService.shared.isEnabled(serverId: serverId) else { return }
+        await DownloadService.shared.waitForRestoredInflightTasks()
+        await LibraryStore.shared.loadAlbums()
+        let recapIds = UserDefaults.standard.bool(forKey: "recapEnabled")
+            ? Array(RecapStore.shared.recapPlaylistIds)
+            : []
+        let favorites = UserDefaults.standard.object(forKey: "enableFavorites") as? Bool ?? true
+        await KeepLibraryOfflineService.shared.checkAndDownload(
+            serverId: serverId,
+            libraryAlbums: LibraryStore.shared.albums,
+            favorites: favorites,
+            recapPlaylistIds: recapIds,
+            force: force
+        )
     }
 }

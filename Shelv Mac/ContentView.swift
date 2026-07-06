@@ -41,6 +41,42 @@ struct ToastView: View {
     }
 }
 
+private struct KeepLibraryOfflineBanner: View {
+    @ObservedObject private var keepOffline = KeepLibraryOfflineService.shared
+
+    var body: some View {
+        if keepOffline.lowStorageBannerVisible {
+            HStack(spacing: 12) {
+                Image(systemName: "externaldrive.badge.exclamationmark")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(String(localized: "keep_library_offline_storage_title"))
+                        .font(.subheadline.bold())
+                        .foregroundStyle(.white)
+                    Text(String(localized: "keep_library_offline_storage_message"))
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.85))
+                }
+                Spacer()
+                Button {
+                    keepOffline.dismissLowStorageBanner()
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.white)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(Color.red.gradient, in: RoundedRectangle(cornerRadius: 12))
+            .frame(maxWidth: 520)
+            .padding(.top, 12)
+            .transition(.move(edge: .top).combined(with: .opacity))
+        }
+    }
+}
+
 struct MainWindowView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var serverStore: ServerStore
@@ -114,6 +150,8 @@ struct MainWindowView: View {
                     .animation(.easeInOut, value: offlineMode.serverErrorBannerVisible)
                 QueueSyncBanner()
                     .animation(.easeInOut, value: QueueSyncService.shared.pendingRemote != nil)
+                KeepLibraryOfflineBanner()
+                    .animation(.easeInOut, value: KeepLibraryOfflineService.shared.lowStorageBannerVisible)
                 if let msg = toastMessage {
                     ToastView(message: msg, isError: toastIsError)
                         .transition(.move(edge: .top).combined(with: .opacity))

@@ -118,10 +118,12 @@ actor CloudKitSyncService {
     private static let lyricsServerRecordName = "lyrics_server_settings"
     private static let lyricsUseCustomKey = "useCustomLrcLibServer"
     private static let lyricsCustomURLKey = "customLrcLibBaseURL"
+    private static let lyricsOnlineFallbackKey = LrcLibEndpoint.onlineFallbackEnabledKey
     private let lyricsServerUpdatedAtKey = "lyrics_server_updated_at"
     private let lyricsServerSyncedAtKey = "lyrics_server_synced_at"
     private let lyricsServerEchoUseCustomKey = "lyrics_server_echo_use_custom"
     private let lyricsServerEchoCustomURLKey = "lyrics_server_echo_custom_url"
+    private let lyricsServerEchoOnlineFallbackKey = "lyrics_server_echo_online_fallback"
     private let lyricsServerEchoUpdatedAtKey = "lyrics_server_echo_updated_at"
 
     private var isZoneReady = false
@@ -926,8 +928,9 @@ actor CloudKitSyncService {
         let syncedAt = UserDefaults.standard.double(forKey: lyricsServerSyncedAtKey)
         let useCustom = UserDefaults.standard.bool(forKey: Self.lyricsUseCustomKey)
         let customURL = UserDefaults.standard.string(forKey: Self.lyricsCustomURLKey) ?? ""
+        let onlineFallback = LrcLibEndpoint.isOnlineFallbackEnabled
 
-        if updatedAt == 0, useCustom || !customURL.isEmpty {
+        if updatedAt == 0, useCustom || !customURL.isEmpty || !onlineFallback {
             updatedAt = Date().timeIntervalSince1970
             Self.setUserDefault(.double(updatedAt), forKey: lyricsServerUpdatedAtKey)
         }
@@ -939,6 +942,7 @@ actor CloudKitSyncService {
             let rec = CKRecord(recordType: "LyricsServerSettings", recordID: rid)
             rec["useCustom"] = useCustom ? 1 : 0
             rec["customBaseURL"] = customURL
+            rec["onlineFallbackEnabled"] = onlineFallback ? 1 : 0
             rec["updatedAt"] = updatedAt
             _ = try await db.modifyRecords(saving: [rec], deleting: [], savePolicy: .allKeys, atomically: true)
             Self.setUserDefault(.double(updatedAt), forKey: lyricsServerSyncedAtKey)
@@ -954,12 +958,15 @@ actor CloudKitSyncService {
         guard updatedAt > localUpdated else { return }
         let useCustom = (record["useCustom"] as? Int64 ?? 0) == 1
         let customURL = record["customBaseURL"] as? String ?? ""
+        let onlineFallback = (record["onlineFallbackEnabled"] as? Int64).map { $0 == 1 } ?? true
         Self.setUserDefault(.bool(useCustom), forKey: Self.lyricsUseCustomKey)
         Self.setUserDefault(.string(customURL), forKey: Self.lyricsCustomURLKey)
+        Self.setUserDefault(.bool(onlineFallback), forKey: Self.lyricsOnlineFallbackKey)
         Self.setUserDefault(.double(updatedAt), forKey: lyricsServerUpdatedAtKey)
         Self.setUserDefault(.double(updatedAt), forKey: lyricsServerSyncedAtKey)
         Self.setUserDefault(.bool(useCustom), forKey: lyricsServerEchoUseCustomKey)
         Self.setUserDefault(.string(customURL), forKey: lyricsServerEchoCustomURLKey)
+        Self.setUserDefault(.bool(onlineFallback), forKey: lyricsServerEchoOnlineFallbackKey)
         Self.setUserDefault(.double(updatedAt), forKey: lyricsServerEchoUpdatedAtKey)
         log("Lyrics server settings updated from iCloud")
     }
@@ -972,14 +979,17 @@ actor CloudKitSyncService {
 
         let useCustom = UserDefaults.standard.bool(forKey: Self.lyricsUseCustomKey)
         let customURL = UserDefaults.standard.string(forKey: Self.lyricsCustomURLKey) ?? ""
+        let onlineFallback = LrcLibEndpoint.isOnlineFallbackEnabled
         let echoUseCustom = UserDefaults.standard.bool(forKey: lyricsServerEchoUseCustomKey)
         let echoCustomURL = UserDefaults.standard.string(forKey: lyricsServerEchoCustomURLKey) ?? ""
-        return useCustom == echoUseCustom && customURL == echoCustomURL
+        let echoOnlineFallback = UserDefaults.standard.bool(forKey: lyricsServerEchoOnlineFallbackKey)
+        return useCustom == echoUseCustom && customURL == echoCustomURL && onlineFallback == echoOnlineFallback
     }
 
     private func clearLyricsServerEchoMarker() {
         Self.removeUserDefault(forKey: lyricsServerEchoUseCustomKey)
         Self.removeUserDefault(forKey: lyricsServerEchoCustomURLKey)
+        Self.removeUserDefault(forKey: lyricsServerEchoOnlineFallbackKey)
         Self.removeUserDefault(forKey: lyricsServerEchoUpdatedAtKey)
     }
 
@@ -1071,7 +1081,8 @@ actor CloudKitSyncService {
         let lyricsUpdatedAt = UserDefaults.standard.double(forKey: lyricsServerUpdatedAtKey)
         let useCustomLyricsServer = UserDefaults.standard.bool(forKey: Self.lyricsUseCustomKey)
         let customLyricsURL = UserDefaults.standard.string(forKey: Self.lyricsCustomURLKey) ?? ""
-        if lyricsUpdatedAt > 0 || useCustomLyricsServer || !customLyricsURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        let onlineFallback = LrcLibEndpoint.isOnlineFallbackEnabled
+        if lyricsUpdatedAt > 0 || useCustomLyricsServer || !customLyricsURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !onlineFallback {
             Self.setUserDefault(.double(0), forKey: lyricsServerSyncedAtKey)
         }
         await PlayLogService.shared.markAllUnsyncedForReUpload()

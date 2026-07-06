@@ -89,7 +89,7 @@ nonisolated final class NetworkStatus: @unchecked Sendable {
         continuations.forEach { $0.resume() }
         if changed {
             ConnectivityDebugLog.log("network status changed via sync update: hasNetwork=\(any), isOnWifi=\(wifi), status=\(path.status)")
-            NotificationCenter.default.post(name: .networkStatusChanged, object: nil)
+            postNetworkStatusChanged()
         }
     }
 
@@ -114,9 +114,19 @@ nonisolated final class NetworkStatus: @unchecked Sendable {
             continuations.forEach { $0.resume() }
             if changed {
                 ConnectivityDebugLog.log("network status changed: hasNetwork=\(any), isOnWifi=\(wifi), status=\(path.status)")
-                NotificationCenter.default.post(name: .networkStatusChanged, object: nil)
+                self.postNetworkStatusChanged()
             }
         }
         monitor.start(queue: queue)
+    }
+
+    private func postNetworkStatusChanged() {
+        if Thread.isMainThread {
+            NotificationCenter.default.post(name: .networkStatusChanged, object: nil)
+        } else {
+            Task { @MainActor in
+                NotificationCenter.default.post(name: .networkStatusChanged, object: nil)
+            }
+        }
     }
 }
