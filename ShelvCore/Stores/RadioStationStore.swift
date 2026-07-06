@@ -69,7 +69,7 @@ final class RadioStationStore: ObservableObject {
         } catch {
             guard refreshGeneration == generation else { return }
             if !(error is CancellationError) {
-                errorMessage = radioErrorDescription(error)
+                errorMessage = items.isEmpty ? radioErrorDescription(error) : nil
             }
         }
     }

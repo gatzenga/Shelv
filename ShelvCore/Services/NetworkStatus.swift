@@ -1,6 +1,12 @@
 import Foundation
 import Network
 
+extension Notification.Name {
+    nonisolated static var networkStatusChanged: Notification.Name {
+        Notification.Name("shelv.networkStatusChanged")
+    }
+}
+
 nonisolated final class NetworkStatus: @unchecked Sendable {
     static let shared = NetworkStatus()
 
@@ -68,6 +74,7 @@ nonisolated final class NetworkStatus: @unchecked Sendable {
         let wifi = path.usesInterfaceType(.wifi) || path.usesInterfaceType(.wiredEthernet)
         let any = path.status == .satisfied
         lock.lock()
+        let changed = _isOnWifi != wifi || _hasNetwork != any
         _isOnWifi = wifi
         _hasNetwork = any
         let continuations: [CheckedContinuation<Void, Never>]
@@ -80,6 +87,10 @@ nonisolated final class NetworkStatus: @unchecked Sendable {
         }
         lock.unlock()
         continuations.forEach { $0.resume() }
+        if changed {
+            ConnectivityDebugLog.log("network status changed via sync update: hasNetwork=\(any), isOnWifi=\(wifi), status=\(path.status)")
+            NotificationCenter.default.post(name: .networkStatusChanged, object: nil)
+        }
     }
 
     private init() {
@@ -88,6 +99,7 @@ nonisolated final class NetworkStatus: @unchecked Sendable {
             let wifi = path.usesInterfaceType(.wifi) || path.usesInterfaceType(.wiredEthernet)
             let any = path.status == .satisfied
             self.lock.lock()
+            let changed = self._isOnWifi != wifi || self._hasNetwork != any
             self._isOnWifi = wifi
             self._hasNetwork = any
             let continuations: [CheckedContinuation<Void, Never>]
@@ -100,6 +112,10 @@ nonisolated final class NetworkStatus: @unchecked Sendable {
             }
             self.lock.unlock()
             continuations.forEach { $0.resume() }
+            if changed {
+                ConnectivityDebugLog.log("network status changed: hasNetwork=\(any), isOnWifi=\(wifi), status=\(path.status)")
+                NotificationCenter.default.post(name: .networkStatusChanged, object: nil)
+            }
         }
         monitor.start(queue: queue)
     }

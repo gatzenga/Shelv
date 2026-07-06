@@ -33,10 +33,11 @@ actor StreamCacheService {
     static let shared = StreamCacheService()
     private init() {}
 
-    private var activeTasks: [String: Task<Void, Never>] = [:]
+    private var activeTasks: [String: Task<Bool, Never>] = [:]
     private var activeFormats: [String: ActualStreamFormat] = [:]
     private var cachedURLs: [String: URL] = [:]
     private var cachedFormats: [String: ActualStreamFormat] = [:]
+    private static let requestTimeout: TimeInterval = 10
     private static let cacheFileExtensions: Set<String> = [
         "aac", "aif", "aiff", "audio", "flac", "m4a", "mp3", "ogg", "opus", "wav", "webm"
     ]
@@ -94,8 +95,16 @@ actor StreamCacheService {
         cachedFormats[songId]
     }
 
+    func isActive(songId: String) -> Bool {
+        activeTasks[songId] != nil
+    }
+
     func prefetch(songId: String, url: URL, codec: String, bitrate: Int, songTitle: String = "") {
         if !songTitle.isEmpty { StreamCacheLog.register(songId: songId, title: songTitle) }
+        guard NetworkStatus.shared.hasNetwork else {
+            StreamCacheLog.log(songId: songId, message: "Prefetch skipped – offline")
+            return
+        }
         if cachedURLs[songId] != nil {
             StreamCacheLog.log(songId: songId, message: "Already cached – skipped")
             return
@@ -114,16 +123,20 @@ actor StreamCacheService {
         }
     }
 
-    func prefetchAndWait(songId: String, url: URL, codec: String, bitrate: Int, songTitle: String = "") async {
+    @discardableResult
+    func prefetchAndWait(songId: String, url: URL, codec: String, bitrate: Int, songTitle: String = "") async -> Bool {
         if !songTitle.isEmpty { StreamCacheLog.register(songId: songId, title: songTitle) }
+        guard NetworkStatus.shared.hasNetwork else {
+            StreamCacheLog.log(songId: songId, message: "Prefetch skipped – offline")
+            return false
+        }
         if cachedURLs[songId] != nil {
             StreamCacheLog.log(songId: songId, message: "Already cached – skipped")
-            return
+            return true
         }
         if let task = activeTasks[songId] {
             StreamCacheLog.log(songId: songId, message: "Already downloading – waiting")
-            await task.value
-            return
+            return await task.value
         }
         let desc = bitrate > 0 ? "\(codec.uppercased()) · \(bitrate) kbps" : codec.uppercased()
         StreamCacheLog.log(songId: songId, message: "Prefetch started (\(desc))")
@@ -134,7 +147,7 @@ actor StreamCacheService {
             await downloadWithRetry(songId: songId, url: url, format: format, maxAttempts: 3)
         }
         activeTasks[songId] = task
-        await task.value
+        return await task.value
     }
 
     func cancel(songId: String) {
@@ -185,15 +198,21 @@ actor StreamCacheService {
         }
     }
 
-    private func downloadWithRetry(songId: String, url: URL, format: ActualStreamFormat, maxAttempts: Int) async {
+    private func downloadWithRetry(songId: String, url: URL, format: ActualStreamFormat, maxAttempts: Int) async -> Bool {
         let requestedDest = Self.tempURL(for: songId, ext: Self.fileExtension(for: format.codecLabel))
         for attempt in 1...maxAttempts {
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else { return false }
+            guard NetworkStatus.shared.hasNetwork else {
+                StreamCacheLog.log(songId: songId, message: "Cancelled – offline")
+                break
+            }
             do {
-                let (tmpURL, response) = try await URLSession.shared.download(from: url)
+                var request = URLRequest(url: url)
+                request.timeoutInterval = Self.requestTimeout
+                let (tmpURL, response) = try await URLSession.shared.download(for: request)
                 guard !Task.isCancelled else {
                     try? FileManager.default.removeItem(at: tmpURL)
-                    return
+                    return false
                 }
                 guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
                     StreamCacheLog.log(songId: songId, message: "Attempt \(attempt)/\(maxAttempts) – bad status")
@@ -217,15 +236,15 @@ actor StreamCacheService {
                 } else {
                     StreamCacheLog.log(songId: songId, message: "Cached ✓")
                 }
-                return
+                return true
             } catch let urlError as URLError where urlError.code == .timedOut {
                 StreamCacheLog.log(songId: songId, message: "Timeout – no retry")
                 activeFormats.removeValue(forKey: songId)
                 activeTasks.removeValue(forKey: songId)
                 publishRemoved(songId: songId)
-                return
+                return false
             } catch {
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled else { return false }
                 StreamCacheLog.log(songId: songId, message: "Attempt \(attempt)/\(maxAttempts) – error: \(error.localizedDescription)")
                 if attempt < maxAttempts { try? await Task.sleep(nanoseconds: 1_000_000_000) }
             }
@@ -234,6 +253,7 @@ actor StreamCacheService {
         activeTasks.removeValue(forKey: songId)
         publishRemoved(songId: songId)
         StreamCacheLog.log(songId: songId, message: "All attempts failed")
+        return false
     }
 
     private func publishActive(songId: String) {

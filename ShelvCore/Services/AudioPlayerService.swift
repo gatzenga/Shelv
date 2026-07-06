@@ -171,6 +171,7 @@ class AudioPlayerService: ObservableObject {
     private let lyricsAutoFetcher = AudioPlayerLyricsAutoFetcher()
     private var engineSubscriptions = Set<AnyCancellable>()
     private var bufferingShowTask: Task<Void, Never>?
+    private var remoteStreamStallTask: Task<Void, Never>?
     private var radioReconnectTask: Task<Void, Never>?
     private var radioReconnectAttempts = 0
     #if os(tvOS)
@@ -778,6 +779,7 @@ class AudioPlayerService: ObservableObject {
 
     private func streamCacheJob(for song: Song) -> AudioPlayerStreamCacheJob? {
         guard !OfflineModeService.shared.isOffline,
+              NetworkStatus.shared.hasNetwork,
               !isDownloadedLocally(song),
               let url = SubsonicAPIService.shared.streamURL(for: song.id),
               !url.isFileURL
@@ -809,13 +811,14 @@ class AudioPlayerService: ObservableObject {
 
     #if os(iOS) || os(tvOS) || os(macOS)
     private func prewarmNowPlayingArtwork(startingWith song: Song) {
+        let upcomingLimit = max(4, backgroundStreamPreCacheLimit)
         var seen = Set<String>()
         var songs: [Song] = []
-        for candidate in [song] + upcomingSongs(limit: 4) {
+        for candidate in [song] + upcomingSongs(limit: upcomingLimit) {
             guard seen.insert(candidate.id).inserted else { continue }
             songs.append(candidate)
         }
-        prewarmNowPlayingArtwork(for: songs, limit: 5)
+        prewarmNowPlayingArtwork(for: songs, limit: upcomingLimit + 1)
     }
 
     private func prewarmNowPlayingArtwork(for songs: [Song], limit: Int = 5) {
@@ -974,7 +977,77 @@ class AudioPlayerService: ObservableObject {
         return true
     }
 
+    @MainActor
+    private func stopUnavailableRemotePlayback(song: Song, generation: Int) {
+        guard playbackGeneration == generation else { return }
+        cancelRemoteStreamStallWatchdog()
+        pendingNowPlayingElapsedStartTime = nil
+        isBuffering = false
+        isPlaying = false
+        isEngineLoaded = false
+        networkResumeSong = song
+        networkResumeTime = currentTime
+        resumeTime = currentTime
+        nowPlaying.updatePlaybackRate(0, currentTime: currentTime)
+        MPNowPlayingInfoCenter.default().playbackState = .paused
+        let message = NetworkStatus.shared.hasNetwork
+            ? String(localized: "server_unreachable")
+            : SubsonicAPIError.networkError(URLError(.notConnectedToInternet)).localizedDescription
+        OfflineModeService.shared.notifyServerError(message, bypassCooldown: true)
+    }
+
+    @MainActor
+    private func cancelRemoteStreamStallWatchdog() {
+        remoteStreamStallTask?.cancel()
+        remoteStreamStallTask = nil
+    }
+
+    @MainActor
+    private func scheduleRemoteStreamStallWatchdog() {
+        guard playbackMode == .songs,
+              isPlaying,
+              isEngineLoaded,
+              currentStreamURL.map({ !$0.isFileURL }) == true,
+              let song = currentSong
+        else {
+            cancelRemoteStreamStallWatchdog()
+            return
+        }
+
+        let generation = playbackGeneration
+        let songId = song.id
+        let startTime = currentTime
+        remoteStreamStallTask?.cancel()
+        remoteStreamStallTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(10))
+            guard let self,
+                  !Task.isCancelled,
+                  self.playbackGeneration == generation,
+                  self.playbackMode == .songs,
+                  self.isPlaying,
+                  self.isEngineLoaded,
+                  self.currentSong?.id == songId,
+                  self.currentStreamURL.map({ !$0.isFileURL }) == true,
+                  self.engine.isWaiting
+            else { return }
+
+            if await self.playCachedStreamIfAvailable(
+                song: song,
+                songId: songId,
+                seekTo: self.currentTime,
+                generation: generation
+            ) {
+                return
+            }
+
+            let hasProgressed = self.currentTime > startTime + 1
+            guard !hasProgressed else { return }
+            self.stopUnavailableRemotePlayback(song: song, generation: generation)
+        }
+    }
+
     private func startPlayback(song: Song, seekTo: Double = 0) {
+        cancelRemoteStreamStallWatchdog()
         prepareForSongPlayback()
         stopFastSeeking()
         #if os(iOS) || os(tvOS) || os(macOS)
@@ -1046,6 +1119,14 @@ class AudioPlayerService: ObservableObject {
             Task { try? await SubsonicAPIService.shared.scrobble(songId: song.id, submission: false) }
             #endif
 
+            if !url.isFileURL && !NetworkStatus.shared.hasNetwork {
+                if await self.playCachedStreamIfAvailable(song: song, songId: song.id, seekTo: seekTo, generation: gen) {
+                    return
+                }
+                self.stopUnavailableRemotePlayback(song: song, generation: gen)
+                return
+            }
+
             // Transcodierter Remote-Stream → erst cachen, dann lokal abspielen
             if self.isTranscodedRemote(url), let fmt = TranscodingPolicy.currentStreamFormat() {
                 self.engine.stop()
@@ -1059,58 +1140,26 @@ class AudioPlayerService: ObservableObject {
                 if await self.playCachedStreamIfAvailable(song: song, songId: songId, seekTo: seekTo, generation: gen) {
                     return
                 }
-                await StreamCacheService.shared.prefetch(
-                    songId: songId,
-                    url: url,
-                    codec: fmt.codec.rawValue,
-                    bitrate: fmt.bitrate,
-                    songTitle: song.title
-                )
                 #if os(iOS)
                 // Background-Task damit iOS den Download nicht einfriert wenn Handy gesperrt wird
                 // bevor der erste Song je gespielt hat (kein aktiver Audio-Kontext vorhanden)
                 let bgTask = UIApplication.shared.beginBackgroundTask(withName: "shelv.streamload")
                 defer { if bgTask != .invalid { UIApplication.shared.endBackgroundTask(bgTask) } }
                 #endif
-                // Polling bis Datei da ist (alle 200ms, max 60s)
-                // repeat…while: erst schlafen, dann prüfen — Download hat gerade erst gestartet
-                let deadline = Date().addingTimeInterval(60)
-                repeat {
-                    try? await Task.sleep(nanoseconds: 200_000_000)
-                    guard self.playbackGeneration == gen else { return }
-                    if let local = await StreamCacheService.shared.localURL(for: songId) {
-                        let asset = AVURLAsset(url: local, options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])
-                        let cmTime = try? await asset.load(.duration)
-                        guard self.playbackGeneration == gen else { return }
-                        let precise = cmTime.flatMap { $0.isValid && !$0.isIndefinite ? CMTimeGetSeconds($0) : nil }
-                        let resolvedDuration = (precise ?? 0) > 0 ? precise! : Double(song.duration ?? 0)
-                        self.currentStreamURL = local
-                        let cachedFormat = await StreamCacheService.shared.cachedFormat(for: songId)
-                        guard self.playbackGeneration == gen else { return }
-                        if let cachedFormat {
-                            self.actualStreamFormat = cachedFormat
-                        }
-                        self.probeStreamFormat(for: song, url: local)
-                        self.engine.play(url: local)
-                        if !self.isPlaying { self.engine.pause() }
-                        self.engine.trustedDuration = resolvedDuration
-                        self.duration = resolvedDuration
-                        if seekTo > 0 { self.engine.seek(to: seekTo) }
-                        self.isEngineLoaded = true
-                        break
-                    }
-                } while Date() < deadline
-                // Timeout-Fallback: Raw-Stream versuchen
-                if self.playbackGeneration == gen, !self.isEngineLoaded,
-                   let rawURL = SubsonicAPIService.shared.rawStreamURL(for: songId) {
-                    self.currentStreamURL = rawURL
-                    self.probeStreamFormat(for: song, url: rawURL)
-                    self.engine.play(url: rawURL)
-                    if !self.isPlaying { self.engine.pause() }
-                    self.engine.trustedDuration = Double(song.duration ?? 0)
-                    if seekTo > 0 { self.engine.seek(to: seekTo) }
-                    self.isEngineLoaded = true
+                let didCache = await StreamCacheService.shared.prefetchAndWait(
+                    songId: songId,
+                    url: url,
+                    codec: fmt.codec.rawValue,
+                    bitrate: fmt.bitrate,
+                    songTitle: song.title
+                )
+                guard self.playbackGeneration == gen else { return }
+                if didCache,
+                   await self.playCachedStreamIfAvailable(song: song, songId: songId, seekTo: seekTo, generation: gen) {
+                    return
                 }
+                self.stopUnavailableRemotePlayback(song: song, generation: gen)
+                return
             } else if !url.isFileURL, self.streamPreCacheEnabled {
                 // Original-Remote-Stream mit Pre-Cache → erst vollständig laden, dann lokal abspielen
                 self.engine.stop()
@@ -1120,43 +1169,20 @@ class AudioPlayerService: ObservableObject {
                 if await self.playCachedStreamIfAvailable(song: song, songId: songId, seekTo: seekTo, generation: gen) {
                     return
                 }
-                await StreamCacheService.shared.prefetch(
+                let didCache = await StreamCacheService.shared.prefetchAndWait(
                     songId: songId,
                     url: url,
                     codec: suffix,
                     bitrate: 0,
                     songTitle: song.title
                 )
-                let deadline = Date().addingTimeInterval(60)
-                repeat {
-                    try? await Task.sleep(nanoseconds: 200_000_000)
-                    guard self.playbackGeneration == gen else { return }
-                    if let local = await StreamCacheService.shared.localURL(for: songId) {
-                        let asset = AVURLAsset(url: local, options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])
-                        let cmTime = try? await asset.load(.duration)
-                        guard self.playbackGeneration == gen else { return }
-                        let precise = cmTime.flatMap { $0.isValid && !$0.isIndefinite ? CMTimeGetSeconds($0) : nil }
-                        let resolvedDuration = (precise ?? 0) > 0 ? precise! : Double(song.duration ?? 0)
-                        self.currentStreamURL = local
-                        self.probeStreamFormat(for: song, url: local)
-                        self.engine.play(url: local)
-                        if !self.isPlaying { self.engine.pause() }
-                        self.engine.trustedDuration = resolvedDuration
-                        self.duration = resolvedDuration
-                        if seekTo > 0 { self.engine.seek(to: seekTo) }
-                        self.isEngineLoaded = true
-                        break
-                    }
-                } while Date() < deadline
-                // Timeout-Fallback: direkt streamen
-                if self.playbackGeneration == gen, !self.isEngineLoaded {
-                    self.probeStreamFormat(for: song, url: url)
-                    self.engine.play(url: url)
-                    if !self.isPlaying { self.engine.pause() }
-                    self.engine.trustedDuration = Double(song.duration ?? 0)
-                    if seekTo > 0 { self.engine.seek(to: seekTo) }
-                    self.isEngineLoaded = true
+                guard self.playbackGeneration == gen else { return }
+                if didCache,
+                   await self.playCachedStreamIfAvailable(song: song, songId: songId, seekTo: seekTo, generation: gen) {
+                    return
                 }
+                self.stopUnavailableRemotePlayback(song: song, generation: gen)
+                return
             } else {
                 // Raw-Stream oder lokale Datei → wie bisher
                 self.probeStreamFormat(for: song, url: url)
@@ -1171,6 +1197,7 @@ class AudioPlayerService: ObservableObject {
     private func clearPlaybackState() {
         cancelAllManagedStreamCaches()
         cancelRadioReconnect()
+        cancelRemoteStreamStallWatchdog()
         teardownPlayer()
         radioMetadata.stopPolling()
         #if os(tvOS)
@@ -1201,6 +1228,7 @@ class AudioPlayerService: ObservableObject {
     }
 
     private func teardownPlayer() {
+        cancelRemoteStreamStallWatchdog()
         pendingNowPlayingElapsedStartTime = nil
         nowPlaying.cancelArtwork()
         engine.stop()
@@ -1209,6 +1237,7 @@ class AudioPlayerService: ObservableObject {
 
     func pause() {
         networkResumeSong = nil
+        cancelRemoteStreamStallWatchdog()
         #if os(tvOS)
         resumeWatchdog?.cancel()
         #endif
@@ -2029,6 +2058,11 @@ class AudioPlayerService: ObservableObject {
             .sink { [weak self] waiting in
                 guard let self, self.isEngineLoaded, self.isPlaying else { return }
                 self.isBuffering = waiting
+                if waiting {
+                    self.scheduleRemoteStreamStallWatchdog()
+                } else {
+                    self.cancelRemoteStreamStallWatchdog()
+                }
                 if self.isRadioPlayback, !waiting {
                     self.radioReconnectAttempts = 0
                     self.cancelRadioReconnect()
@@ -2054,6 +2088,18 @@ class AudioPlayerService: ObservableObject {
             self.networkResumeSong = self.currentSong
             self.networkResumeTime = self.currentTime
             self.resumeTime = self.currentTime
+            let failedRemoteStream = self.currentStreamURL.map { !$0.isFileURL } ?? false
+            if failedRemoteStream {
+                self.isBuffering = false
+                self.isPlaying = false
+                self.nowPlaying.updatePlaybackRate(0, currentTime: self.currentTime)
+                MPNowPlayingInfoCenter.default().playbackState = .paused
+                let message = NetworkStatus.shared.hasNetwork
+                    ? String(localized: "server_unreachable")
+                    : SubsonicAPIError.networkError(URLError(.notConnectedToInternet)).localizedDescription
+                OfflineModeService.shared.notifyServerError(message, bypassCooldown: true)
+                return
+            }
             self.isBuffering = true
         }
 

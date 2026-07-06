@@ -7,6 +7,7 @@ enum SubsonicAPIError: LocalizedError {
     case noServer
     case noPassword
     case invalidURL
+    case httpError(Int)
     case networkError(Error)
     case apiError(Int, String?)
     case decodingError(Error)
@@ -16,6 +17,7 @@ enum SubsonicAPIError: LocalizedError {
         case .noServer:              return String(localized: "no_server_configured")
         case .noPassword:            return String(localized: "no_password_found")
         case .invalidURL:            return String(localized: "invalid_server_url")
+        case .httpError(let code):   return "\(String(localized: "server_returned_an_error")) (HTTP \(code))"
         case .networkError(let e):
             if let urlError = e as? URLError {
                 switch urlError.code {
@@ -325,6 +327,7 @@ private nonisolated struct InternetRadioStationsBody: Decodable {
 
 nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
     nonisolated static let shared = SubsonicAPIService()
+    nonisolated private static let requestTimeout: TimeInterval = 10
 
     private let credentialLock = NSLock()
     nonisolated(unsafe) private var _activeServer: SubsonicServer?
@@ -391,8 +394,8 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
 
     private let session: URLSession = {
         let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 30
-        config.timeoutIntervalForResource = 120
+        config.timeoutIntervalForRequest = requestTimeout
+        config.timeoutIntervalForResource = 45
         return URLSession(configuration: config)
     }()
 
@@ -455,21 +458,55 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         return url
     }
 
-    private func fetchData(path: String, extra: [URLQueryItem] = [], retries: Int = 2) async throws -> Data {
-        let url = try buildURL(path: path, extra: extra)
+    private func activeRequestSignature(for server: SubsonicServer) -> String {
+        "\(server.id.uuidString)|\(server.activeBaseURL)"
+    }
+
+    private func isCurrentActiveRequest(_ signature: String) -> Bool {
+        credentialLock.withLock {
+            guard let server = _activeServer else { return false }
+            return activeRequestSignature(for: server) == signature
+        }
+    }
+
+    private func notifyServerErrorIfCurrentRequest(_ signature: String, message: String?) async {
+        await MainActor.run {
+            guard self.isCurrentActiveRequest(signature) else { return }
+            OfflineModeService.shared.notifyServerErrorIfPresentationAllowed(message)
+        }
+    }
+
+    private func clearServerErrorIfCurrentRequest(_ signature: String) async {
+        await MainActor.run {
+            guard self.isCurrentActiveRequest(signature) else { return }
+            OfflineModeService.shared.clearServerError()
+        }
+    }
+
+    private func fetchData(path: String, extra: [URLQueryItem] = [], retries: Int = 0) async throws -> Data {
+        let creds = try resolveCredentials()
+        let requestSignature = activeRequestSignature(for: creds.server)
+        let url = try buildURL(for: creds.server, password: creds.password, path: path, extra: extra)
+        await NetworkStatus.shared.waitUntilReady()
+        if !NetworkStatus.shared.hasNetwork {
+            let networkError = SubsonicAPIError.networkError(URLError(.notConnectedToInternet))
+            ConnectivityDebugLog.log("request failed: \(path) -> no network")
+            await notifyServerErrorIfCurrentRequest(requestSignature, message: networkError.localizedDescription)
+            throw networkError
+        }
         var lastError: Error?
         for attempt in 0...retries {
             if attempt > 0 {
                 try await Task.sleep(for: .milliseconds(500 * attempt))
                 try Task.checkCancellation()
             }
+            var request = URLRequest(url: url)
+            request.timeoutInterval = Self.requestTimeout
+            let startedAt = Date()
+            let data: Data
+            let response: URLResponse
             do {
-                let (data, _) = try await session.data(from: url)
-                // Server hat geantwortet -> Banner ausblenden, falls einer aktiv ist.
-                await MainActor.run {
-                    OfflineModeService.shared.clearServerError()
-                }
-                return data
+                (data, response) = try await session.data(for: request)
             } catch {
                 if Task.isCancelled || (error as? URLError)?.code == .cancelled {
                     throw CancellationError()
@@ -478,13 +515,30 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
                 let isRetryable = (error as? URLError).map {
                     [.timedOut, .networkConnectionLost, .notConnectedToInternet, .cannotConnectToHost].contains($0.code)
                 } ?? false
-                if !isRetryable || attempt == retries { break }
+                if !isRetryable || attempt == retries {
+                    let elapsed = Date().timeIntervalSince(startedAt)
+                    ConnectivityDebugLog.log("request failed: \(path) -> \(ConnectivityDebugLog.short(error)) after \(String(format: "%.2f", elapsed))s")
+                    break
+                }
+                continue
+            }
+
+            let elapsed = Date().timeIntervalSince(startedAt)
+            if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+                let httpError = SubsonicAPIError.httpError(http.statusCode)
+                ConnectivityDebugLog.log("request failed: \(path) -> HTTP \(http.statusCode) after \(String(format: "%.2f", elapsed))s")
+                await notifyServerErrorIfCurrentRequest(requestSignature, message: httpError.localizedDescription)
+                throw httpError
+            } else {
+                // Server hat geantwortet -> Banner ausblenden, aber nur wenn diese Antwort
+                // noch zur aktuell ausgewählten URL gehört.
+                await clearServerErrorIfCurrentRequest(requestSignature)
+                return data
             }
         }
-        let networkError = SubsonicAPIError.networkError(lastError ?? URLError(.unknown))
-        await MainActor.run {
-            OfflineModeService.shared.notifyServerError(networkError.localizedDescription)
-        }
+        let rootError = lastError ?? URLError(.unknown)
+        let networkError = SubsonicAPIError.networkError(rootError)
+        await notifyServerErrorIfCurrentRequest(requestSignature, message: networkError.localizedDescription)
         throw networkError
     }
 
