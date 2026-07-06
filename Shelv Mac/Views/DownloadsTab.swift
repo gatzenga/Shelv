@@ -441,6 +441,11 @@ struct BulkDownloadSheet: View {
                        let stable = appState.serverStore.activeServer?.stableId {
                         keepOffline.setEnabled(true, serverId: stable)
                         if !plan.planned.isEmpty {
+                            keepOffline.rememberStoragePause(
+                                serverId: stable,
+                                availableBytes: plan.availableBytes,
+                                plan: plan
+                            )
                             keepOffline.markDownloadsStarted(serverId: stable)
                         } else if !plan.skipped.isEmpty {
                             keepOffline.markPausedLowStorage(serverId: stable, skippedSongs: plan.skipped)

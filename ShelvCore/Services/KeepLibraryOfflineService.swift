@@ -97,13 +97,25 @@ final class KeepLibraryOfflineService: ObservableObject {
         activeServerId = serverId
         status = .pausedLowStorage
         if !skippedSongs.isEmpty {
+            let availableBytes = Self.availableDiskBytes()
             saveStoragePause(
                 serverId: serverId,
-                availableBytes: Self.availableDiskBytes(),
-                missingSignature: lowStorageSignature(serverId: serverId, skippedSongs: skippedSongs)
+                availableBytes: availableBytes,
+                missingSignature: lowStorageSignature(serverId: serverId, skippedSongs: skippedSongs),
+                reserveFloorBytes: availableBytes
             )
         }
         lowStorageBannerVisible = shouldShowLowStorageBanner(serverId: serverId, skippedSongs: skippedSongs)
+    }
+
+    func rememberStoragePause(serverId: String, availableBytes: Int64?, plan: BulkDownloadPlan) {
+        guard isEnabled(serverId: serverId), !plan.skipped.isEmpty else { return }
+        saveStoragePause(
+            serverId: serverId,
+            availableBytes: availableBytes,
+            plan: plan,
+            reserveFloorBytes: storageReserveFloor(availableBytes: availableBytes, plannedBytes: plan.totalBytes)
+        )
     }
 
     func checkAndDownload(
@@ -132,7 +144,8 @@ final class KeepLibraryOfflineService: ObservableObject {
         defer { isChecking = false }
 
         let availableBytes = Self.availableDiskBytes()
-        let maxBytes = Self.keepOfflineBudgetBytes(availableBytes: availableBytes)
+        let existingPause = storagePause(serverId: serverId)
+        let maxBytes = Self.keepOfflineBudgetBytes(availableBytes: availableBytes, pause: existingPause)
         var plan = await DownloadService.shared.planKeepLibraryOffline(
             serverId: serverId,
             maxBytes: maxBytes,
@@ -150,16 +163,15 @@ final class KeepLibraryOfflineService: ObservableObject {
             playlistMarkers: plan.playlistMarkers,
             recapPlaylistSongIds: plan.recapPlaylistSongIds
         )
-        let missingSignature = lowStorageSignature(serverId: serverId, skippedSongs: plan.planned + plan.skipped)
+        let missingSignature = lowStorageSignature(serverId: serverId, skippedSongs: plan.skipped)
         markCoveredPlaylists(plan.playlistMarkers)
 
-        if let pause = storagePause(serverId: serverId),
+        if let pause = existingPause,
            pause.missingSignature == missingSignature {
             if !hasEnoughStorageImprovement(since: pause, availableBytes: availableBytes) {
                 status = .pausedLowStorage
                 return
             }
-            clearStoragePause(serverId: serverId)
             lowStorageFailureSignatures.removeValue(forKey: serverId)
         }
 
@@ -168,7 +180,12 @@ final class KeepLibraryOfflineService: ObservableObject {
                 clearStoragePause(serverId: serverId)
                 status = .idle
             } else {
-                saveStoragePause(serverId: serverId, availableBytes: availableBytes, plan: plan)
+                saveStoragePause(
+                    serverId: serverId,
+                    availableBytes: availableBytes,
+                    plan: plan,
+                    reserveFloorBytes: availableBytes
+                )
                 status = .pausedLowStorage
                 lowStorageBannerVisible = shouldShowLowStorageBanner(serverId: serverId, skippedSongs: plan.skipped)
             }
@@ -178,7 +195,12 @@ final class KeepLibraryOfflineService: ObservableObject {
         let planSignature = downloadPlanSignature(plan.planned)
         if pendingLowStorageFailureServers.remove(serverId) != nil {
             lowStorageFailureSignatures[serverId] = planSignature
-            saveStoragePause(serverId: serverId, availableBytes: availableBytes, plan: plan)
+            saveStoragePause(
+                serverId: serverId,
+                availableBytes: availableBytes,
+                plan: plan,
+                reserveFloorBytes: existingPause?.reserveFloorBytes ?? availableBytes
+            )
             status = .pausedLowStorage
             lowStorageBannerVisible = shouldShowLowStorageBanner(serverId: serverId, skippedSongs: plan.planned + plan.skipped)
             return
@@ -200,7 +222,16 @@ final class KeepLibraryOfflineService: ObservableObject {
         }
         manualCancelSignatures.removeValue(forKey: serverId)
 
-        clearStoragePause(serverId: serverId)
+        if plan.skipped.isEmpty {
+            clearStoragePause(serverId: serverId)
+        } else {
+            saveStoragePause(
+                serverId: serverId,
+                availableBytes: availableBytes,
+                plan: plan,
+                reserveFloorBytes: storageReserveFloor(availableBytes: availableBytes, plannedBytes: plan.totalBytes)
+            )
+        }
         status = .downloading
         DownloadStore.shared.enqueueSongs(plan.planned)
     }
@@ -220,6 +251,15 @@ final class KeepLibraryOfflineService: ObservableObject {
     static func keepOfflineBudgetBytes(availableBytes: Int64?) -> Int64 {
         guard let availableBytes, availableBytes > 0 else { return 0 }
         return Int64(Double(availableBytes) * (1.0 - storageReserveRatio))
+    }
+
+    private static func keepOfflineBudgetBytes(availableBytes: Int64?, pause: StoragePause?) -> Int64 {
+        guard let availableBytes, availableBytes > 0 else { return 0 }
+        guard let floor = pause?.reserveFloorBytes else {
+            return keepOfflineBudgetBytes(availableBytes: availableBytes)
+        }
+        let refillBytes = max(0, availableBytes - floor)
+        return refillBytes >= storageRetryThresholdBytes ? refillBytes : 0
     }
 
     private func enabledKey(serverId: String) -> String {
@@ -259,18 +299,30 @@ final class KeepLibraryOfflineService: ObservableObject {
         return try? JSONDecoder().decode(StoragePause.self, from: data)
     }
 
-    private func saveStoragePause(serverId: String, availableBytes: Int64?, plan: BulkDownloadPlan) {
+    private func saveStoragePause(
+        serverId: String,
+        availableBytes: Int64?,
+        plan: BulkDownloadPlan,
+        reserveFloorBytes: Int64?
+    ) {
         saveStoragePause(
             serverId: serverId,
             availableBytes: availableBytes,
-            missingSignature: lowStorageSignature(serverId: serverId, skippedSongs: plan.planned + plan.skipped)
+            missingSignature: lowStorageSignature(serverId: serverId, skippedSongs: plan.skipped),
+            reserveFloorBytes: reserveFloorBytes
         )
     }
 
-    private func saveStoragePause(serverId: String, availableBytes: Int64?, missingSignature: String) {
+    private func saveStoragePause(
+        serverId: String,
+        availableBytes: Int64?,
+        missingSignature: String,
+        reserveFloorBytes: Int64?
+    ) {
         let pause = StoragePause(
             availableBytes: availableBytes,
-            missingSignature: missingSignature
+            missingSignature: missingSignature,
+            reserveFloorBytes: reserveFloorBytes
         )
         if let data = try? JSONEncoder().encode(pause) {
             UserDefaults.standard.set(data, forKey: storagePauseKey(serverId: serverId))
@@ -282,8 +334,15 @@ final class KeepLibraryOfflineService: ObservableObject {
     }
 
     private func hasEnoughStorageImprovement(since pause: StoragePause, availableBytes: Int64?) -> Bool {
-        guard let current = availableBytes, let previous = pause.availableBytes else { return false }
-        return current - previous >= Self.storageRetryThresholdBytes
+        guard let current = availableBytes else { return false }
+        let baseline = pause.reserveFloorBytes ?? pause.availableBytes
+        guard let baseline else { return false }
+        return current - baseline >= Self.storageRetryThresholdBytes
+    }
+
+    private func storageReserveFloor(availableBytes: Int64?, plannedBytes: Int64) -> Int64? {
+        guard let availableBytes else { return nil }
+        return max(0, availableBytes - plannedBytes)
     }
 
     private func markCoveredPlaylists(_ markers: [BulkDownloadPlaylistMarker]) {
@@ -303,4 +362,5 @@ final class KeepLibraryOfflineService: ObservableObject {
 private struct StoragePause: Codable {
     let availableBytes: Int64?
     let missingSignature: String
+    let reserveFloorBytes: Int64?
 }
