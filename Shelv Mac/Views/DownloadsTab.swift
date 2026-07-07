@@ -367,7 +367,7 @@ struct BulkDownloadSheet: View {
                         if mode.isKeepLibraryOffline {
                             LabeledContent(String(localized: "available_storage"),
                                            value: ByteCountFormatter.string(fromByteCount: plan.availableBytes ?? 0, countStyle: .file))
-                            if !plan.skipped.isEmpty {
+                            if !plan.skipped.isEmpty && !plan.isEmpty {
                                 Text(String(localized: "keep_library_offline_storage_warning"))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
@@ -385,9 +385,7 @@ struct BulkDownloadSheet: View {
 
                     if plan.isEmpty {
                         Section {
-                            Text(mode.isKeepLibraryOffline
-                                 ? String(localized: "library_already_offline")
-                                 : String(localized: "nothing_new_fits_in_the_configured_storage_limit"))
+                            Text(emptyPlanMessage(for: plan))
                             .foregroundStyle(.secondary)
                         }
                     } else {
@@ -479,6 +477,15 @@ struct BulkDownloadSheet: View {
         return "\(codec.label) · \(bitrate > 0 ? bitrate : 192) kbps"
     }
 
+    private func emptyPlanMessage(for plan: BulkDownloadPlan) -> String {
+        if mode.isKeepLibraryOffline {
+            return plan.skipped.isEmpty
+                ? String(localized: "library_already_offline")
+                : String(localized: "keep_library_offline_storage_warning")
+        }
+        return String(localized: "nothing_new_fits_in_the_configured_storage_limit")
+    }
+
     private func recompute() async {
         guard let stable = appState.serverStore.activeServer?.stableId, !stable.isEmpty else { return }
         isPlanning = true
@@ -497,7 +504,10 @@ struct BulkDownloadSheet: View {
             )
         case .keepLibraryOffline:
             let available = KeepLibraryOfflineService.availableDiskBytes()
-            let maxBytes = KeepLibraryOfflineService.keepOfflineBudgetBytes(availableBytes: available)
+            let maxBytes = await KeepLibraryOfflineService.keepOfflineBudgetBytes(
+                serverId: stable,
+                availableBytes: available
+            )
             let planned = await DownloadService.shared.planKeepLibraryOffline(
                 serverId: stable,
                 maxBytes: maxBytes,

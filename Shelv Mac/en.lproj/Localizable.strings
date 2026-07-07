@@ -543,7 +543,7 @@
 "keep_library_offline_paused_storage" = "Paused: not enough storage";
 "keep_library_offline_storage_title" = "Not enough storage";
 "keep_library_offline_storage_message" = "Free up space to continue keeping your library offline.";
-"keep_library_offline_storage_warning" = "Some songs do not fit within the 10% free-space reserve.";
+"keep_library_offline_storage_warning" = "Some songs do not fit within the 15% free-space reserve.";
 "library_already_offline" = "Your library is already offline.";
 "then_recently_added" = "Then recently added";
 "available_storage" = "Available Storage";

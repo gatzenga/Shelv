@@ -142,7 +142,11 @@ final class KeepLibraryOfflineService: ObservableObject {
 
         let availableBytes = Self.availableDiskBytes()
         let existingPause = storagePause(serverId: serverId)
-        let maxBytes = Self.keepOfflineBudgetBytes(availableBytes: availableBytes, pause: existingPause)
+        let maxBytes = await Self.keepOfflineBudgetBytes(
+            serverId: serverId,
+            availableBytes: availableBytes,
+            pause: existingPause
+        )
         var plan = await DownloadService.shared.planKeepLibraryOffline(
             serverId: serverId,
             maxBytes: maxBytes,
@@ -246,17 +250,33 @@ final class KeepLibraryOfflineService: ObservableObject {
     }
 
     static func keepOfflineBudgetBytes(availableBytes: Int64?) -> Int64 {
-        guard let availableBytes, availableBytes > 0 else { return 0 }
-        return Int64(Double(availableBytes) * (1.0 - storageReserveRatio))
+        keepOfflineBudgetBytes(availableBytes: availableBytes, downloadedBytes: 0)
     }
 
-    private static func keepOfflineBudgetBytes(availableBytes: Int64?, pause: StoragePause?) -> Int64 {
+    static func keepOfflineBudgetBytes(serverId: String, availableBytes: Int64?) async -> Int64 {
+        let downloadedBytes = await DownloadDatabase.shared.totalBytes(serverId: serverId)
+        return keepOfflineBudgetBytes(availableBytes: availableBytes, downloadedBytes: downloadedBytes)
+    }
+
+    private static func keepOfflineBudgetBytes(availableBytes: Int64?, downloadedBytes: Int64) -> Int64 {
         guard let availableBytes, availableBytes > 0 else { return 0 }
+        let managedPoolBytes = availableBytes + max(0, downloadedBytes)
+        let reserveBytes = Int64((Double(managedPoolBytes) * storageReserveRatio).rounded(.up))
+        return max(0, availableBytes - reserveBytes)
+    }
+
+    private static func keepOfflineBudgetBytes(
+        serverId: String,
+        availableBytes: Int64?,
+        pause: StoragePause?
+    ) async -> Int64 {
+        guard let availableBytes, availableBytes > 0 else { return 0 }
+        let poolBudget = await keepOfflineBudgetBytes(serverId: serverId, availableBytes: availableBytes)
         guard let floor = pause?.reserveFloorBytes else {
-            return keepOfflineBudgetBytes(availableBytes: availableBytes)
+            return poolBudget
         }
         let refillBytes = max(0, availableBytes - floor)
-        return refillBytes >= storageRetryThresholdBytes ? refillBytes : 0
+        return refillBytes >= storageRetryThresholdBytes ? min(refillBytes, poolBudget) : 0
     }
 
     private func enabledKey(serverId: String) -> String {

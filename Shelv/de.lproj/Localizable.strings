@@ -541,7 +541,7 @@
 "keep_library_offline_paused_storage" = "Pausiert: zu wenig Speicher";
 "keep_library_offline_storage_title" = "Zu wenig Speicher";
 "keep_library_offline_storage_message" = "Gib Speicher frei, damit die Mediathek weiter offline gehalten werden kann.";
-"keep_library_offline_storage_warning" = "Einige Songs passen nicht mehr in die 10%-Speicherreserve.";
+"keep_library_offline_storage_warning" = "Einige Songs passen nicht mehr in die 15%-Speicherreserve.";
 "library_already_offline" = "Deine Mediathek ist bereits offline.";
 "then_recently_added" = "Dann neu hinzugefügt";
 "available_storage" = "Verfügbarer Speicher";

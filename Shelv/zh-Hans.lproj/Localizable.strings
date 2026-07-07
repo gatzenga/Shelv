@@ -541,7 +541,7 @@
 "keep_library_offline_paused_storage" = "已暂停：存储空间不足";
 "keep_library_offline_storage_title" = "存储空间不足";
 "keep_library_offline_storage_message" = "请释放空间，以继续保持资料库离线。";
-"keep_library_offline_storage_warning" = "有些歌曲无法在预留 10% 可用空间内下载。";
+"keep_library_offline_storage_warning" = "有些歌曲无法在预留 15% 可用空间内下载。";
 "library_already_offline" = "你的资料库已可离线使用。";
 "then_recently_added" = "然后下载最近添加";
 "available_storage" = "可用存储空间";
