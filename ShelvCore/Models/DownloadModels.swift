@@ -235,6 +235,7 @@ struct BulkDownloadPlan {
 enum KeepLibraryOfflineStatus: Equatable {
     case inactive
     case idle
+    case nothingToDo
     case checking
     case downloading
     case pausedLowStorage

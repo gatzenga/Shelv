@@ -19,6 +19,7 @@
 "mix_failed" = "Mix fehlgeschlagen";
 "ok" = "OK";
 "songs" = "Titel";
+"show_more" = "Mehr anzeigen";
 "downloads" = "Downloads";
 "library" = "Bibliothek";
 "albums" = "Alben";
@@ -538,6 +539,8 @@
 "download_format" = "Download-Format";
 "keep_library_offline" = "Mediathek offline halten";
 "keep_library_offline_active" = "Mediathek offline halten ist aktiv";
+"keep_library_offline_ready" = "Bereit";
+"keep_library_offline_nothing_to_do" = "Nichts zu tun";
 "keep_library_offline_paused_storage" = "Pausiert: zu wenig Speicher";
 "keep_library_offline_storage_title" = "Zu wenig Speicher";
 "keep_library_offline_storage_message" = "Gib Speicher frei, damit die Mediathek weiter offline gehalten werden kann.";

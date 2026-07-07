@@ -19,6 +19,7 @@
 "mix_failed" = "混音失败";
 "ok" = "确定";
 "songs" = "歌曲";
+"show_more" = "显示更多";
 "downloads" = "下载";
 "library" = "音乐库";
 "albums" = "专辑";
@@ -538,6 +539,8 @@
 "download_format" = "下载格式";
 "keep_library_offline" = "保持资料库离线";
 "keep_library_offline_active" = "保持资料库离线已开启";
+"keep_library_offline_ready" = "已就绪";
+"keep_library_offline_nothing_to_do" = "没有要处理的项目";
 "keep_library_offline_paused_storage" = "已暂停：存储空间不足";
 "keep_library_offline_storage_title" = "存储空间不足";
 "keep_library_offline_storage_message" = "请释放空间，以继续保持资料库离线。";

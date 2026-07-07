@@ -241,7 +241,9 @@ struct DownloadsTab: View {
         case .inactive:
             return String(localized: "inactive")
         case .idle:
-            return String(localized: "keep_library_offline_active")
+            return String(localized: "keep_library_offline_ready")
+        case .nothingToDo:
+            return String(localized: "keep_library_offline_nothing_to_do")
         case .checking:
             return String(localized: "checking")
         case .downloading:
@@ -261,6 +263,8 @@ struct DownloadsTab: View {
             return "arrow.triangle.2.circlepath"
         case .downloading:
             return "arrow.down.circle"
+        case .idle:
+            return "clock"
         default:
             return "checkmark.circle"
         }

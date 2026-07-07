@@ -63,12 +63,14 @@ actor DownloadService {
 
     private let backgroundIdentifier = "ch.vkugler.Shelv.downloads"
     private let maxConcurrent = 5
+    private let queuedStatePublishLimit = 500
     private var effectiveMaxConcurrent: Int {
         TranscodingPolicy.currentDownloadFormat() != nil ? 1 : maxConcurrent
     }
     private let maxAttempts = 3
 
     private var pendingJobs: [DownloadJob] = []
+    private var pendingJobStartIndex = 0
     private var pendingJobKeys = Set<String>()
     private var inflightJobs: [Int: DownloadJob] = [:]   // taskIdentifier -> Job
     private var jobKeyByTask: [Int: String] = [:]         // taskIdentifier -> "serverId::songId"
@@ -108,6 +110,56 @@ actor DownloadService {
         "\(serverId)::\(songId)"
     }
 
+    private var hasPendingJobs: Bool {
+        pendingJobStartIndex < pendingJobs.count
+    }
+
+    private var activePendingJobs: ArraySlice<DownloadJob> {
+        guard hasPendingJobs else { return [] }
+        return pendingJobs[pendingJobStartIndex...]
+    }
+
+    private func appendPendingJob(_ job: DownloadJob) {
+        pendingJobs.append(job)
+    }
+
+    private func popNextPendingJob() -> DownloadJob? {
+        guard hasPendingJobs else {
+            clearPendingJobs(keepingCapacity: true)
+            return nil
+        }
+        let job = pendingJobs[pendingJobStartIndex]
+        pendingJobStartIndex += 1
+        compactPendingJobsIfNeeded()
+        return job
+    }
+
+    private func removePendingJobs(where shouldRemove: (DownloadJob) -> Bool) -> Int {
+        compactPendingJobs(force: true)
+        let before = pendingJobs.count
+        pendingJobs.removeAll(where: shouldRemove)
+        return before - pendingJobs.count
+    }
+
+    private func clearPendingJobs(keepingCapacity: Bool = false) {
+        pendingJobs.removeAll(keepingCapacity: keepingCapacity)
+        pendingJobStartIndex = 0
+    }
+
+    private func compactPendingJobsIfNeeded() {
+        if pendingJobStartIndex == pendingJobs.count {
+            clearPendingJobs(keepingCapacity: true)
+        } else if pendingJobStartIndex > 512 && pendingJobStartIndex * 2 > pendingJobs.count {
+            compactPendingJobs(force: true)
+        }
+    }
+
+    private func compactPendingJobs(force: Bool = false) {
+        guard pendingJobStartIndex > 0, (force || pendingJobStartIndex * 2 > pendingJobs.count) else { return }
+        pendingJobs.removeFirst(pendingJobStartIndex)
+        pendingJobStartIndex = 0
+    }
+
     // MARK: - Setup
 
     func setup() {
@@ -119,6 +171,9 @@ actor DownloadService {
             cfg.isDiscretionary = false
             cfg.sessionSendsLaunchEvents = true
             cfg.shouldUseExtendedBackgroundIdleMode = true
+            cfg.allowsExpensiveNetworkAccess = true
+            cfg.allowsConstrainedNetworkAccess = true
+            cfg.networkServiceType = .responsiveData
             #else
             // macOS: App läuft ohnehin weiter — Standard-Session wie in der
             // bisherigen Desktop-App (bewährtes Verhalten beibehalten).
@@ -219,6 +274,8 @@ actor DownloadService {
             }
         }
 
+        let transcoding = TranscodingPolicy.currentDownloadFormat()
+        let shouldPublishQueuedStates = songs.count <= queuedStatePublishLimit
         var added = 0
         for song in songs {
             let key = Self.key(songId: song.id, serverId: serverId)
@@ -228,7 +285,6 @@ actor DownloadService {
             // Stale Cancel-Marker beim Neu-Enqueue entfernen — sonst würde eine spätere
             // Completion fälschlich als "cancelled" interpretiert.
             cancelledKeys.remove(key)
-            let transcoding = TranscodingPolicy.currentDownloadFormat()
             guard let url = api.api.downloadURL(for: song.id, server: api.server, password: api.password,
                                                 transcoding: transcoding) else { continue }
             let cover = song.coverArt.flatMap { api.api.coverArtURL(for: $0, server: api.server, password: api.password, size: 600) }
@@ -269,9 +325,11 @@ actor DownloadService {
                 isFavorite: false,
                 requestedFormat: transcoding?.codec
             )
-            pendingJobs.append(job)
+            appendPendingJob(job)
             pendingJobKeys.insert(key)
-            stateSubject.send((key, .queued))
+            if shouldPublishQueuedStates {
+                stateSubject.send((key, .queued))
+            }
             added += 1
         }
         if added > 0 { incrementBatchTotal(by: added) }
@@ -337,8 +395,7 @@ actor DownloadService {
         // Markieren: falls eine `handleCompletion` parallel läuft und an einem await suspendiert ist,
         // bricht sie nach Resume ab und räumt die geschriebene Datei wieder auf.
         cancelledKeys.insert(key)
-        let removedPending = pendingJobs.filter { Self.key(songId: $0.song.id, serverId: $0.serverId) == key }.count
-        pendingJobs.removeAll { Self.key(songId: $0.song.id, serverId: $0.serverId) == key }
+        let removedPending = removePendingJobs { Self.key(songId: $0.song.id, serverId: $0.serverId) == key }
         if removedPending > 0 { pendingJobKeys.remove(key) }
         var removedInflight = 0
         let matchingTaskIds = inflightJobs
@@ -421,15 +478,15 @@ actor DownloadService {
 
     private func jobSongIds(matching predicate: (DownloadJob) -> Bool) -> [String] {
         var ids: [String] = []
-        ids.append(contentsOf: pendingJobs.filter(predicate).map { $0.song.id })
+        ids.append(contentsOf: activePendingJobs.filter(predicate).map { $0.song.id })
         ids.append(contentsOf: inflightJobs.values.filter(predicate).map { $0.song.id })
         ids.append(contentsOf: inCompletionJobs.values.filter(predicate).map { $0.song.id })
         return ids
     }
 
     func cancelBatch() {
-        let pendingKeys = pendingJobs.map { Self.key(songId: $0.song.id, serverId: $0.serverId) }
-        pendingJobs.removeAll()
+        let pendingKeys = activePendingJobs.map { Self.key(songId: $0.song.id, serverId: $0.serverId) }
+        clearPendingJobs(keepingCapacity: true)
         pendingJobKeys.removeAll()
         let inflightKeys = inflightJobs.values.map { Self.key(songId: $0.song.id, serverId: $0.serverId) }
         for taskId in Array(inflightJobs.keys) {
@@ -789,7 +846,7 @@ actor DownloadService {
     func currentState(songId: String, serverId: String) -> DownloadState {
         let key = Self.key(songId: songId, serverId: serverId)
         if let p = progressSubject.value[key] { return .downloading(progress: p) }
-        if pendingJobs.contains(where: { Self.key(songId: $0.song.id, serverId: $0.serverId) == key }) {
+        if pendingJobKeys.contains(key) {
             return .queued
         }
         return .none
@@ -799,11 +856,11 @@ actor DownloadService {
 
     private func startNextJobs() {
         guard let session else { return }
-        while inflightJobs.count < effectiveMaxConcurrent && !pendingJobs.isEmpty {
-            let job = pendingJobs.removeFirst()
+        while inflightJobs.count < effectiveMaxConcurrent, let job = popNextPendingJob() {
             let jobKey = Self.key(songId: job.song.id, serverId: job.serverId)
             pendingJobKeys.remove(jobKey)
             let task = session.downloadTask(with: job.downloadURL)
+            task.priority = URLSessionTask.highPriority
             if let desc = encodeJob(job) { task.taskDescription = desc }
             inflightJobs[task.taskIdentifier] = job
             jobKeyByTask[task.taskIdentifier] = jobKey
@@ -888,6 +945,7 @@ actor DownloadService {
             return
         }
 
+        startNextJobs()
         await downloadAssetsIfNeeded(for: job, audioPath: finalURL.path)
 
         // Race-Window 2: User cancel-te während Cover/Asset-Download (await downloadAssetsIfNeeded).
@@ -1011,7 +1069,7 @@ actor DownloadService {
                 startNextJobs()
                 return
             }
-            pendingJobs.append(next)
+            appendPendingJob(next)
             pendingJobKeys.insert(key)
             stateSubject.send((key, .queued))
             startNextJobs()
@@ -1034,7 +1092,7 @@ actor DownloadService {
             raw.fellBackToRaw = true
             raw.downloadURL = rawURL
             raw.fileExtension = job.song.suffix?.pathSafeFileExtension() ?? "mp3"
-            pendingJobs.append(raw)
+            appendPendingJob(raw)
             pendingJobKeys.insert(key)
             stateSubject.send((key, .queued))
             startNextJobs()
@@ -1099,7 +1157,7 @@ actor DownloadService {
     }
 
     private func resetBatchIfDone() {
-        guard pendingJobs.isEmpty, inflightJobs.isEmpty else { return }
+        guard !hasPendingJobs, inflightJobs.isEmpty else { return }
         Task { [weak self] in
             try? await Task.sleep(nanoseconds: 1_500_000_000)
             await self?.flushBatchIfStillIdle()
@@ -1107,7 +1165,7 @@ actor DownloadService {
     }
 
     private func flushBatchIfStillIdle() {
-        guard pendingJobs.isEmpty, inflightJobs.isEmpty else { return }
+        guard !hasPendingJobs, inflightJobs.isEmpty else { return }
         batchTotal = 0
         batchCompleted = 0
         batchFailed = 0

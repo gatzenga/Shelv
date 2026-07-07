@@ -540,6 +540,8 @@
 "download_format" = "Download Format";
 "keep_library_offline" = "Keep Library Offline";
 "keep_library_offline_active" = "Keep Library Offline is active";
+"keep_library_offline_ready" = "Ready";
+"keep_library_offline_nothing_to_do" = "Nothing to do";
 "keep_library_offline_paused_storage" = "Paused: not enough storage";
 "keep_library_offline_storage_title" = "Not enough storage";
 "keep_library_offline_storage_message" = "Free up space to continue keeping your library offline.";
