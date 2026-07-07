@@ -40,7 +40,7 @@ final class CarPlayRootController: NSObject {
         let playlists = CarPlayPlaylistsController(interfaceController: interfaceController)
         let radio     = CarPlayRadioController(interfaceController: interfaceController)
         let recap     = CarPlayRecapController(interfaceController: interfaceController)
-        let queue     = CarPlayQueueController()
+        let queue     = CarPlayQueueController(interfaceController: interfaceController)
 
         discoverController  = discover
         libraryController   = library
@@ -348,11 +348,13 @@ final class CarPlayRootController: NSObject {
 extension CarPlayRootController: CPNowPlayingTemplateObserver {
     nonisolated func nowPlayingTemplateUpNextButtonTapped(_ nowPlayingTemplate: CPNowPlayingTemplate) {
         Task { @MainActor in
-            guard let queue = self.queueController?.rootTemplate else { return }
+            guard let queueController = self.queueController else { return }
+            let queue = queueController.rootTemplate
             let ic = self.interfaceController
 
             // Queue ist schon top: nichts tun.
             if ic.topTemplate === queue { return }
+            queueController.refreshForPresentation()
 
             // Queue ist irgendwo im Stack: dorthin springen statt erneut pushen.
             if ic.templates.contains(where: { $0 === queue }) {
