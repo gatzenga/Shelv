@@ -16,6 +16,7 @@ final class KeepLibraryOfflineService: ObservableObject {
     private var manualCancelSignatures: [String: String] = [:]
     private var pendingLowStorageFailureServers = Set<String>()
     private var lowStorageFailureSignatures: [String: String] = [:]
+    private var lowStorageBannerDismissTask: Task<Void, Never>?
 
     private init() {}
 
@@ -43,7 +44,7 @@ final class KeepLibraryOfflineService: ObservableObject {
             pendingLowStorageFailureServers.remove(serverId)
             UserDefaults.standard.removeObject(forKey: storagePauseKey(serverId: serverId))
             status = .inactive
-            lowStorageBannerVisible = false
+            setLowStorageBannerVisible(false)
         }
     }
 
@@ -60,7 +61,7 @@ final class KeepLibraryOfflineService: ObservableObject {
         activeServerId = serverId
         pendingManualCancelServers.insert(serverId)
         status = .idle
-        lowStorageBannerVisible = false
+        setLowStorageBannerVisible(false)
         Task { await DownloadService.shared.cancelBatch() }
     }
 
@@ -69,26 +70,26 @@ final class KeepLibraryOfflineService: ObservableObject {
         activeServerId = serverId
         pendingLowStorageFailureServers.insert(serverId)
         status = .pausedLowStorage
-        lowStorageBannerVisible = shouldShowLowStorageBanner(
+        setLowStorageBannerVisible(shouldShowLowStorageBanner(
             serverId: serverId,
             skippedSongs: failedSong.map { [$0] } ?? []
-        )
+        ))
     }
 
     func prepare(serverId: String) {
         activeServerId = serverId
         status = isEnabled(serverId: serverId) ? .idle : .inactive
-        lowStorageBannerVisible = false
+        setLowStorageBannerVisible(false)
     }
 
     func dismissLowStorageBanner() {
-        lowStorageBannerVisible = false
+        setLowStorageBannerVisible(false)
     }
 
     func markDownloadsStarted(serverId: String) {
         guard isEnabled(serverId: serverId) else { return }
         activeServerId = serverId
-        lowStorageBannerVisible = false
+        setLowStorageBannerVisible(false)
         status = .downloading
     }
 
@@ -105,7 +106,7 @@ final class KeepLibraryOfflineService: ObservableObject {
                 reserveFloorBytes: availableBytes
             )
         }
-        lowStorageBannerVisible = shouldShowLowStorageBanner(serverId: serverId, skippedSongs: skippedSongs)
+        setLowStorageBannerVisible(shouldShowLowStorageBanner(serverId: serverId, skippedSongs: skippedSongs))
     }
 
     func rememberStoragePause(serverId: String, availableBytes: Int64?, plan: BulkDownloadPlan) {
@@ -139,7 +140,7 @@ final class KeepLibraryOfflineService: ObservableObject {
             status = .checking
         }
         if !isLowStorageCandidate {
-            lowStorageBannerVisible = false
+            setLowStorageBannerVisible(false)
         }
         defer { isChecking = false }
 
@@ -187,7 +188,7 @@ final class KeepLibraryOfflineService: ObservableObject {
                     reserveFloorBytes: availableBytes
                 )
                 status = .pausedLowStorage
-                lowStorageBannerVisible = shouldShowLowStorageBanner(serverId: serverId, skippedSongs: plan.skipped)
+                setLowStorageBannerVisible(shouldShowLowStorageBanner(serverId: serverId, skippedSongs: plan.skipped))
             }
             return
         }
@@ -202,7 +203,7 @@ final class KeepLibraryOfflineService: ObservableObject {
                 reserveFloorBytes: existingPause?.reserveFloorBytes ?? availableBytes
             )
             status = .pausedLowStorage
-            lowStorageBannerVisible = shouldShowLowStorageBanner(serverId: serverId, skippedSongs: plan.planned + plan.skipped)
+            setLowStorageBannerVisible(shouldShowLowStorageBanner(serverId: serverId, skippedSongs: plan.planned + plan.skipped))
             return
         }
         if lowStorageFailureSignatures[serverId] == planSignature {
@@ -282,6 +283,18 @@ final class KeepLibraryOfflineService: ObservableObject {
         }
         UserDefaults.standard.set(signature, forKey: key)
         return true
+    }
+
+    private func setLowStorageBannerVisible(_ visible: Bool) {
+        lowStorageBannerDismissTask?.cancel()
+        lowStorageBannerDismissTask = nil
+        lowStorageBannerVisible = visible
+        guard visible else { return }
+        lowStorageBannerDismissTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(5))
+            guard !Task.isCancelled else { return }
+            self?.dismissLowStorageBanner()
+        }
     }
 
     private func lowStorageSignature(serverId: String, skippedSongs: [Song]) -> String {
