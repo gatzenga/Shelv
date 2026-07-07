@@ -18,6 +18,7 @@
 "delete_downloads_2" = "Delete Downloads?";
 "delete" = "Delete";
 "cancel" = "Cancel";
+"disable" = "Disable";
 "the_downloads_will_be_removed_from_this_device" = "The downloads will be removed from this device.";
 "download_artist" = "Download Artist";
 "download_started" = "Download started";
@@ -123,6 +124,8 @@
 "free_on_device" = "Free on device";
 "songs" = "Songs";
 "enable_downloads" = "Enable Downloads";
+"disable_downloads_2" = "Disable downloads?";
+"disabling_downloads_will_cancel_active_downloads_and_remove_downloads" = "Active downloads will be canceled and all downloaded songs, albums and artists will be removed from this device.";
 "bulk_download" = "Bulk Download";
 "download_everything" = "Download Everything…";
 "max_storage" = "Max Storage";

@@ -8,13 +8,21 @@ struct DownloadsSettingsView: View {
     @AppStorage("preventSleepDuringDownloads") private var preventSleepDuringDownloads = false
     @ObservedObject var offlineMode = OfflineModeService.shared
     @ObservedObject private var keepOffline = KeepLibraryOfflineService.shared
+    @ObservedObject private var downloadStore = DownloadStore.shared
 
     @State private var showBulkDownloadSheet = false
     @State private var showKeepLibraryOfflineSheet = false
     @State private var showDeleteAllDownloadsConfirm = false
+    @State private var showDisableDownloadsConfirm = false
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
     private var activeServerId: String? { serverStore.activeServer?.stableId }
+    private var hasDownloadsToClear: Bool {
+        !downloadStore.songs.isEmpty
+        || downloadStore.batchProgress != nil
+        || !downloadStore.inFlightProgress.isEmpty
+        || !downloadStore.inFlightStates.isEmpty
+    }
 
     private var maxAllowedStorageGB: Int {
         guard let values = try? URL(fileURLWithPath: NSHomeDirectory())
@@ -27,7 +35,7 @@ struct DownloadsSettingsView: View {
     var body: some View {
         List {
             Section {
-                Toggle(isOn: $enableDownloads) {
+                Toggle(isOn: downloadsEnabledBinding) {
                     Label { Text(String(localized: "enable_downloads")) } icon: {
                         Image(systemName: "arrow.down.circle").foregroundStyle(accentColor)
                     }
@@ -159,6 +167,17 @@ struct DownloadsSettingsView: View {
         } message: {
             Text(String(localized: "all_downloaded_songs_albums_and_artists_will_be_re"))
         }
+        .alert(
+            String(localized: "disable_downloads_2"),
+            isPresented: $showDisableDownloadsConfirm
+        ) {
+            Button(String(localized: "disable"), role: .destructive) {
+                disableDownloadsAndClearData()
+            }
+            Button(String(localized: "cancel"), role: .cancel) {}
+        } message: {
+            Text(String(localized: "disabling_downloads_will_cancel_active_downloads_and_remove_downloads"))
+        }
         .task(id: enableDownloads) {
             guard enableDownloads, LibraryStore.shared.albums.isEmpty else { return }
             await LibraryStore.shared.loadAlbums()
@@ -168,6 +187,34 @@ struct DownloadsSettingsView: View {
                 keepOffline.prepare(serverId: activeServerId)
             }
         }
+    }
+
+    private var downloadsEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { enableDownloads },
+            set: { newValue in
+                if newValue {
+                    enableDownloads = true
+                    offlineMode.downloadsFeatureEnabled = true
+                } else if hasDownloadsToClear {
+                    showDisableDownloadsConfirm = true
+                } else {
+                    disableDownloadsAndClearData()
+                }
+            }
+        )
+    }
+
+    private func disableDownloadsAndClearData() {
+        enableDownloads = false
+        offlineMode.downloadsFeatureEnabled = false
+        if let activeServerId {
+            keepOffline.disableAndCancel(serverId: activeServerId)
+        }
+        if offlineMode.isOffline {
+            offlineMode.exitOfflineMode()
+        }
+        downloadStore.deleteAll()
     }
 
     private var keepOfflineStatusText: String {

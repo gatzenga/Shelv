@@ -115,6 +115,7 @@ struct DownloadsTab: View {
     @EnvironmentObject var appState: AppState
     @ObservedObject var offlineMode = OfflineModeService.shared
     @ObservedObject private var keepOffline = KeepLibraryOfflineService.shared
+    @ObservedObject private var downloadStore = DownloadStore.shared
     @AppStorage("enableDownloads") private var enableDownloads = false
     @AppStorage("offlineModeEnabled") private var offlineModeEnabled = false
     @AppStorage("maxBulkDownloadStorageGB") private var maxBulkStorageGB = 10
@@ -122,6 +123,14 @@ struct DownloadsTab: View {
     @State private var showBulkSheet = false
     @State private var showKeepLibraryOfflineSheet = false
     @State private var showDeleteAllConfirm = false
+    @State private var showDisableDownloadsConfirm = false
+
+    private var hasDownloadsToClear: Bool {
+        !downloadStore.songs.isEmpty
+        || downloadStore.batchProgress != nil
+        || !downloadStore.inFlightProgress.isEmpty
+        || !downloadStore.inFlightStates.isEmpty
+    }
 
     private var maxAllowedStorageGB: Int {
         guard let values = try? URL(fileURLWithPath: NSHomeDirectory())
@@ -134,7 +143,7 @@ struct DownloadsTab: View {
     var body: some View {
         Form {
             Section {
-                Toggle(String(localized: "enable_downloads"), isOn: $enableDownloads)
+                Toggle(String(localized: "enable_downloads"), isOn: downloadsEnabledBinding)
                 if enableDownloads {
                     DownloadFormatRows()
                 }
@@ -219,6 +228,17 @@ struct DownloadsTab: View {
             }
             Button(String(localized: "cancel"), role: .cancel) {}
         }
+        .alert(
+            String(localized: "disable_downloads_2"),
+            isPresented: $showDisableDownloadsConfirm
+        ) {
+            Button(String(localized: "disable"), role: .destructive) {
+                disableDownloadsAndClearData()
+            }
+            Button(String(localized: "cancel"), role: .cancel) {}
+        } message: {
+            Text(String(localized: "disabling_downloads_will_cancel_active_downloads_and_remove_downloads"))
+        }
         .sheet(isPresented: $showBulkSheet) {
             BulkDownloadSheet(maxBytes: Int64(maxBulkStorageGB) * 1_000_000_000)
                 .environmentObject(appState)
@@ -234,6 +254,34 @@ struct DownloadsTab: View {
                 keepOffline.prepare(serverId: stable)
             }
         }
+    }
+
+    private var downloadsEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { enableDownloads },
+            set: { newValue in
+                if newValue {
+                    enableDownloads = true
+                    offlineMode.downloadsFeatureEnabled = true
+                } else if hasDownloadsToClear {
+                    showDisableDownloadsConfirm = true
+                } else {
+                    disableDownloadsAndClearData()
+                }
+            }
+        )
+    }
+
+    private func disableDownloadsAndClearData() {
+        enableDownloads = false
+        offlineMode.downloadsFeatureEnabled = false
+        if let stable = appState.serverStore.activeServer?.stableId {
+            keepOffline.disableAndCancel(serverId: stable)
+        }
+        if offlineMode.isOffline {
+            offlineMode.exitOfflineMode()
+        }
+        downloadStore.deleteAll()
     }
 
     private var keepOfflineStatusText: String {

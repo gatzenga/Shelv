@@ -18,6 +18,7 @@
 "delete_downloads_2" = "删除下载";
 "delete" = "删除";
 "cancel" = "取消";
+"disable" = "停用";
 "the_downloads_will_be_removed_from_this_device" = "下载内容将从本设备移除。";
 "download_artist" = "下载艺术家";
 "download_started" = "下载已开始";
@@ -123,6 +124,8 @@
 "free_on_device" = "设备可用";
 "songs" = "歌曲";
 "enable_downloads" = "启用下载";
+"disable_downloads_2" = "停用下载？";
+"disabling_downloads_will_cancel_active_downloads_and_remove_downloads" = "正在进行的下载将被取消，所有已下载的歌曲、专辑和艺术家都将从本设备移除。";
 "bulk_download" = "批量下载";
 "download_everything" = "下载全部";
 "max_storage" = "最大存储";
