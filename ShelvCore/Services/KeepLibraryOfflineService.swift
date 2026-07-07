@@ -131,14 +131,10 @@ final class KeepLibraryOfflineService: ObservableObject {
         guard !isChecking else { return }
 
         activeServerId = serverId
-        let isManualCancelCandidate = pendingManualCancelServers.contains(serverId)
-            || manualCancelSignatures[serverId] != nil
         let isLowStorageCandidate = pendingLowStorageFailureServers.contains(serverId)
             || lowStorageFailureSignatures[serverId] != nil
         isChecking = true
-        if !isManualCancelCandidate && !isLowStorageCandidate {
-            status = .checking
-        }
+        status = .checking
         if !isLowStorageCandidate {
             setLowStorageBannerVisible(false)
         }
