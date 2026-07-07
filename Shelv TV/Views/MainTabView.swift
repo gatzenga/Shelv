@@ -21,7 +21,8 @@ struct MainTabView: View {
     )
     @State private var visibleShowRadio = MainTabView.initialRadioVisible
     @State private var showIdleNowPlaying = false
-    @State private var nowPlayingSidePanelOpen = false
+    @State private var nowPlayingSidePanel: TVNowPlayingPanel?
+    @State private var nowPlayingRootVisible = false
     @State private var idleNowPlayingTask: Task<Void, Never>?
 
     private var serverErrorAlertTitle: String {
@@ -56,7 +57,7 @@ struct MainTabView: View {
             tabView
 
             if showIdleNowPlaying {
-                TVIdleNowPlayingView {
+                TVIdleNowPlayingView(panel: nowPlayingSidePanel) {
                     dismissIdleNowPlaying()
                 }
                 .transition(.opacity)
@@ -77,7 +78,7 @@ struct MainTabView: View {
         }
         .onPlayPauseCommand {
             if showIdleNowPlaying {
-                dismissIdleNowPlaying()
+                player.togglePlayPause()
             } else {
                 registerUserActivity()
                 player.togglePlayPause()
@@ -113,7 +114,10 @@ struct MainTabView: View {
         .onChange(of: player.currentRadioStation?.id) { _, _ in
             updateIdleNowPlayingAvailability()
         }
-        .onChange(of: nowPlayingSidePanelOpen) { _, _ in
+        .onChange(of: nowPlayingSidePanel) { _, _ in
+            updateIdleNowPlayingAvailability()
+        }
+        .onChange(of: nowPlayingRootVisible) { _, _ in
             updateIdleNowPlayingAvailability()
         }
         // Fremde Queue von einem anderen Gerät — auf tvOS als nativer Alert (zuverlässig
@@ -158,7 +162,10 @@ struct MainTabView: View {
     private var tabView: some View {
         TabView(selection: $selection) {
             Tab(String(localized: "now_playing"), systemImage: "play.circle", value: Self.nowPlayingTab) {
-                NowPlayingView(isSidePanelOpen: $nowPlayingSidePanelOpen)
+                NowPlayingView(
+                    activeSidePanel: $nowPlayingSidePanel,
+                    isRootVisible: $nowPlayingRootVisible
+                )
             }
 
             Tab(String(localized: "discover"), systemImage: "sparkles", value: Self.discoverTab) {
@@ -203,9 +210,15 @@ struct MainTabView: View {
 
     private var canShowIdleNowPlaying: Bool {
         selection == Self.nowPlayingTab
+            && nowPlayingRootVisible
             && player.hasActivePlayback
             && player.isPlaying
-            && !nowPlayingSidePanelOpen
+    }
+
+    private var canKeepIdleNowPlayingVisible: Bool {
+        selection == Self.nowPlayingTab
+            && nowPlayingRootVisible
+            && player.hasActivePlayback
     }
 
     private func registerUserActivity() {
@@ -222,7 +235,14 @@ struct MainTabView: View {
     }
 
     private func updateIdleNowPlayingAvailability() {
-        if canShowIdleNowPlaying {
+        if showIdleNowPlaying {
+            if canKeepIdleNowPlayingVisible {
+                idleNowPlayingTask?.cancel()
+            } else {
+                showIdleNowPlaying = false
+                idleNowPlayingTask?.cancel()
+            }
+        } else if canShowIdleNowPlaying {
             scheduleIdleNowPlayingIfNeeded()
         } else {
             showIdleNowPlaying = false
@@ -249,6 +269,7 @@ struct MainTabView: View {
 }
 
 private struct TVIdleNowPlayingView: View {
+    let panel: TVNowPlayingPanel?
     let onDismiss: () -> Void
 
     @ObservedObject private var player = AudioPlayerService.shared
@@ -263,17 +284,36 @@ private struct TVIdleNowPlayingView: View {
         ZStack {
             background
 
-            HStack(alignment: .center, spacing: 86) {
-                artwork
+            if panel == .lyrics, !player.isRadioPlayback {
+                HStack(alignment: .center, spacing: 64) {
+                    VStack(alignment: .center, spacing: 34) {
+                        artwork
+                        VStack(alignment: .leading, spacing: 24) {
+                            metadata
+                            progress
+                        }
+                        .frame(width: 560, alignment: .leading)
+                    }
+                    .frame(width: 620)
 
-                VStack(alignment: .leading, spacing: 28) {
-                    metadata
-                    progress
+                    LyricsView()
+                        .frame(width: 840, height: 840)
                 }
-                .frame(width: 700, alignment: .leading)
+                .frame(maxWidth: 1700, maxHeight: .infinity)
+                .padding(.horizontal, 70)
+            } else {
+                HStack(alignment: .center, spacing: 86) {
+                    artwork
+
+                    VStack(alignment: .leading, spacing: 28) {
+                        metadata
+                        progress
+                    }
+                    .frame(width: 700, alignment: .leading)
+                }
+                .frame(maxWidth: 1500, maxHeight: .infinity)
+                .padding(.horizontal, 90)
             }
-            .frame(maxWidth: 1500, maxHeight: .infinity)
-            .padding(.horizontal, 90)
         }
         .contentShape(Rectangle())
         .focusable()
@@ -289,42 +329,11 @@ private struct TVIdleNowPlayingView: View {
         .onTapGesture(perform: onDismiss)
         .onMoveCommand { _ in onDismiss() }
         .onExitCommand(perform: onDismiss)
-        .onPlayPauseCommand(perform: onDismiss)
     }
 
     @ViewBuilder
     private var background: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-
-            if let station = player.currentRadioStation {
-                TVRadioStationArtworkView(item: station, size: 2100, metadata: player.currentRadioMetadata)
-                    .blur(radius: 72)
-                    .opacity(0.46)
-                    .saturation(1.15)
-                    .ignoresSafeArea()
-            } else {
-                CoverArtView(url: player.currentSong?.coverURL(900), size: 2100, cornerRadius: 0)
-                    .blur(radius: 72)
-                    .opacity(0.46)
-                    .saturation(1.15)
-                    .ignoresSafeArea()
-            }
-
-            LinearGradient(
-                colors: [
-                    .black.opacity(0.72),
-                    .black.opacity(0.38),
-                    .black.opacity(0.70)
-                ],
-                startPoint: .leading,
-                endPoint: .trailing
-            )
-            .ignoresSafeArea()
-
-            Color.black.opacity(0.08)
-                .ignoresSafeArea()
-        }
+        TVPlayerGradientBackground(style: .idle)
     }
 
     @ViewBuilder
@@ -339,24 +348,23 @@ private struct TVIdleNowPlayingView: View {
     }
 
     private var metadata: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 8) {
             Text(player.displayTitle)
-                .font(.largeTitle.bold())
-                .lineLimit(2)
-                .minimumScaleFactor(0.72)
+                .font(.title2.bold())
+                .lineLimit(1)
                 .foregroundStyle(.primary)
 
             if let artist = currentArtist {
                 Text(artist)
-                    .font(.title2)
-                    .foregroundStyle(.secondary)
+                    .font(.body)
+                    .foregroundStyle(Color.primary.opacity(0.78))
                     .lineLimit(1)
             }
 
             if let subtitle = currentSubtitle {
                 Text(subtitle)
-                    .font(.title3)
-                    .foregroundStyle(.tertiary)
+                    .font(.callout)
+                    .foregroundStyle(Color.primary.opacity(0.60))
                     .lineLimit(1)
             }
         }
@@ -376,8 +384,7 @@ private struct TVIdleNowPlayingView: View {
         } else {
             VStack(spacing: 10) {
                 TVIdleProgressBar(
-                    progress: displayDuration > 0 ? min(max(displayTime / displayDuration, 0), 1) : 0,
-                    accent: accent
+                    progress: displayDuration > 0 ? min(max(displayTime / displayDuration, 0), 1) : 0
                 )
                 .frame(width: 620, height: 8)
 
@@ -387,7 +394,7 @@ private struct TVIdleNowPlayingView: View {
                     Text(formatDuration(Int(displayDuration)))
                 }
                 .font(.callout.monospacedDigit())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.white.opacity(0.62))
                 .frame(width: 620)
             }
         }
@@ -415,17 +422,16 @@ private struct TVIdleNowPlayingView: View {
 
 private struct TVIdleProgressBar: View {
     let progress: Double
-    let accent: Color
 
     var body: some View {
         GeometryReader { proxy in
             ZStack(alignment: .leading) {
                 Capsule()
-                    .fill(.white.opacity(0.18))
+                    .fill(.white.opacity(0.22))
 
                 if progress > 0 {
                     Capsule()
-                        .fill(accent)
+                        .fill(.white.opacity(0.95))
                         .frame(width: proxy.size.width * progress)
                 }
             }

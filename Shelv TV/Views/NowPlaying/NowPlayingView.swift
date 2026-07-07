@@ -1,9 +1,13 @@
 import SwiftUI
 
-private enum SidePanel: Equatable { case lyrics, queue }
+enum TVNowPlayingPanel: Equatable {
+    case lyrics
+    case queue
+}
 
 struct NowPlayingView: View {
-    @Binding private var isSidePanelOpen: Bool
+    @Binding private var activeSidePanel: TVNowPlayingPanel?
+    @Binding private var isRootVisible: Bool
     @ObservedObject var player = AudioPlayerService.shared
     @ObservedObject private var library = LibraryStore.shared
     @ObservedObject private var radioStore = RadioStationStore.shared
@@ -19,55 +23,64 @@ struct NowPlayingView: View {
 
     @State private var displayTime: Double = 0
     @State private var displayDuration: Double = 0
-    @State private var panel: SidePanel?
+    @State private var panel: TVNowPlayingPanel?
     @State private var showSleepTimer = false
 
-    init(isSidePanelOpen: Binding<Bool> = .constant(false)) {
-        _isSidePanelOpen = isSidePanelOpen
+    init(
+        activeSidePanel: Binding<TVNowPlayingPanel?> = .constant(nil),
+        isRootVisible: Binding<Bool> = .constant(false)
+    ) {
+        _activeSidePanel = activeSidePanel
+        _isRootVisible = isRootVisible
     }
 
     var body: some View {
         NavigationStack {
-            Group {
-                if player.hasActivePlayback {
-                    HStack(spacing: 0) {
-                        playerColumn
-                            .frame(maxWidth: .infinity)
-                            .focusSection()
+            ZStack {
+                TVPlayerGradientBackground()
 
-                        if let panel, !player.isRadioPlayback {
-                            Divider()
-                            sidePanel(panel)
-                                .frame(width: 720)
+                Group {
+                    if player.hasActivePlayback {
+                        HStack(spacing: 0) {
+                            playerColumn
+                                .frame(maxWidth: .infinity)
                                 .focusSection()
-                                .transition(.move(edge: .trailing).combined(with: .opacity))
+
+                            if let panel, !player.isRadioPlayback {
+                                sidePanel(panel)
+                                    .frame(width: 720)
+                                    .focusSection()
+                                    .transition(.move(edge: .trailing).combined(with: .opacity))
+                            }
                         }
+                        .animation(.easeInOut(duration: 0.25), value: panel)
+                        .onAppear { syncDisplayFromPlayer() }
+                        .onChange(of: scenePhase) { _, phase in
+                            if phase == .active { syncDisplayFromPlayer() }
+                        }
+                        .onReceive(player.timePublisher) { t in
+                            displayTime = t.time
+                            displayDuration = t.duration
+                        }
+                    } else {
+                        ContentUnavailableView(
+                            String(localized: "nothing_playing"),
+                            systemImage: "play.slash"
+                        )
                     }
-                    .animation(.easeInOut(duration: 0.25), value: panel)
-                    .onAppear { syncDisplayFromPlayer() }
-                    .onChange(of: scenePhase) { _, phase in
-                        if phase == .active { syncDisplayFromPlayer() }
-                    }
-                    .onReceive(player.timePublisher) { t in
-                        displayTime = t.time
-                        displayDuration = t.duration
-                    }
-                } else {
-                    ContentUnavailableView(
-                        String(localized: "nothing_playing"),
-                        systemImage: "play.slash"
-                    )
                 }
             }
-        }
-        .onAppear {
-            isSidePanelOpen = panel != nil
-        }
-        .onDisappear {
-            isSidePanelOpen = false
+            .onAppear {
+                isRootVisible = true
+                activeSidePanel = panel
+            }
+            .onDisappear {
+                isRootVisible = false
+                activeSidePanel = nil
+            }
         }
         .onChange(of: panel) { _, panel in
-            isSidePanelOpen = panel != nil
+            activeSidePanel = isRootVisible ? panel : nil
         }
     }
 
@@ -237,7 +250,7 @@ struct NowPlayingView: View {
         if let song = player.currentSong {
             if let artist = song.artist {
                 let libraryArtist = resolvedLibraryArtist(name: artist, id: song.artistId)
-                AccentTextLink(text: artist, font: .body) {
+                AccentTextLink(text: artist, font: .body, color: Color.primary.opacity(0.78)) {
                     ArtistDetailView(artist: libraryArtist)
                 }
                 .artistContextMenu(libraryArtist)
@@ -246,24 +259,27 @@ struct NowPlayingView: View {
                 if let alid = song.albumId, !alid.isEmpty {
                     let libraryAlbum = Album(id: alid, name: album, artist: song.artist,
                                              artistId: song.artistId, coverArt: song.coverArt)
-                    AccentTextLink(text: album, font: .callout) {
+                    AccentTextLink(text: album, font: .callout, color: Color.primary.opacity(0.60)) {
                         AlbumDetailView(album: libraryAlbum)
                     }
                     .albumContextMenu(libraryAlbum)
                 } else {
-                    Text(album).font(.callout).foregroundStyle(.tertiary).lineLimit(1)
+                    Text(album)
+                        .font(.callout)
+                        .foregroundStyle(Color.primary.opacity(0.60))
+                        .lineLimit(1)
                 }
             }
         } else if player.isRadioPlayback {
             VStack(spacing: 4) {
                 Text(player.radioDisplayArtistLine)
                     .font(.callout)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Color.primary.opacity(0.60))
                     .lineLimit(1)
                     .accessibilityHidden(player.radioDisplayArtist.isEmpty)
                 Text(player.radioDisplayStationName)
                     .font(.callout.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.primary.opacity(0.78))
                     .lineLimit(1)
             }
         }
@@ -274,7 +290,7 @@ struct NowPlayingView: View {
         player.actualStreamFormat?.displayString
     }
 
-    private func toggle(_ p: SidePanel) {
+    private func toggle(_ p: TVNowPlayingPanel) {
         panel = (panel == p) ? nil : p
     }
 
@@ -308,7 +324,7 @@ struct NowPlayingView: View {
     // MARK: - Seitenpanel (rechts)
 
     @ViewBuilder
-    private func sidePanel(_ p: SidePanel) -> some View {
+    private func sidePanel(_ p: TVNowPlayingPanel) -> some View {
         switch p {
         case .lyrics:
             // Kein Kopf — Titel/Künstler stehen links in der Now-Playing-Spalte.

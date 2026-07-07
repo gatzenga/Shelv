@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 private let lyricsHighlightAnimationDuration = 0.12
 private let lyricsHighlightRenderLeadMs = 70
@@ -229,6 +230,10 @@ struct LyricsPanel: View {
                 DragGesture(minimumDistance: 1)
                     .onChanged { _ in pauseAutoScroll() }
             )
+            .overlay {
+                MacLyricsScrollActivityObserver(onScroll: pauseAutoScroll)
+                    .allowsHitTesting(false)
+            }
             .onAppear {
                 focusCurrentLineSoon(proxy: proxy, anchor: lyricsStandardActiveLineAnchor)
             }
@@ -556,5 +561,73 @@ struct LyricsPanel: View {
             }
             .filter { !$0.isEmpty }
             .joined(separator: "\n")
+    }
+}
+
+private struct MacLyricsScrollActivityObserver: NSViewRepresentable {
+    let onScroll: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onScroll: onScroll)
+    }
+
+    func makeNSView(context: Context) -> ObserverView {
+        let view = ObserverView()
+        context.coordinator.view = view
+        context.coordinator.installMonitor()
+        return view
+    }
+
+    func updateNSView(_ nsView: ObserverView, context: Context) {
+        context.coordinator.view = nsView
+        context.coordinator.onScroll = onScroll
+    }
+
+    static func dismantleNSView(_ nsView: ObserverView, coordinator: Coordinator) {
+        coordinator.removeMonitor()
+    }
+
+    final class ObserverView: NSView {
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            nil
+        }
+    }
+
+    @MainActor
+    final class Coordinator {
+        weak var view: NSView?
+        var onScroll: () -> Void
+        private var monitor: Any?
+
+        init(onScroll: @escaping () -> Void) {
+            self.onScroll = onScroll
+        }
+
+        func installMonitor() {
+            guard monitor == nil else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+                self?.handle(event)
+                return event
+            }
+        }
+
+        func removeMonitor() {
+            if let monitor {
+                NSEvent.removeMonitor(monitor)
+                self.monitor = nil
+            }
+        }
+
+        private func handle(_ event: NSEvent) {
+            guard let view,
+                  let window = view.window,
+                  event.window === window,
+                  abs(event.scrollingDeltaX) > 0.1 || abs(event.scrollingDeltaY) > 0.1 else { return }
+
+            let point = view.convert(event.locationInWindow, from: nil)
+            guard view.bounds.contains(point) else { return }
+
+            onScroll()
+        }
     }
 }

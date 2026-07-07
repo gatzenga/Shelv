@@ -156,17 +156,23 @@ struct LyricsSheetView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            lyricsContent
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            Divider()
-            bottomControls
+        ZStack {
+            if usesNativeInterface {
+                PlayerGradientBackground()
+            }
+
+            VStack(spacing: 0) {
+                lyricsContent
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                Divider()
+                bottomControls
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .ignoresSafeArea(.keyboard)
         .navigationTitle(String(localized: "lyrics"))
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarBackground(usesNativeInterface ? .hidden : .visible, for: .navigationBar)
         .onAppear {
             syncPlaybackClock(time: player.currentTime)
             rebuildLines()

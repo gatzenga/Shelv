@@ -642,6 +642,7 @@ struct PlaylistListRow: View {
 struct AccentTextLink<Destination: View>: View {
     let text: String
     let font: Font
+    var color: Color = .secondary
     @ViewBuilder let destination: () -> Destination
     @FocusState private var focused: Bool
     @AppStorage("themeColor") private var themeColor = "violet"
@@ -653,7 +654,7 @@ struct AccentTextLink<Destination: View>: View {
             Text(text)
                 .font(font)
                 .lineLimit(1)
-                .foregroundStyle(focused ? AppTheme.color(for: themeColor) : Color.secondary)
+                .foregroundStyle(focused ? AppTheme.color(for: themeColor) : color)
         }
         .buttonStyle(.borderless)
         .focused($focused)

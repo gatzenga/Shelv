@@ -3,7 +3,7 @@ import SwiftUI
 private let lyricsHighlightAnimationDuration = 0.12
 private let lyricsHighlightRenderLeadMs = 70
 private let lyricsHighlightLeadMs = Int(lyricsHighlightAnimationDuration * 1000) + lyricsHighlightRenderLeadMs
-private let lyricsStandardActiveLineAnchor = UnitPoint(x: 0.5, y: 0.2)
+private let lyricsNativeActiveLineAnchor = UnitPoint(x: 0.5, y: 0.12)
 
 private struct LyricLine: Identifiable {
     let id: Int
@@ -11,13 +11,67 @@ private struct LyricLine: Identifiable {
     let text: String
 }
 
+private struct TVNativeLyricLineRow: View {
+    let line: LyricLine
+    let distance: Int
+
+    private var opacity: Double {
+        switch distance {
+        case 0:
+            return 1.0
+        case 1:
+            return 0.58
+        case 2:
+            return 0.36
+        default:
+            return 0.22
+        }
+    }
+
+    private var blurRadius: CGFloat {
+        switch distance {
+        case 0:
+            return 0
+        case 1:
+            return 0.35
+        case 2:
+            return 1.1
+        default:
+            return 2.1
+        }
+    }
+
+    var body: some View {
+        Text(line.text)
+            .font(.system(size: 42, weight: .bold))
+            .lineSpacing(7)
+            .foregroundStyle(Color.primary.opacity(opacity))
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .blur(radius: blurRadius)
+            .padding(.vertical, 7)
+            .animation(.easeInOut(duration: lyricsHighlightAnimationDuration), value: distance)
+    }
+}
+
+private struct TVNativePlainLyricLine: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 37, weight: .semibold))
+            .lineSpacing(7)
+            .foregroundStyle(Color.primary.opacity(0.86))
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
 /// Lyrics-Panel der Now-Playing-Ansicht. Synchronisierte LRC laufen automatisch
-/// mit (aktive Zeile mit Akzentfarbe hinterlegt + nach oben fokussiert), sonst Plaintext.
+/// mit (Native-Style: aktive Zeile scharf, entfernte Zeilen weicher), sonst Plaintext.
 /// Bewusst ohne eigenen Kopf (Titel/Künstler) — der steht links in der Now-Playing-Spalte.
 struct LyricsView: View {
     @ObservedObject var player = AudioPlayerService.shared
-    @AppStorage("themeColor") private var themeColor = "violet"
-    private var accent: Color { AppTheme.color(for: themeColor) }
 
     @State private var parsedLines: [LyricLine] = []
     @State private var plainLines: [String] = []
@@ -102,38 +156,27 @@ struct LyricsView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 6) {
                     ForEach(Array(parsedLines.enumerated()), id: \.element.id) { index, line in
-                        let isActive = visualActiveLineIndex == index
-                        Text(line.text)
-                            .font(.title3)
-                            .foregroundStyle(isActive ? Color.primary : Color.secondary)
-                            .padding(.vertical, 9)
-                            .padding(.horizontal, 20)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background {
-                                if isActive {
-                                    RoundedRectangle(cornerRadius: 10)
-                                        .fill(accent.opacity(0.18))
-                                }
-                            }
-                            .animation(.easeOut(duration: lyricsHighlightAnimationDuration), value: isActive)
+                        let distance = visualActiveLineIndex.map { abs(index - $0) } ?? 0
+                        TVNativeLyricLineRow(line: line, distance: distance)
                             .id(line.id)
                     }
                 }
-                .padding(.horizontal, 40)
-                .padding(.vertical, 90)
+                .padding(.horizontal, 54)
+                .padding(.top, 90)
+                .padding(.bottom, 120)
             }
             .scrollIndicators(.hidden)
             .edgeFadeMask()
             .onAppear {
-                focusCurrentLineSoon(proxy: proxy, anchor: lyricsStandardActiveLineAnchor)
+                focusCurrentLineSoon(proxy: proxy, anchor: lyricsNativeActiveLineAnchor)
             }
             .onChange(of: initialFocusRequest) { _, _ in
-                focusCurrentLineSoon(proxy: proxy, anchor: lyricsStandardActiveLineAnchor)
+                focusCurrentLineSoon(proxy: proxy, anchor: lyricsNativeActiveLineAnchor)
             }
             .onChange(of: standardPreparedLineIndex) { _, index in
                 guard let index, index < parsedLines.count else { return }
                 withAnimation(.easeOut(duration: standardPreparedScrollDuration)) {
-                    proxy.scrollTo(parsedLines[index].id, anchor: lyricsStandardActiveLineAnchor)
+                    proxy.scrollTo(parsedLines[index].id, anchor: lyricsNativeActiveLineAnchor)
                 }
             }
             .onChange(of: activeLineIndex) { _, index in
@@ -141,7 +184,7 @@ struct LyricsView: View {
                 guard standardPreparedLineIndex != index else { return }
 
                 withAnimation(.easeOut(duration: 0.18)) {
-                    proxy.scrollTo(parsedLines[index].id, anchor: lyricsStandardActiveLineAnchor)
+                    proxy.scrollTo(parsedLines[index].id, anchor: lyricsNativeActiveLineAnchor)
                 }
             }
         }
@@ -153,16 +196,12 @@ struct LyricsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(plainLines.enumerated()), id: \.offset) { _, line in
-                    Text(line.isEmpty ? " " : line)
-                        .font(.title3)
-                        .foregroundStyle(.primary)
-                        .padding(.vertical, 6)
-                        .padding(.horizontal, 20)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    TVNativePlainLyricLine(text: line.isEmpty ? " " : line)
                 }
             }
-            .padding(.horizontal, 40)
-            .padding(.vertical, 90)
+            .padding(.horizontal, 54)
+            .padding(.top, 90)
+            .padding(.bottom, 120)
         }
         .scrollIndicators(.hidden)
         .edgeFadeMask()
