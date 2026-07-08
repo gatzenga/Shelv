@@ -1,14 +1,13 @@
 import Foundation
 
 nonisolated enum TranscodingCodec: String, CaseIterable, Identifiable, Codable {
-    case raw, opus, mp3, aac
+    case raw, opus, mp3
     var id: String { rawValue }
     var label: String {
         switch self {
         case .raw:  return String(localized: "original")
         case .opus: return "Opus"
         case .mp3:  return "MP3"
-        case .aac:  return "AAC"
         }
     }
     nonisolated var fileExtension: String {
@@ -16,12 +15,11 @@ nonisolated enum TranscodingCodec: String, CaseIterable, Identifiable, Codable {
         case .raw:  return ""
         case .opus: return "opus"
         case .mp3:  return "mp3"
-        case .aac:  return "m4a"
         }
     }
 
-    /// AAC funktioniert mit Navidrome live-Transcoding + AVPlayer nicht zuverlässig
-    /// (kein Container der HTTP-streamable ist), daher nur für Downloads.
+    /// AAC bleibt bewusst deaktiviert: Navidrome liefert es nicht zuverlässig in
+    /// einem für AVPlayer sauber nutzbaren Container.
     static var streamingOptions: [TranscodingCodec] { [.raw, .opus, .mp3] }
     static var downloadOptions: [TranscodingCodec] { [.raw, .opus, .mp3] }
 }

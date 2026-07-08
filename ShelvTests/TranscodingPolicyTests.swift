@@ -26,6 +26,5 @@ final class TranscodingPolicyTests: XCTestCase {
         XCTAssertEqual(TranscodingCodec.raw.fileExtension, "")
         XCTAssertEqual(TranscodingCodec.opus.fileExtension, "opus")
         XCTAssertEqual(TranscodingCodec.mp3.fileExtension, "mp3")
-        XCTAssertEqual(TranscodingCodec.aac.fileExtension, "m4a")
     }
 }

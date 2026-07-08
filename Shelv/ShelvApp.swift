@@ -45,7 +45,7 @@ struct ShelvApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
-        // AAC ist für Streaming nicht supported — Migration falls vorher gesetzt
+        // AAC-Transcoding bleibt deaktiviert — Migration falls vorher gesetzt.
         let d = UserDefaults.standard
         if d.string(forKey: "transcodingWifiCodec") == "aac" { d.set("raw", forKey: "transcodingWifiCodec") }
         if d.string(forKey: "transcodingCellularCodec") == "aac" { d.set("raw", forKey: "transcodingCellularCodec") }

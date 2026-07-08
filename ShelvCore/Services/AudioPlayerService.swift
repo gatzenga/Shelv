@@ -1682,7 +1682,7 @@ class AudioPlayerService: ObservableObject {
     private var infinityPendingSongIds: [String] = []
 
     private var clampedInfinityMixAheadCount: Int {
-        min(max(infinityMixAheadCount, 1), 5)
+        min(max(infinityMixAheadCount, 1), 10)
     }
 
     /// Hält bei aktivem Endlos-Modus die gewählte Anzahl Zufallstitel bereit.
