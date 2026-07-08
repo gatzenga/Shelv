@@ -131,9 +131,10 @@ struct MainTabView: View {
         } message: {
             Text(String(localized: "queue_available_subtitle"))
         }
-        .task(id: queueSync.pendingRemote != nil) {
-            guard queueSync.pendingRemote != nil else { return }
+        .task(id: queueSync.pendingRemote?.signature) {
+            guard let pendingSignature = queueSync.pendingRemote?.signature else { return }
             try? await Task.sleep(for: .seconds(6))
+            guard queueSync.pendingRemote?.signature == pendingSignature else { return }
             queueSync.dismissPending()
         }
         .alert(serverErrorAlertTitle, isPresented: Binding(

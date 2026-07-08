@@ -7,7 +7,8 @@ struct QueueSyncBanner: View {
     @Environment(\.themeColor) private var themeColor
 
     var body: some View {
-        if queueSync.pendingRemote != nil {
+        if let pendingRemote = queueSync.pendingRemote {
+            let pendingSignature = pendingRemote.signature
             HStack(spacing: 12) {
                 Image(systemName: "music.note.list")
                     .font(.headline)
@@ -40,7 +41,15 @@ struct QueueSyncBanner: View {
             .frame(maxWidth: 480)
             .padding(.top, 12)
             .transition(.move(edge: .top).combined(with: .opacity))
-            .task { try? await Task.sleep(for: .seconds(6)); queueSync.dismissPending() }
+            .task(id: pendingSignature) {
+                do {
+                    try await Task.sleep(for: .seconds(6))
+                } catch {
+                    return
+                }
+                guard queueSync.pendingRemote?.signature == pendingSignature else { return }
+                queueSync.dismissPending()
+            }
         }
     }
 }

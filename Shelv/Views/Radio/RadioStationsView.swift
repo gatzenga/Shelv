@@ -111,7 +111,7 @@ struct RadioStationsView: View {
 
     private var listBody: some View {
         List {
-            ForEach(displayItems) { item in
+            ForEach(Array(displayItems.enumerated()), id: \.element.id) { index, item in
                 radioRow(item)
                     .contentShape(Rectangle())
                     .onTapGesture {
@@ -119,6 +119,7 @@ struct RadioStationsView: View {
                     }
                 .contextMenu { contextMenu(for: item) }
                 .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+                .listRowSeparator(index == 0 ? .hidden : .visible, edges: .top)
                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     Button {
                         deleteItem = item

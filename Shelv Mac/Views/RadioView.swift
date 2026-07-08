@@ -24,8 +24,6 @@ struct RadioView: View {
                 .padding(.top, 24)
                 .padding(.bottom, 16)
 
-            Divider()
-
             Group {
                 if store.isLoading && store.items.isEmpty {
                     ProgressView()
