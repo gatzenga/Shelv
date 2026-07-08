@@ -49,6 +49,7 @@ struct DiscoverView: View {
     @State private var showConnectionRecoveryState = false
     @State private var isSwitchingServerURL = false
     @State private var serverURLSwitchGeneration = 0
+    @State private var serverURLSwitchTask: Task<Void, Never>?
     @State private var locallyInitiatedURLSwitchSignature: String?
 
     private var activeServer: SubsonicServer? {
@@ -200,8 +201,11 @@ struct DiscoverView: View {
                 }
                 serverURLSwitchGeneration += 1
                 let generation = serverURLSwitchGeneration
+                serverURLSwitchTask?.cancel()
+                serverURLSwitchTask = nil
                 isSwitchingServerURL = true
                 showConnectionRecoveryState = false
+                offlineMode.clearServerError()
                 libraryStore.resetDiscoverInMemory()
                 RadioStationStore.shared.resetInMemory()
                 Task { @MainActor in
@@ -210,7 +214,7 @@ struct DiscoverView: View {
                             isSwitchingServerURL = false
                         }
                     }
-                    await loadOnlineDiscoverContent()
+                    await loadOnlineDiscoverContent(ignoresVisibleServerError: true)
                     guard generation == serverURLSwitchGeneration else { return }
                     await RadioStationStore.shared.refresh()
                 }
@@ -259,7 +263,7 @@ struct DiscoverView: View {
         let isActive = activeURLSlot(for: server) == slot
         Button {
             guard !isActive else { return }
-            Task { await switchServerURLSlot(slot) }
+            startServerURLSlotSwitch(slot)
         } label: {
             Text(title(for: slot))
         }
@@ -288,42 +292,72 @@ struct DiscoverView: View {
     }
 
     @MainActor
-    private func switchServerURLSlot(_ slot: ServerURLSlot) async {
+    private func startServerURLSlotSwitch(_ slot: ServerURLSlot) {
         guard let server = activeServer else { return }
+        guard activeURLSlot(for: server) != slot else { return }
         guard slot == .primary || server.hasSecondaryURL else { return }
 
         serverURLSwitchGeneration += 1
         let generation = serverURLSwitchGeneration
+        let targetSignature = serverURLSignature(for: server, slot: slot)
+        serverURLSwitchTask?.cancel()
+        serverURLSwitchTask = Task { @MainActor in
+            await switchServerURLSlot(
+                slot,
+                serverID: server.id,
+                targetSignature: targetSignature,
+                generation: generation
+            )
+        }
+    }
+
+    @MainActor
+    private func switchServerURLSlot(
+        _ slot: ServerURLSlot,
+        serverID: UUID,
+        targetSignature: String,
+        generation: Int
+    ) async {
+        guard !Task.isCancelled else { return }
         isSwitchingServerURL = true
         showConnectionRecoveryState = false
+        offlineMode.clearServerError()
         defer {
             if generation == serverURLSwitchGeneration {
                 isSwitchingServerURL = false
+                serverURLSwitchTask = nil
             }
         }
 
-        locallyInitiatedURLSwitchSignature = serverURLSignature(for: server, slot: slot)
-        serverStore.setURLSlot(for: server.id, slot: slot)
+        locallyInitiatedURLSwitchSignature = targetSignature
+        serverStore.setURLSlot(for: serverID, slot: slot)
 
         libraryStore.resetDiscoverInMemory()
 
         if await offlineMode.beginUserInitiatedServerRefresh() {
-            guard generation == serverURLSwitchGeneration else { return }
+            guard !Task.isCancelled, generation == serverURLSwitchGeneration else { return }
             await updateDeviceNetworkState()
+            guard !Task.isCancelled, generation == serverURLSwitchGeneration else { return }
             presentConnectionRecoveryState()
             return
         }
-        guard generation == serverURLSwitchGeneration else { return }
+        defer { offlineMode.finishUserInitiatedServerRefresh() }
+        guard !Task.isCancelled, generation == serverURLSwitchGeneration else { return }
 
-        await loadOnlineDiscoverContent()
-        guard generation == serverURLSwitchGeneration else { return }
+        await loadOnlineDiscoverContent(ignoresVisibleServerError: true)
+        guard !Task.isCancelled, generation == serverURLSwitchGeneration else { return }
         await RadioStationStore.shared.refresh()
     }
 
     @MainActor
-    private func loadOnlineDiscoverContent(refreshRandom: Bool = false) async {
+    private func loadOnlineDiscoverContent(
+        refreshRandom: Bool = false,
+        ignoresVisibleServerError: Bool = false
+    ) async {
+        let requestSignature = activeServerURLSignature
         showConnectionRecoveryState = false
         await updateDeviceNetworkState()
+        guard !Task.isCancelled, requestSignature == activeServerURLSignature else { return }
         guard deviceHasNetwork else {
             let message = SubsonicAPIError.networkError(URLError(.notConnectedToInternet)).localizedDescription
             offlineMode.notifyServerErrorIfPresentationAllowed(message)
@@ -342,7 +376,8 @@ struct DiscoverView: View {
         }
 
         await updateDeviceNetworkState()
-        if discoverContentIsEmpty && (!deviceHasNetwork || offlineMode.serverErrorBannerVisible || !didLoadDiscover) {
+        guard !Task.isCancelled, requestSignature == activeServerURLSignature else { return }
+        if discoverContentIsEmpty && (!deviceHasNetwork || (!ignoresVisibleServerError && offlineMode.serverErrorBannerVisible) || !didLoadDiscover) {
             presentConnectionRecoveryState()
         }
     }

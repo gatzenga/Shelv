@@ -19,12 +19,20 @@ struct DiscoverView: View {
     @State private var showConnectionRecoveryState = false
     @State private var isCheckingConnection = false
     @State private var isSwitchingServerURL = false
+    @State private var serverURLSwitchGeneration = 0
+    @State private var serverURLSwitchTask: Task<Void, Never>?
+    @State private var locallyInitiatedURLSwitchSignature: String?
     private let player = AudioPlayerService.shared
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
     private var activeServer: SubsonicServer? {
         serverStore.activeServer
+    }
+
+    private var activeServerURLSignature: String? {
+        guard let activeServer else { return nil }
+        return serverURLSignature(for: activeServer, slot: activeURLSlot(for: activeServer))
     }
 
     private var discoverTitle: String {
@@ -57,9 +65,8 @@ struct DiscoverView: View {
 
     private var shouldShowDiscoverLoadingState: Bool {
         !offlineMode.isOffline
-            && discoverContentIsEmpty
             && !shouldShowConnectionRecoveryState
-            && (vm.isLoading || isCheckingConnection)
+            && (isSwitchingServerURL || (discoverContentIsEmpty && (vm.isLoading || isCheckingConnection)))
     }
 
     private var shouldShowConnectionRecoveryState: Bool {
@@ -89,10 +96,10 @@ struct DiscoverView: View {
             .navigationTitle(String(localized: "discover"))
             .toolbar {
                 ToolbarItem(placement: .automatic) {
-                    ThemePickerButton()
-                }
-                ToolbarItem(placement: .automatic) {
                     OfflineRecapToolbarItem()
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    ThemePickerButton()
                 }
             }
             .onChange(of: offlineMode.isOffline) { _, isOffline in
@@ -228,9 +235,23 @@ struct DiscoverView: View {
         .navigationTitle(String(localized: "discover"))
         .toolbar {
             ToolbarItem(placement: .automatic) {
-                ThemePickerButton()
+                InsightsToolbarButton()
             }
-            ToolbarItem(placement: .automatic) {
+            if recapEnabled {
+                ToolbarItem(placement: .automatic) {
+                    RecapToolbarButton()
+                }
+            }
+            if #available(macOS 26.0, *) {
+                ToolbarSpacer(.fixed, placement: .automatic)
+            } else {
+                ToolbarItem(placement: .automatic) {
+                    Divider()
+                        .frame(height: 22)
+                        .padding(.horizontal, 8)
+                }
+            }
+            ToolbarItem(placement: .primaryAction) {
                 Button {
                     Task { await refreshOnlineDiscoverContent() }
                 } label: {
@@ -239,16 +260,8 @@ struct DiscoverView: View {
                 .disabled(isCheckingConnection || isSwitchingServerURL || (vm.isLoading && !shouldShowConnectionRecoveryState))
                 .help(String(localized: "reload"))
             }
-            ToolbarItem(placement: .automatic) {
-                Divider()
-            }
-            if recapEnabled {
-                ToolbarItem(placement: .automatic) {
-                    RecapToolbarButton()
-                }
-            }
-            ToolbarItem(placement: .automatic) {
-                InsightsToolbarButton()
+            ToolbarItem(placement: .primaryAction) {
+                ThemePickerButton()
             }
         }
         .task { await loadOnlineDiscoverContent(verifyReachabilityFirst: discoverContentIsEmpty) }
@@ -263,15 +276,52 @@ struct DiscoverView: View {
             presentConnectionRecoveryState()
         }
         .onChange(of: serverStore.activeServerID) { _, _ in
+            serverURLSwitchGeneration += 1
+            serverURLSwitchTask?.cancel()
+            serverURLSwitchTask = nil
+            locallyInitiatedURLSwitchSignature = activeServerURLSignature
+            isSwitchingServerURL = false
+            isCheckingConnection = false
+            offlineMode.clearServerError()
             vm.reset()
-            Task { await loadOnlineDiscoverContent(verifyReachabilityFirst: true) }
+            Task {
+                await loadOnlineDiscoverContent(
+                    verifyReachabilityFirst: true,
+                    ignoresVisibleServerError: true
+                )
+            }
         }
-        .onChange(of: activeServer?.activeURLSlot) { _, _ in
-            guard !isSwitchingServerURL else { return }
+        .onChange(of: activeServerURLSignature) { _, newSignature in
+            guard let newSignature else { return }
+            if locallyInitiatedURLSwitchSignature == newSignature {
+                locallyInitiatedURLSwitchSignature = nil
+                return
+            }
+            serverURLSwitchGeneration += 1
+            let generation = serverURLSwitchGeneration
+            serverURLSwitchTask?.cancel()
+            serverURLSwitchTask = nil
+            isSwitchingServerURL = true
+            isCheckingConnection = true
+            showConnectionRecoveryState = false
+            offlineMode.clearServerError()
             vm.reset()
             libraryStore.reset()
             RadioStationStore.shared.resetInMemory()
-            Task { await loadOnlineDiscoverContent(verifyReachabilityFirst: true) }
+            Task { @MainActor in
+                defer {
+                    if generation == serverURLSwitchGeneration {
+                        isSwitchingServerURL = false
+                        isCheckingConnection = false
+                    }
+                }
+                await loadOnlineDiscoverContent(
+                    verifyReachabilityFirst: true,
+                    ignoresVisibleServerError: true
+                )
+                guard generation == serverURLSwitchGeneration else { return }
+                await RadioStationStore.shared.refresh()
+            }
         }
     }
 
@@ -309,8 +359,8 @@ struct DiscoverView: View {
     private func serverURLSlotMenuButton(slot: ServerURLSlot, server: SubsonicServer) -> some View {
         let isActive = activeURLSlot(for: server) == slot
         Button {
-            guard !isActive, !isSwitchingServerURL else { return }
-            Task { await switchServerURLSlot(slot) }
+            guard !isActive else { return }
+            startServerURLSlotSwitch(slot)
         } label: {
             HStack(spacing: 16) {
                 Text(title(for: slot))
@@ -327,6 +377,13 @@ struct DiscoverView: View {
         server.isUsingSecondaryURL ? .secondary : .primary
     }
 
+    private func serverURLSignature(for server: SubsonicServer, slot: ServerURLSlot) -> String {
+        let baseURL = slot == .secondary && server.hasSecondaryURL
+            ? (server.secondaryURL ?? server.baseURL)
+            : server.baseURL
+        return "\(server.id.uuidString)|\(slot.rawValue)|\(baseURL)"
+    }
+
     private func title(for slot: ServerURLSlot) -> String {
         switch slot {
         case .primary:
@@ -337,30 +394,65 @@ struct DiscoverView: View {
     }
 
     @MainActor
-    private func switchServerURLSlot(_ slot: ServerURLSlot) async {
+    private func startServerURLSlotSwitch(_ slot: ServerURLSlot) {
         guard let server = activeServer else { return }
         guard activeURLSlot(for: server) != slot else { return }
         guard slot == .primary || server.hasSecondaryURL else { return }
 
+        serverURLSwitchGeneration += 1
+        let generation = serverURLSwitchGeneration
+        let targetSignature = serverURLSignature(for: server, slot: slot)
+        serverURLSwitchTask?.cancel()
+        serverURLSwitchTask = Task { @MainActor in
+            await switchServerURLSlot(
+                slot,
+                serverID: server.id,
+                targetSignature: targetSignature,
+                generation: generation
+            )
+        }
+    }
+
+    @MainActor
+    private func switchServerURLSlot(
+        _ slot: ServerURLSlot,
+        serverID: UUID,
+        targetSignature: String,
+        generation: Int
+    ) async {
+        guard !Task.isCancelled else { return }
         isSwitchingServerURL = true
         isCheckingConnection = true
         showConnectionRecoveryState = false
+        offlineMode.clearServerError()
         defer {
-            isSwitchingServerURL = false
-            isCheckingConnection = false
+            if generation == serverURLSwitchGeneration {
+                isSwitchingServerURL = false
+                isCheckingConnection = false
+                serverURLSwitchTask = nil
+            }
         }
 
-        serverStore.setURLSlot(for: server.id, slot: slot)
+        locallyInitiatedURLSwitchSignature = targetSignature
+        serverStore.setURLSlot(for: serverID, slot: slot)
+        vm.reset()
+        RadioStationStore.shared.resetInMemory()
 
         if await offlineMode.beginUserInitiatedServerRefresh() {
+            guard !Task.isCancelled, generation == serverURLSwitchGeneration else { return }
             await updateDeviceNetworkState()
+            guard !Task.isCancelled, generation == serverURLSwitchGeneration else { return }
             presentConnectionRecoveryState()
             return
         }
         defer { offlineMode.finishUserInitiatedServerRefresh() }
+        guard !Task.isCancelled, generation == serverURLSwitchGeneration else { return }
 
-        vm.reset()
-        await loadOnlineDiscoverContent(verifyReachabilityFirst: false)
+        await loadOnlineDiscoverContent(
+            verifyReachabilityFirst: false,
+            ignoresVisibleServerError: true
+        )
+        guard !Task.isCancelled, generation == serverURLSwitchGeneration else { return }
         await RadioStationStore.shared.refresh()
     }
 
@@ -387,9 +479,14 @@ struct DiscoverView: View {
     }
 
     @MainActor
-    private func loadOnlineDiscoverContent(verifyReachabilityFirst: Bool = false) async {
+    private func loadOnlineDiscoverContent(
+        verifyReachabilityFirst: Bool = false,
+        ignoresVisibleServerError: Bool = false
+    ) async {
+        let requestSignature = activeServerURLSignature
         showConnectionRecoveryState = false
         await updateDeviceNetworkState()
+        guard !Task.isCancelled, requestSignature == activeServerURLSignature else { return }
         guard deviceHasNetwork else {
             let message = SubsonicAPIError.networkError(URLError(.notConnectedToInternet)).localizedDescription
             offlineMode.notifyServerErrorIfPresentationAllowed(message)
@@ -397,7 +494,7 @@ struct DiscoverView: View {
             return
         }
 
-        if offlineMode.serverErrorBannerVisible && discoverContentIsEmpty {
+        if !ignoresVisibleServerError, offlineMode.serverErrorBannerVisible && discoverContentIsEmpty {
             presentConnectionRecoveryState()
             return
         }
@@ -414,6 +511,7 @@ struct DiscoverView: View {
             if await offlineMode.beginVisibleServerReachabilityCheck() {
                 isCheckingConnection = false
                 await updateDeviceNetworkState()
+                guard !Task.isCancelled, requestSignature == activeServerURLSignature else { return }
                 presentConnectionRecoveryState()
                 return
             }
@@ -424,8 +522,9 @@ struct DiscoverView: View {
         let didLoadDiscover = await vm.load()
 
         await updateDeviceNetworkState()
+        guard !Task.isCancelled, requestSignature == activeServerURLSignature else { return }
         showConnectionRecoveryState = discoverContentIsEmpty
-            && (!deviceHasNetwork || offlineMode.serverErrorBannerVisible || !didLoadDiscover)
+            && (!deviceHasNetwork || (!ignoresVisibleServerError && offlineMode.serverErrorBannerVisible) || !didLoadDiscover)
     }
 
     @MainActor
@@ -588,34 +687,67 @@ struct MixButton: View {
     let isLoading: Bool
     let action: () async -> Void
 
+    @Environment(\.themeColor) private var themeColor
+    @AppStorage(PersonalizationPreferenceKey.miniPlayerStyle) private var interfaceStyleRaw = PersonalizationMiniPlayerStyle.shelv.rawValue
+
+    private var usesNativeInterface: Bool {
+        PersonalizationMiniPlayerStyle(rawValue: interfaceStyleRaw) == .native
+    }
+
     var body: some View {
         Button {
+            guard !isLoading else { return }
             Task { await action() }
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: icon)
-                    .font(.body.bold())
-                    .frame(width: 24)
+                    .font(usesNativeInterface ? .body : .body.bold())
+                    .frame(width: usesNativeInterface ? 28 : 24)
                 Text(title)
                     .font(.body.bold())
                 Spacer()
                 if isLoading {
                     ProgressView()
                         .controlSize(.small)
-                        .tint(color)
+                        .tint(usesNativeInterface ? .white : color)
                 } else {
                     Image(systemName: "play.fill")
                         .font(.caption)
                 }
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 13)
-            .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).stroke(color.opacity(0.25), lineWidth: 1))
-            .foregroundStyle(color)
+            .padding(.vertical, usesNativeInterface ? 14 : 13)
+            .background {
+                if usesNativeInterface {
+                    Capsule(style: .continuous)
+                        .fill(themeColor)
+                } else {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(color.opacity(0.12))
+                }
+            }
+            .overlay {
+                if !usesNativeInterface {
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(color.opacity(0.25), lineWidth: 1)
+                }
+            }
+            .foregroundStyle(usesNativeInterface ? .white : color)
         }
-        .buttonStyle(.plain)
-        .disabled(isLoading)
+        .buttonStyle(MixButtonPressStyle(usesNativeInterface: usesNativeInterface))
+        .allowsHitTesting(!isLoading)
+    }
+}
+
+private struct MixButtonPressStyle: ButtonStyle {
+    let usesNativeInterface: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.985 : 1)
+            .brightness(usesNativeInterface && configuration.isPressed ? -0.045 : 0)
+            .opacity(!usesNativeInterface && configuration.isPressed ? 0.78 : 1)
+            .animation(.easeOut(duration: 0.08), value: configuration.isPressed)
     }
 }
 

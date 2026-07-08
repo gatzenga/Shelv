@@ -41,6 +41,11 @@ final class OfflineModeService: ObservableObject {
         return "\(server.displayName) [\(slot)] \(url)"
     }
 
+    private var activeServerRequestSignature: String? {
+        guard let server = SubsonicAPIService.shared.activeServer else { return nil }
+        return "\(server.id.uuidString)|\(server.activeBaseURL)"
+    }
+
     private init() {
         // AppStorage-Werte spiegeln
         $isOffline
@@ -133,10 +138,14 @@ final class OfflineModeService: ObservableObject {
         presentsServerError: Bool
     ) async -> Bool {
         guard !isOffline else { return false }
-        guard SubsonicAPIService.shared.activeServer != nil else { return false }
+        guard let requestSignature = activeServerRequestSignature else { return false }
         await NetworkStatus.shared.waitUntilReady()
         ConnectivityDebugLog.log("\(label) check started: server=\(activeServerDebugLabel), network=\(NetworkStatus.shared.isOnWifi ? "wifi" : "cellular/other")")
         guard NetworkStatus.shared.hasNetwork else {
+            guard requestSignature == activeServerRequestSignature else {
+                ConnectivityDebugLog.log("\(label) ignored: active server changed")
+                return true
+            }
             let message = SubsonicAPIError.networkError(URLError(.notConnectedToInternet)).localizedDescription
             ConnectivityDebugLog.log("\(label) failed: no network")
             if markOfflinePresentation, presentsServerError {
@@ -153,6 +162,10 @@ final class OfflineModeService: ObservableObject {
         }
         do {
             try await SubsonicAPIService.shared.ping()
+            guard requestSignature == activeServerRequestSignature else {
+                ConnectivityDebugLog.log("\(label) ignored: active server changed")
+                return true
+            }
             ConnectivityDebugLog.log("\(label) ok: ping")
             if presentsServerError {
                 allowUserInitiatedServerErrorPresentation()
@@ -165,6 +178,10 @@ final class OfflineModeService: ObservableObject {
             }
             if shouldLogRefreshFailure(error) {
                 ConnectivityDebugLog.log("\(label) failed: \(describeServerError(error))")
+            }
+            guard requestSignature == activeServerRequestSignature else {
+                ConnectivityDebugLog.log("\(label) ignored: active server changed")
+                return true
             }
             if presentsServerError {
                 notifyServerError(error.localizedDescription, bypassCooldown: true)
