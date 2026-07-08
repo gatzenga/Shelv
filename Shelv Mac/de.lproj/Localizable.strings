@@ -53,6 +53,10 @@
 "contact" = "Kontakt";
 "support_my_work" = "Support my work";
 "playback" = "Wiedergabe";
+"general" = "Allgemein";
+"interface_style" = "Oberfläche";
+"mini_player_shelv" = "Shelv";
+"mini_player_native" = "Nativ";
 "play_pause" = "Abspielen / Pause";
 "next_track" = "Nächster Titel";
 "previous_track" = "Vorheriger Titel";
@@ -534,6 +538,8 @@
 "cancel_timer" = "Timer abbrechen";
 "mute" = "Stummschalten";
 "unmute" = "Ton einschalten";
+"volume" = "Lautstärke";
+"playback_position" = "Wiedergabeposition";
 "minutes_abbreviation" = "Min.";
 "hour_abbreviation" = "Std.";
 "primary_url" = "Primary URL";

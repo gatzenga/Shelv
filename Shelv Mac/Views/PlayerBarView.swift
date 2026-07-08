@@ -1,6 +1,182 @@
 import SwiftUI
 import AppKit
 
+private enum NativeMacSliderInteraction {
+    case jumpWithGrabSafety
+    case grabOnly
+}
+
+private enum NativeMacSliderDragMode {
+    case grab(startValue: Double)
+    case jump
+}
+
+private struct NativeMacLinearSlider: View {
+    @Binding var value: Double
+    let bounds: ClosedRange<Double>
+    let trackColor: Color
+    let fillColor: Color
+    let accessibilityLabel: String
+    var idleHeight: CGFloat = 5
+    var activeHeight: CGFloat = 10
+    var isEnabled = true
+    var interaction: NativeMacSliderInteraction = .jumpWithGrabSafety
+    var grabRadius: CGFloat = 18
+    var grabActivationDistance: CGFloat = 2
+    var onEditingChanged: (Bool) -> Void = { _ in }
+
+    @State private var isInteracting = false
+    @State private var isHovered = false
+    @State private var dragMode: NativeMacSliderDragMode?
+
+    var body: some View {
+        GeometryReader { geometry in
+            let width = geometry.size.width
+
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(trackColor)
+
+                Capsule()
+                    .fill(fillColor)
+                    .frame(width: progressWidth(in: width))
+                    .animation(nil, value: value)
+            }
+            .frame(height: isInteracting || isHovered ? activeHeight : idleHeight)
+            .frame(maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .opacity(isEnabled ? 1 : 0.45)
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { gesture in
+                        guard isEnabled, width > 0 else { return }
+                        if dragMode == nil {
+                            dragMode = resolvedDragMode(startX: gesture.startLocation.x, width: width)
+                            guard dragMode != nil else { return }
+                        }
+                        guard shouldUpdateValue(for: gesture) else { return }
+                        beginInteractionIfNeeded()
+                        updateValue(for: gesture, width: width)
+                    }
+                    .onEnded { gesture in
+                        guard isEnabled, width > 0 else {
+                            resetInteraction(notify: isInteracting)
+                            return
+                        }
+                        guard dragMode != nil else { return }
+                        guard shouldUpdateValue(for: gesture) else {
+                            resetInteraction(notify: false)
+                            return
+                        }
+                        beginInteractionIfNeeded()
+                        updateValue(for: gesture, width: width)
+                        resetInteraction(notify: true)
+                    }
+            )
+            .onHover { hovering in
+                guard isEnabled else { return }
+                isHovered = hovering
+            }
+            .animation(.spring(response: 0.24, dampingFraction: 0.78), value: isInteracting)
+            .animation(.easeOut(duration: 0.14), value: isHovered)
+        }
+        .frame(height: 28)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityValue("\(Int(normalizedValue * 100))%")
+        .accessibilityAdjustableAction { direction in
+            guard isEnabled else { return }
+            let span = bounds.upperBound - bounds.lowerBound
+            guard span > 0 else { return }
+            let step = span * 0.05
+            switch direction {
+            case .increment:
+                value = clamped(value + step)
+            case .decrement:
+                value = clamped(value - step)
+            @unknown default:
+                break
+            }
+            onEditingChanged(false)
+        }
+    }
+
+    private var normalizedValue: Double {
+        let span = bounds.upperBound - bounds.lowerBound
+        guard span > 0 else { return 0 }
+        return min(1, max(0, (value - bounds.lowerBound) / span))
+    }
+
+    private func progressWidth(in width: CGFloat) -> CGFloat {
+        width * CGFloat(normalizedValue)
+    }
+
+    private func resolvedDragMode(startX: CGFloat, width: CGFloat) -> NativeMacSliderDragMode? {
+        let currentX = CGFloat(normalizedValue) * width
+        let startsNearCurrentValue = abs(startX - currentX) <= grabRadius
+        switch interaction {
+        case .jumpWithGrabSafety:
+            return startsNearCurrentValue ? .grab(startValue: value) : .jump
+        case .grabOnly:
+            return startsNearCurrentValue ? .grab(startValue: value) : nil
+        }
+    }
+
+    private func updateValue(for gesture: DragGesture.Value, width: CGFloat) {
+        switch dragMode {
+        case .grab(let startValue):
+            updateValue(startValue: startValue, translationX: gesture.translation.width, width: width)
+        case .jump:
+            updateValue(at: gesture.location.x, width: width)
+        case nil:
+            break
+        }
+    }
+
+    private func shouldUpdateValue(for gesture: DragGesture.Value) -> Bool {
+        switch dragMode {
+        case .grab:
+            let distance = hypot(gesture.translation.width, gesture.translation.height)
+            return distance >= grabActivationDistance
+        case .jump:
+            return true
+        case nil:
+            return false
+        }
+    }
+
+    private func beginInteractionIfNeeded() {
+        guard !isInteracting else { return }
+        isInteracting = true
+        onEditingChanged(true)
+    }
+
+    private func resetInteraction(notify: Bool) {
+        dragMode = nil
+        if isInteracting {
+            isInteracting = false
+            if notify {
+                onEditingChanged(false)
+            }
+        }
+    }
+
+    private func updateValue(at locationX: CGFloat, width: CGFloat) {
+        let fraction = min(1, max(0, Double(locationX / width)))
+        value = bounds.lowerBound + (bounds.upperBound - bounds.lowerBound) * fraction
+    }
+
+    private func updateValue(startValue: Double, translationX: CGFloat, width: CGFloat) {
+        let span = bounds.upperBound - bounds.lowerBound
+        guard span > 0 else { return }
+        let translatedValue = startValue + Double(translationX / width) * span
+        value = clamped(translatedValue)
+    }
+
+    private func clamped(_ candidate: Double) -> Double {
+        min(bounds.upperBound, max(bounds.lowerBound, candidate))
+    }
+}
+
 struct PlayerBarView: View {
     @EnvironmentObject var appState: AppState
     @ObservedObject var libraryStore = LibraryViewModel.shared
@@ -14,6 +190,7 @@ struct PlayerBarView: View {
     @Environment(\.themeColor) private var themeColor
     @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
     @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
+    @AppStorage(PersonalizationPreferenceKey.miniPlayerStyle) private var interfaceStyleRaw = PersonalizationMiniPlayerStyle.shelv.rawValue
     @AppStorage("radioSortDirectionMac") private var radioSortDirectionRaw = SortDirection.ascending.rawValue
     @State private var isDragging: Bool = false
     @State private var dragValue: Double = 0
@@ -27,6 +204,10 @@ struct PlayerBarView: View {
     private var radioDisplayItems: [RadioStationDisplayItem] {
         let direction = SortDirection(rawValue: radioSortDirectionRaw) ?? .ascending
         return direction == .descending ? Array(radioStore.items.reversed()) : radioStore.items
+    }
+
+    private var usesNativeInterface: Bool {
+        PersonalizationMiniPlayerStyle(rawValue: interfaceStyleRaw) == .native
     }
 
     var body: some View {
@@ -264,23 +445,7 @@ struct PlayerBarView: View {
                                     .monospacedDigit()
                                     .frame(width: 42, alignment: .trailing)
 
-                                Slider(
-                                    value: Binding(
-                                        get: { isDragging ? dragValue : displayTime },
-                                        set: { newVal in dragValue = newVal }
-                                    ),
-                                    in: 0...max(player.duration, 1)
-                                ) { editing in
-                                    if editing {
-                                        isDragging = true
-                                    } else {
-                                        player.seek(to: dragValue)
-                                        displayTime = dragValue
-                                        isDragging = false
-                                    }
-                                }
-                                .frame(maxWidth: 360)
-                                .disabled(player.currentSong == nil || player.duration <= 0)
+                                playbackProgressControl
 
                                 Text(formatTime(player.duration))
                                     .font(.caption)
@@ -317,46 +482,39 @@ struct PlayerBarView: View {
                         .frame(height: 14)
                         .padding(.trailing, 8)
 
-                        Button { appState.togglePanel(.queue) } label: {
-                            Image(systemName: "list.bullet")
-                                .font(.system(size: Self.rightIconSize + 1, weight: .medium))
-                                .foregroundStyle(appState.activePanel == .queue ? themeColor : Color.secondary)
-                                .frame(width: Self.rightControlSize, height: Self.rightControlSize)
+                        MacPlayerUtilityButton(
+                            systemName: "list.bullet",
+                            isActive: appState.activePanel == .queue,
+                            helpText: String(localized: "queue"),
+                            iconSize: Self.rightIconSize + 1,
+                            usesNativeInterface: usesNativeInterface
+                        ) {
+                            appState.togglePanel(.queue)
                         }
-                        .buttonStyle(.plain)
-                        .frame(width: Self.rightControlSize, height: Self.rightControlSize)
-                        .help(String(localized: "queue"))
 
-                        Button { appState.togglePanel(.lyrics) } label: {
-                            Image(systemName: "text.quote")
-                                .font(.system(size: Self.rightIconSize, weight: .medium))
-                                .foregroundStyle(appState.activePanel == .lyrics ? themeColor : Color.secondary)
-                                .frame(width: Self.rightControlSize, height: Self.rightControlSize)
+                        MacPlayerUtilityButton(
+                            systemName: "quote.bubble",
+                            isActive: appState.activePanel == .lyrics,
+                            helpText: String(localized: "lyrics"),
+                            usesNativeInterface: usesNativeInterface
+                        ) {
+                            appState.togglePanel(.lyrics)
                         }
-                        .buttonStyle(.plain)
-                        .frame(width: Self.rightControlSize, height: Self.rightControlSize)
-                        .help(String(localized: "lyrics"))
                     }
 
-                    AVRoutePickerViewRepresentable()
-                        .frame(width: 22, height: 22)
-                        .frame(width: Self.rightControlSize, height: Self.rightControlSize)
-                        .help(String(localized: "airplay"))
+                    MacRoutePickerButton(usesNativeInterface: usesNativeInterface)
 
-                    HStack(spacing: 8) {
-                        Button { toggleMute() } label: {
-                            Image(systemName: volumeSystemImage)
-                                .font(.system(size: Self.rightIconSize, weight: .regular))
-                                .foregroundStyle(Color.secondary)
-                                .frame(width: Self.rightControlSize, height: Self.rightControlSize)
-                        }
-                        .buttonStyle(.plain)
-                        .frame(width: Self.rightControlSize, height: Self.rightControlSize)
-                        .help(player.volume < 0.01 ? String(localized: "unmute") : String(localized: "mute"))
-
-                        Slider(value: volumeBinding, in: 0...1)
-                            .frame(width: 100)
+                    MacPlayerUtilityButton(
+                        systemName: volumeSystemImage,
+                        isActive: false,
+                        helpText: player.volume < 0.01 ? String(localized: "unmute") : String(localized: "mute"),
+                        weight: .regular,
+                        usesNativeInterface: usesNativeInterface
+                    ) {
+                        toggleMute()
                     }
+
+                    volumeControl
                 }
                 .frame(maxWidth: .infinity, alignment: .trailing)
                 .padding(.trailing, 20)
@@ -375,6 +533,57 @@ struct PlayerBarView: View {
         .onChange(of: player.currentSong?.id ?? player.currentRadioStation?.id) { _, _ in displayTime = player.currentTime }
         .onChange(of: player.volume) { _, newVolume in
             rememberAudibleVolume(newVolume)
+        }
+    }
+
+    @ViewBuilder
+    private var playbackProgressControl: some View {
+        if usesNativeInterface {
+            NativeMacLinearSlider(
+                value: progressBinding,
+                bounds: 0...max(player.duration, 1),
+                trackColor: Color.primary.opacity(0.16),
+                fillColor: Color.primary.opacity(0.86),
+                accessibilityLabel: String(localized: "playback_position"),
+                idleHeight: 5,
+                activeHeight: 10,
+                isEnabled: player.currentSong != nil && player.duration > 0,
+                interaction: .jumpWithGrabSafety,
+                grabRadius: 10,
+                onEditingChanged: handleSeekEditing
+            )
+            .frame(maxWidth: 360)
+        } else {
+            Slider(
+                value: progressBinding,
+                in: 0...max(player.duration, 1),
+                onEditingChanged: handleSeekEditing
+            )
+            .frame(maxWidth: 360)
+            .disabled(player.currentSong == nil || player.duration <= 0)
+        }
+    }
+
+    @ViewBuilder
+    private var volumeControl: some View {
+        if usesNativeInterface {
+            NativeMacLinearSlider(
+                value: volumeBinding,
+                bounds: 0...1,
+                trackColor: Color.primary.opacity(0.16),
+                fillColor: Color.primary.opacity(0.86),
+                accessibilityLabel: String(localized: "volume"),
+                idleHeight: 5,
+                activeHeight: 9,
+                interaction: .jumpWithGrabSafety,
+                grabRadius: 10
+            )
+            .frame(width: 100)
+            .padding(.leading, -4)
+        } else {
+            Slider(value: volumeBinding, in: 0...1)
+                .frame(width: 100)
+                .padding(.leading, -4)
         }
     }
 
@@ -492,6 +701,24 @@ struct PlayerBarView: View {
         )
     }
 
+    private var progressBinding: Binding<Double> {
+        Binding(
+            get: { isDragging ? dragValue : displayTime },
+            set: { dragValue = $0 }
+        )
+    }
+
+    private func handleSeekEditing(_ editing: Bool) {
+        if editing {
+            isDragging = true
+            dragValue = displayTime
+        } else {
+            player.seek(to: dragValue)
+            displayTime = dragValue
+            isDragging = false
+        }
+    }
+
     private var volumeSystemImage: String {
         if player.volume < 0.01 {
             return "speaker.slash.fill"
@@ -525,8 +752,9 @@ struct PlayerBarView: View {
         }
     }
 
-    private static let rightControlSize: CGFloat = 28
-    private static let rightIconSize: CGFloat = 17
+    fileprivate static let rightControlSize: CGFloat = 30
+    fileprivate static let rightIconSize: CGFloat = 17
+    fileprivate static let routePickerSize: CGFloat = 20
     private static let sleepTimerOptions = [15, 30, 45, 60, 90, 120]
 
     private func sleepTimerRowLabel(minutes: Int) -> String {
@@ -558,6 +786,90 @@ struct PlayerBarView: View {
         return String(format: "%d:%02d", m, s)
     }
 
+}
+
+private struct MacPlayerUtilityButton: View {
+    let systemName: String
+    let isActive: Bool
+    let helpText: String
+    var iconSize: CGFloat = PlayerBarView.rightIconSize
+    var weight: Font.Weight = .medium
+    var usesNativeInterface = false
+    let action: () -> Void
+
+    @Environment(\.themeColor) private var themeColor
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .symbolRenderingMode(.monochrome)
+                .font(.system(size: iconSize, weight: weight))
+                .foregroundStyle(foregroundColor)
+                .frame(width: PlayerBarView.rightControlSize, height: PlayerBarView.rightControlSize)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(helpText)
+        .background {
+            if isHovered || (usesNativeInterface && isActive) {
+                RoundedRectangle(cornerRadius: usesNativeInterface ? 9 : 7, style: .continuous)
+                    .fill(Color.primary.opacity(nativeBackgroundOpacity))
+                    .overlay {
+                        if usesNativeInterface {
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .stroke(Color.primary.opacity(0.08), lineWidth: 0.5)
+                        }
+                    }
+            }
+        }
+        .onHover { hovering in
+            isHovered = hovering
+        }
+    }
+
+    private var foregroundColor: Color {
+        if isActive {
+            return usesNativeInterface ? .primary : themeColor
+        }
+        return isHovered ? .primary : .secondary
+    }
+
+    private var nativeBackgroundOpacity: Double {
+        if usesNativeInterface {
+            return isActive ? 0.10 : 0.07
+        }
+        return 0.06
+    }
+}
+
+private struct MacRoutePickerButton: View {
+    var usesNativeInterface = false
+    @State private var isHovered = false
+
+    var body: some View {
+        ZStack {
+            if isHovered {
+                RoundedRectangle(cornerRadius: usesNativeInterface ? 9 : 7, style: .continuous)
+                    .fill(Color.primary.opacity(usesNativeInterface ? 0.07 : 0.06))
+                    .overlay {
+                        if usesNativeInterface {
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .stroke(Color.primary.opacity(0.08), lineWidth: 0.5)
+                        }
+                    }
+            }
+
+            AVRoutePickerViewRepresentable()
+                .frame(width: PlayerBarView.routePickerSize, height: PlayerBarView.routePickerSize)
+        }
+        .frame(width: PlayerBarView.rightControlSize, height: PlayerBarView.rightControlSize)
+        .contentShape(Rectangle())
+        .help(String(localized: "airplay"))
+        .onHover { hovering in
+            isHovered = hovering
+        }
+    }
 }
 
 private struct SleepTimerNativeMenuTrigger: NSViewRepresentable {

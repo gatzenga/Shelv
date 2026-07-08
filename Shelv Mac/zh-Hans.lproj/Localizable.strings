@@ -53,6 +53,10 @@
 "contact" = "联系我们";
 "support_my_work" = "支持我的工作";
 "playback" = "播放";
+"general" = "通用";
+"interface_style" = "界面";
+"mini_player_shelv" = "Shelv";
+"mini_player_native" = "原生";
 "play_pause" = "播放 / 暂停";
 "next_track" = "下一首";
 "previous_track" = "上一首";
@@ -534,6 +538,8 @@
 "cancel_timer" = "取消定时器";
 "mute" = "静音";
 "unmute" = "取消静音";
+"volume" = "音量";
+"playback_position" = "播放位置";
 "minutes_abbreviation" = "分钟";
 "hour_abbreviation" = "小时";
 "primary_url" = "主 URL";

@@ -1,15 +1,6 @@
 import SwiftUI
 import AVKit
 
-private final class PlayerPaletteResult: NSObject {
-    let primary: UIColor
-    let secondary: UIColor?
-    init(_ primary: UIColor, _ secondary: UIColor?) {
-        self.primary = primary
-        self.secondary = secondary
-    }
-}
-
 private struct NativePlayerProgressSlider: View {
     @Binding var value: Double
     let trackColor: Color
@@ -121,12 +112,7 @@ struct PlayerView: View {
     @State private var playerBgPrimary: Color = Color(UIColor.systemBackground)
     @State private var playerBgSecondary: Color = Color(UIColor.systemBackground)
     @State private var activePlayerBackgroundIdentifier: String?
-
-    private static let paletteCache: NSCache<NSString, PlayerPaletteResult> = {
-        let c = NSCache<NSString, PlayerPaletteResult>()
-        c.countLimit = 200
-        return c
-    }()
+    @State private var isPlayerVisible = false
 
     private var currentAlbum: Album? {
         guard let song = player.currentSong, let albumId = song.albumId else { return nil }
@@ -156,19 +142,7 @@ struct PlayerView: View {
         (isDragging || player.isSeeking) ? $seekValue : progressFraction
     }
     private var playerBackgroundIdentifier: String {
-        if player.isRadioPlayback {
-            guard let station = player.currentRadioStation else { return "radio-none" }
-            if station.usesDynamicSongCover,
-               let metadata = player.currentRadioMetadata,
-               trimmedNonEmpty(metadata.artworkURL) != nil {
-                return "radio-art-\(metadata.artworkRevisionToken)"
-            }
-            if let coverArt = trimmedNonEmpty(station.coverArt) {
-                return "radio-cover-\(coverArt)"
-            }
-            return "radio-station-\(station.id)"
-        }
-        return player.currentSong?.coverArt ?? "song-none"
+        PlayerBackgroundPaletteStore.identifier(for: player)
     }
 
     private var radioDisplayItems: [RadioStationDisplayItem] {
@@ -531,8 +505,17 @@ struct PlayerView: View {
                     displayTime = update.time
                     displayDuration = update.duration
                 }
-                .onAppear { displayTime = player.currentTime; displayDuration = player.duration }
-                .onDisappear { artistResolveTask?.cancel(); artistResolveTask = nil }
+                .onAppear {
+                    syncCachedPlayerBackgroundIfAvailable()
+                    isPlayerVisible = true
+                    displayTime = player.currentTime
+                    displayDuration = player.duration
+                }
+                .onDisappear {
+                    isPlayerVisible = false
+                    artistResolveTask?.cancel()
+                    artistResolveTask = nil
+                }
                 .sheet(isPresented: $showQueue) {
                     QueueView()
                         .presentationSizing(.page)
@@ -777,7 +760,7 @@ struct PlayerView: View {
 
     private func updatePlayerBackground() async {
         let key = playerBackgroundIdentifier
-        guard key != "song-none", key != "radio-none" else {
+        guard !PlayerBackgroundPaletteStore.isEmptyIdentifier(key) else {
             activePlayerBackgroundIdentifier = nil
             withAnimation(.easeInOut(duration: 0.5)) {
                 playerBgPrimary = Color(UIColor.systemBackground)
@@ -788,15 +771,11 @@ struct PlayerView: View {
             return
         }
 
+        let alreadyShowingIdentifier = activePlayerBackgroundIdentifier == key && rawPrimary != nil
         activePlayerBackgroundIdentifier = key
 
-        if let hit = Self.paletteCache.object(forKey: key as NSString) {
-            rawPrimary = hit.primary
-            rawSecondary = hit.secondary
-            withAnimation(.easeInOut(duration: 0.6)) {
-                playerBgPrimary = adaptedColor(hit.primary, asSecondary: false)
-                playerBgSecondary = adaptedColor(hit.secondary ?? hit.primary, asSecondary: true)
-            }
+        if let hit = PlayerBackgroundPaletteStore.cachedPalette(for: key) {
+            applyPlayerBackground(hit, animated: isPlayerVisible && !alreadyShowingIdentifier)
             return
         }
 
@@ -811,14 +790,37 @@ struct PlayerView: View {
             }
             return
         }
-        let (primary, secondary) = img.extractPlayerPalette()
+        let (primary, secondary) = img.extractPlayerGradientPalette()
         guard !Task.isCancelled, activePlayerBackgroundIdentifier == key else { return }
-        Self.paletteCache.setObject(PlayerPaletteResult(primary, secondary), forKey: key as NSString)
-        rawPrimary = primary
-        rawSecondary = secondary
-        withAnimation(.easeInOut(duration: 0.6)) {
-            playerBgPrimary = adaptedColor(primary, asSecondary: false)
-            playerBgSecondary = adaptedColor(secondary ?? primary, asSecondary: true)
+        PlayerBackgroundPaletteStore.cache(
+            PlayerBackgroundPalette(primary: primary, secondary: secondary),
+            for: key
+        )
+        applyPlayerBackground(
+            PlayerBackgroundPalette(primary: primary, secondary: secondary),
+            animated: isPlayerVisible
+        )
+    }
+
+    private func syncCachedPlayerBackgroundIfAvailable() {
+        let key = playerBackgroundIdentifier
+        guard let palette = PlayerBackgroundPaletteStore.cachedPalette(for: key) else { return }
+        activePlayerBackgroundIdentifier = key
+        applyPlayerBackground(palette, animated: false)
+    }
+
+    private func applyPlayerBackground(_ palette: PlayerBackgroundPalette, animated: Bool) {
+        let update = {
+            rawPrimary = palette.primary
+            rawSecondary = palette.secondary
+            playerBgPrimary = adaptedColor(palette.primary, asSecondary: false)
+            playerBgSecondary = adaptedColor(palette.secondary ?? palette.primary, asSecondary: true)
+        }
+
+        if animated {
+            withAnimation(.easeInOut(duration: 0.6), update)
+        } else {
+            update()
         }
     }
 
@@ -875,24 +877,7 @@ struct PlayerView: View {
     }
 
     private func adaptedColor(_ uiColor: UIColor, asSecondary: Bool) -> Color {
-        var h: CGFloat = 0, s: CGFloat = 0, v: CGFloat = 0, a: CGFloat = 0
-        uiColor.getHue(&h, saturation: &s, brightness: &v, alpha: &a)
-        let factor: CGFloat = asSecondary ? 0.88 : 1.0
-        if colorScheme == .dark {
-            return Color(UIColor(
-                hue: h,
-                saturation: min(s * 1.2 * factor, 0.90),
-                brightness: min(max(v, 0.35) * 0.82, 0.72),
-                alpha: 1
-            ))
-        } else {
-            return Color(UIColor(
-                hue: h,
-                saturation: min(s * 0.82 * factor, 0.78),
-                brightness: min(v * 0.45 + 0.58, 0.96),
-                alpha: 1
-            ))
-        }
+        PlayerBackgroundPaletteStore.adaptedColor(uiColor, asSecondary: asSecondary, colorScheme: colorScheme)
     }
 
     private func resolveArtist(_ artistName: String) {
@@ -916,13 +901,6 @@ struct PlayerView: View {
 
     private var audioBadge: String? {
         player.actualStreamFormat?.displayString
-    }
-
-    private func trimmedNonEmpty(_ value: String?) -> String? {
-        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !trimmed.isEmpty
-        else { return nil }
-        return trimmed
     }
 
     private func formatTime(_ seconds: Double) -> String {
@@ -1095,128 +1073,5 @@ struct AirPlayButton: UIViewRepresentable {
     func updateUIView(_ uiView: AVRoutePickerView, context: Context) {
         uiView.tintColor = tintColor
         uiView.activeTintColor = activeTintColor
-    }
-}
-
-private extension UIImage {
-    func extractPlayerPalette() -> (UIColor, UIColor?) {
-        // 14 Buckets: 0–11 = Hue (je 30°, s ≥ 0.15), 12 = Dunkel (v < 0.20), 13 = Hell (v > 0.85, s < 0.12)
-        let totalBuckets = 14
-
-        let side = 32
-        let totalPixels = side * side
-        let size = CGSize(width: side, height: side)
-        let renderer = UIGraphicsImageRenderer(size: size)
-        let small = renderer.image { _ in draw(in: CGRect(origin: .zero, size: size)) }
-        guard let cgImage = small.cgImage else { return (.systemGray, nil) }
-
-        var pixels = [UInt8](repeating: 0, count: totalPixels * 4)
-        guard let ctx = CGContext(
-            data: &pixels, width: side, height: side,
-            bitsPerComponent: 8, bytesPerRow: side * 4,
-            space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else { return (.systemGray, nil) }
-        ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: side, height: side))
-
-        var rSum = [CGFloat](repeating: 0, count: totalBuckets)
-        var gSum = [CGFloat](repeating: 0, count: totalBuckets)
-        var bSum = [CGFloat](repeating: 0, count: totalBuckets)
-        var counts = [Int](repeating: 0, count: totalBuckets)
-
-        for i in stride(from: 0, to: pixels.count, by: 4) {
-            let r = CGFloat(pixels[i]) / 255
-            let g = CGFloat(pixels[i+1]) / 255
-            let b = CGFloat(pixels[i+2]) / 255
-
-            var h: CGFloat = 0, s: CGFloat = 0, v: CGFloat = 0, a: CGFloat = 0
-            UIColor(red: r, green: g, blue: b, alpha: 1).getHue(&h, saturation: &s, brightness: &v, alpha: &a)
-
-            let bucket: Int
-            if v < 0.20 {
-                bucket = 12
-            } else if v > 0.85, s < 0.12 {
-                bucket = 13
-            } else if s >= 0.15 {
-                bucket = min(Int(h * 12), 11)
-            } else {
-                continue
-            }
-            rSum[bucket] += r; gSum[bucket] += g; bSum[bucket] += b
-            counts[bucket] += 1
-        }
-
-        func bucketColor(at idx: Int) -> UIColor {
-            let n = CGFloat(counts[idx])
-            return UIColor(red: rSum[idx]/n, green: gSum[idx]/n, blue: bSum[idx]/n, alpha: 1)
-        }
-
-        // Phase 1: chromatische Buckets (0–11) nach Grösse sortieren
-        let chromaticSorted = (0..<12).filter { counts[$0] > 0 }.sorted { counts[$0] > counts[$1] }
-
-        var primary: UIColor
-        var secondary: UIColor? = nil
-
-        if let primaryIdx = chromaticSorted.first {
-            let chromaticColor = bucketColor(at: primaryIdx)
-            let chromaticCount = counts[primaryIdx]
-            let minSecondaryCount = max(3, chromaticCount / 10)
-
-            // Zweite chromatische Farbe suchen (≥60° Hue-Abstand, ≥25% des Primär-Buckets)
-            for candidateIdx in chromaticSorted.dropFirst() {
-                let diff = abs(candidateIdx - primaryIdx)
-                if min(diff, 12 - diff) >= 2, counts[candidateIdx] >= minSecondaryCount {
-                    secondary = bucketColor(at: candidateIdx)
-                    break
-                }
-            }
-
-            if secondary != nil {
-                // Zwei chromatische Farben → Chroma bleibt Primär
-                primary = chromaticColor
-            } else {
-                // Neutral-Fallback: wer mehr Pixel hat, wird Primär
-                let darkCount = counts[12]
-                let lightCount = counts[13]
-                let neutralIdx = darkCount >= lightCount ? 12 : 13
-                let neutralCount = max(darkCount, lightCount)
-                if neutralCount > 0 {
-                    if neutralCount > chromaticCount {
-                        primary = bucketColor(at: neutralIdx)
-                        secondary = chromaticColor
-                    } else {
-                        primary = chromaticColor
-                        secondary = bucketColor(at: neutralIdx)
-                    }
-                } else {
-                    primary = chromaticColor
-                }
-            }
-        } else {
-            // Kein Chroma überhaupt → Dark vs Light
-            let darkCount = counts[12]
-            let lightCount = counts[13]
-            if darkCount >= lightCount {
-                primary = darkCount > 0 ? bucketColor(at: 12) : .systemGray
-                secondary = lightCount > 0 ? bucketColor(at: 13) : nil
-            } else {
-                primary = bucketColor(at: 13)
-                secondary = darkCount > 0 ? bucketColor(at: 12) : nil
-            }
-        }
-
-        // Letzter Fallback: tonale Variante der Primärfarbe
-        if secondary == nil {
-            var h: CGFloat = 0, s: CGFloat = 0, v: CGFloat = 0, a: CGFloat = 0
-            primary.getHue(&h, saturation: &s, brightness: &v, alpha: &a)
-            secondary = UIColor(
-                hue: h,
-                saturation: min(s * 0.8, 1.0),
-                brightness: max(v * 0.45, 0.10),
-                alpha: 1
-            )
-        }
-
-        return (primary, secondary)
     }
 }

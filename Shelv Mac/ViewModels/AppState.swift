@@ -37,6 +37,14 @@ class AppState: ObservableObject {
         activePanel = .songInfo
     }
 
+    func closePanel(_ panel: SidePanel) {
+        guard activePanel == panel else { return }
+        activePanel = nil
+        if panel == .songInfo {
+            songInfoSong = nil
+        }
+    }
+
     func closeSongInfo() {
         if activePanel == .songInfo {
             activePanel = nil

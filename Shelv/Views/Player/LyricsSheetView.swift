@@ -164,7 +164,9 @@ struct LyricsSheetView: View {
             VStack(spacing: 0) {
                 lyricsContent
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                Divider()
+                if !usesNativeInterface {
+                    Divider()
+                }
                 bottomControls
             }
         }

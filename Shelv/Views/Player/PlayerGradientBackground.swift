@@ -6,13 +6,78 @@ private func trimmedNonEmpty(_ value: String?) -> String? {
     return trimmed.isEmpty ? nil : trimmed
 }
 
-private final class PlayerGradientPaletteResult: NSObject {
+struct PlayerBackgroundPalette {
     let primary: UIColor
     let secondary: UIColor?
+}
 
-    init(_ primary: UIColor, _ secondary: UIColor?) {
-        self.primary = primary
-        self.secondary = secondary
+private final class PlayerBackgroundPaletteResult: NSObject {
+    let palette: PlayerBackgroundPalette
+
+    init(_ palette: PlayerBackgroundPalette) {
+        self.palette = palette
+    }
+}
+
+enum PlayerBackgroundPaletteStore {
+    private static let paletteCache: NSCache<NSString, PlayerBackgroundPaletteResult> = {
+        let cache = NSCache<NSString, PlayerBackgroundPaletteResult>()
+        cache.countLimit = 200
+        return cache
+    }()
+
+    static func identifier(for player: AudioPlayerService) -> String {
+        if player.isRadioPlayback {
+            guard let station = player.currentRadioStation else { return "radio-none" }
+            if station.usesDynamicSongCover,
+               let metadata = player.currentRadioMetadata,
+               trimmedNonEmpty(metadata.artworkURL) != nil {
+                return "radio-art-\(metadata.artworkRevisionToken)"
+            }
+            if let coverArt = trimmedNonEmpty(station.coverArt) {
+                return "radio-cover-\(coverArt)"
+            }
+            return "radio-station-\(station.id)"
+        }
+        return player.currentSong?.coverArt ?? "song-none"
+    }
+
+    static func isEmptyIdentifier(_ identifier: String) -> Bool {
+        identifier == "song-none" || identifier == "radio-none"
+    }
+
+    static func cachedPalette(for identifier: String) -> PlayerBackgroundPalette? {
+        guard !isEmptyIdentifier(identifier) else { return nil }
+        return paletteCache.object(forKey: identifier as NSString)?.palette
+    }
+
+    static func cache(_ palette: PlayerBackgroundPalette, for identifier: String) {
+        guard !isEmptyIdentifier(identifier) else { return }
+        paletteCache.setObject(PlayerBackgroundPaletteResult(palette), forKey: identifier as NSString)
+    }
+
+    static func adaptedColor(_ uiColor: UIColor, asSecondary: Bool, colorScheme: ColorScheme) -> Color {
+        var h: CGFloat = 0
+        var s: CGFloat = 0
+        var v: CGFloat = 0
+        var a: CGFloat = 0
+        uiColor.getHue(&h, saturation: &s, brightness: &v, alpha: &a)
+        let factor: CGFloat = asSecondary ? 0.88 : 1.0
+        if colorScheme == .dark {
+            return Color(UIColor(
+                hue: h,
+                saturation: min(s * 1.2 * factor, 0.90),
+                brightness: min(max(v, 0.35) * 0.82, 0.72),
+                alpha: 1
+            ))
+        } else {
+            return Color(UIColor(
+                hue: h,
+                saturation: min(s * 0.82 * factor, 0.78),
+                brightness: min(v * 0.45 + 0.58, 0.96),
+                alpha: 1
+            ))
+        }
     }
 }
 
@@ -22,15 +87,15 @@ struct PlayerGradientBackground: View {
 
     @State private var rawPrimary: UIColor?
     @State private var rawSecondary: UIColor?
-    @State private var primaryColor = Color(UIColor.systemBackground)
-    @State private var secondaryColor = Color(UIColor.systemBackground)
     @State private var activeIdentifier: String?
 
-    private static let paletteCache: NSCache<NSString, PlayerGradientPaletteResult> = {
-        let cache = NSCache<NSString, PlayerGradientPaletteResult>()
-        cache.countLimit = 200
-        return cache
-    }()
+    init() {
+        let identifier = PlayerBackgroundPaletteStore.identifier(for: AudioPlayerService.shared)
+        let palette = PlayerBackgroundPaletteStore.cachedPalette(for: identifier)
+        _rawPrimary = State(initialValue: palette?.primary)
+        _rawSecondary = State(initialValue: palette?.secondary)
+        _activeIdentifier = State(initialValue: palette == nil ? nil : identifier)
+    }
 
     var body: some View {
         LinearGradient(
@@ -47,51 +112,36 @@ struct PlayerGradientBackground: View {
         .task(id: backgroundIdentifier) {
             await updateBackground()
         }
-        .onChange(of: colorScheme) { _, _ in
-            guard let rawPrimary else { return }
-            primaryColor = adaptedColor(rawPrimary, asSecondary: false)
-            secondaryColor = adaptedColor(rawSecondary ?? rawPrimary, asSecondary: true)
-        }
+    }
+
+    private var primaryColor: Color {
+        guard let rawPrimary else { return Color(UIColor.systemBackground) }
+        return PlayerBackgroundPaletteStore.adaptedColor(rawPrimary, asSecondary: false, colorScheme: colorScheme)
+    }
+
+    private var secondaryColor: Color {
+        guard let rawPrimary else { return Color(UIColor.systemBackground) }
+        return PlayerBackgroundPaletteStore.adaptedColor(rawSecondary ?? rawPrimary, asSecondary: true, colorScheme: colorScheme)
     }
 
     private var backgroundIdentifier: String {
-        if player.isRadioPlayback {
-            guard let station = player.currentRadioStation else { return "radio-none" }
-            if station.usesDynamicSongCover,
-               let metadata = player.currentRadioMetadata,
-               trimmedNonEmpty(metadata.artworkURL) != nil {
-                return "radio-art-\(metadata.artworkRevisionToken)"
-            }
-            if let coverArt = trimmedNonEmpty(station.coverArt) {
-                return "radio-cover-\(coverArt)"
-            }
-            return "radio-station-\(station.id)"
-        }
-        return player.currentSong?.coverArt ?? "song-none"
+        PlayerBackgroundPaletteStore.identifier(for: player)
     }
 
     private func updateBackground() async {
         let identifier = backgroundIdentifier
-        guard identifier != "song-none", identifier != "radio-none" else {
+        guard !PlayerBackgroundPaletteStore.isEmptyIdentifier(identifier) else {
             activeIdentifier = nil
             rawPrimary = nil
             rawSecondary = nil
-            withAnimation(.easeInOut(duration: 0.5)) {
-                primaryColor = Color(UIColor.systemBackground)
-                secondaryColor = Color(UIColor.systemBackground)
-            }
             return
         }
 
+        let alreadyShowingIdentifier = activeIdentifier == identifier && rawPrimary != nil
         activeIdentifier = identifier
 
-        if let hit = Self.paletteCache.object(forKey: identifier as NSString) {
-            rawPrimary = hit.primary
-            rawSecondary = hit.secondary
-            withAnimation(.easeInOut(duration: 0.6)) {
-                primaryColor = adaptedColor(hit.primary, asSecondary: false)
-                secondaryColor = adaptedColor(hit.secondary ?? hit.primary, asSecondary: true)
-            }
+        if let hit = PlayerBackgroundPaletteStore.cachedPalette(for: identifier) {
+            apply(hit, animated: !alreadyShowingIdentifier)
             return
         }
 
@@ -100,22 +150,27 @@ struct PlayerGradientBackground: View {
         guard let image else {
             rawPrimary = nil
             rawSecondary = nil
-            withAnimation(.easeInOut(duration: 0.5)) {
-                primaryColor = Color(UIColor.systemBackground)
-                secondaryColor = Color(UIColor.systemBackground)
-            }
             return
         }
 
         let (primary, secondary) = image.extractPlayerGradientPalette()
         guard !Task.isCancelled, activeIdentifier == identifier else { return }
 
-        Self.paletteCache.setObject(PlayerGradientPaletteResult(primary, secondary), forKey: identifier as NSString)
-        rawPrimary = primary
-        rawSecondary = secondary
-        withAnimation(.easeInOut(duration: 0.6)) {
-            primaryColor = adaptedColor(primary, asSecondary: false)
-            secondaryColor = adaptedColor(secondary ?? primary, asSecondary: true)
+        let palette = PlayerBackgroundPalette(primary: primary, secondary: secondary)
+        PlayerBackgroundPaletteStore.cache(palette, for: identifier)
+        apply(palette, animated: true)
+    }
+
+    private func apply(_ palette: PlayerBackgroundPalette, animated: Bool) {
+        let update = {
+            rawPrimary = palette.primary
+            rawSecondary = palette.secondary
+        }
+
+        if animated {
+            withAnimation(.easeInOut(duration: 0.6), update)
+        } else {
+            update()
         }
     }
 
@@ -168,32 +223,9 @@ struct PlayerGradientBackground: View {
         return nil
     }
 
-    private func adaptedColor(_ uiColor: UIColor, asSecondary: Bool) -> Color {
-        var h: CGFloat = 0
-        var s: CGFloat = 0
-        var v: CGFloat = 0
-        var a: CGFloat = 0
-        uiColor.getHue(&h, saturation: &s, brightness: &v, alpha: &a)
-        let factor: CGFloat = asSecondary ? 0.88 : 1.0
-        if colorScheme == .dark {
-            return Color(UIColor(
-                hue: h,
-                saturation: min(s * 1.2 * factor, 0.90),
-                brightness: min(max(v, 0.35) * 0.82, 0.72),
-                alpha: 1
-            ))
-        } else {
-            return Color(UIColor(
-                hue: h,
-                saturation: min(s * 0.82 * factor, 0.78),
-                brightness: min(v * 0.45 + 0.58, 0.96),
-                alpha: 1
-            ))
-        }
-    }
 }
 
-private extension UIImage {
+extension UIImage {
     func extractPlayerGradientPalette() -> (UIColor, UIColor?) {
         let totalBuckets = 14
         let side = 32

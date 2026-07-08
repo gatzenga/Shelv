@@ -18,6 +18,7 @@ struct Shelv_DesktopApp: App {
 
     init() {
         NSWindow.allowsAutomaticWindowTabbing = false
+        // AAC-Transcoding bleibt deaktiviert — Migration falls vorher gesetzt.
         let d = UserDefaults.standard
         if d.string(forKey: "transcodingWifiCodec") == "aac" { d.set("raw", forKey: "transcodingWifiCodec") }
         if d.string(forKey: "transcodingCellularCodec") == "aac" { d.set("raw", forKey: "transcodingCellularCodec") }
@@ -54,7 +55,7 @@ struct Shelv_DesktopApp: App {
                 .environmentObject(LibraryViewModel.shared)
                 .environmentObject(DownloadStore.shared)
                 .environmentObject(OfflineModeService.shared)
-                .frame(minWidth: 760, minHeight: 600)
+                .frame(minWidth: 1000, minHeight: 600)
                 .task { await LyricsStore.shared.setup() }
                 .task {
                     Task.detached(priority: .utility) {

@@ -132,7 +132,7 @@ struct MainWindowView: View {
                 if appState.activePanel != nil {
                     Divider()
                     sidePanelContent
-                        .frame(width: 380)
+                        .frame(width: 410)
                         .frame(maxHeight: .infinity)
                         .background(Color(NSColor.windowBackgroundColor))
                         .transition(.move(edge: .trailing))

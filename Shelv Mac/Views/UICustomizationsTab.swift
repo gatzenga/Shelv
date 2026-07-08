@@ -1,26 +1,22 @@
 import SwiftUI
 
 struct UICustomizationsTab: View {
-    @State private var section: CustomizationSection = .discover
+    @State private var section: CustomizationSection = .general
 
     private enum CustomizationSection: String, CaseIterable, Identifiable {
+        case general
         case discover
         case playlists
         case favorites
-        case instantMix
-        case radio
-        case genre
 
         var id: String { rawValue }
 
         var title: String {
             switch self {
+            case .general: return String(localized: "general")
             case .discover: return String(localized: "discover")
             case .playlists: return String(localized: "playlists")
             case .favorites: return String(localized: "favorites")
-            case .instantMix: return String(localized: "instant_mix")
-            case .radio: return String(localized: "radio")
-            case .genre: return String(localized: "genre")
             }
         }
     }
@@ -41,12 +37,10 @@ struct UICustomizationsTab: View {
 
             Group {
                 switch section {
+                case .general: MacGeneralPersonalizationPanel()
                 case .discover: MacDiscoveryPersonalizationPanel()
                 case .playlists: MacPlaylistsPersonalizationPanel()
                 case .favorites: MacFavoritesPersonalizationPanel()
-                case .instantMix: MacInstantMixPersonalizationPanel()
-                case .radio: MacRadioPersonalizationPanel()
-                case .genre: MacGenrePersonalizationPanel()
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -156,6 +150,53 @@ private func localized(_ key: String) -> String {
     NSLocalizedString(key, comment: "")
 }
 
+private struct MacGeneralPersonalizationPanel: View {
+    @AppStorage(PersonalizationPreferenceKey.miniPlayerStyle) private var miniPlayerStyleRaw = PersonalizationMiniPlayerStyle.shelv.rawValue
+    @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
+    @AppStorage(PersonalizationPreferenceKey.showRadio) private var showRadio = true
+    @AppStorage(PersonalizationPreferenceKey.showGenreFilter) private var showGenreFilter = true
+    @Environment(\.themeColor) private var themeColor
+
+    var body: some View {
+        Form {
+            Section(String(localized: "interface_style")) {
+                Picker(selection: $miniPlayerStyleRaw) {
+                    ForEach(PersonalizationMiniPlayerStyle.allCases, id: \.self) { style in
+                        Label(localized(style.titleKey), systemImage: style.systemImage)
+                            .tag(style.rawValue)
+                    }
+                } label: {
+                    Label(String(localized: "interface_style"), systemImage: "play.rectangle")
+                }
+                .pickerStyle(.segmented)
+            }
+
+            Section {
+                Toggle(isOn: $showInstantMixActions) {
+                    Label(String(localized: "show_instant_mix_actions"), systemImage: "sparkles")
+                }
+                .tint(themeColor)
+
+                Toggle(isOn: $showRadio) {
+                    Label(String(localized: "show_radio"), systemImage: "dot.radiowaves.left.and.right")
+                }
+                .tint(themeColor)
+
+                Toggle(isOn: $showGenreFilter) {
+                    Label(String(localized: "show_genre"), systemImage: "guitars")
+                }
+                .tint(themeColor)
+            }
+        }
+        .formStyle(.grouped)
+        .onChange(of: showGenreFilter) { _, enabled in
+            if !enabled {
+                PersonalizationSettings.clearAlbumGenreFilter()
+            }
+        }
+    }
+}
+
 private struct MacFavoritesPersonalizationPanel: View {
     @AppStorage(PersonalizationPreferenceKey.showFavoritesInLibrary) private var showFavoritesInLibrary = true
     @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
@@ -176,61 +217,5 @@ private struct MacFavoritesPersonalizationPanel: View {
             }
         }
         .formStyle(.grouped)
-    }
-}
-
-private struct MacInstantMixPersonalizationPanel: View {
-    @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
-    @Environment(\.themeColor) private var themeColor
-
-    var body: some View {
-        Form {
-            Section {
-                Toggle(isOn: $showInstantMixActions) {
-                    Label(String(localized: "show_instant_mix_actions"), systemImage: "sparkles")
-                }
-                .tint(themeColor)
-            }
-        }
-        .formStyle(.grouped)
-    }
-}
-
-private struct MacRadioPersonalizationPanel: View {
-    @AppStorage(PersonalizationPreferenceKey.showRadio) private var showRadio = true
-    @Environment(\.themeColor) private var themeColor
-
-    var body: some View {
-        Form {
-            Section {
-                Toggle(isOn: $showRadio) {
-                    Label(String(localized: "show_radio"), systemImage: "dot.radiowaves.left.and.right")
-                }
-                .tint(themeColor)
-            }
-        }
-        .formStyle(.grouped)
-    }
-}
-
-private struct MacGenrePersonalizationPanel: View {
-    @AppStorage(PersonalizationPreferenceKey.showGenreFilter) private var showGenreFilter = true
-    @Environment(\.themeColor) private var themeColor
-
-    var body: some View {
-        Form {
-            Section {
-                Toggle(isOn: $showGenreFilter) {
-                    Label(String(localized: "show_genre"), systemImage: "guitars")
-                }
-                .tint(themeColor)
-            }
-        }
-        .formStyle(.grouped)
-        .onChange(of: showGenreFilter) { _, enabled in
-            if !enabled {
-                PersonalizationSettings.clearAlbumGenreFilter()
-            }
-        }
     }
 }

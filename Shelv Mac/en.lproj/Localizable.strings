@@ -53,6 +53,10 @@
 "contact" = "Contact";
 "support_my_work" = "Support my work";
 "playback" = "Playback";
+"general" = "General";
+"interface_style" = "Interface";
+"mini_player_shelv" = "Shelv";
+"mini_player_native" = "Native";
 "play_pause" = "Play / Pause";
 "next_track" = "Next Track";
 "previous_track" = "Previous Track";
@@ -534,6 +538,8 @@
 "cancel_timer" = "Cancel Timer";
 "mute" = "Mute";
 "unmute" = "Unmute";
+"volume" = "Volume";
+"playback_position" = "Playback position";
 "minutes_abbreviation" = "min";
 "hour_abbreviation" = "hr";
 "primary_url" = "Primary URL";

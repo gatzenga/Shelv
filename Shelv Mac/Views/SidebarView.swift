@@ -159,7 +159,7 @@ struct SidebarView: View {
         .padding(.horizontal, 8)
         .padding(.top, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 290)
+        .navigationSplitViewColumnWidth(min: 190, ideal: 235, max: 310)
         .task {
             if showFavoritesInLibrary && libraryStore.starredAlbums.isEmpty {
                 await libraryStore.loadStarred()

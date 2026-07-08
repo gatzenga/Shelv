@@ -9,6 +9,7 @@ private struct QueueEntry: Identifiable {
 
 struct QueuePopover: View {
     private let player = AudioPlayerService.shared
+    @EnvironmentObject private var appState: AppState
     @Environment(\.themeColor) private var themeColor
     @State private var showClearConfirm = false
     @State private var isEditing = false
@@ -111,18 +112,24 @@ struct QueuePopover: View {
                     }
                 }
                 Spacer()
-                if hasUpcoming {
-                    Button(isEditing ? String(localized: "done") : String(localized: "edit")) {
-                        isEditing.toggle()
-                    }
-                    .font(.caption)
-                    .foregroundStyle(isEditing ? themeColor : .secondary)
-                    .buttonStyle(.plain)
-
-                    Button(String(localized: "clear")) { showClearConfirm = true }
+                HStack(spacing: 8) {
+                    if hasUpcoming {
+                        Button(isEditing ? String(localized: "done") : String(localized: "edit")) {
+                            isEditing.toggle()
+                        }
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(isEditing ? themeColor : .secondary)
                         .buttonStyle(.plain)
+
+                        Button(String(localized: "clear")) { showClearConfirm = true }
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .buttonStyle(.plain)
+                    }
+
+                    MacSidePanelCloseButton {
+                        appState.closePanel(.queue)
+                    }
                 }
             }
             .padding(.horizontal, 14)

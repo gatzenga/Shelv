@@ -80,15 +80,9 @@ struct SongInfoPanel: View {
     }
 
     private var closeButton: some View {
-        Button {
+        MacSidePanelCloseButton {
             appState.closeSongInfo()
-        } label: {
-            Image(systemName: "xmark.circle.fill")
-                .font(.title3)
-                .foregroundStyle(.secondary)
         }
-        .buttonStyle(.plain)
-        .help(String(localized: "done"))
     }
 
     private var tabPicker: some View {

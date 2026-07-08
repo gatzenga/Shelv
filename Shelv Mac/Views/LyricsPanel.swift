@@ -5,6 +5,7 @@ private let lyricsHighlightAnimationDuration = 0.12
 private let lyricsHighlightRenderLeadMs = 70
 private let lyricsHighlightLeadMs = Int(lyricsHighlightAnimationDuration * 1000) + lyricsHighlightRenderLeadMs
 private let lyricsStandardActiveLineAnchor = UnitPoint(x: 0.5, y: 0.2)
+private let lyricsNativeActiveLineAnchor = UnitPoint(x: 0.5, y: 0.12)
 
 private struct LyricLine: Identifiable {
     let id: Int
@@ -48,10 +49,77 @@ private struct LyricLineRow: View {
     }
 }
 
+private struct NativeLyricLineRow: View {
+    let line: LyricLine
+    let isActive: Bool
+    let distance: Int
+    let onTap: () -> Void
+
+    private var opacity: Double {
+        switch distance {
+        case 0:
+            return 1.0
+        case 1:
+            return 0.58
+        case 2:
+            return 0.36
+        default:
+            return 0.22
+        }
+    }
+
+    private var blurRadius: CGFloat {
+        switch distance {
+        case 0:
+            return 0
+        case 1:
+            return 0.35
+        case 2:
+            return 1.1
+        default:
+            return 2.1
+        }
+    }
+
+    var body: some View {
+        Button(action: onTap) {
+            Text(line.text)
+                .font(.system(size: 22, weight: .bold))
+                .lineSpacing(4)
+                .foregroundStyle(Color.primary.opacity(opacity))
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .blur(radius: blurRadius)
+                .contentShape(Rectangle())
+                .padding(.vertical, 5)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(line.text)
+        .accessibilityAddTraits(.isButton)
+        .animation(.easeInOut(duration: lyricsHighlightAnimationDuration), value: isActive)
+        .animation(.easeInOut(duration: lyricsHighlightAnimationDuration), value: distance)
+    }
+}
+
+private struct NativePlainLyricLine: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 20, weight: .semibold))
+            .lineSpacing(5)
+            .foregroundStyle(Color.primary.opacity(0.86))
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
 struct LyricsPanel: View {
     @ObservedObject private var player = AudioPlayerService.shared
     @EnvironmentObject var lyricsStore: LyricsStore
+    @EnvironmentObject private var appState: AppState
     @Environment(\.themeColor) private var themeColor
+    @AppStorage(PersonalizationPreferenceKey.miniPlayerStyle) private var interfaceStyleRaw = PersonalizationMiniPlayerStyle.shelv.rawValue
 
     @State private var parsedLines: [LyricLine] = []
     @State private var activeLineIndex: Int? = nil
@@ -73,26 +141,30 @@ struct LyricsPanel: View {
     @State private var standardPreparedLineIndex: Int?
     @State private var standardPreparedScrollDuration: Double = 0.38
 
+    private var usesNativeInterface: Bool {
+        PersonalizationMiniPlayerStyle(rawValue: interfaceStyleRaw) == .native
+    }
+
     var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text(String(localized: "lyrics"))
-                    .font(.headline)
-                Spacer()
-                if let source = lyricsStore.currentLyrics?.source, source != "none" {
-                    Text(source)
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                        .textCase(.uppercase)
+        Group {
+            if usesNativeInterface {
+                ZStack(alignment: .topTrailing) {
+                    lyricsContent
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                    nativePanelControls
+                        .padding(.top, 12)
+                        .padding(.trailing, 14)
+                }
+            } else {
+                VStack(spacing: 0) {
+                    header
+
+                    Divider()
+
+                    lyricsContent
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
-            .padding(.bottom, 8)
-
-            Divider()
-
-            lyricsContent
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
@@ -141,24 +213,94 @@ struct LyricsPanel: View {
         }
     }
 
+    private var header: some View {
+        HStack {
+            Text(String(localized: "lyrics"))
+                .font(.headline)
+            Spacer()
+            if let source = lyricsStore.currentLyrics?.source, source != "none" {
+                Text(source)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .textCase(.uppercase)
+            }
+            MacSidePanelCloseButton {
+                appState.closePanel(.lyrics)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+        .padding(.bottom, 8)
+    }
+
+    private var nativePanelControls: some View {
+        HStack(spacing: 8) {
+            if let source = lyricsStore.currentLyrics?.source, source != "none" {
+                Text(source)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .textCase(.uppercase)
+            }
+            MacSidePanelCloseButton {
+                appState.closePanel(.lyrics)
+            }
+        }
+    }
+
     // MARK: - Content
 
     @ViewBuilder
     private var lyricsContent: some View {
         if lyricsStore.isLoadingLyrics {
-            placeholderView(icon: nil, isLoading: true, text: "")
+            if usesNativeInterface {
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                placeholderView(icon: nil, isLoading: true, text: "")
+            }
         } else if let record = lyricsStore.currentLyrics {
-            if record.isInstrumental {
-                placeholderView(icon: "pianokeys", isLoading: false, text: String(localized: "instrumental"))
-            } else if record.isSynced, !parsedLines.isEmpty {
-                syncedView
-            } else if let plain = plainText(for: record) {
-                plainView(plain)
+            content(for: record)
+        } else {
+            if usesNativeInterface {
+                nativePlaceholderView(icon: "text.page.slash", text: String(localized: "no_lyrics_available"))
             } else {
                 placeholderView(icon: "text.page.slash", isLoading: false, text: String(localized: "no_lyrics_available"))
             }
+        }
+    }
+
+    @ViewBuilder
+    private func content(for record: LyricsRecord) -> some View {
+        if usesNativeInterface {
+            nativeContent(for: record)
+        } else {
+            shelvContent(for: record)
+        }
+    }
+
+    @ViewBuilder
+    private func shelvContent(for record: LyricsRecord) -> some View {
+        if record.isInstrumental {
+            placeholderView(icon: "pianokeys", isLoading: false, text: String(localized: "instrumental"))
+        } else if record.isSynced, !parsedLines.isEmpty {
+            syncedView
+        } else if let plain = plainText(for: record) {
+            plainView(plain)
         } else {
             placeholderView(icon: "text.page.slash", isLoading: false, text: String(localized: "no_lyrics_available"))
+        }
+    }
+
+    @ViewBuilder
+    private func nativeContent(for record: LyricsRecord) -> some View {
+        if record.isInstrumental {
+            nativePlaceholderView(icon: "pianokeys", text: String(localized: "instrumental"))
+        } else if record.isSynced, !parsedLines.isEmpty {
+            nativeSyncedView
+        } else if let plain = plainText(for: record) {
+            nativePlainView(plain)
+        } else {
+            nativePlaceholderView(icon: "text.page.slash", text: String(localized: "no_lyrics_available"))
         }
     }
 
@@ -174,6 +316,18 @@ struct LyricsPanel: View {
                     .font(.callout)
                     .foregroundStyle(.tertiary)
             }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func nativePlaceholderView(icon: String, text: String) -> some View {
+        VStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 48))
+                .foregroundStyle(.secondary)
+            Text(text)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -194,6 +348,22 @@ struct LyricsPanel: View {
             }
             .padding(.vertical, 12)
         }
+    }
+
+    private func nativePlainView(_ plain: String) -> some View {
+        let lines = lyricTextLines(from: plain)
+        return ScrollView {
+            LazyVStack(alignment: .leading, spacing: 14) {
+                ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                    NativePlainLyricLine(text: line)
+                }
+            }
+            .padding(.horizontal, 28)
+            .padding(.top, 44)
+            .padding(.bottom, 60)
+        }
+        .scrollIndicators(.hidden)
+        .mask { nativeLyricsFadeMask }
     }
 
     // MARK: - Synced lyrics
@@ -244,7 +414,8 @@ struct LyricsPanel: View {
             .onChange(of: standardPreparedLineIndex) { _, index in
                 guard !isUserScrolling,
                       let index,
-                      parsedLines.indices.contains(index) else { return }
+                      parsedLines.indices.contains(index),
+                      !usesNativeInterface else { return }
 
                 withAnimation(.easeOut(duration: standardPreparedScrollDuration)) {
                     proxy.scrollTo(parsedLines[index].id, anchor: lyricsStandardActiveLineAnchor)
@@ -268,6 +439,93 @@ struct LyricsPanel: View {
                 }
             }
         }
+    }
+
+    private var nativeSyncedView: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 14) {
+                    ForEach(Array(parsedLines.enumerated()), id: \.element.id) { index, line in
+                        let isActive = visualActiveLineIndex == index
+                        let distance = visualActiveLineIndex.map { abs(index - $0) } ?? 0
+                        NativeLyricLineRow(
+                            line: line,
+                            isActive: isActive,
+                            distance: distance,
+                            onTap: {
+                                let seconds = Double(line.timeMs) / 1000.0
+                                player.seek(to: seconds)
+                                syncPlaybackClock(time: seconds)
+                                updateActiveIndex()
+                                visualActiveLineIndex = index
+                                isUserScrolling = false
+                                withAnimation(.easeOut(duration: 0.14)) {
+                                    proxy.scrollTo(line.id, anchor: lyricsNativeActiveLineAnchor)
+                                }
+                            }
+                        )
+                        .id(line.id)
+                    }
+                }
+                .padding(.horizontal, 28)
+                .padding(.top, 44)
+                .padding(.bottom, 60)
+            }
+            .scrollIndicators(.hidden)
+            .mask { nativeLyricsFadeMask }
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 1)
+                    .onChanged { _ in pauseAutoScroll() }
+            )
+            .overlay {
+                MacLyricsScrollActivityObserver(onScroll: pauseAutoScroll)
+                    .allowsHitTesting(false)
+            }
+            .onAppear {
+                focusCurrentLineSoon(proxy: proxy, anchor: lyricsNativeActiveLineAnchor)
+            }
+            .onChange(of: initialFocusRequest) { _, _ in
+                guard !isUserScrolling else { return }
+                focusCurrentLineSoon(proxy: proxy, anchor: lyricsNativeActiveLineAnchor)
+            }
+            .onChange(of: activeLineIndex) { _, index in
+                guard !isUserScrolling, let index, index < parsedLines.count else { return }
+                withAnimation(.easeOut(duration: 0.14)) {
+                    proxy.scrollTo(parsedLines[index].id, anchor: lyricsNativeActiveLineAnchor)
+                }
+            }
+            .onChange(of: visualActiveLineIndex) { _, index in
+                guard !isUserScrolling,
+                      let index,
+                      parsedLines.indices.contains(index) else { return }
+
+                withAnimation(.easeOut(duration: 0.18)) {
+                    proxy.scrollTo(parsedLines[index].id, anchor: lyricsNativeActiveLineAnchor)
+                }
+            }
+            .onChange(of: autoScrollRefocusRequest) { _, _ in
+                guard !isUserScrolling,
+                      let index = activeLineIndex,
+                      parsedLines.indices.contains(index) else { return }
+
+                withAnimation(.easeOut(duration: 0.18)) {
+                    proxy.scrollTo(parsedLines[index].id, anchor: lyricsNativeActiveLineAnchor)
+                }
+            }
+        }
+    }
+
+    private var nativeLyricsFadeMask: some View {
+        LinearGradient(
+            stops: [
+                .init(color: .clear, location: 0.0),
+                .init(color: .black, location: 0.08),
+                .init(color: .black, location: 0.84),
+                .init(color: .clear, location: 1.0)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
     }
 
     // MARK: - Logic
