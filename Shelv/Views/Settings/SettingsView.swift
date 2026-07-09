@@ -1,4 +1,7 @@
 import SwiftUI
+#if os(iOS)
+import UIKit
+#endif
 
 private enum SettingsRoute: Hashable {
     case uiCustomizations
@@ -17,6 +20,7 @@ struct SettingsView: View {
     @State private var managingServer: SubsonicServer?
     @State private var showDeleteConfirm = false
     @State private var serverToDelete: SubsonicServer?
+    @State private var showAboutRecap = false
     @Binding private var path: NavigationPath
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
@@ -70,6 +74,16 @@ struct SettingsView: View {
                     .tint(accentColor)
 
                     if recapEnabled {
+                        Button {
+                            showAboutRecap = true
+                        } label: {
+                            Label {
+                                Text(String(localized: "about")).foregroundStyle(.primary)
+                            } icon: {
+                                Image(systemName: "info.circle").foregroundStyle(accentColor)
+                            }
+                        }
+
                         NavigationLink(destination:
                             RecapSettingsView()
                                 .environmentObject(serverStore)
@@ -236,6 +250,9 @@ struct SettingsView: View {
                     UICustomizationsSettingsView()
                 }
             }
+            .sheet(isPresented: $showAboutRecap) {
+                RecapAboutSheet()
+            }
             .sheet(isPresented: $showAddServer) {
                 AddServerView()
                     .environmentObject(serverStore)
@@ -370,6 +387,7 @@ private struct UICustomizationsSettingsView: View {
     @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     @AppStorage(PersonalizationPreferenceKey.showRadio) private var showRadio = true
     @AppStorage(PersonalizationPreferenceKey.showGenreFilter) private var showGenreFilter = true
+    @AppStorage(PersonalizationPreferenceKey.showDiscoverAirPlay) private var showDiscoverAirPlay = false
     @AppStorage(PersonalizationPreferenceKey.miniPlayerStyle) private var miniPlayerStyleRaw = PersonalizationMiniPlayerStyle.shelv.rawValue
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
@@ -420,6 +438,13 @@ private struct UICustomizationsSettingsView: View {
                 Toggle(isOn: $showGenreFilter) {
                     Label { Text(String(localized: "show_genre")) } icon: {
                         Image(systemName: "guitars").foregroundStyle(accentColor)
+                    }
+                }
+                .tint(accentColor)
+
+                Toggle(isOn: $showDiscoverAirPlay) {
+                    Label { Text(String(localized: "show_airplay_on_discover")) } icon: {
+                        Image(systemName: "airplayaudio").foregroundStyle(accentColor)
                     }
                 }
                 .tint(accentColor)
@@ -633,12 +658,9 @@ private struct UISwipeActionsSettingsView: View {
             }
 
             Section {
-                Button {
+                ResetDefaultsButton(accentColor: accentColor) {
                     PersonalizationSettings.resetSwipeActions()
-                } label: {
-                    Label(String(localized: "reset_to_defaults"), systemImage: "arrow.counterclockwise")
                 }
-                .foregroundStyle(accentColor)
             }
         }
         .navigationTitle(String(localized: "swipe_actions"))
@@ -675,12 +697,9 @@ private struct UISwipeActionGroupSettingsView: View {
             }
 
             Section {
-                Button {
+                ResetDefaultsButton(accentColor: accentColor) {
                     PersonalizationSettings.resetSwipeActions(for: group)
-                } label: {
-                    Label(String(localized: "reset_to_defaults"), systemImage: "arrow.counterclockwise")
                 }
-                .foregroundStyle(accentColor)
             }
         }
         .navigationTitle(localized(group.titleKey))
@@ -698,6 +717,44 @@ private struct UISwipeActionGroupSettingsView: View {
             PersonalizationSettings.normalizeSwipeActions(for: group)
         }
         .transaction { $0.animation = nil }
+    }
+}
+
+private struct ResetDefaultsButton: View {
+    let accentColor: Color
+    let action: () -> Bool
+
+    @State private var showsConfirmation = false
+    @State private var confirmationToken = 0
+
+    var body: some View {
+        Button {
+            guard action() else { return }
+
+#if os(iOS)
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+#endif
+            showsConfirmation = true
+            confirmationToken += 1
+        } label: {
+            Label {
+                Text(String(localized: "reset_to_defaults"))
+            } icon: {
+                Image(systemName: showsConfirmation ? "checkmark" : "arrow.counterclockwise")
+                    .foregroundStyle(showsConfirmation ? Color.green : accentColor)
+                    .frame(width: 20)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .foregroundStyle(accentColor)
+        .buttonStyle(.plain)
+        .task(id: confirmationToken) {
+            guard confirmationToken > 0 else { return }
+            try? await Task.sleep(nanoseconds: 900_000_000)
+            guard !Task.isCancelled else { return }
+            showsConfirmation = false
+        }
     }
 }
 
@@ -841,6 +898,39 @@ private struct SwipeActionIcon: View {
             .symbolRenderingMode(.monochrome)
             .foregroundStyle(action.displayColor(accentColor: accentColor))
             .frame(width: size, height: 24, alignment: .center)
+    }
+}
+
+private struct RecapAboutSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                RecapAboutContent()
+                    .padding()
+            }
+            .navigationTitle(String(localized: "recap"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(String(localized: "done")) { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+}
+
+private struct RecapAboutContent: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(String(localized: "recap_about_server_playlists"))
+            Text(String(localized: "recap_about_icloud_recommended"))
+            Text(String(localized: "recap_about_icloud_benefits"))
+        }
+        .font(.body)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

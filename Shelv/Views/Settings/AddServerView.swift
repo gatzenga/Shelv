@@ -8,6 +8,7 @@ struct AddServerView: View {
     private let serverURLPlaceholder = "https://music.example.com"
 
     var editingServer: SubsonicServer? = nil
+    var requiresServer = false
 
     @State private var name = ""
     @State private var baseURL = ""
@@ -25,6 +26,9 @@ struct AddServerView: View {
     private enum Field { case name, url, secondaryURL, username, password }
 
     private var isEditing: Bool { editingServer != nil }
+    private var confirmationTitle: String {
+        requiresServer && !isEditing ? String(localized: "connect") : String(localized: "save")
+    }
     private var trimmedSecondaryBaseURL: String {
         secondaryBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -130,14 +134,16 @@ struct AddServerView: View {
             )
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(String(localized: "cancel")) { dismiss() }
+                if !requiresServer {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button(String(localized: "cancel")) { dismiss() }
+                    }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     if isSaving {
                         ProgressView()
                     } else {
-                        Button(String(localized: "save")) { Task { await save() } }
+                        Button(confirmationTitle) { Task { await save() } }
                             .disabled(!canSave)
                             .bold()
                     }
@@ -203,7 +209,9 @@ struct AddServerView: View {
                 var server = tempServer
                 server.remoteUserId = uid
                 serverStore.add(server: server, password: password)
-                dismiss()
+                if !requiresServer {
+                    dismiss()
+                }
             } catch {
                 testResult = error.localizedDescription
                 testSuccess = false

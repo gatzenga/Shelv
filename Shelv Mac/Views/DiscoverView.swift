@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct DiscoverView: View {
-    @StateObject private var vm = DiscoverViewModel()
+    @ObservedObject private var vm = DiscoverViewModel.shared
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var serverStore: ServerStore
     @ObservedObject var libraryStore = LibraryViewModel.shared
@@ -18,6 +18,7 @@ struct DiscoverView: View {
     @State private var deviceHasNetwork = true
     @State private var showConnectionRecoveryState = false
     @State private var isCheckingConnection = false
+    @State private var isRefreshingDiscover = false
     @State private var isSwitchingServerURL = false
     @State private var serverURLSwitchGeneration = 0
     @State private var serverURLSwitchTask: Task<Void, Never>?
@@ -120,7 +121,6 @@ struct DiscoverView: View {
                 MixButton(
                     title: String(localized: "play_all_downloads"),
                     icon: "play.fill",
-                    color: .blue,
                     isLoading: mixLoading == "offline_play"
                 ) {
                     mixLoading = "offline_play"
@@ -130,7 +130,6 @@ struct DiscoverView: View {
                 MixButton(
                     title: String(localized: "shuffle_all_downloads"),
                     icon: "shuffle",
-                    color: .orange,
                     isLoading: mixLoading == "offline_shuffle"
                 ) {
                     mixLoading = "offline_shuffle"
@@ -140,7 +139,6 @@ struct DiscoverView: View {
                 MixButton(
                     title: String(localized: "mix_latest_downloads"),
                     icon: "arrow.down.circle.fill",
-                    color: .green,
                     isLoading: mixLoading == "offline_newest"
                 ) {
                     mixLoading = "offline_newest"
@@ -234,13 +232,13 @@ struct DiscoverView: View {
         }
         .navigationTitle(String(localized: "discover"))
         .toolbar {
-            ToolbarItem(placement: .automatic) {
-                InsightsToolbarButton()
-            }
             if recapEnabled {
                 ToolbarItem(placement: .automatic) {
                     RecapToolbarButton()
                 }
+            }
+            ToolbarItem(placement: .automatic) {
+                InsightsToolbarButton()
             }
             if #available(macOS 26.0, *) {
                 ToolbarSpacer(.fixed, placement: .automatic)
@@ -255,7 +253,7 @@ struct DiscoverView: View {
                 Button {
                     Task { await refreshOnlineDiscoverContent() }
                 } label: {
-                    Image(systemName: "arrow.clockwise")
+                    RefreshToolbarIcon(isRefreshing: isRefreshingDiscover)
                 }
                 .disabled(isCheckingConnection || isSwitchingServerURL || (vm.isLoading && !shouldShowConnectionRecoveryState))
                 .help(String(localized: "reload"))
@@ -458,9 +456,11 @@ struct DiscoverView: View {
 
     @MainActor
     private func refreshOnlineDiscoverContent() async {
-        guard !isCheckingConnection, !isSwitchingServerURL else { return }
+        guard !isRefreshingDiscover, !isCheckingConnection, !isSwitchingServerURL else { return }
         guard !vm.isLoading || shouldShowConnectionRecoveryState else { return }
 
+        isRefreshingDiscover = true
+        defer { isRefreshingDiscover = false }
         showConnectionRecoveryState = false
         isCheckingConnection = true
         defer { isCheckingConnection = false }
@@ -472,7 +472,7 @@ struct DiscoverView: View {
         defer { offlineMode.finishUserInitiatedServerRefresh() }
 
         Task { await CloudKitSyncService.shared.syncNow() }
-        async let discover:  Void = loadOnlineDiscoverContent(verifyReachabilityFirst: false)
+        async let discover:  Void = loadOnlineDiscoverContent(verifyReachabilityFirst: false, force: true)
         async let playlists: Void = libraryStore.loadPlaylists(force: true)
         async let radio:     Void = RadioStationStore.shared.refresh()
         _ = await (discover, playlists, radio)
@@ -481,7 +481,8 @@ struct DiscoverView: View {
     @MainActor
     private func loadOnlineDiscoverContent(
         verifyReachabilityFirst: Bool = false,
-        ignoresVisibleServerError: Bool = false
+        ignoresVisibleServerError: Bool = false,
+        force: Bool = false
     ) async {
         let requestSignature = activeServerURLSignature
         showConnectionRecoveryState = false
@@ -519,7 +520,7 @@ struct DiscoverView: View {
             shouldFinishReachabilityCheck = true
         }
 
-        let didLoadDiscover = await vm.load()
+        let didLoadDiscover = await vm.load(force: force)
 
         await updateDeviceNetworkState()
         guard !Task.isCancelled, requestSignature == activeServerURLSignature else { return }
@@ -593,6 +594,11 @@ struct DiscoverView: View {
     private func isDiscoverySectionVisible(_ section: PersonalizationDiscoverySection) -> Bool {
         switch section {
         case .smartMixes:
+            #if DEBUG
+            if SubsonicAPIService.shared.isDemoActive {
+                return !visibleSmartMixes.isEmpty
+            }
+            #endif
             return !visibleSmartMixes.isEmpty && !discoverContentIsEmpty
         case .recentlyAdded:
             return !vm.recentlyAdded.isEmpty
@@ -610,21 +616,11 @@ struct DiscoverView: View {
         MixButton(
             title: NSLocalizedString(mix.titleKey, comment: ""),
             icon: mix.systemImage,
-            color: smartMixColor(for: mix),
             isLoading: mixLoading == mix.playbackKey
         ) {
             mixLoading = mix.playbackKey
             await playSmartMix(mix)
             mixLoading = nil
-        }
-    }
-
-    private func smartMixColor(for mix: PersonalizationSmartMix) -> Color {
-        switch mix {
-        case .newest: return .blue
-        case .frequent: return .orange
-        case .recent: return .green
-        case .random: return .purple
         }
     }
 
@@ -680,19 +676,55 @@ struct DiscoverView: View {
     }
 }
 
+private struct RefreshToolbarIcon: View {
+    let isRefreshing: Bool
+    @State private var rotation: Double = 0
+
+    var body: some View {
+        ZStack {
+            Image(systemName: "arrow.clockwise")
+                .opacity(isRefreshing ? 0 : 1)
+
+            Circle()
+                .trim(from: 0.18, to: 0.82)
+                .stroke(
+                    Color.primary,
+                    style: StrokeStyle(lineWidth: 1.8, lineCap: .round)
+                )
+                .frame(width: 12, height: 12)
+                .rotationEffect(.degrees(rotation))
+                .opacity(isRefreshing ? 1 : 0)
+        }
+        .frame(width: 16, height: 16)
+        .onAppear {
+            updateRotation()
+        }
+        .onChange(of: isRefreshing) { _, _ in
+            updateRotation()
+        }
+    }
+
+    private func updateRotation() {
+        if isRefreshing {
+            rotation = 0
+            withAnimation(.linear(duration: 0.75).repeatForever(autoreverses: false)) {
+                rotation = 360
+            }
+        } else {
+            withAnimation(.easeOut(duration: 0.12)) {
+                rotation = 0
+            }
+        }
+    }
+}
+
 struct MixButton: View {
     let title: String
     let icon: String
-    let color: Color
     let isLoading: Bool
     let action: () async -> Void
 
     @Environment(\.themeColor) private var themeColor
-    @AppStorage(PersonalizationPreferenceKey.miniPlayerStyle) private var interfaceStyleRaw = PersonalizationMiniPlayerStyle.shelv.rawValue
-
-    private var usesNativeInterface: Bool {
-        PersonalizationMiniPlayerStyle(rawValue: interfaceStyleRaw) == .native
-    }
 
     var body: some View {
         Button {
@@ -701,52 +733,38 @@ struct MixButton: View {
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: icon)
-                    .font(usesNativeInterface ? .body : .body.bold())
-                    .frame(width: usesNativeInterface ? 28 : 24)
+                    .font(.body)
+                    .frame(width: 28)
                 Text(title)
                     .font(.body.bold())
                 Spacer()
                 if isLoading {
                     ProgressView()
                         .controlSize(.small)
-                        .tint(usesNativeInterface ? .white : color)
+                        .tint(.white)
                 } else {
                     Image(systemName: "play.fill")
                         .font(.caption)
                 }
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, usesNativeInterface ? 14 : 13)
+            .padding(.vertical, 14)
             .background {
-                if usesNativeInterface {
-                    Capsule(style: .continuous)
-                        .fill(themeColor)
-                } else {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(color.opacity(0.12))
-                }
+                Capsule(style: .continuous)
+                    .fill(themeColor)
             }
-            .overlay {
-                if !usesNativeInterface {
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(color.opacity(0.25), lineWidth: 1)
-                }
-            }
-            .foregroundStyle(usesNativeInterface ? .white : color)
+            .foregroundStyle(.white)
         }
-        .buttonStyle(MixButtonPressStyle(usesNativeInterface: usesNativeInterface))
+        .buttonStyle(MixButtonPressStyle())
         .allowsHitTesting(!isLoading)
     }
 }
 
 private struct MixButtonPressStyle: ButtonStyle {
-    let usesNativeInterface: Bool
-
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? 0.985 : 1)
-            .brightness(usesNativeInterface && configuration.isPressed ? -0.045 : 0)
-            .opacity(!usesNativeInterface && configuration.isPressed ? 0.78 : 1)
+            .brightness(configuration.isPressed ? -0.045 : 0)
             .animation(.easeOut(duration: 0.08), value: configuration.isPressed)
     }
 }

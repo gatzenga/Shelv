@@ -1,4 +1,6 @@
 import SwiftUI
+import AVFoundation
+import UIKit
 
 struct DiscoverView: View {
     @ObservedObject var libraryStore = LibraryStore.shared
@@ -11,6 +13,7 @@ struct DiscoverView: View {
     @AppStorage("recapEnabled") private var recapEnabled = false
     @AppStorage("mixUseDatabase") private var mixUseDatabase = false
     @AppStorage(PersonalizationPreferenceKey.showRadio) private var showRadio = true
+    @AppStorage(PersonalizationPreferenceKey.showDiscoverAirPlay) private var showDiscoverAirPlay = false
     @AppStorage(PersonalizationPreferenceKey.showSmartMixNewest) private var showSmartMixNewest = true
     @AppStorage(PersonalizationPreferenceKey.showSmartMixFrequent) private var showSmartMixFrequent = true
     @AppStorage(PersonalizationPreferenceKey.showSmartMixRecent) private var showSmartMixRecent = true
@@ -51,6 +54,7 @@ struct DiscoverView: View {
     @State private var serverURLSwitchGeneration = 0
     @State private var serverURLSwitchTask: Task<Void, Never>?
     @State private var locallyInitiatedURLSwitchSignature: String?
+    @State private var discoverAirPlayRouteIsActive = false
 
     private var activeServer: SubsonicServer? {
         serverStore.activeServer
@@ -142,6 +146,11 @@ struct DiscoverView: View {
                         }
                     }
                 }
+                if showDiscoverAirPlay {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        discoverAirPlayButton
+                    }
+                }
             }
             .sheet(isPresented: $showInsights) {
                 InsightsView()
@@ -177,9 +186,13 @@ struct DiscoverView: View {
             }
             .task {
                 await updateDeviceNetworkState()
+                updateDiscoverAirPlayRouteState()
             }
             .onReceive(NotificationCenter.default.publisher(for: .networkStatusChanged)) { _ in
                 Task { await handleNetworkStatusChanged() }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.routeChangeNotification)) { _ in
+                updateDiscoverAirPlayRouteState()
             }
             .onChange(of: offlineMode.serverErrorBannerVisible) { _, visible in
                 guard visible, discoverContentIsEmpty else { return }
@@ -223,6 +236,43 @@ struct DiscoverView: View {
                 Button(String(localized: "ok"), role: .cancel) {}
             } message: { msg in
                 Text(msg)
+            }
+        }
+    }
+
+    private var discoverAirPlayButton: some View {
+        ZStack {
+            Button {} label: {
+                discoverAirPlayIcon
+            }
+            .allowsHitTesting(false)
+
+            AirPlayButton(tintColor: UIColor.clear, activeTintColor: UIColor.clear)
+                .frame(width: 44, height: 44)
+                .opacity(0.02)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("AirPlay")
+    }
+
+    @ViewBuilder
+    private var discoverAirPlayIcon: some View {
+        if discoverAirPlayRouteIsActive {
+            Image(systemName: "airplayaudio")
+                .foregroundStyle(accentColor)
+        } else {
+            Image(systemName: "airplayaudio")
+                .foregroundStyle(Color(UIColor.label))
+        }
+    }
+
+    private func updateDiscoverAirPlayRouteState() {
+        discoverAirPlayRouteIsActive = AVAudioSession.sharedInstance().currentRoute.outputs.contains { output in
+            switch output.portType {
+            case .builtInReceiver, .builtInSpeaker:
+                return false
+            default:
+                return true
             }
         }
     }
@@ -546,6 +596,11 @@ struct DiscoverView: View {
     private func isDiscoverySectionVisible(_ section: PersonalizationDiscoverySection) -> Bool {
         switch section {
         case .smartMixes:
+            #if DEBUG
+            if SubsonicAPIService.shared.isDemoActive {
+                return !visibleSmartMixes.isEmpty
+            }
+            #endif
             return !visibleSmartMixes.isEmpty && !discoverContentIsEmpty
         case .recentlyAdded:
             return !libraryStore.recentlyAdded.isEmpty

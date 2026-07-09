@@ -3,6 +3,8 @@ import Combine
 
 @MainActor
 class DiscoverViewModel: ObservableObject {
+    static let shared = DiscoverViewModel()
+
     @Published var recentlyAdded: [Album] = []
     @Published var recentlyPlayed: [Album] = []
     @Published var frequentlyPlayed: [Album] = []
@@ -14,10 +16,19 @@ class DiscoverViewModel: ObservableObject {
     private let player = AudioPlayerService.shared
     private static let shelfSize = 20
     private var loadGeneration = 0
+    private var hasLoadedDiscoverContent = false
+
+    private var hasDiscoverContent: Bool {
+        !recentlyAdded.isEmpty || !recentlyPlayed.isEmpty || !frequentlyPlayed.isEmpty || !randomAlbums.isEmpty
+    }
 
     @discardableResult
     func load(force: Bool = false) async -> Bool {
-        guard !isLoading else { return !recentlyAdded.isEmpty || !recentlyPlayed.isEmpty || !frequentlyPlayed.isEmpty || !randomAlbums.isEmpty }
+        if !force && hasLoadedDiscoverContent {
+            return true
+        }
+
+        guard !isLoading else { return hasLoadedDiscoverContent || hasDiscoverContent }
         loadGeneration += 1
         let generation = loadGeneration
         isLoading = true
@@ -42,6 +53,7 @@ class DiscoverViewModel: ObservableObject {
             recentlyPlayed   = loadedRecent
             frequentlyPlayed = loadedFrequent
             randomAlbums     = loadedRandom
+            hasLoadedDiscoverContent = true
             return true
         } catch {
             guard loadGeneration == generation else { return false }
@@ -52,6 +64,7 @@ class DiscoverViewModel: ObservableObject {
 
     func reset() {
         loadGeneration += 1
+        hasLoadedDiscoverContent = false
         recentlyAdded = []
         recentlyPlayed = []
         frequentlyPlayed = []

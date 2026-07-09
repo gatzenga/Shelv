@@ -1,8 +1,8 @@
 import SwiftUI
 
 private enum SettingsTab: Hashable {
-    case uiCustomizations
     case server
+    case uiCustomizations
     case appearance
     case recap
     case playback
@@ -47,8 +47,8 @@ private enum SettingsTab: Hashable {
 }
 
 private let settingsTabs: [SettingsTab] = [
-    .uiCustomizations,
     .server,
+    .uiCustomizations,
     .appearance,
     .recap,
     .playback,
@@ -65,7 +65,7 @@ struct SettingsView: View {
     @EnvironmentObject var serverStore: ServerStore
     @Environment(\.themeColor) private var themeColor
     @AppStorage("appColorScheme") private var colorScheme: AppColorScheme = .system
-    @State private var selectedTab: SettingsTab = .uiCustomizations
+    @State private var selectedTab: SettingsTab = .server
 
     var body: some View {
         VStack(spacing: 0) {

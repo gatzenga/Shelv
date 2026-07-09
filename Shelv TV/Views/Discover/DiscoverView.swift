@@ -141,6 +141,11 @@ struct DiscoverView: View {
     private func isDiscoverySectionVisible(_ section: PersonalizationDiscoverySection) -> Bool {
         switch section {
         case .smartMixes:
+            #if DEBUG
+            if api.isDemoActive {
+                return !visibleSmartMixes.isEmpty
+            }
+            #endif
             return !visibleSmartMixes.isEmpty && !discoverContentIsEmpty
         case .recentlyAdded:
             return !newest.isEmpty
