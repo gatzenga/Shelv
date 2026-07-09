@@ -214,7 +214,7 @@ actor LyricsBackgroundService {
         let customStatus = customLrcLibEnabled ? "on" : "off"
         let fallbackStatus = customLrcLibEnabled ? (onlineFallbackEnabled ? "on" : "off") : "n/a"
         DBErrorLog.logLyrics(
-            "Bulk plan → queue \(enqueuedCount)/\(songs.count), Navidrome \(navidromeStatus), LRCLIB custom \(customStatus), LRCLIB.org fallback \(fallbackStatus)"
+            "Bulk plan → queue \(enqueuedCount)/\(songs.count), Navidrome \(navidromeStatus), LRCLIB custom \(customStatus), LRCLIB.net fallback \(fallbackStatus)"
         )
         publishProgress()
         startNextJobs()

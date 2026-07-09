@@ -392,7 +392,7 @@
 "include_navidrome_lyrics" = "Navidrome-Lyrics einbeziehen";
 "use_custom_lrclib_server" = "Eigenen LRCLIB-Server verwenden";
 "lrclib_server_url" = "LRCLIB-Server-URL";
-"lrclib_online_fallback" = "LRCLIB.org-Fallback";
+"lrclib_online_fallback" = "LRCLIB.net-Fallback";
 "artist_bio_show_more" = "Mehr anzeigen";
 "artist_bio_show_less" = "Weniger anzeigen";
 

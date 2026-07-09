@@ -174,7 +174,7 @@
 "include_navidrome_lyrics" = "包含 Navidrome 歌词";
 "use_custom_lrclib_server" = "使用自定义 LRCLIB 服务器";
 "lrclib_server_url" = "LRCLIB 服务器 URL";
-"lrclib_online_fallback" = "LRCLIB.org 回退";
+"lrclib_online_fallback" = "LRCLIB.net 回退";
 "database" = "数据库";
 "stored" = "已存储";
 "download_all_lyrics" = "下载所有歌词";

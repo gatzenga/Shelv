@@ -409,7 +409,7 @@
 "include_navidrome_lyrics" = "包含 Navidrome 歌词";
 "use_custom_lrclib_server" = "使用自定义 LRCLIB 服务器";
 "lrclib_server_url" = "LRCLIB 服务器 URL";
-"lrclib_online_fallback" = "LRCLIB.org 回退";
+"lrclib_online_fallback" = "LRCLIB.net 回退";
 "about" = "关于";
 "queue_sync" = "队列同步";
 "queue_sync_off" = "关闭";

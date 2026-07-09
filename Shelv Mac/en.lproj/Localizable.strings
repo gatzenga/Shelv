@@ -174,7 +174,7 @@
 "include_navidrome_lyrics" = "Include Navidrome Lyrics";
 "use_custom_lrclib_server" = "Use custom LRCLIB server";
 "lrclib_server_url" = "LRCLIB server URL";
-"lrclib_online_fallback" = "LRCLIB.org fallback";
+"lrclib_online_fallback" = "LRCLIB.net fallback";
 "database" = "Database";
 "stored" = "Stored";
 "download_all_lyrics" = "Download all lyrics";
