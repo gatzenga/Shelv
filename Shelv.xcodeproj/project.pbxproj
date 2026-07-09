@@ -31,6 +31,7 @@
 		BC10012E2FFE000000000001 /* ShelvCore/Services/DownloadDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC10012F2FFE000000000001 /* ShelvCore/Services/DownloadDatabase.swift */; };
 		BC1001302FFE000000000001 /* ShelvCore/Services/DBErrorLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001312FFE000000000001 /* ShelvCore/Services/DBErrorLog.swift */; };
 		BC1001322FFE000000000001 /* ShelvCore/Services/DownloadPayloadValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001332FFE000000000001 /* ShelvCore/Services/DownloadPayloadValidator.swift */; };
+		BC1001342FFE000000000001 /* ShelvCore/Services/PlayLogService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001352FFE000000000001 /* ShelvCore/Services/PlayLogService.swift */; };
 		BC1867E52F91A088006D96E2 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC1867E42F91A088006D96E2 /* GRDB */; };
 		BC51161D2FDC8A850011CDE9 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC51161C2FDC8A850011CDE9 /* GRDB */; };
 		BC7B84A72FDB17F90058CB78 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC7B84A62FDB17F90058CB78 /* GRDB */; };
@@ -61,6 +62,7 @@
 		BC10012F2FFE000000000001 /* ShelvCore/Services/DownloadDatabase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/DownloadDatabase.swift; sourceTree = "<group>"; };
 		BC1001312FFE000000000001 /* ShelvCore/Services/DBErrorLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/DBErrorLog.swift; sourceTree = "<group>"; };
 		BC1001332FFE000000000001 /* ShelvCore/Services/DownloadPayloadValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/DownloadPayloadValidator.swift; sourceTree = "<group>"; };
+		BC1001352FFE000000000001 /* ShelvCore/Services/PlayLogService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/PlayLogService.swift; sourceTree = "<group>"; };
 		BC5116112FDC8A690011CDE9 /* Shelv TV.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Shelv TV.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC7B83F52FDB17700058CB78 /* Shelv.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Shelv.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC9C59382F8E9FB000FF4D25 /* Shelv.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Shelv.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -149,6 +151,7 @@
 				BC10012B2FFE000000000001 /* ShelvCore/Services/ConnectivityDebugLog.swift */,
 				BC1001312FFE000000000001 /* ShelvCore/Services/DBErrorLog.swift */,
 				BC1001332FFE000000000001 /* ShelvCore/Services/DownloadPayloadValidator.swift */,
+				BC1001352FFE000000000001 /* ShelvCore/Services/PlayLogService.swift */,
 				BC10011A2FFE000000000001 /* ShelvCore/Services/URL+QueryParam.swift */,
 				BC1001252FFE000000000001 /* ShelvCore/Services/InstantMixQueueBuilder.swift */,
 				BC10011B2FFE000000000001 /* ShelvCore/Utilities/PathSafe.swift */,
@@ -393,6 +396,7 @@
 				BC10012A2FFE000000000001 /* ShelvCore/Services/ConnectivityDebugLog.swift in Sources */,
 				BC1001302FFE000000000001 /* ShelvCore/Services/DBErrorLog.swift in Sources */,
 				BC1001322FFE000000000001 /* ShelvCore/Services/DownloadPayloadValidator.swift in Sources */,
+				BC1001342FFE000000000001 /* ShelvCore/Services/PlayLogService.swift in Sources */,
 				BC10010A2FFE000000000001 /* ShelvCore/Services/URL+QueryParam.swift in Sources */,
 				BC1001242FFE000000000001 /* ShelvCore/Services/InstantMixQueueBuilder.swift in Sources */,
 				BC10010B2FFE000000000001 /* ShelvCore/Utilities/PathSafe.swift in Sources */,
@@ -480,7 +484,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "Shelv TV/Shelv TVRelease.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 112;
+				CURRENT_PROJECT_VERSION = 115;
 				DEVELOPMENT_TEAM = 7CZP946PWR;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -514,7 +518,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "Shelv TV/Shelv TVRelease.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 112;
+				CURRENT_PROJECT_VERSION = 115;
 				DEVELOPMENT_TEAM = 7CZP946PWR;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -550,7 +554,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Shelv Mac/Shelv Mac.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 112;
+				CURRENT_PROJECT_VERSION = 115;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 7CZP946PWR;
 				ENABLE_APP_SANDBOX = YES;
@@ -599,7 +603,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Shelv Mac/Shelv Mac.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 112;
+				CURRENT_PROJECT_VERSION = 115;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 7CZP946PWR;
 				ENABLE_APP_SANDBOX = YES;
@@ -767,7 +771,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Shelv/Shelv.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 112;
+				CURRENT_PROJECT_VERSION = 115;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 7CZP946PWR;
 				ENABLE_APP_SANDBOX = YES;
@@ -817,7 +821,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Shelv/Shelv.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 112;
+				CURRENT_PROJECT_VERSION = 115;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 7CZP946PWR;
 				ENABLE_APP_SANDBOX = YES;

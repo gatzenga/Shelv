@@ -9,6 +9,7 @@ import Network
 final class CloudKitSyncStatus: ObservableObject {
     @Published var lastSyncDate: Date?
     @Published var isSyncing = false
+    @Published var currentMessage: String?
     @Published var pendingUploads = 0
     @Published var pendingScrobbles = 0
     @Published var lastError: String?
@@ -50,6 +51,24 @@ final class CloudKitSyncStatus: ObservableObject {
 enum RecapMarkerSaveResult {
     case created
     case conflict(existingPlaylistId: String)
+}
+
+private nonisolated struct CloudDownloadStats: Sendable {
+    var playsDownloaded = 0
+    var recapsDownloaded = 0
+    var settingsDownloaded = 0
+    var playsDeleted = 0
+    var recapsDeleted = 0
+    var settingsDeleted = 0
+
+    mutating func add(_ other: CloudDownloadStats) {
+        playsDownloaded += other.playsDownloaded
+        recapsDownloaded += other.recapsDownloaded
+        settingsDownloaded += other.settingsDownloaded
+        playsDeleted += other.playsDeleted
+        recapsDeleted += other.recapsDeleted
+        settingsDeleted += other.settingsDeleted
+    }
 }
 
 private enum CloudSyncCategory: String, CaseIterable {
@@ -128,9 +147,12 @@ actor CloudKitSyncService {
 
     private var isZoneReady = false
     private var lastDisabledLogAt: [String: Date] = [:]
+    private let minimumVisibleStatusDuration: TimeInterval = 3
+    private var isSyncWorkflowRunning = false
+    private var currentStatusChangedAt = Date.distantPast
 
     private var syncEnabled: Bool {
-        if UserDefaults.standard.object(forKey: syncEnabledKey) == nil { return true }
+        if UserDefaults.standard.object(forKey: syncEnabledKey) == nil { return false }
         return UserDefaults.standard.bool(forKey: syncEnabledKey)
     }
 
@@ -143,7 +165,7 @@ actor CloudKitSyncService {
     }
 
     private var lyricsServerSyncEnabled: Bool {
-        UserDefaults.standard.bool(forKey: lyricsServerSyncEnabledKey)
+        boolDefaultingToTrue(forKey: lyricsServerSyncEnabledKey)
     }
 
     private var radioStationsSyncEnabled: Bool {
@@ -164,7 +186,10 @@ actor CloudKitSyncService {
     }
 
     private var canSync: Bool {
-        canSyncBase && CloudSyncCategory.allCases.contains { isEnabled($0) }
+        canSyncBase && (
+            CloudSyncCategory.allCases.contains { isEnabled($0) }
+                || radioStationsSyncEnabled
+        )
     }
 
     private func boolDefaultingToTrue(forKey key: String) -> Bool {
@@ -187,9 +212,76 @@ actor CloudKitSyncService {
     private var canSyncRadioStations: Bool {
         canSyncBase && radioStationsSyncEnabled
     }
+
+    private func refreshRadioStationsIfNeeded() async {
+        guard canSyncRadioStations else { return }
+        await RadioStationStore.shared.refresh()
+    }
     // NWPathMonitor lebt im actor – kein Lifecycle-Problem auf SwiftUI-Structs
     nonisolated(unsafe) private var pathMonitor: NWPathMonitor?
     private init() {}
+
+    // MARK: - Visible Sync Status
+
+    private func statusText(_ key: String) -> String {
+        String(localized: String.LocalizationValue(key))
+    }
+
+    private func statusText(_ key: String, count: Int) -> String {
+        String(format: String(localized: String.LocalizationValue(key)), count)
+    }
+
+    private func setCurrentStatus(_ message: String, isSyncing: Bool = true) async {
+        currentStatusChangedAt = Date()
+        await MainActor.run {
+            status.currentMessage = message
+            status.isSyncing = isSyncing
+        }
+    }
+
+    private func finishCurrentStatus(_ message: String? = nil) async {
+        await MainActor.run {
+            if let message {
+                status.currentMessage = message
+            }
+            status.isSyncing = false
+        }
+    }
+
+    private func runVisibleStatusStep(
+        _ message: String,
+        minimumDuration: TimeInterval? = nil,
+        operation: () async -> Void
+    ) async {
+        let startedAt = Date()
+        await setCurrentStatus(message)
+        operationLog(message)
+        await operation()
+
+        let minimumDuration = minimumDuration ?? minimumVisibleStatusDuration
+        let visibleSince = max(startedAt.timeIntervalSince1970, currentStatusChangedAt.timeIntervalSince1970)
+        let remaining = minimumDuration - (Date().timeIntervalSince1970 - visibleSince)
+        if remaining > 0 {
+            try? await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000))
+        }
+    }
+
+    private func operationLog(_ message: String) {
+        log(message)
+    }
+
+    private func beginSyncWorkflow(named name: String) -> Bool {
+        guard !isSyncWorkflowRunning else {
+            log("\(name) skipped — another sync is already running")
+            return false
+        }
+        isSyncWorkflowRunning = true
+        return true
+    }
+
+    private func endSyncWorkflow() {
+        isSyncWorkflowRunning = false
+    }
 
     // MARK: - Device ID
 
@@ -374,25 +466,31 @@ actor CloudKitSyncService {
 
     // MARK: - Upload
 
-    func uploadPendingEvents() async {
+    @discardableResult
+    func uploadPendingEvents() async -> Int {
         guard canSyncBase else {
             logDisabled(.playHistory, action: "pending play upload")
-            return
+            return 0
         }
         guard canSync(.playHistory) else {
             logDisabled(.playHistory, action: "pending play upload")
-            return
+            return 0
         }
         guard await status.accountAvailable else {
             debug("[CloudKitSync] uploadPendingEvents skipped – account not available")
-            return
+            return 0
         }
+        let pendingAtStart = await PlayLogService.shared.pendingUploadCount()
+        if pendingAtStart > 0 {
+            await setCurrentStatus(statusText("sync_status_uploading_plays_format", count: pendingAtStart))
+        }
+        var totalUploaded = 0
         do {
             try await ensureZoneExists()
             while canSync(.playHistory) {
                 let unsynced = await PlayLogService.shared.fetchUnsynced(limit: 200)
                 debug("[CloudKitSync] Pending events to upload: \(unsynced.count)")
-                guard !unsynced.isEmpty else { return }
+                guard !unsynced.isEmpty else { return totalUploaded }
 
                 let did = deviceId
                 let records: [CKRecord] = unsynced.compactMap { event in
@@ -407,7 +505,7 @@ actor CloudKitSyncService {
                     r["deviceId"]     = did
                     return r
                 }
-                guard !records.isEmpty else { return }
+                guard !records.isEmpty else { return totalUploaded }
 
                 debug("[CloudKitSync] Sending modifyRecords with \(records.count) records...")
                 let saveResults = try await db.modifyRecords(
@@ -432,6 +530,7 @@ actor CloudKitSyncService {
                 }
 
                 await PlayLogService.shared.markSynced(uuids: uploaded)
+                totalUploaded += uploaded.count
                 await updatePendingCounts()
                 debug("[CloudKitSync] Uploaded \(uploaded.count) events (\(failureCount) failures)")
                 if failureCount > 0 {
@@ -440,7 +539,7 @@ actor CloudKitSyncService {
                     log("Uploaded \(uploaded.count) plays")
                 }
                 await MainActor.run { status.lastSyncDate = Date() }
-                if uploaded.isEmpty { return }
+                if uploaded.isEmpty { return totalUploaded }
             }
         } catch {
             debug("[CloudKitSync] Upload error: \(error)")
@@ -450,30 +549,36 @@ actor CloudKitSyncService {
             }
             log("Upload error: \(error.localizedDescription)", isError: true)
         }
+        return totalUploaded
     }
 
     // MARK: - Download
 
-    func downloadChanges() async {
+    @discardableResult
+    private func downloadChanges() async -> CloudDownloadStats {
         guard canSyncBase else {
             logDisabled(nil, action: "iCloud download")
-            return
+            return CloudDownloadStats()
         }
         guard await status.accountAvailable else {
             log("Download skipped — iCloud account not available")
-            return
+            return CloudDownloadStats()
         }
         let enabledCategories = CloudSyncCategory.allCases.filter { canSync($0) }
         guard !enabledCategories.isEmpty else {
             logDisabled(nil, action: "iCloud download")
-            return
+            return CloudDownloadStats()
         }
+        var stats = CloudDownloadStats()
         for category in enabledCategories {
-            await downloadChanges(for: category)
+            stats.add(await downloadChanges(for: category))
         }
+        return stats
     }
 
-    private func downloadChanges(for category: CloudSyncCategory) async {
+    @discardableResult
+    private func downloadChanges(for category: CloudSyncCategory) async -> CloudDownloadStats {
+        var stats = CloudDownloadStats()
         do {
             try await ensureZoneExists()
             let token = changeToken(for: category)
@@ -481,6 +586,7 @@ actor CloudKitSyncService {
             debug("[CloudKitSync] Fetching \(category.displayName) changes with token: \(hasToken ? "hasToken" : "noToken")")
             let (records, deletions, newToken) = try await fetchZoneChanges(previousToken: token)
             debug("[CloudKitSync] Received \(records.count) new records, \(deletions.count) deletions for \(category.displayName)")
+
             // Deletionen zuerst: verhindert, dass ein Add mit gleichem recordName
             // (z.B. Recap-Marker Reset + Neu-Erzeugung auf anderem Gerät) durch
             // eine nachfolgende Delete-Meldung wieder entfernt wird.
@@ -498,14 +604,22 @@ actor CloudKitSyncService {
             var playsIn = 0, recapsIn = 0, settingsIn = 0
             for record in records {
                 guard category.handles(recordType: record.recordType) else { continue }
-                switch record.recordType {
-                case "PlayEvent": playsIn += 1
-                case "RecapMarker": recapsIn += 1
-                case "RecapSettings", "LyricsServerSettings": settingsIn += 1
-                default: break
-                }
-                await handleIncomingRecord(record)
+                let result = await handleIncomingRecord(record)
+                playsIn += result.playsDownloaded
+                recapsIn += result.recapsDownloaded
+                settingsIn += result.settingsDownloaded
             }
+            if playsIn > 0 {
+                await setCurrentStatus(statusText("sync_status_downloading_plays_format", count: playsIn))
+            } else if recapsIn > 0 {
+                await setCurrentStatus(statusText("sync_status_downloading_recaps_format", count: recapsIn))
+            }
+            stats.playsDownloaded = playsIn
+            stats.recapsDownloaded = recapsIn
+            stats.settingsDownloaded = settingsIn
+            stats.playsDeleted = playsDel
+            stats.recapsDeleted = recapsDel
+            stats.settingsDeleted = settingsDel
             // Retention-Settings: nach dem Einlesen lokalen Stand ggf. nachschieben.
             if category == .recap {
                 await pushRetentionIfNeeded()
@@ -551,6 +665,7 @@ actor CloudKitSyncService {
                 log("\(category.displayName) download error: \(error.localizedDescription)", isError: true)
             }
         }
+        return stats
     }
 
     private func fetchZoneChanges(previousToken: CKServerChangeToken?) async throws -> (changed: [CKRecord], deleted: [(CKRecord.ID, CKRecord.RecordType)], token: CKServerChangeToken?) {
@@ -605,40 +720,51 @@ actor CloudKitSyncService {
         }
     }
 
-    private func handleIncomingRecord(_ record: CKRecord) async {
+    private func handleIncomingRecord(_ record: CKRecord) async -> CloudDownloadStats {
+        var stats = CloudDownloadStats()
         switch record.recordType {
         case "PlayEvent":
-            guard canSync(.playHistory) else { return }
+            guard canSync(.playHistory) else { return stats }
             guard
                 let uuid       = record["uuid"]         as? String,
                 let songId     = record["songId"]        as? String,
                 let serverId   = record["serverId"]      as? String,
                 let playedAt   = record["playedAt"]      as? Double,
                 let duration   = record["songDuration"]  as? Double
-            else { return }
-            await PlayLogService.shared.insertIfNotExists(
+            else { return stats }
+            let changed = await PlayLogService.shared.insertIfNotExists(
                 uuid: uuid, songId: songId, serverId: serverId,
                 playedAt: playedAt, songDuration: duration
             )
+            if changed {
+                stats.playsDownloaded = 1
+            }
 
         case "RecapMarker":
-            guard canSync(.recap) else { return }
+            guard canSync(.recap) else { return stats }
             guard
                 let playlistId  = record["playlistId"]  as? String,
                 let serverId    = record["serverId"]     as? String,
                 let periodType  = record["periodType"]   as? String,
                 let periodStart = record["periodStart"]  as? Double,
                 let periodEnd   = record["periodEnd"]    as? Double
-            else { return }
+            else { return stats }
             let name = record.recordID.recordName
             // Wiederauferstehungs-Schutz: Marker, der lokal zur Löschung vorgemerkt ist,
             // darf nicht über den Change-Feed wieder eingefügt werden.
-            if isMarkerPendingDeletion(name) { return }
+            if isMarkerPendingDeletion(name) { return stats }
             if let existing = await PlayLogService.shared.registryEntry(byCKRecordName: name) {
-                guard existing.playlistId != playlistId else { return }
+                if existing.playlistId == playlistId {
+                    let removed = await PlayLogService.shared.keepOnlyRegistryEntryForSamePeriod(existing)
+                    if !removed.isEmpty {
+                        debug("[CloudKitSync] Removed \(removed.count) duplicate local recap registry entries for \(name)")
+                    }
+                    return stats
+                }
                 // Same ckRecordName, different playlistId → Delete+Recreate-Flow auf anderem Gerät.
                 // Alten Eintrag entfernen, neuen übernehmen.
                 await PlayLogService.shared.deleteRegistryEntry(playlistId: existing.playlistId)
+                stats.recapsDownloaded = 1
             }
             let isTest = (record["isTest"] as? Int64 ?? 0) == 1 || name.hasPrefix("test.")
             let entry = RecapRegistryRecord(
@@ -646,22 +772,31 @@ actor CloudKitSyncService {
                 periodType: periodType, periodStart: periodStart, periodEnd: periodEnd,
                 ckRecordName: name, isTest: isTest
             )
-            await PlayLogService.shared.registerPlaylist(entry)
+            let removed = await PlayLogService.shared.keepOnlyRegistryEntryForSamePeriod(entry)
+            if !removed.isEmpty {
+                debug("[CloudKitSync] Removed \(removed.count) duplicate local recap registry entries for \(name)")
+            }
+            if stats.recapsDownloaded == 0 {
+                stats.recapsDownloaded = 1
+            }
             DispatchQueue.main.async {
                 NotificationCenter.default.post(name: .recapRegistryUpdated, object: nil)
             }
 
         case "RecapSettings":
-            guard canSync(.recap) else { return }
+            guard canSync(.recap) else { return stats }
             applyIncomingRetention(record)
+            stats.settingsDownloaded = 1
 
         case "LyricsServerSettings":
-            guard canSync(.lyricsServer) else { return }
+            guard canSync(.lyricsServer) else { return stats }
             applyIncomingLyricsServerSettings(record)
+            stats.settingsDownloaded = 1
 
         default:
             break
         }
+        return stats
     }
 
     private func handleDeletedRecord(id: CKRecord.ID, type: CKRecord.RecordType) async {
@@ -1279,6 +1414,9 @@ actor CloudKitSyncService {
     }
 
     func syncNow() async {
+        guard beginSyncWorkflow(named: "Sync") else { return }
+        defer { endSyncWorkflow() }
+
         // Queue-Sync hängt an einem eigenen Toggle und läuft unabhängig vom Play-Log-Sync.
         // Bei jedem Sync-Auslöser (Foreground, Pull-to-Refresh, Mac-Refresh, Netz-Reconnect)
         // die Remote-Queue mitprüfen — so wird ein fremder Stand zuverlässig überall erkannt.
@@ -1298,16 +1436,41 @@ actor CloudKitSyncService {
         } else {
             logDisabled(.recap, action: "queued marker deletion")
         }
-        await uploadPendingEvents()
-        await downloadChanges()
-        await uploadPendingEvents()
+        let pendingUploads = await PlayLogService.shared.pendingUploadCount()
+        if pendingUploads > 0 {
+            await runVisibleStatusStep(statusText("sync_status_uploading_plays_format", count: pendingUploads)) {
+                _ = await uploadPendingEvents()
+            }
+        }
+        await runVisibleStatusStep(statusText("sync_status_checking_icloud")) {
+            _ = await downloadChanges()
+        }
+        let remainingUploads = await PlayLogService.shared.pendingUploadCount()
+        if remainingUploads > 0 {
+            await runVisibleStatusStep(statusText("sync_status_uploading_plays_format", count: remainingUploads)) {
+                _ = await uploadPendingEvents()
+            }
+        }
         if canSync(.recap) {
-            await reuploadAllRecapMarkers()
+            await runVisibleStatusStep(statusText("sync_status_syncing_recaps")) {
+                await reuploadAllRecapMarkers()
+                let activeServerId = await MainActor.run { SubsonicAPIService.shared.activeServer?.stableId } ?? ""
+                if !activeServerId.isEmpty {
+                    await canonicalizeLocalRecapRegistry(serverId: activeServerId)
+                    let updated = await applyRecapDiffsWithNavidrome(serverId: activeServerId)
+                    if updated > 0 {
+                        await setCurrentStatus(statusText("sync_status_updating_recap_playlists_format", count: updated))
+                    }
+                    _ = await cleanupShelvRecapPlaylistsOnServer(serverId: activeServerId)
+                }
+            }
         } else {
             logDisabled(.recap, action: "recap marker reupload")
         }
         await pushLyricsServerSettingsIfNeeded()
+        await refreshRadioStationsIfNeeded()
         await flushScrobbleQueue()
+        await finishCurrentStatus(statusText("sync_status_complete"))
         log("Sync done")
     }
 
@@ -1346,28 +1509,238 @@ actor CloudKitSyncService {
         isZoneReady = false
     }
 
+    private func resetChangeToken(for category: CloudSyncCategory) {
+        setChangeToken(nil, for: category)
+        isZoneReady = false
+    }
+
     func handleSyncEnabledChange() async {
         guard syncEnabled else {
+            await finishCurrentStatus(statusText("sync_status_idle"))
             log("iCloud sync disabled")
             return
         }
-        log("iCloud sync enabled — purging iCloud and re-uploading local truth")
-        await setup()
-        // Wipe iCloud so stale markers (from sync-off periods) can't be adopted.
-        // Local data is preserved; deleteZone re-flags local cloud data for re-upload.
-        // Other devices detect zoneNotFound on next sync and do the same.
-        await deleteZone(force: true)
-        resetChangeToken()
-        await uploadPendingEvents()
-        if canSync(.recap) {
-            await reuploadAllRecapMarkers()
+        await runInitialICloudReconcile()
+    }
+
+    private func runInitialICloudReconcile() async {
+        guard beginSyncWorkflow(named: "Initial iCloud sync") else { return }
+        defer { endSyncWorkflow() }
+
+        log("iCloud sync enabled — merging local and iCloud data")
+        guard await refreshAccountAvailability(action: "Initial iCloud sync") else {
+            await finishCurrentStatus(statusText("sync_status_idle"))
+            return
         }
-        await pushLyricsServerSettingsIfNeeded()
-        await downloadChanges()
-        await flushScrobbleQueue()
+
+        let activeServerId = await MainActor.run { SubsonicAPIService.shared.activeServer?.stableId } ?? ""
+
+        await runVisibleStatusStep(statusText("sync_status_preparing_icloud")) {
+            await setup()
+            let assigned = await PlayLogService.shared.assignMissingCloudIdentifiers()
+            if assigned > 0 {
+                self.log("Prepared \(assigned) local plays for iCloud upload")
+            }
+            resetChangeToken(for: .playHistory)
+            resetChangeToken(for: .recap)
+        }
+
+        if canSync(.playHistory) {
+            await runVisibleStatusStep(statusText("sync_status_checking_icloud")) {
+                _ = await downloadChanges(for: .playHistory)
+            }
+
+            let pendingUploads = await PlayLogService.shared.pendingUploadCount()
+            if pendingUploads > 0 {
+                await runVisibleStatusStep(statusText("sync_status_uploading_plays_format", count: pendingUploads)) {
+                    _ = await uploadPendingEvents()
+                }
+            }
+
+            await runVisibleStatusStep(statusText("sync_status_merging_play_history")) {
+                _ = await downloadChanges(for: .playHistory)
+                _ = await uploadPendingEvents()
+            }
+
+            if !activeServerId.isEmpty {
+                await runVisibleStatusStep(statusText("sync_status_cleaning_play_database")) {
+                    let result = await cleanupDeadPlayLogEntries(serverId: activeServerId)
+                    if result.removedRows > 0 {
+                        self.log("Removed \(result.removedRows) dead play rows")
+                    }
+                }
+            }
+        } else {
+            logDisabled(.playHistory, action: "initial play history reconcile")
+        }
+
+        if canSync(.recap), !activeServerId.isEmpty {
+            await runVisibleStatusStep(statusText("sync_status_downloading_recaps")) {
+                _ = await downloadChanges(for: .recap)
+            }
+
+            await runVisibleStatusStep(statusText("sync_status_uploading_recaps")) {
+                await reuploadAllRecapMarkers()
+            }
+
+            await runVisibleStatusStep(statusText("sync_status_resolving_recap_conflicts")) {
+                await canonicalizeLocalRecapRegistry(serverId: activeServerId)
+            }
+
+            await runVisibleStatusStep(statusText("sync_status_updating_recap_playlists")) {
+                let updated = await applyRecapDiffsWithNavidrome(serverId: activeServerId)
+                if updated > 0 {
+                    await setCurrentStatus(statusText("sync_status_updating_recap_playlists_format", count: updated))
+                }
+            }
+
+            await runVisibleStatusStep(statusText("sync_status_cleaning_duplicate_recaps")) {
+                let deleted = await cleanupShelvRecapPlaylistsOnServer(serverId: activeServerId)
+                if deleted > 0 {
+                    self.log("Deleted \(deleted) duplicate ShelV recap playlists")
+                }
+            }
+        } else {
+            logDisabled(.recap, action: "initial recap reconcile")
+        }
+
+        await runVisibleStatusStep(statusText("sync_status_verifying_icloud")) {
+            resetChangeToken(for: .playHistory)
+            resetChangeToken(for: .recap)
+            _ = await downloadChanges()
+            _ = await uploadPendingEvents()
+            if canSync(.recap), !activeServerId.isEmpty {
+                await reuploadAllRecapMarkers()
+                await canonicalizeLocalRecapRegistry(serverId: activeServerId)
+                _ = await cleanupShelvRecapPlaylistsOnServer(serverId: activeServerId)
+            }
+            await pushLyricsServerSettingsIfNeeded()
+            await flushScrobbleQueue()
+            await updatePendingCounts()
+        }
+
+        await finishCurrentStatus(statusText("sync_status_complete"))
+        await MainActor.run { status.lastSyncDate = Date() }
+        log("Initial iCloud sync complete")
+    }
+
+    private func cleanupDeadPlayLogEntries(serverId: String) async -> (checkedSongs: Int, removedRows: Int, deletedCloudEvents: Int) {
+        let ids = await PlayLogService.shared.distinctSongIds(serverId: serverId)
+        guard !ids.isEmpty else { return (0, 0, 0) }
+
+        var dead: [String] = []
+        await withTaskGroup(of: (String, Bool).self) { group in
+            var iterator = ids.makeIterator()
+            let maxConcurrent = 6
+            var inFlight = 0
+
+            while inFlight < maxConcurrent, let id = iterator.next() {
+                inFlight += 1
+                group.addTask { (id, await Self.songIsDead(id: id)) }
+            }
+
+            for await (id, isDead) in group {
+                if isDead { dead.append(id) }
+                if let next = iterator.next() {
+                    group.addTask { (next, await Self.songIsDead(id: next)) }
+                }
+            }
+        }
+
+        guard !dead.isEmpty else { return (ids.count, 0, 0) }
+
+        let uuids = await PlayLogService.shared.uuids(forSongIds: dead, serverId: serverId)
+        let removed = await PlayLogService.shared.deletePlays(forSongIds: dead, serverId: serverId)
+        if !uuids.isEmpty {
+            await deletePlayEvents(uuids: uuids, force: true)
+        }
+        return (ids.count, removed, uuids.count)
+    }
+
+    private nonisolated static func songIsDead(id: String) async -> Bool {
+        do {
+            _ = try await SubsonicAPIService.shared.getSong(id: id)
+            return false
+        } catch SubsonicAPIError.apiError(let code, let message) {
+            if code == 70 { return true }
+            if code == 0, (message ?? "").range(of: "not found", options: .caseInsensitive) != nil { return true }
+            return false
+        } catch {
+            return false
+        }
+    }
+
+    private func canonicalizeLocalRecapRegistry(serverId: String) async {
+        let entries = await PlayLogService.shared.allRegistryEntries(serverId: serverId)
+        let grouped = Dictionary(grouping: entries) { entry in
+            "\(entry.serverId)|\(entry.periodType)|\(entry.periodStart)|\(entry.isTest)"
+        }
+
+        for (_, group) in grouped where group.count > 1 {
+            let canonical = group.first(where: { $0.ckRecordName != nil }) ?? group[0]
+            let removed = await PlayLogService.shared.keepOnlyRegistryEntryForSamePeriod(canonical)
+            if !removed.isEmpty {
+                debug("[CloudKitSync] Canonicalized recap period, kept \(canonical.playlistId), removed \(removed.count)")
+            }
+        }
+
+        await RecapStore.shared.loadEntries(serverId: serverId)
+    }
+
+    private func applyRecapDiffsWithNavidrome(serverId: String) async -> Int {
+        let diffs = await RecapStore.shared.computeDiffs(serverId: serverId)
+        guard !diffs.isEmpty else { return 0 }
+
+        var applied = 0
+        for diff in diffs {
+            let decision: RecapDiffDecision = diff.serverMissing ? .createNew : .update
+            do {
+                try await RecapStore.shared.applyDiff(diff, decision: decision, serverId: serverId)
+                applied += 1
+            } catch {
+                log("Recap playlist update failed: \(error.localizedDescription)", isError: true)
+            }
+        }
+        await RecapStore.shared.loadEntries(serverId: serverId)
+        return applied
+    }
+
+    private func cleanupShelvRecapPlaylistsOnServer(serverId: String) async -> Int {
+        let canonicalIds = Set(await PlayLogService.shared.allRegistryEntries(serverId: serverId).map(\.playlistId))
+        guard !canonicalIds.isEmpty else { return 0 }
+
+        let playlists: [Playlist]
+        do {
+            playlists = try await SubsonicAPIService.shared.getPlaylists()
+        } catch {
+            log("Recap server cleanup skipped: \(error.localizedDescription)", isError: true)
+            return 0
+        }
+
+        let obsolete = playlists.filter { playlist in
+            (playlist.comment ?? "").trimmingCharacters(in: .whitespacesAndNewlines) == "Shelv Recap"
+                && !canonicalIds.contains(playlist.id)
+        }
+
+        var deleted = 0
+        for playlist in obsolete {
+            do {
+                try await SubsonicAPIService.shared.deletePlaylist(id: playlist.id)
+                deleted += 1
+            } catch SubsonicAPIError.apiError(let code, let message)
+                where code == 70 || (message ?? "").localizedCaseInsensitiveContains("not found") {
+                deleted += 1
+            } catch {
+                log("Could not delete duplicate recap playlist \(playlist.id): \(error.localizedDescription)", isError: true)
+            }
+        }
+        return deleted
     }
 
     func handleSyncCategoryChange() async {
+        guard beginSyncWorkflow(named: "What to Sync update") else { return }
+        defer { endSyncWorkflow() }
+
         log("What to Sync updated — Play History: \(playHistorySyncEnabled ? "on" : "off"), Recap: \(recapSyncEnabled ? "on" : "off"), Lyrics Server: \(lyricsServerSyncEnabled ? "on" : "off"), Radio Stations: \(radioStationsSyncEnabled ? "on" : "off")")
         guard canSyncBase else {
             logDisabled(nil, action: "What to Sync update")
@@ -1375,22 +1748,37 @@ actor CloudKitSyncService {
         }
         guard await refreshAccountAvailability(action: "What to Sync update") else { return }
         if canSync(.playHistory) {
-            await uploadPendingEvents()
+            let pendingUploads = await PlayLogService.shared.pendingUploadCount()
+            if pendingUploads > 0 {
+                await runVisibleStatusStep(statusText("sync_status_uploading_plays_format", count: pendingUploads)) {
+                    _ = await uploadPendingEvents()
+                }
+            }
         }
         if canSync(.recap) {
-            await pushRetentionIfNeeded()
-            await reuploadAllRecapMarkers()
+            await runVisibleStatusStep(statusText("sync_status_syncing_recaps")) {
+                await pushRetentionIfNeeded()
+                await reuploadAllRecapMarkers()
+                let activeServerId = await MainActor.run { SubsonicAPIService.shared.activeServer?.stableId } ?? ""
+                if !activeServerId.isEmpty {
+                    await canonicalizeLocalRecapRegistry(serverId: activeServerId)
+                    let updated = await applyRecapDiffsWithNavidrome(serverId: activeServerId)
+                    if updated > 0 {
+                        await setCurrentStatus(statusText("sync_status_updating_recap_playlists_format", count: updated))
+                    }
+                    _ = await cleanupShelvRecapPlaylistsOnServer(serverId: activeServerId)
+                }
+            }
         }
         if canSync(.lyricsServer) {
             await pushLyricsServerSettingsIfNeeded()
         }
-        if canSyncRadioStations {
-            await MainActor.run {
-                _ = Task { await RadioStationStore.shared.refresh() }
-            }
+        await refreshRadioStationsIfNeeded()
+        await runVisibleStatusStep(statusText("sync_status_checking_icloud")) {
+            _ = await downloadChanges()
         }
-        await downloadChanges()
         await updatePendingCounts()
+        await finishCurrentStatus(statusText("sync_status_complete"))
     }
 
     private func reuploadAllRecapMarkers() async {
@@ -1407,6 +1795,11 @@ actor CloudKitSyncService {
         let all = await PlayLogService.shared.allRegistryEntries(serverId: stableId)
         let entries = onlyLocalOnly ? all.filter { $0.ckRecordName == nil } : all
         guard !entries.isEmpty else { return }
+        await setCurrentStatus(
+            onlyLocalOnly
+                ? statusText("sync_status_uploading_recaps_format", count: entries.count)
+                : statusText("sync_status_syncing_recaps")
+        )
         if onlyLocalOnly {
             log("Reconciling \(entries.count) local-only recap marker(s)")
         }
@@ -1474,19 +1867,28 @@ actor CloudKitSyncService {
                     _ = try? await saveRecapMarker(entry, periodKey: conflict.periodKey)
                 }
             } else {
-                CloudKitSyncService.debugLog("[Reupload] conflict (full): iCloud has playlistId=\(conflict.existingPlaylistId), local had \(conflict.entry.playlistId) — adopting iCloud")
-                try? await SubsonicAPIService.shared.deletePlaylist(id: conflict.entry.playlistId)
-                let updated = RecapRegistryRecord(
-                    playlistId: conflict.existingPlaylistId,
-                    serverId: conflict.entry.serverId,
-                    periodType: conflict.entry.periodType,
-                    periodStart: conflict.entry.periodStart,
-                    periodEnd: conflict.entry.periodEnd,
-                    ckRecordName: recordName,
-                    isTest: conflict.entry.isTest
-                )
-                await PlayLogService.shared.deleteRegistryEntry(playlistId: conflict.entry.playlistId)
-                await PlayLogService.shared.registerPlaylist(updated)
+                let remoteExists = (try? await SubsonicAPIService.shared.getPlaylist(id: conflict.existingPlaylistId)) != nil
+                if remoteExists {
+                    CloudKitSyncService.debugLog("[Reupload] conflict (full): iCloud has playlistId=\(conflict.existingPlaylistId), local had \(conflict.entry.playlistId) — adopting iCloud")
+                    try? await SubsonicAPIService.shared.deletePlaylist(id: conflict.entry.playlistId)
+                    let updated = RecapRegistryRecord(
+                        playlistId: conflict.existingPlaylistId,
+                        serverId: conflict.entry.serverId,
+                        periodType: conflict.entry.periodType,
+                        periodStart: conflict.entry.periodStart,
+                        periodEnd: conflict.entry.periodEnd,
+                        ckRecordName: recordName,
+                        isTest: conflict.entry.isTest
+                    )
+                    await PlayLogService.shared.deleteRegistryEntry(playlistId: conflict.entry.playlistId)
+                    await PlayLogService.shared.keepOnlyRegistryEntryForSamePeriod(updated)
+                } else {
+                    CloudKitSyncService.debugLog("[Reupload] conflict (full): iCloud playlistId=\(conflict.existingPlaylistId) MISSING on Navidrome — keeping local \(conflict.entry.playlistId), clearing stale iCloud marker")
+                    await deleteRecapMarker(ckRecordName: recordName)
+                    var entry = conflict.entry
+                    entry.ckRecordName = nil
+                    _ = try? await saveRecapMarker(entry, periodKey: conflict.periodKey)
+                }
             }
         }
     }

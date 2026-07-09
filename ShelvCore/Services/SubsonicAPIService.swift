@@ -483,6 +483,14 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         }
     }
 
+    #if DEBUG
+    private func clearServerErrorForDemoRequest() async {
+        await MainActor.run {
+            OfflineModeService.shared.clearServerError()
+        }
+    }
+    #endif
+
     private func fetchData(path: String, extra: [URLQueryItem] = [], retries: Int = 0) async throws -> Data {
         let creds = try resolveCredentials()
         let requestSignature = activeRequestSignature(for: creds.server)
@@ -583,6 +591,12 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
     }
 
     func ping() async throws {
+        #if DEBUG
+        if isDemoActive {
+            await clearServerErrorForDemoRequest()
+            return
+        }
+        #endif
         let data = try await fetchData(path: "ping")
         let body = try decoder.decode(Envelope<PingBody>.self, from: data).response
         try check(status: body.status, error: body.error)
@@ -590,6 +604,11 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
 
     @discardableResult
     func ping(server: SubsonicServer, password: String) async throws -> ServerInfo {
+        #if DEBUG
+        if server.baseURL == DemoContent.serverBaseURL || server.activeBaseURL == DemoContent.serverBaseURL {
+            return ServerInfo(apiVersion: apiVersion, serverVersion: "Shelv Demo", serverType: "demo")
+        }
+        #endif
         let data = try await fetchData(for: server, password: password, path: "ping")
         let body = try decoder.decode(Envelope<PingInfoBody>.self, from: data).response
         try check(status: body.status, error: body.error)
@@ -1078,10 +1097,15 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         if let n = name    { extra.append(URLQueryItem(name: "name",    value: n)) }
         if let c = comment { extra.append(URLQueryItem(name: "comment", value: c)) }
         extra += songIdsToAdd.map         { URLQueryItem(name: "songIdToAdd",          value: $0) }
-        extra += songIndicesToRemove.map  { URLQueryItem(name: "songIndexToRemove",     value: "\($0)") }
+        extra += normalizedPlaylistRemovalIndices(songIndicesToRemove)
+            .map { URLQueryItem(name: "songIndexToRemove", value: "\($0)") }
         let data = try await fetchData(path: "updatePlaylist", extra: extra)
         let body = try decoder.decode(Envelope<PingBody>.self, from: data).response
         try check(status: body.status, error: body.error)
+    }
+
+    private func normalizedPlaylistRemovalIndices(_ indices: [Int]) -> [Int] {
+        Array(Set(indices.filter { $0 >= 0 })).sorted(by: >)
     }
 
     func deletePlaylist(id: String) async throws {

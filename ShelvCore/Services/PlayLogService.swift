@@ -48,6 +48,10 @@ struct RecapSongCount {
 actor PlayLogService {
     static let shared = PlayLogService()
 
+    #if SHELV_LOGIC_TESTS
+    nonisolated(unsafe) static var testDatabaseURL: URL?
+    #endif
+
     private var pool: DatabasePool?
     private init() {}
 
@@ -170,6 +174,11 @@ actor PlayLogService {
     }
 
     static var dbURL: URL {
+        #if SHELV_LOGIC_TESTS
+        if let testDatabaseURL {
+            return testDatabaseURL
+        }
+        #endif
         #if os(tvOS)
         // tvOS hat keinen beschreibbaren Application-Support-Ordner — nur Caches ist
         // persistent beschreibbar. Application Support liefert „You don't have permission".
@@ -195,6 +204,20 @@ actor PlayLogService {
 
     // MARK: - Play Log
 
+    #if SHELV_LOGIC_TESTS
+    func insertLegacyPlayForTesting(songId: String, serverId: String, playedAt: Double, songDuration: Double) {
+        safeWrite { db in
+            try db.execute(
+                sql: """
+                    INSERT INTO play_log (songId, serverId, playedAt, songDuration, uuid, syncedAt)
+                    VALUES (?, ?, ?, ?, NULL, NULL)
+                    """,
+                arguments: [songId, serverId, playedAt, songDuration]
+            )
+        }
+    }
+    #endif
+
     @discardableResult
     func log(songId: String, serverId: String, songDuration: Double) -> String? {
         guard pool != nil else { return nil }
@@ -210,7 +233,7 @@ actor PlayLogService {
     }
 
     func topSongs(serverId: String, from start: Date, to end: Date, limit: Int) -> [RecapSongCount] {
-        #if DEBUG
+        #if DEBUG && !SHELV_LOGIC_TESTS
         if SubsonicAPIService.shared.isDemoActive { return Array(DemoContent.recapSongCounts().prefix(limit)) }
         #endif
         guard let pool else { return [] }
@@ -222,7 +245,7 @@ actor PlayLogService {
                   AND playedAt >= ?
                   AND playedAt < ?
                 GROUP BY songId
-                ORDER BY cnt DESC
+                ORDER BY cnt DESC, MAX(playedAt) DESC, songId ASC
                 LIMIT ?
                 """, arguments: [serverId, start.timeIntervalSince1970, end.timeIntervalSince1970, limit])
             .map { RecapSongCount(songId: $0["songId"], count: $0["cnt"]) }
@@ -241,6 +264,33 @@ actor PlayLogService {
         }) ?? []
     }
 
+    @discardableResult
+    func assignMissingCloudIdentifiers(serverId: String? = nil) -> Int {
+        guard pool != nil else { return 0 }
+        var assigned = 0
+        safeWrite { db in
+            let ids: [Int64]
+            if let serverId {
+                ids = try Int64.fetchAll(
+                    db,
+                    sql: "SELECT id FROM play_log WHERE serverId = ? AND uuid IS NULL",
+                    arguments: [serverId]
+                )
+            } else {
+                ids = try Int64.fetchAll(db, sql: "SELECT id FROM play_log WHERE uuid IS NULL")
+            }
+
+            for id in ids {
+                try db.execute(
+                    sql: "UPDATE play_log SET uuid = ?, syncedAt = NULL WHERE id = ?",
+                    arguments: [UUID().uuidString.lowercased(), id]
+                )
+            }
+            assigned = ids.count
+        }
+        return assigned
+    }
+
     func markSynced(uuids: [String]) {
         guard pool != nil, !uuids.isEmpty else { return }
         let now = Date().timeIntervalSince1970
@@ -255,13 +305,16 @@ actor PlayLogService {
         }
     }
 
-    func insertIfNotExists(uuid: String, songId: String, serverId: String, playedAt: Double, songDuration: Double) {
-        
+    @discardableResult
+    func insertIfNotExists(uuid: String, songId: String, serverId: String, playedAt: Double, songDuration: Double) -> Bool {
+        guard pool != nil else { return false }
+        var changed = false
         safeWrite { db in
             if let existing = try PlayLogRecord.filter(Column("uuid") == uuid).fetchOne(db) {
                 if existing.serverId != serverId {
                     try db.execute(sql: "UPDATE play_log SET serverId = ? WHERE uuid = ?",
                                    arguments: [serverId, uuid])
+                    changed = db.changesCount > 0
                 }
             } else {
                 let record = PlayLogRecord(
@@ -270,8 +323,10 @@ actor PlayLogService {
                     uuid: uuid, syncedAt: Date().timeIntervalSince1970
                 )
                 try record.insert(db)
+                changed = true
             }
         }
+        return changed
     }
 
     func pendingUploadCount() -> Int {
@@ -421,6 +476,63 @@ actor PlayLogService {
         safeWrite { db in
             try db.execute(sql: "DELETE FROM recap_registry WHERE ckRecordName = ?", arguments: [ckRecordName])
         }
+    }
+
+    func deleteRegistryEntries(playlistIds: [String]) {
+        guard pool != nil, !playlistIds.isEmpty else { return }
+        safeWrite { db in
+            for start in stride(from: 0, to: playlistIds.count, by: 500) {
+                let chunk = Array(playlistIds[start..<min(start + 500, playlistIds.count)])
+                let placeholders = chunk.map { _ in "?" }.joined(separator: ",")
+                try db.execute(
+                    sql: "DELETE FROM recap_registry WHERE playlistId IN (\(placeholders))",
+                    arguments: StatementArguments(chunk)
+                )
+            }
+        }
+    }
+
+    func markRecapMarkersUnsyncedForReUpload(serverId: String) {
+        guard pool != nil else { return }
+        safeWrite { db in
+            try db.execute(
+                sql: "UPDATE recap_registry SET ckRecordName = NULL WHERE serverId = ?",
+                arguments: [serverId]
+            )
+        }
+    }
+
+    @discardableResult
+    func keepOnlyRegistryEntryForSamePeriod(_ record: RecapRegistryRecord) -> [String] {
+        guard pool != nil else { return [] }
+        var removed: [String] = []
+        safeWrite { db in
+            removed = try String.fetchAll(db, sql: """
+                SELECT playlistId FROM recap_registry
+                WHERE serverId = ?
+                  AND periodType = ?
+                  AND periodStart = ?
+                  AND isTest = ?
+                  AND playlistId != ?
+                """, arguments: [
+                    record.serverId,
+                    record.periodType,
+                    record.periodStart,
+                    record.isTest,
+                    record.playlistId
+                ])
+
+            if !removed.isEmpty {
+                let placeholders = removed.map { _ in "?" }.joined(separator: ",")
+                try db.execute(
+                    sql: "DELETE FROM recap_registry WHERE playlistId IN (\(placeholders))",
+                    arguments: StatementArguments(removed)
+                )
+            }
+
+            try record.insert(db, onConflict: .replace)
+        }
+        return removed
     }
 
     func allRegistryEntries(serverId: String) -> [RecapRegistryRecord] {

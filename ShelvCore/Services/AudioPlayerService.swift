@@ -705,7 +705,6 @@ class AudioPlayerService: ObservableObject {
 
     func ensureDemoStandby(force: Bool = false) {
         guard SubsonicAPIService.shared.isDemoActive else { return }
-        UserDefaults.standard.set(true, forKey: "recapEnabled")
         let hasExpectedStandby =
             currentSong?.id == DemoContent.playerSong.id &&
             currentIndex == DemoContent.playerCurrentIndex &&

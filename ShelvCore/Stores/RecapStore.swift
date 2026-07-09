@@ -10,6 +10,11 @@ struct RecapSyncReport: Identifiable {
     let isError: Bool
 }
 
+struct RecapDeleteAllResult {
+    let deletedCount: Int
+    let failedCount: Int
+}
+
 // MARK: - Recap Diff
 
 struct RecapDiff: Identifiable {
@@ -69,6 +74,10 @@ enum RecapProcessedWeeks {
         var set = load()
         set.remove(periodStart)
         save(set)
+    }
+
+    static func clear() {
+        UserDefaults.standard.removeObject(forKey: storageKey)
     }
 
     static func contains(_ periodStart: Double) -> Bool {
@@ -679,6 +688,75 @@ class RecapStore: ObservableObject {
         if let ckName = entry?.ckRecordName {
             await CloudKitSyncService.shared.queueRecapMarkerDeletion(ckRecordName: ckName)
         }
+    }
+
+    @discardableResult
+    func deleteAllRecaps(serverId: String) async -> RecapDeleteAllResult {
+        let api = SubsonicAPIService.shared
+        let registeredEntries = await PlayLogService.shared.allRegistryEntries(serverId: serverId)
+        var entriesByPlaylistId: [String: RecapRegistryRecord] = [:]
+        for entry in registeredEntries {
+            entriesByPlaylistId[entry.playlistId] = entry
+        }
+
+        var targetIds = Set(entriesByPlaylistId.keys)
+        do {
+            let playlists = try await api.getPlaylists()
+            let serverRecapIds = playlists
+                .filter { ($0.comment ?? "").trimmingCharacters(in: .whitespacesAndNewlines) == "Shelv Recap" }
+                .map(\.id)
+            targetIds.formUnion(serverRecapIds)
+        } catch {
+            CloudKitSyncService.debugLog("[UserAction:deleteAllRecaps] server recap scan skipped: \(error.localizedDescription)")
+        }
+
+        guard !targetIds.isEmpty else {
+            await loadEntries(serverId: serverId)
+            return RecapDeleteAllResult(deletedCount: 0, failedCount: 0)
+        }
+
+        var deletedCount = 0
+        var failedCount = 0
+        var registryIdsToRemove: [String] = []
+
+        for playlistId in targetIds.sorted() {
+            let entry = entriesByPlaylistId[playlistId]
+            var shouldRemoveRegistryEntry = false
+            CloudKitSyncService.debugLog("[UserAction:deleteAllRecaps] playlistId=\(playlistId) marker=\(entry?.ckRecordName ?? "nil")")
+            do {
+                try await api.deletePlaylist(id: playlistId)
+                deletedCount += 1
+                shouldRemoveRegistryEntry = entry != nil
+            } catch SubsonicAPIError.apiError(let code, let message)
+                where code == 70 || (message ?? "").localizedCaseInsensitiveContains("not found") {
+                deletedCount += 1
+                shouldRemoveRegistryEntry = entry != nil
+            } catch {
+                failedCount += 1
+                CloudKitSyncService.debugLog("[UserAction:deleteAllRecaps] delete failed for \(playlistId): \(error.localizedDescription)")
+            }
+
+            if shouldRemoveRegistryEntry {
+                registryIdsToRemove.append(playlistId)
+                if let ckName = entry?.ckRecordName {
+                    await CloudKitSyncService.shared.deleteRecapMarker(ckRecordName: ckName, force: true)
+                    await CloudKitSyncService.shared.queueRecapMarkerDeletion(ckRecordName: ckName)
+                }
+            }
+        }
+
+        if !registryIdsToRemove.isEmpty {
+            await PlayLogService.shared.deleteRegistryEntries(playlistIds: registryIdsToRemove)
+        }
+        if failedCount == 0 {
+            RecapProcessedWeeks.clear()
+            UserDefaults.standard.removeObject(forKey: GenKey.lastWeek)
+            UserDefaults.standard.removeObject(forKey: GenKey.lastMonth)
+            UserDefaults.standard.removeObject(forKey: GenKey.lastYear)
+        }
+        await loadEntries(serverId: serverId)
+        NotificationCenter.default.post(name: .recapRegistryUpdated, object: nil)
+        return RecapDeleteAllResult(deletedCount: deletedCount, failedCount: failedCount)
     }
 
     /// Löscht den neuesten non-test Week-Recap für den Server vollständig (Navidrome + iCloud + DB)
