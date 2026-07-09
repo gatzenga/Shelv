@@ -772,9 +772,12 @@ struct MixButton: View {
 private struct MixButtonPressStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.985 : 1)
-            .brightness(configuration.isPressed ? -0.045 : 0)
-            .animation(.easeOut(duration: 0.08), value: configuration.isPressed)
+            .brightness(configuration.isPressed ? -0.035 : 0)
+            .overlay {
+                Capsule(style: .continuous)
+                    .fill(Color.black.opacity(configuration.isPressed ? 0.10 : 0))
+            }
+            .animation(.easeOut(duration: 0.10), value: configuration.isPressed)
     }
 }
 
