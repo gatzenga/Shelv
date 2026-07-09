@@ -5,7 +5,7 @@ struct LyricsSettingsView: View {
     @EnvironmentObject var lyricsStore: LyricsStore
     @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage("autoFetchLyrics") private var autoFetchLyrics = true
-    @AppStorage("includeNavidromeLyrics") private var includeNavidromeLyrics = false
+    @AppStorage("includeNavidromeLyrics") private var includeNavidromeLyrics = true
     @AppStorage("useCustomLrcLibServer") private var useCustomLrcLibServer = false
     @AppStorage("customLrcLibBaseURL") private var customLrcLibBaseURL = ""
     @AppStorage(LrcLibEndpoint.onlineFallbackEnabledKey) private var lrcLibOnlineFallbackEnabled = true

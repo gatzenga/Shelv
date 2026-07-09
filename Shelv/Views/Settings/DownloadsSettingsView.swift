@@ -3,7 +3,7 @@ import SwiftUI
 struct DownloadsSettingsView: View {
     @EnvironmentObject var serverStore: ServerStore
     @AppStorage("themeColor") private var themeColorName = "violet"
-    @AppStorage("enableDownloads") private var enableDownloads = false
+    @AppStorage("enableDownloads") private var enableDownloads = true
     @AppStorage("maxBulkDownloadStorageGB") private var maxBulkStorageGB = 10
     @AppStorage("preventSleepDuringDownloads") private var preventSleepDuringDownloads = false
     @ObservedObject var offlineMode = OfflineModeService.shared

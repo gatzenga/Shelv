@@ -9,7 +9,7 @@ struct PlaylistDetailView: View {
     @ObservedObject var pinStore = PinnedPlaylistStore.shared
     @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
     @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
-    @AppStorage("enableDownloads") private var enableDownloads = false
+    @AppStorage("enableDownloads") private var enableDownloads = true
 
     @ViewBuilder
     private func playlistDownloadButtons(iconOnly: Bool) -> some View {

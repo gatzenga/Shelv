@@ -117,11 +117,12 @@ struct MainWindowView: View {
                 .onChange(of: serverStore.activeServerID) { _, _ in
                     appState.player.stop()
                     QueueSyncService.shared.handleServerChange()
+                    DiscoverViewModel.shared.reset()
                     libraryStore.reset()
                     RadioStationStore.shared.resetInMemory()
                     #if DEBUG
-                    // Demo-Server aktiv → festes Player-Standbild (nach stop(), sonst sofort
-                    // wieder gelöscht) + Recap-Anzeige aktivieren. Wie iOS-ContentView.
+                    // Demo-Server aktiv -> festes Player-Standbild (nach stop(), sonst sofort
+                    // wieder gelöscht). Wie iOS-ContentView.
                     if SubsonicAPIService.shared.isDemoActive {
                         appState.player.ensureDemoStandby(force: true)
                     }

@@ -12,7 +12,7 @@ struct LibraryView: View {
     @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
     @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     @AppStorage(PersonalizationPreferenceKey.showGenreFilter) private var showGenreFilter = true
-    @AppStorage("enableDownloads") private var enableDownloads = false
+    @AppStorage("enableDownloads") private var enableDownloads = true
 
     @State private var segment: LibrarySegment = .albums
     @State private var showAddToPlaylist = false

@@ -13,7 +13,7 @@ struct SidebarView: View {
     @AppStorage(PersonalizationPreferenceKey.showFavoritesInLibrary) private var showFavoritesInLibrary = true
     @AppStorage(PersonalizationPreferenceKey.showPlaylistsTab) private var showPlaylistsInSidebar = true
     @AppStorage(PersonalizationPreferenceKey.showRadio) private var showRadio = true
-    @AppStorage("enableDownloads") private var enableDownloads = false
+    @AppStorage("enableDownloads") private var enableDownloads = true
     @AppStorage("downloadsOnlyFilter") private var showDownloadsOnly: Bool = false
     @AppStorage("playlistSortOption") private var sortOptionRaw: String = PlaylistSortOption.alphabetical.rawValue
     private var sortOption: PlaylistSortOption { PlaylistSortOption(rawValue: sortOptionRaw) ?? .alphabetical }

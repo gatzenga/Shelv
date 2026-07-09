@@ -117,11 +117,18 @@ class ServerStore: ObservableObject {
     }
 
     func delete(server: SubsonicServer) {
+        let wasActive = activeServer?.id == server.id
         KeychainService.delete(for: server.id)
         servers = servers.filter { $0.id != server.id }
         save()
-        if activeServerID == server.id {
-            activateStoredServer()
+        if wasActive {
+            if let next = servers.first {
+                activate(server: next)
+            } else {
+                activeServerID = nil
+                UserDefaults.standard.removeObject(forKey: activeKey)
+                clearAPIService()
+            }
         }
 
         let serverStableId = server.stableId
@@ -153,6 +160,7 @@ class ServerStore: ObservableObject {
         activeServerID = nil
         UserDefaults.standard.removeObject(forKey: saveKey)
         UserDefaults.standard.removeObject(forKey: activeKey)
+        clearAPIService()
 
         guard !stableIds.isEmpty else { return }
         Task.detached(priority: .utility) {
@@ -166,6 +174,11 @@ class ServerStore: ObservableObject {
                 NotificationCenter.default.post(name: .recapRegistryUpdated, object: nil)
             }
         }
+    }
+
+    private func clearAPIService() {
+        SubsonicAPIService.shared.activeServer = nil
+        SubsonicAPIService.shared.activePassword = nil
     }
 
     #if os(macOS)

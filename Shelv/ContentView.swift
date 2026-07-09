@@ -16,7 +16,6 @@ struct ContentView: View {
     @State private var searchResetToken = 0
     @State private var showPlayer = false
     @State private var showRecap = false
-    @State private var showAddServer = false
     @State private var playlistSongIds: [String]? = nil
     @State private var offlineToast: ShelveToast?
     @State private var settingsPath = NavigationPath()
@@ -37,6 +36,30 @@ struct ContentView: View {
     }
 
     var body: some View {
+        Group {
+            if serverStore.activeServer != nil {
+                authenticatedContent
+            } else {
+                requiredServerLogin
+            }
+        }
+        .onChange(of: serverStore.activeServerID) { _, _ in
+            handleServerChange()
+        }
+        .onAppear {
+            #if DEBUG
+            if DemoContent.isLargeLibraryFixtureEnabled {
+                selectedTab = 1
+            }
+            AudioPlayerService.shared.ensureDemoStandby()
+            #endif
+            if serverStore.activeServer != nil {
+                handlePendingShortcutDestination()
+            }
+        }
+    }
+
+    private var authenticatedContent: some View {
         rootContent
             .background(ServerErrorBannerWindowPresenter())
             .ignoresSafeArea(.keyboard)
@@ -66,11 +89,6 @@ struct ContentView: View {
                     .presentationCornerRadius(24)
                     .tint(accentColor)
             }
-            .sheet(isPresented: $showAddServer) {
-                AddServerView()
-                    .environmentObject(serverStore)
-                    .tint(accentColor)
-            }
             .sheet(item: Binding(
                 get: { playlistSongIds.map { IdentifiableStrings(ids: $0) } },
                 set: { if $0 == nil { playlistSongIds = nil } }
@@ -91,6 +109,7 @@ struct ContentView: View {
                 offlineToast = ShelveToast(message: String(localized: "no_instant_mix_available"), isError: true)
             }
             .onReceive(NotificationCenter.default.publisher(for: .shelvShortcutDestinationRequested)) { note in
+                guard serverStore.activeServer != nil else { return }
                 guard let rawValue = note.object as? String,
                       let destination = ShelvShortcutDestination(rawValue: rawValue)
                 else {
@@ -100,19 +119,6 @@ struct ContentView: View {
                 handleShortcutDestination(destination)
             }
             .shelveToast($offlineToast)
-            .onChange(of: serverStore.activeServerID) { _, _ in
-                AudioPlayerService.shared.stop()
-                QueueSyncService.shared.handleServerChange()
-                libraryStore.resetInMemory()
-                RadioStationStore.shared.resetInMemory()
-                #if DEBUG
-                // Demo-Server aktiv → festes Player-Standbild setzen (nach stop(), sonst würde
-                // es sofort wieder gelöscht) und Recap-Anzeige aktivieren.
-                if SubsonicAPIService.shared.isDemoActive {
-                    AudioPlayerService.shared.ensureDemoStandby(force: true)
-                }
-                #endif
-            }
             .onChange(of: showPlaylistsTab) { _, enabled in
                 if !enabled && selectedTab == 2 { selectedTab = 0 }
             }
@@ -123,18 +129,12 @@ struct ContentView: View {
                 #endif
                 handlePendingShortcutDestination()
             }
-            .onAppear {
-                #if DEBUG
-                if DemoContent.isLargeLibraryFixtureEnabled {
-                    selectedTab = 1
-                }
-                AudioPlayerService.shared.ensureDemoStandby()
-                #endif
-                if serverStore.servers.isEmpty {
-                    showAddServer = true
-                }
-                handlePendingShortcutDestination()
-            }
+    }
+
+    private var requiredServerLogin: some View {
+        AddServerView(requiresServer: true)
+            .environmentObject(serverStore)
+            .tint(accentColor)
     }
 
     @ViewBuilder
@@ -154,6 +154,27 @@ struct ContentView: View {
                 showPlayer: $showPlayer
             )
         }
+    }
+
+    private func handleServerChange() {
+        AudioPlayerService.shared.stop()
+        QueueSyncService.shared.handleServerChange()
+        libraryStore.resetInMemory()
+        RadioStationStore.shared.resetInMemory()
+        if serverStore.activeServer == nil {
+            selectedTab = 0
+            settingsPath = NavigationPath()
+            showPlayer = false
+            showRecap = false
+            playlistSongIds = nil
+        }
+        #if DEBUG
+        // Demo-Server aktiv -> festes Player-Standbild setzen (nach stop(), sonst würde
+        // es sofort wieder gelöscht).
+        if SubsonicAPIService.shared.isDemoActive {
+            AudioPlayerService.shared.ensureDemoStandby(force: true)
+        }
+        #endif
     }
 
     /// Tab-Selection-Binding: Bei jedem Wechsel zum Search-Tab (Tag 4) wird der Reset-Token
@@ -228,7 +249,7 @@ private struct ShelvBottomRoot: View {
     @ObservedObject private var offlineMode = OfflineModeService.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage(PersonalizationPreferenceKey.showPlaylistsTab) private var showPlaylistsTab = true
-    @AppStorage("enableDownloads") private var enableDownloads = false
+    @AppStorage("enableDownloads") private var enableDownloads = true
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
     private var isRegularWidth: Bool { horizontalSizeClass == .regular }
@@ -292,7 +313,7 @@ private struct NativeBottomRoot: View {
     @Environment(\.colorScheme) private var appColorScheme
     @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage(PersonalizationPreferenceKey.showPlaylistsTab) private var showPlaylistsTab = true
-    @AppStorage("enableDownloads") private var enableDownloads = false
+    @AppStorage("enableDownloads") private var enableDownloads = true
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
     private var libraryTabTitle: String {

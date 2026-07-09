@@ -27,6 +27,7 @@ final class PersonalizationSettingsTests: XCTestCase {
         XCTAssertTrue(defaults.bool(forKey: PersonalizationPreferenceKey.showInstantMixActions))
         XCTAssertTrue(defaults.bool(forKey: PersonalizationPreferenceKey.showRadio))
         XCTAssertTrue(defaults.bool(forKey: PersonalizationPreferenceKey.showGenreFilter))
+        XCTAssertEqual(defaults.object(forKey: PersonalizationPreferenceKey.showDiscoverAirPlay) as? Bool, false)
         XCTAssertTrue(PersonalizationSettings.isSmartMixEnabled(.newest, in: defaults))
         XCTAssertTrue(PersonalizationSettings.isSmartMixEnabled(.frequent, in: defaults))
         XCTAssertTrue(PersonalizationSettings.isSmartMixEnabled(.recent, in: defaults))
@@ -46,6 +47,91 @@ final class PersonalizationSettingsTests: XCTestCase {
         XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightPrimary, in: defaults), .playNext)
         XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightSecondary, in: defaults), .addToQueue)
         XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightTertiary, in: defaults), .instantMix)
+    }
+
+    func testSharedAppDefaultsMatchFreshInstallPolicy() {
+        let expectedKeys: Set<String> = [
+            "recapEnabled",
+            "recapWeeklyEnabled",
+            "recapMonthlyEnabled",
+            "recapYearlyEnabled",
+            "recapThreshold",
+            "enableDownloads",
+            "offlineModeEnabled",
+            "preventSleepDuringDownloads",
+            "maxBulkDownloadStorageGB",
+            "transcodingEnabled",
+            "transcodingWifiCodec",
+            "transcodingWifiBitrate",
+            "transcodingCellularCodec",
+            "transcodingCellularBitrate",
+            "transcodingDownloadCodec",
+            "transcodingDownloadBitrate",
+            "gaplessEnabled",
+            "replayGainEnabled",
+            "replayGainMode",
+            "queueSyncMode",
+            "autoFetchLyrics",
+            "includeNavidromeLyrics",
+            "useCustomLrcLibServer",
+            "lrcLibOnlineFallbackEnabled",
+            "streamPreCacheAheadCount",
+            "streamPreCacheEnabled",
+            "infinityMixAheadCount",
+            "iCloudSyncEnabled",
+            "iCloudSyncPlayHistoryEnabled",
+            "iCloudSyncRecapEnabled",
+            "iCloudSyncLyricsServerEnabled",
+            "iCloudSyncRadioStationsEnabled",
+            "mixUseDatabase",
+        ]
+
+        XCTAssertEqual(Set(ShelvDefaultSettings.registeredValues.keys), expectedKeys)
+
+        ShelvDefaultSettings.registerDefaults(in: defaults)
+
+        XCTAssertFalse(defaults.bool(forKey: "recapEnabled"))
+        #if os(tvOS)
+        XCTAssertFalse(defaults.bool(forKey: "enableDownloads"))
+        #else
+        XCTAssertTrue(defaults.bool(forKey: "enableDownloads"))
+        #endif
+        XCTAssertTrue(defaults.bool(forKey: "autoFetchLyrics"))
+        XCTAssertTrue(defaults.bool(forKey: "includeNavidromeLyrics"))
+        XCTAssertTrue(defaults.bool(forKey: "lrcLibOnlineFallbackEnabled"))
+        XCTAssertTrue(defaults.bool(forKey: "iCloudSyncPlayHistoryEnabled"))
+        XCTAssertTrue(defaults.bool(forKey: "iCloudSyncRecapEnabled"))
+        XCTAssertTrue(defaults.bool(forKey: "iCloudSyncLyricsServerEnabled"))
+        XCTAssertTrue(defaults.bool(forKey: "iCloudSyncRadioStationsEnabled"))
+
+        XCTAssertFalse(defaults.bool(forKey: "offlineModeEnabled"))
+        XCTAssertFalse(defaults.bool(forKey: "preventSleepDuringDownloads"))
+        XCTAssertFalse(defaults.bool(forKey: "transcodingEnabled"))
+        XCTAssertFalse(defaults.bool(forKey: "gaplessEnabled"))
+        XCTAssertFalse(defaults.bool(forKey: "replayGainEnabled"))
+        XCTAssertFalse(defaults.bool(forKey: "useCustomLrcLibServer"))
+        XCTAssertFalse(defaults.bool(forKey: "streamPreCacheEnabled"))
+        XCTAssertFalse(defaults.bool(forKey: "iCloudSyncEnabled"))
+        XCTAssertFalse(defaults.bool(forKey: "mixUseDatabase"))
+
+        XCTAssertEqual(defaults.integer(forKey: "recapThreshold"), 30)
+        XCTAssertEqual(defaults.integer(forKey: "maxBulkDownloadStorageGB"), 10)
+        XCTAssertEqual(defaults.integer(forKey: "transcodingWifiBitrate"), 256)
+        XCTAssertEqual(defaults.integer(forKey: "transcodingCellularBitrate"), 128)
+        XCTAssertEqual(defaults.integer(forKey: "transcodingDownloadBitrate"), 192)
+        XCTAssertEqual(defaults.integer(forKey: "streamPreCacheAheadCount"), 1)
+        XCTAssertEqual(defaults.integer(forKey: "infinityMixAheadCount"), 1)
+
+        XCTAssertEqual(defaults.string(forKey: "transcodingWifiCodec"), "raw")
+        XCTAssertEqual(defaults.string(forKey: "transcodingCellularCodec"), "raw")
+        XCTAssertEqual(defaults.string(forKey: "transcodingDownloadCodec"), "raw")
+        XCTAssertEqual(defaults.string(forKey: "replayGainMode"), "track")
+        XCTAssertEqual(defaults.string(forKey: "queueSyncMode"), "off")
+
+        defaults.set(false, forKey: "enableDownloads")
+        ShelvDefaultSettings.registerDefaults(in: defaults)
+
+        XCTAssertFalse(defaults.bool(forKey: "enableDownloads"))
     }
 
     func testClearAlbumGenreFilterResetsStoredSelection() {
@@ -219,6 +305,22 @@ final class PersonalizationSettingsTests: XCTestCase {
 
         XCTAssertEqual(PersonalizationSettings.swipeAction(for: .leftPrimary, in: defaults), .playNext)
         XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightPrimary, in: defaults), .none)
+    }
+
+    func testResetSwipeActionsReportsNoChangeWhenAlreadyDefaults() {
+        PersonalizationSettings.registerDefaults(in: defaults)
+
+        XCTAssertFalse(PersonalizationSettings.resetSwipeActions(in: defaults))
+        XCTAssertFalse(PersonalizationSettings.resetSwipeActions(for: .songs, in: defaults))
+    }
+
+    func testResetSwipeActionsReportsChangeWhenValuesReset() {
+        PersonalizationSettings.registerDefaults(in: defaults)
+        PersonalizationSettings.setSwipeAction(.none, for: .leftPrimary, in: defaults)
+
+        XCTAssertTrue(PersonalizationSettings.resetSwipeActions(for: .songs, in: defaults))
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .leftPrimary, in: defaults), .favorite)
+        XCTAssertFalse(PersonalizationSettings.resetSwipeActions(for: .songs, in: defaults))
     }
 
     func testMigratesOldDefaultSongSwipeSlotsToSongInstantMix() {

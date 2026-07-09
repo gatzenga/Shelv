@@ -7,10 +7,10 @@ final class OfflineModeService: ObservableObject {
     static let shared = OfflineModeService()
 
     @AppStorage("offlineModeEnabled") private var storedOffline: Bool = false
-    @AppStorage("enableDownloads") private var storedDownloadsEnabled: Bool = false
+    @AppStorage("enableDownloads") private var storedDownloadsEnabled: Bool = true
 
     @Published var isOffline: Bool = UserDefaults.standard.bool(forKey: "offlineModeEnabled")
-    @Published var downloadsFeatureEnabled: Bool = UserDefaults.standard.bool(forKey: "enableDownloads")
+    @Published var downloadsFeatureEnabled: Bool = OfflineModeService.downloadsEnabledDefaultingToTrue()
     @Published var serverErrorBannerVisible: Bool = false
     @Published var lastServerErrorMessage: String?
     @Published var lastServerErrorWasDeviceOffline: Bool = false
@@ -44,6 +44,17 @@ final class OfflineModeService: ObservableObject {
     private var activeServerRequestSignature: String? {
         guard let server = SubsonicAPIService.shared.activeServer else { return nil }
         return "\(server.id.uuidString)|\(server.activeBaseURL)"
+    }
+
+    private static func downloadsEnabledDefaultingToTrue() -> Bool {
+        if UserDefaults.standard.object(forKey: "enableDownloads") == nil {
+            #if os(tvOS)
+            return false
+            #else
+            return true
+            #endif
+        }
+        return UserDefaults.standard.bool(forKey: "enableDownloads")
     }
 
     private init() {

@@ -11,7 +11,7 @@ struct RecapView: View {
     @AppStorage("recapWeeklyEnabled") private var weeklyEnabled = true
     @AppStorage("recapMonthlyEnabled") private var monthlyEnabled = true
     @AppStorage("recapYearlyEnabled") private var yearlyEnabled = true
-    @AppStorage("enableDownloads") private var enableDownloads = false
+    @AppStorage("enableDownloads") private var enableDownloads = true
 
     @State private var segment: RecapPeriod.PeriodType = .week
     @State private var entryToDelete: RecapRegistryRecord?

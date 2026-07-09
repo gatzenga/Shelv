@@ -8,7 +8,7 @@ struct PlaylistsView: View {
     @ObservedObject var pinStore = PinnedPlaylistStore.shared
     private let player = AudioPlayerService.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
-    @AppStorage("enableDownloads") private var enableDownloads = false
+    @AppStorage("enableDownloads") private var enableDownloads = true
     @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
     @AppStorage("playlistSortOption") private var sortOptionRaw: String = PlaylistSortOption.alphabetical.rawValue
     private var sortOption: PlaylistSortOption { PlaylistSortOption(rawValue: sortOptionRaw) ?? .alphabetical }

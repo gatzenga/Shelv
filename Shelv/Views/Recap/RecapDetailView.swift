@@ -11,7 +11,7 @@ struct RecapDetailView: View {
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
     @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
     @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
-    @AppStorage("enableDownloads") private var enableDownloads = false
+    @AppStorage("enableDownloads") private var enableDownloads = true
 
     @State private var songs: [SongWithCount] = []
     @State private var isLoading = true

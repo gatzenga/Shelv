@@ -113,7 +113,7 @@ struct PlaylistDownloadBadge: View {
     let playlistId: String
     @ObservedObject private var downloadStore = DownloadStore.shared
     @Environment(\.themeColor) private var themeColor
-    @AppStorage("enableDownloads") private var enableDownloads = false
+    @AppStorage("enableDownloads") private var enableDownloads = true
 
     var body: some View {
         if enableDownloads && downloadStore.downloadedPlaylistIds.contains(playlistId) {

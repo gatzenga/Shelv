@@ -143,7 +143,7 @@ struct FavoriteSongRow: View {
     @ObservedObject private var offlineMode = OfflineModeService.shared
     @EnvironmentObject private var appState: AppState
     @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
-    @AppStorage("enableDownloads") private var enableDownloads = false
+    @AppStorage("enableDownloads") private var enableDownloads = true
     @State private var isHovered = false
 
     var body: some View {

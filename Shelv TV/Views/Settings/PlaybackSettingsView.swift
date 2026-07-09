@@ -12,7 +12,7 @@ struct PlaybackSettingsView: View {
     @AppStorage("queueSyncMode") private var queueSyncMode = "off"
     @AppStorage("infinityMixAheadCount") private var infinityMixAheadCount = 1
     @AppStorage("autoFetchLyrics") private var autoFetchLyrics = true
-    @AppStorage("includeNavidromeLyrics") private var includeNavidromeLyrics = false
+    @AppStorage("includeNavidromeLyrics") private var includeNavidromeLyrics = true
     @AppStorage("useCustomLrcLibServer") private var useCustomLrcLibServer = false
     @AppStorage("customLrcLibBaseURL") private var customLrcLibBaseURL = ""
     @AppStorage(LrcLibEndpoint.onlineFallbackEnabledKey) private var lrcLibOnlineFallbackEnabled = true

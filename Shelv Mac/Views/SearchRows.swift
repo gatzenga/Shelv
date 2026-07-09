@@ -18,7 +18,7 @@ struct SearchSection<Content: View>: View {
 struct SearchArtistRow: View {
     let artist: Artist
     @ObservedObject private var downloadStore = DownloadStore.shared
-    @AppStorage("enableDownloads") private var enableDownloads = false
+    @AppStorage("enableDownloads") private var enableDownloads = true
     @Environment(\.themeColor) private var themeColor
     @State private var isHovered = false
 
@@ -92,7 +92,7 @@ struct SearchSongRow: View {
     @ObservedObject private var downloadStore = DownloadStore.shared
     @ObservedObject private var offlineMode = OfflineModeService.shared
     @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
-    @AppStorage("enableDownloads") private var enableDownloads = false
+    @AppStorage("enableDownloads") private var enableDownloads = true
     @State private var isHovered = false
 
     var body: some View {
@@ -172,7 +172,7 @@ struct LyricsSearchRow: View {
     @ObservedObject private var downloadStore = DownloadStore.shared
     @ObservedObject private var offlineMode = OfflineModeService.shared
     @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
-    @AppStorage("enableDownloads") private var enableDownloads = false
+    @AppStorage("enableDownloads") private var enableDownloads = true
     @State private var isHovered = false
 
     var body: some View {

@@ -24,24 +24,7 @@ struct Shelv_DesktopApp: App {
         if d.string(forKey: "transcodingCellularCodec") == "aac" { d.set("raw", forKey: "transcodingCellularCodec") }
         if d.string(forKey: "transcodingDownloadCodec") == "aac" { d.set("raw", forKey: "transcodingDownloadCodec") }
         PersonalizationSettings.registerDefaults()
-        UserDefaults.standard.register(defaults: [
-            "recapWeeklyEnabled": true,
-            "recapMonthlyEnabled": true,
-            "recapYearlyEnabled": true,
-            "enableDownloads": false,
-            "offlineModeEnabled": false,
-            "maxBulkDownloadStorageGB": 10,
-            "transcodingEnabled": false,
-            "transcodingWifiCodec": "raw",
-            "transcodingWifiBitrate": 256,
-            "transcodingCellularCodec": "raw",
-            "transcodingCellularBitrate": 128,
-            "transcodingDownloadCodec": "raw",
-            "transcodingDownloadBitrate": 192,
-            "streamPreCacheAheadCount": 1,
-            "infinityMixAheadCount": 1,
-            "enableInstantMix": true,
-        ])
+        ShelvDefaultSettings.registerDefaults()
     }
 
     var body: some Scene {
@@ -279,7 +262,7 @@ struct DataSaverMenuItem: View {
 
 struct OfflineModeMenuItem: View {
     @ObservedObject private var offlineMode = OfflineModeService.shared
-    @AppStorage("enableDownloads") private var enableDownloads = false
+    @AppStorage("enableDownloads") private var enableDownloads = true
 
     var body: some View {
         Toggle(

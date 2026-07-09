@@ -10,6 +10,7 @@ nonisolated enum PersonalizationPreferenceKey {
     static let showInstantMixActions = "ui.showInstantMixActions"
     static let showRadio = "ui.showRadio"
     static let showGenreFilter = "ui.showGenreFilter"
+    static let showDiscoverAirPlay = "ui.discover.showAirPlay"
     static let albumGenreFilter = "albumGenreFilter"
     static let miniPlayerStyle = "ui.miniPlayerStyle"
     static let showSmartMixNewest = "ui.discover.smartMix.newest"
@@ -328,6 +329,56 @@ nonisolated enum PersonalizationMiniPlayerStyle: String, CaseIterable {
     }
 }
 
+nonisolated enum ShelvDefaultSettings {
+    static let values: [String: Any] = [
+        "recapEnabled": false,
+        "recapWeeklyEnabled": true,
+        "recapMonthlyEnabled": true,
+        "recapYearlyEnabled": true,
+        "recapThreshold": 30,
+        "enableDownloads": true,
+        "offlineModeEnabled": false,
+        "preventSleepDuringDownloads": false,
+        "maxBulkDownloadStorageGB": 10,
+        "transcodingEnabled": false,
+        "transcodingWifiCodec": "raw",
+        "transcodingWifiBitrate": 256,
+        "transcodingCellularCodec": "raw",
+        "transcodingCellularBitrate": 128,
+        "transcodingDownloadCodec": "raw",
+        "transcodingDownloadBitrate": 192,
+        "gaplessEnabled": false,
+        "replayGainEnabled": false,
+        "replayGainMode": "track",
+        "queueSyncMode": "off",
+        "autoFetchLyrics": true,
+        "includeNavidromeLyrics": true,
+        "useCustomLrcLibServer": false,
+        "lrcLibOnlineFallbackEnabled": true,
+        "streamPreCacheAheadCount": 1,
+        "streamPreCacheEnabled": false,
+        "infinityMixAheadCount": 1,
+        "iCloudSyncEnabled": false,
+        "iCloudSyncPlayHistoryEnabled": true,
+        "iCloudSyncRecapEnabled": true,
+        "iCloudSyncLyricsServerEnabled": true,
+        "iCloudSyncRadioStationsEnabled": true,
+        "mixUseDatabase": false,
+    ]
+
+    static var registeredValues: [String: Any] {
+        var registeredValues = values
+        #if os(tvOS)
+        registeredValues["enableDownloads"] = false
+        #endif
+        return registeredValues
+    }
+
+    static func registerDefaults(in defaults: UserDefaults = .standard) {
+        defaults.register(defaults: registeredValues)
+    }
+}
+
 nonisolated enum PersonalizationSettings {
     static let currentMigrationVersion = 3
     static let defaultDiscoverySectionOrderRaw = PersonalizationDiscoverySection.allCases
@@ -343,6 +394,7 @@ nonisolated enum PersonalizationSettings {
             PersonalizationPreferenceKey.showInstantMixActions: true,
             PersonalizationPreferenceKey.showRadio: true,
             PersonalizationPreferenceKey.showGenreFilter: true,
+            PersonalizationPreferenceKey.showDiscoverAirPlay: false,
             PersonalizationPreferenceKey.miniPlayerStyle: PersonalizationMiniPlayerStyle.shelv.rawValue,
             PersonalizationPreferenceKey.discoverySectionOrder: defaultDiscoverySectionOrderRaw,
         ]
@@ -521,17 +573,28 @@ nonisolated enum PersonalizationSettings {
         normalizeSwipeActions(for: slot.group, in: defaults)
     }
 
-    static func resetSwipeActions(in defaults: UserDefaults = .standard) {
+    @discardableResult
+    static func resetSwipeActions(in defaults: UserDefaults = .standard) -> Bool {
+        var didReset = false
         for group in PersonalizationSwipeGroup.allCases {
-            resetSwipeActions(for: group, in: defaults)
+            didReset = resetSwipeActions(for: group, in: defaults) || didReset
         }
+        return didReset
     }
 
-    static func resetSwipeActions(for group: PersonalizationSwipeGroup, in defaults: UserDefaults = .standard) {
+    @discardableResult
+    static func resetSwipeActions(for group: PersonalizationSwipeGroup, in defaults: UserDefaults = .standard) -> Bool {
+        let didReset = group.slots.contains { slot in
+            swipeAction(for: slot, in: defaults) != slot.defaultAction
+        }
+
+        guard didReset else { return false }
+
         for slot in group.slots {
             defaults.set(slot.defaultAction.rawValue, forKey: slot.storageKey)
         }
         normalizeSwipeActions(for: group, in: defaults)
+        return true
     }
 
     static func clearAlbumGenreFilter(in defaults: UserDefaults = .standard) {

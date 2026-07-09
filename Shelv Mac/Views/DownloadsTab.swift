@@ -116,7 +116,7 @@ struct DownloadsTab: View {
     @ObservedObject var offlineMode = OfflineModeService.shared
     @ObservedObject private var keepOffline = KeepLibraryOfflineService.shared
     @ObservedObject private var downloadStore = DownloadStore.shared
-    @AppStorage("enableDownloads") private var enableDownloads = false
+    @AppStorage("enableDownloads") private var enableDownloads = true
     @AppStorage("offlineModeEnabled") private var offlineModeEnabled = false
     @AppStorage("maxBulkDownloadStorageGB") private var maxBulkStorageGB = 10
 

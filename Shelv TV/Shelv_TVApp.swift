@@ -9,11 +9,7 @@ struct Shelv_TVApp: App {
 
     init() {
         PersonalizationSettings.registerDefaults()
-        UserDefaults.standard.register(defaults: [
-            "streamPreCacheAheadCount": 1,
-            "infinityMixAheadCount": 1,
-            "enableInstantMix": true,
-        ])
+        ShelvDefaultSettings.registerDefaults()
     }
 
     private var preferredScheme: ColorScheme? {
