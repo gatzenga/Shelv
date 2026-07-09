@@ -5,6 +5,7 @@ struct DiscoverView: View {
     @AppStorage("mixUseDatabase") private var mixUseDatabase = false
     @AppStorage("themeColor") private var themeColor = "violet"
     @AppStorage("recapEnabled") private var recapEnabled = false
+    @AppStorage(PersonalizationPreferenceKey.showDiscoverInsights) private var showDiscoverInsights = true
     @AppStorage(PersonalizationPreferenceKey.showSmartMixNewest) private var showSmartMixNewest = true
     @AppStorage(PersonalizationPreferenceKey.showSmartMixFrequent) private var showSmartMixFrequent = true
     @AppStorage(PersonalizationPreferenceKey.showSmartMixRecent) private var showSmartMixRecent = true
@@ -66,10 +67,12 @@ struct DiscoverView: View {
                                 }
                                 .buttonStyle(.bordered)
                             }
-                            NavigationLink { InsightsView() } label: {
-                                Label(String(localized: "insights"), systemImage: "chart.bar.xaxis")
+                            if showDiscoverInsights {
+                                NavigationLink { InsightsView() } label: {
+                                    Label(String(localized: "insights"), systemImage: "chart.bar.xaxis")
+                                }
+                                .buttonStyle(.bordered)
                             }
-                            .buttonStyle(.bordered)
                         }
                     }
                     .padding(.horizontal, 50)

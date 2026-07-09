@@ -153,6 +153,7 @@ private func localized(_ key: String) -> String {
 private struct MacGeneralPersonalizationPanel: View {
     @AppStorage(PersonalizationPreferenceKey.miniPlayerStyle) private var miniPlayerStyleRaw = PersonalizationMiniPlayerStyle.shelv.rawValue
     @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
+    @AppStorage(PersonalizationPreferenceKey.showDiscoverInsights) private var showDiscoverInsights = true
     @AppStorage(PersonalizationPreferenceKey.showRadio) private var showRadio = true
     @AppStorage(PersonalizationPreferenceKey.showGenreFilter) private var showGenreFilter = true
     @Environment(\.themeColor) private var themeColor
@@ -174,6 +175,11 @@ private struct MacGeneralPersonalizationPanel: View {
             Section {
                 Toggle(isOn: $showInstantMixActions) {
                     Label(String(localized: "show_instant_mix_actions"), systemImage: "sparkles")
+                }
+                .tint(themeColor)
+
+                Toggle(isOn: $showDiscoverInsights) {
+                    Label(String(localized: "show_insights"), systemImage: "chart.bar.xaxis")
                 }
                 .tint(themeColor)
 

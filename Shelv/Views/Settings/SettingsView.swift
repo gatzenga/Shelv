@@ -385,6 +385,7 @@ struct SettingsView: View {
 private struct UICustomizationsSettingsView: View {
     @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
+    @AppStorage(PersonalizationPreferenceKey.showDiscoverInsights) private var showDiscoverInsights = true
     @AppStorage(PersonalizationPreferenceKey.showRadio) private var showRadio = true
     @AppStorage(PersonalizationPreferenceKey.showGenreFilter) private var showGenreFilter = true
     @AppStorage(PersonalizationPreferenceKey.showDiscoverAirPlay) private var showDiscoverAirPlay = false
@@ -424,6 +425,13 @@ private struct UICustomizationsSettingsView: View {
                 Toggle(isOn: $showInstantMixActions) {
                     Label { Text(String(localized: "show_instant_mix_actions")) } icon: {
                         Image(systemName: "sparkles").foregroundStyle(accentColor)
+                    }
+                }
+                .tint(accentColor)
+
+                Toggle(isOn: $showDiscoverInsights) {
+                    Label { Text(String(localized: "show_insights")) } icon: {
+                        Image(systemName: "chart.bar.xaxis").foregroundStyle(accentColor)
                     }
                 }
                 .tint(accentColor)
@@ -469,6 +477,10 @@ private struct UICustomizationsSettingsView: View {
                     }
                 }
             }
+
+            PlayerBottomSpacer()
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
         }
         .tint(accentColor)
         .listStyle(.insetGrouped)
@@ -511,6 +523,10 @@ private struct UIDiscoverSettingsView: View {
                 }
                 .onMove(perform: moveSections)
             }
+
+            PlayerBottomSpacer()
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
         }
         .tint(accentColor)
         .listStyle(.insetGrouped)
@@ -550,6 +566,10 @@ private struct UISmartMixesSettingsView: View {
                     SmartMixToggleRow(mix: mix, accentColor: accentColor)
                 }
             }
+
+            PlayerBottomSpacer()
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
         }
         .tint(accentColor)
         .listStyle(.insetGrouped)
@@ -605,6 +625,10 @@ private struct UIPlaylistsSettingsView: View {
                 Toggle(String(localized: "show_add_to_playlist_actions"), isOn: $showPlaylistActions)
                     .tint(accentColor)
             }
+
+            PlayerBottomSpacer()
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
         }
         .navigationTitle(String(localized: "playlists"))
         .navigationBarTitleDisplayMode(.inline)
@@ -629,6 +653,10 @@ private struct UIFavoritesSettingsView: View {
                 Toggle(String(localized: "show_favorite_actions"), isOn: $showFavoriteActions)
                     .tint(accentColor)
             }
+
+            PlayerBottomSpacer()
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
         }
         .navigationTitle(String(localized: "favorites"))
         .navigationBarTitleDisplayMode(.inline)
@@ -662,6 +690,10 @@ private struct UISwipeActionsSettingsView: View {
                     PersonalizationSettings.resetSwipeActions()
                 }
             }
+
+            PlayerBottomSpacer()
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
         }
         .navigationTitle(String(localized: "swipe_actions"))
         .navigationBarTitleDisplayMode(.inline)
@@ -701,6 +733,10 @@ private struct UISwipeActionGroupSettingsView: View {
                     PersonalizationSettings.resetSwipeActions(for: group)
                 }
             }
+
+            PlayerBottomSpacer()
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
         }
         .navigationTitle(localized(group.titleKey))
         .navigationBarTitleDisplayMode(.inline)
@@ -817,6 +853,10 @@ private struct SwipeActionPickerView: View {
                 .buttonStyle(.plain)
                 .disabled(reason != nil)
             }
+
+            PlayerBottomSpacer()
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
         }
         .navigationTitle(localized(slot.titleKey))
         .navigationBarTitleDisplayMode(.inline)

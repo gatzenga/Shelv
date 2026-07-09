@@ -9,6 +9,7 @@ struct DiscoverView: View {
     @ObservedObject var downloadStore = DownloadStore.shared
     @AppStorage("themeColor") private var themeColorName: String = "violet"
     @AppStorage("recapEnabled") private var recapEnabled = false
+    @AppStorage(PersonalizationPreferenceKey.showDiscoverInsights) private var showDiscoverInsights = true
     @AppStorage(PersonalizationPreferenceKey.showSmartMixNewest) private var showSmartMixNewest = true
     @AppStorage(PersonalizationPreferenceKey.showSmartMixFrequent) private var showSmartMixFrequent = true
     @AppStorage(PersonalizationPreferenceKey.showSmartMixRecent) private var showSmartMixRecent = true
@@ -75,6 +76,10 @@ struct DiscoverView: View {
             && !isCheckingConnection
             && discoverContentIsEmpty
             && (showConnectionRecoveryState || offlineMode.serverErrorBannerVisible)
+    }
+
+    private var hasLeadingToolbarActions: Bool {
+        recapEnabled || showDiscoverInsights
     }
 
     @ViewBuilder
@@ -237,16 +242,20 @@ struct DiscoverView: View {
                     RecapToolbarButton()
                 }
             }
-            ToolbarItem(placement: .automatic) {
-                InsightsToolbarButton()
-            }
-            if #available(macOS 26.0, *) {
-                ToolbarSpacer(.fixed, placement: .automatic)
-            } else {
+            if showDiscoverInsights {
                 ToolbarItem(placement: .automatic) {
-                    Divider()
-                        .frame(height: 22)
-                        .padding(.horizontal, 8)
+                    InsightsToolbarButton()
+                }
+            }
+            if hasLeadingToolbarActions {
+                if #available(macOS 26.0, *) {
+                    ToolbarSpacer(.fixed, placement: .automatic)
+                } else {
+                    ToolbarItem(placement: .automatic) {
+                        Divider()
+                            .frame(height: 22)
+                            .padding(.horizontal, 8)
+                    }
                 }
             }
             ToolbarItem(placement: .primaryAction) {

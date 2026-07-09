@@ -101,6 +101,7 @@ private struct TVRecapAboutView: View {
 
 private struct TVUICustomizationsSettingsView: View {
     @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
+    @AppStorage(PersonalizationPreferenceKey.showDiscoverInsights) private var showDiscoverInsights = true
     @AppStorage(PersonalizationPreferenceKey.showRadio) private var showRadio = true
     @AppStorage(PersonalizationPreferenceKey.showGenreFilter) private var showGenreFilter = true
 
@@ -121,6 +122,7 @@ private struct TVUICustomizationsSettingsView: View {
                     TVFavoritesPersonalizationView()
                 }
                 Toggle(String(localized: "show_instant_mix_actions"), isOn: $showInstantMixActions)
+                Toggle(String(localized: "show_insights"), isOn: $showDiscoverInsights)
                 Toggle(String(localized: "show_radio"), isOn: $showRadio)
                 Toggle(String(localized: "show_genre"), isOn: $showGenreFilter)
             }

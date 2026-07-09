@@ -320,6 +320,7 @@ struct ICloudSyncSettingsView: View {
     @AppStorage("iCloudSyncRecapEnabled") private var recapSyncEnabled = true
     @AppStorage("iCloudSyncLyricsServerEnabled") private var lyricsServerSyncEnabled = true
     @AppStorage("iCloudSyncRadioStationsEnabled") private var radioStationsSyncEnabled = true
+    @AppStorage("iCloudSyncUICustomizationsEnabled") private var uiCustomizationsSyncEnabled = true
 
     @State private var isSyncingManually = false
     @State private var showIcloudResetConfirm = false
@@ -440,6 +441,16 @@ struct ICloudSyncSettingsView: View {
                     }
                     .tint(accentColor)
                     .onChange(of: radioStationsSyncEnabled) { _, _ in
+                        Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
+                    }
+
+                    Toggle(isOn: $uiCustomizationsSyncEnabled) {
+                        Label { Text(String(localized: "ui_customizations")) } icon: {
+                            Image(systemName: "slider.horizontal.2.square").foregroundStyle(accentColor)
+                        }
+                    }
+                    .tint(accentColor)
+                    .onChange(of: uiCustomizationsSyncEnabled) { _, _ in
                         Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
                     }
                 }

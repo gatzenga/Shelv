@@ -8,6 +8,7 @@ nonisolated enum PersonalizationPreferenceKey {
     static let showFavoritesInLibrary = "ui.showFavoritesInLibrary"
     static let showFavoriteActions = "ui.showFavoriteActions"
     static let showInstantMixActions = "ui.showInstantMixActions"
+    static let showDiscoverInsights = "ui.discover.showInsights"
     static let showRadio = "ui.showRadio"
     static let showGenreFilter = "ui.showGenreFilter"
     static let showDiscoverAirPlay = "ui.discover.showAirPlay"
@@ -38,6 +39,19 @@ nonisolated enum PersonalizationPreferenceKey {
     static let legacyEnablePlaylists = "enablePlaylists"
     static let legacyEnableFavorites = "enableFavorites"
     static let legacyEnableInstantMix = "enableInstantMix"
+}
+
+nonisolated struct PersonalizationCloudValue: Codable, Equatable, Sendable {
+    let boolValue: Bool?
+    let stringValue: String?
+
+    static func bool(_ value: Bool) -> PersonalizationCloudValue {
+        PersonalizationCloudValue(boolValue: value, stringValue: nil)
+    }
+
+    static func string(_ value: String) -> PersonalizationCloudValue {
+        PersonalizationCloudValue(boolValue: nil, stringValue: value)
+    }
 }
 
 nonisolated enum PersonalizationSwipeGroup: String, CaseIterable, Identifiable, Hashable {
@@ -363,6 +377,7 @@ nonisolated enum ShelvDefaultSettings {
         "iCloudSyncRecapEnabled": true,
         "iCloudSyncLyricsServerEnabled": true,
         "iCloudSyncRadioStationsEnabled": true,
+        "iCloudSyncUICustomizationsEnabled": true,
         "mixUseDatabase": false,
     ]
 
@@ -392,6 +407,7 @@ nonisolated enum PersonalizationSettings {
             PersonalizationPreferenceKey.showFavoritesInLibrary: true,
             PersonalizationPreferenceKey.showFavoriteActions: true,
             PersonalizationPreferenceKey.showInstantMixActions: true,
+            PersonalizationPreferenceKey.showDiscoverInsights: true,
             PersonalizationPreferenceKey.showRadio: true,
             PersonalizationPreferenceKey.showGenreFilter: true,
             PersonalizationPreferenceKey.showDiscoverAirPlay: false,
@@ -406,6 +422,115 @@ nonisolated enum PersonalizationSettings {
         }
         return values
     }()
+
+    static let cloudSyncedBoolKeys: Set<String> = {
+        var keys: Set<String> = [
+            PersonalizationPreferenceKey.showPlaylistsTab,
+            PersonalizationPreferenceKey.showPlaylistActions,
+            PersonalizationPreferenceKey.showFavoritesInLibrary,
+            PersonalizationPreferenceKey.showFavoriteActions,
+            PersonalizationPreferenceKey.showInstantMixActions,
+            PersonalizationPreferenceKey.showDiscoverInsights,
+            PersonalizationPreferenceKey.showRadio,
+            PersonalizationPreferenceKey.showGenreFilter,
+            PersonalizationPreferenceKey.showDiscoverAirPlay,
+        ]
+        for mix in PersonalizationSmartMix.allCases {
+            keys.insert(mix.storageKey)
+        }
+        return keys
+    }()
+
+    static let cloudSyncedStringKeys: Set<String> = {
+        var keys: Set<String> = [
+            PersonalizationPreferenceKey.albumGenreFilter,
+            PersonalizationPreferenceKey.miniPlayerStyle,
+            PersonalizationPreferenceKey.discoverySectionOrder,
+        ]
+        for slot in PersonalizationSwipeSlot.allCases {
+            keys.insert(slot.storageKey)
+        }
+        return keys
+    }()
+
+    static var cloudSyncedUICustomizationKeys: Set<String> {
+        cloudSyncedBoolKeys.union(cloudSyncedStringKeys)
+    }
+
+    static var defaultCloudUICustomizationSnapshot: [String: PersonalizationCloudValue] {
+        var snapshot: [String: PersonalizationCloudValue] = [:]
+        for key in cloudSyncedBoolKeys {
+            snapshot[key] = .bool((defaultValues[key] as? Bool) ?? false)
+        }
+        for key in cloudSyncedStringKeys {
+            snapshot[key] = .string((defaultValues[key] as? String) ?? "")
+        }
+        return snapshot
+    }
+
+    static func cloudUICustomizationSnapshot(in defaults: UserDefaults = .standard) -> [String: PersonalizationCloudValue] {
+        var snapshot: [String: PersonalizationCloudValue] = [:]
+        for key in cloudSyncedBoolKeys {
+            snapshot[key] = .bool(defaults.bool(forKey: key))
+        }
+        for key in cloudSyncedStringKeys {
+            snapshot[key] = .string(normalizedCloudStringValue(forKey: key, in: defaults))
+        }
+        return snapshot
+    }
+
+    static func hasCustomizedCloudUICustomizationValues(in defaults: UserDefaults = .standard) -> Bool {
+        cloudUICustomizationSnapshot(in: defaults) != defaultCloudUICustomizationSnapshot
+    }
+
+    static func applyCloudUICustomizationSnapshot(
+        _ snapshot: [String: PersonalizationCloudValue],
+        in defaults: UserDefaults = .standard
+    ) {
+        for key in cloudSyncedBoolKeys.sorted() {
+            guard let value = snapshot[key]?.boolValue else { continue }
+            defaults.set(value, forKey: key)
+        }
+
+        for key in cloudSyncedStringKeys.sorted() {
+            guard let rawValue = snapshot[key]?.stringValue else { continue }
+            switch key {
+            case PersonalizationPreferenceKey.discoverySectionOrder:
+                setDiscoverySectionOrder(discoverySectionOrder(from: rawValue), in: defaults)
+            case PersonalizationPreferenceKey.miniPlayerStyle:
+                let style = PersonalizationMiniPlayerStyle(rawValue: rawValue) ?? .shelv
+                defaults.set(style.rawValue, forKey: key)
+            case PersonalizationPreferenceKey.albumGenreFilter:
+                defaults.set(rawValue, forKey: key)
+            default:
+                guard cloudSyncedStringKeys.contains(key) else { continue }
+                guard PersonalizationSwipeAction(rawValue: rawValue) != nil else { continue }
+                defaults.set(rawValue, forKey: key)
+            }
+        }
+
+        normalizeSwipeActions(in: defaults)
+    }
+
+    private static func normalizedCloudStringValue(forKey key: String, in defaults: UserDefaults) -> String {
+        switch key {
+        case PersonalizationPreferenceKey.discoverySectionOrder:
+            return rawDiscoverySectionOrder(
+                discoverySectionOrder(from: defaults.string(forKey: PersonalizationPreferenceKey.discoverySectionOrder))
+            )
+        case PersonalizationPreferenceKey.miniPlayerStyle:
+            let rawValue = defaults.string(forKey: PersonalizationPreferenceKey.miniPlayerStyle) ?? ""
+            return PersonalizationMiniPlayerStyle(rawValue: rawValue)?.rawValue
+                ?? PersonalizationMiniPlayerStyle.shelv.rawValue
+        case PersonalizationPreferenceKey.albumGenreFilter:
+            return defaults.string(forKey: PersonalizationPreferenceKey.albumGenreFilter) ?? ""
+        default:
+            if let slot = PersonalizationSwipeSlot.allCases.first(where: { $0.storageKey == key }) {
+                return swipeAction(for: slot, in: defaults).rawValue
+            }
+            return defaults.string(forKey: key) ?? ""
+        }
+    }
 
     static func registerDefaults(in defaults: UserDefaults = .standard) {
         migrateLegacyKeysIfNeeded(in: defaults)

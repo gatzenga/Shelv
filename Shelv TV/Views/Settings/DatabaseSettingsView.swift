@@ -49,6 +49,7 @@ struct ICloudSyncSettingsView: View {
     @AppStorage("iCloudSyncRecapEnabled") private var recapSyncEnabled = true
     @AppStorage("iCloudSyncLyricsServerEnabled") private var lyricsServerSyncEnabled = true
     @AppStorage("iCloudSyncRadioStationsEnabled") private var radioStationsSyncEnabled = true
+    @AppStorage("iCloudSyncUICustomizationsEnabled") private var uiCustomizationsSyncEnabled = true
     @State private var showIcloudResetConfirm = false
     @State private var isIcloudResetting = false
 
@@ -101,6 +102,10 @@ struct ICloudSyncSettingsView: View {
                         }
                     Toggle(String(localized: "radio_stations"), isOn: $radioStationsSyncEnabled)
                         .onChange(of: radioStationsSyncEnabled) { _, _ in
+                            Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
+                        }
+                    Toggle(String(localized: "ui_customizations"), isOn: $uiCustomizationsSyncEnabled)
+                        .onChange(of: uiCustomizationsSyncEnabled) { _, _ in
                             Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
                         }
                 }

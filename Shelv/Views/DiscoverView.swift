@@ -13,6 +13,7 @@ struct DiscoverView: View {
     @AppStorage("recapEnabled") private var recapEnabled = false
     @AppStorage("mixUseDatabase") private var mixUseDatabase = false
     @AppStorage(PersonalizationPreferenceKey.showRadio) private var showRadio = true
+    @AppStorage(PersonalizationPreferenceKey.showDiscoverInsights) private var showDiscoverInsights = true
     @AppStorage(PersonalizationPreferenceKey.showDiscoverAirPlay) private var showDiscoverAirPlay = false
     @AppStorage(PersonalizationPreferenceKey.showSmartMixNewest) private var showSmartMixNewest = true
     @AppStorage(PersonalizationPreferenceKey.showSmartMixFrequent) private var showSmartMixFrequent = true
@@ -131,7 +132,7 @@ struct DiscoverView: View {
                             Image(systemName: "calendar.badge.clock")
                         }
                     }
-                    if !offlineMode.isOffline && deviceHasNetwork {
+                    if showDiscoverInsights && !offlineMode.isOffline && deviceHasNetwork {
                         Button {
                             showInsights = true
                         } label: {

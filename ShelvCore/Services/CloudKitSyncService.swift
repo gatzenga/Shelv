@@ -75,12 +75,14 @@ private enum CloudSyncCategory: String, CaseIterable {
     case playHistory
     case recap
     case lyricsServer
+    case uiCustomizations
 
     nonisolated var displayName: String {
         switch self {
         case .playHistory: return "Play History"
         case .recap: return "Recap"
         case .lyricsServer: return "Lyrics Server"
+        case .uiCustomizations: return "UI Customizations"
         }
     }
 
@@ -89,6 +91,7 @@ private enum CloudSyncCategory: String, CaseIterable {
         case .playHistory: return "shelv_ck_zone_token_play_history"
         case .recap: return "shelv_ck_zone_token_recap"
         case .lyricsServer: return "shelv_ck_zone_token_lyrics_server"
+        case .uiCustomizations: return "shelv_ck_zone_token_ui_customizations"
         }
     }
 
@@ -100,8 +103,15 @@ private enum CloudSyncCategory: String, CaseIterable {
             return recordType == "RecapMarker" || recordType == "RecapSettings"
         case .lyricsServer:
             return recordType == "LyricsServerSettings"
+        case .uiCustomizations:
+            return recordType == "UICustomizationSettings"
         }
     }
+}
+
+private nonisolated struct CloudUICustomizationPayload: Codable, Sendable {
+    let schemaVersion: Int
+    let values: [String: PersonalizationCloudValue]
 }
 
 // MARK: - CloudKitSyncService
@@ -123,6 +133,7 @@ actor CloudKitSyncService {
     private let recapSyncEnabledKey = "iCloudSyncRecapEnabled"
     private let lyricsServerSyncEnabledKey = "iCloudSyncLyricsServerEnabled"
     private let radioStationsSyncEnabledKey = "iCloudSyncRadioStationsEnabled"
+    private let uiCustomizationsSyncEnabledKey = "iCloudSyncUICustomizationsEnabled"
     private let queueSyncModeKey = "queueSyncMode"
 
     // Geteilte Recap-Retention (eine Wahrheit über alle Geräte, statt lokalem @AppStorage).
@@ -145,11 +156,17 @@ actor CloudKitSyncService {
     private let lyricsServerEchoOnlineFallbackKey = "lyrics_server_echo_online_fallback"
     private let lyricsServerEchoUpdatedAtKey = "lyrics_server_echo_updated_at"
 
+    private static let uiCustomizationsRecordName = "ui_customization_settings"
+    private let uiCustomizationsUpdatedAtKey = "ui_customizations_updated_at"
+    private let uiCustomizationsSyncedAtKey = "ui_customizations_synced_at"
+
     private var isZoneReady = false
     private var lastDisabledLogAt: [String: Date] = [:]
     private let minimumVisibleStatusDuration: TimeInterval = 3
     private var isSyncWorkflowRunning = false
     private var currentStatusChangedAt = Date.distantPast
+    private var isApplyingRemoteUICustomizations = false
+    private var lastUICustomizationSnapshot: [String: PersonalizationCloudValue]?
 
     private var syncEnabled: Bool {
         if UserDefaults.standard.object(forKey: syncEnabledKey) == nil { return false }
@@ -170,6 +187,10 @@ actor CloudKitSyncService {
 
     private var radioStationsSyncEnabled: Bool {
         boolDefaultingToTrue(forKey: radioStationsSyncEnabledKey)
+    }
+
+    private var uiCustomizationsSyncEnabled: Bool {
+        boolDefaultingToTrue(forKey: uiCustomizationsSyncEnabledKey)
     }
 
     private var offlineModeEnabled: Bool {
@@ -202,6 +223,7 @@ actor CloudKitSyncService {
         case .playHistory: return playHistorySyncEnabled
         case .recap: return recapSyncEnabled
         case .lyricsServer: return lyricsServerSyncEnabled
+        case .uiCustomizations: return uiCustomizationsSyncEnabled
         }
     }
 
@@ -219,6 +241,7 @@ actor CloudKitSyncService {
     }
     // NWPathMonitor lebt im actor – kein Lifecycle-Problem auf SwiftUI-Structs
     nonisolated(unsafe) private var pathMonitor: NWPathMonitor?
+    nonisolated(unsafe) private var uiCustomizationDefaultsObserver: NSObjectProtocol?
     private init() {}
 
     // MARK: - Visible Sync Status
@@ -365,6 +388,7 @@ actor CloudKitSyncService {
 
     func setup() async {
         debug("[CloudKitSync] setup() starting")
+        registerUICustomizationDefaultsObserverIfNeeded()
         guard canSyncBase || canSyncQueue else {
             debug("[CloudKitSync] setup() skipped — sync conditions not met (icloud/offline)")
             return
@@ -403,6 +427,33 @@ actor CloudKitSyncService {
         }
         monitor.start(queue: DispatchQueue(label: "ch.vkugler.shelv.netmonitor", qos: .utility))
         pathMonitor = monitor
+    }
+
+    private func registerUICustomizationDefaultsObserverIfNeeded() {
+        if lastUICustomizationSnapshot == nil {
+            lastUICustomizationSnapshot = PersonalizationSettings.cloudUICustomizationSnapshot()
+        }
+        guard uiCustomizationDefaultsObserver == nil else { return }
+        uiCustomizationDefaultsObserver = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: UserDefaults.standard,
+            queue: nil
+        ) { _ in
+            Task {
+                await CloudKitSyncService.shared.handleUICustomizationDefaultsDidChange()
+            }
+        }
+    }
+
+    private func handleUICustomizationDefaultsDidChange() async {
+        guard !isApplyingRemoteUICustomizations else { return }
+        let snapshot = PersonalizationSettings.cloudUICustomizationSnapshot()
+        guard snapshot != lastUICustomizationSnapshot else { return }
+
+        lastUICustomizationSnapshot = snapshot
+        Self.setUserDefault(.double(Date().timeIntervalSince1970), forKey: uiCustomizationsUpdatedAtKey)
+        guard canSync(.uiCustomizations) else { return }
+        await pushUICustomizationsIfNeeded()
     }
 
     // MARK: - Account
@@ -596,7 +647,7 @@ actor CloudKitSyncService {
                 switch recordType {
                 case "PlayEvent": playsDel += 1
                 case "RecapMarker": recapsDel += 1
-                case "RecapSettings", "LyricsServerSettings": settingsDel += 1
+                case "RecapSettings", "LyricsServerSettings", "UICustomizationSettings": settingsDel += 1
                 default: break
                 }
                 await handleDeletedRecord(id: recordID, type: recordType)
@@ -625,6 +676,8 @@ actor CloudKitSyncService {
                 await pushRetentionIfNeeded()
             } else if category == .lyricsServer {
                 await pushLyricsServerSettingsIfNeeded()
+            } else if category == .uiCustomizations {
+                await pushUICustomizationsIfNeeded()
             }
             if let token = newToken { setChangeToken(token, for: category) }
             let downloadedSummary = [
@@ -791,6 +844,11 @@ actor CloudKitSyncService {
         case "LyricsServerSettings":
             guard canSync(.lyricsServer) else { return stats }
             applyIncomingLyricsServerSettings(record)
+            stats.settingsDownloaded = 1
+
+        case "UICustomizationSettings":
+            guard canSync(.uiCustomizations) else { return stats }
+            applyIncomingUICustomizations(record)
             stats.settingsDownloaded = 1
 
         default:
@@ -1128,6 +1186,76 @@ actor CloudKitSyncService {
         Self.removeUserDefault(forKey: lyricsServerEchoUpdatedAtKey)
     }
 
+    // MARK: - Geteilte UI-Customization-Settings
+
+    func pushUICustomizationsIfNeeded() async {
+        guard canSync(.uiCustomizations) else {
+            logDisabled(.uiCustomizations, action: "UI customizations upload")
+            return
+        }
+
+        var updatedAt = UserDefaults.standard.double(forKey: uiCustomizationsUpdatedAtKey)
+        let syncedAt = UserDefaults.standard.double(forKey: uiCustomizationsSyncedAtKey)
+        let snapshot = PersonalizationSettings.cloudUICustomizationSnapshot()
+        lastUICustomizationSnapshot = snapshot
+
+        if updatedAt == 0, PersonalizationSettings.hasCustomizedCloudUICustomizationValues() {
+            updatedAt = Date().timeIntervalSince1970
+            Self.setUserDefault(.double(updatedAt), forKey: uiCustomizationsUpdatedAtKey)
+        }
+
+        guard updatedAt > syncedAt else { return }
+        guard let payload = encodedUICustomizationPayload(values: snapshot) else {
+            log("UI customizations upload failed — could not encode settings", isError: true)
+            return
+        }
+
+        do {
+            try await ensureZoneExists()
+            let rid = CKRecord.ID(recordName: Self.uiCustomizationsRecordName, zoneID: zoneID)
+            let rec = CKRecord(recordType: "UICustomizationSettings", recordID: rid)
+            rec["payload"] = payload as CKRecordValue
+            rec["updatedAt"] = updatedAt
+            rec["deviceId"] = deviceId
+            _ = try await db.modifyRecords(saving: [rec], deleting: [], savePolicy: .allKeys, atomically: true)
+            Self.setUserDefault(.double(updatedAt), forKey: uiCustomizationsSyncedAtKey)
+            log("UI customizations uploaded")
+        } catch {
+            log("UI customizations upload failed — will retry on next sync: \(error.localizedDescription)", isError: true)
+        }
+    }
+
+    private func applyIncomingUICustomizations(_ record: CKRecord) {
+        guard let updatedAt = record["updatedAt"] as? Double else { return }
+        let localUpdated = UserDefaults.standard.double(forKey: uiCustomizationsUpdatedAtKey)
+        guard updatedAt > localUpdated else { return }
+
+        guard
+            let payloadData = record["payload"] as? Data,
+            let payload = decodedUICustomizationPayload(from: payloadData)
+        else { return }
+
+        isApplyingRemoteUICustomizations = true
+        defer { isApplyingRemoteUICustomizations = false }
+
+        PersonalizationSettings.applyCloudUICustomizationSnapshot(payload.values)
+        lastUICustomizationSnapshot = PersonalizationSettings.cloudUICustomizationSnapshot()
+        Self.setUserDefault(.double(updatedAt), forKey: uiCustomizationsUpdatedAtKey)
+        Self.setUserDefault(.double(updatedAt), forKey: uiCustomizationsSyncedAtKey)
+        log("UI customizations updated from iCloud")
+    }
+
+    private func encodedUICustomizationPayload(values: [String: PersonalizationCloudValue]) -> Data? {
+        let payload = CloudUICustomizationPayload(schemaVersion: 1, values: values)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        return try? encoder.encode(payload)
+    }
+
+    private func decodedUICustomizationPayload(from data: Data) -> CloudUICustomizationPayload? {
+        try? JSONDecoder().decode(CloudUICustomizationPayload.self, from: data)
+    }
+
     func deletePlayEvent(uuid: String, force: Bool = false) async {
         guard canSync(.playHistory) || force else {
             logDisabled(.playHistory, action: "play event deletion")
@@ -1219,6 +1347,10 @@ actor CloudKitSyncService {
         let onlineFallback = LrcLibEndpoint.isOnlineFallbackEnabled
         if lyricsUpdatedAt > 0 || useCustomLyricsServer || !customLyricsURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !onlineFallback {
             Self.setUserDefault(.double(0), forKey: lyricsServerSyncedAtKey)
+        }
+        if UserDefaults.standard.double(forKey: uiCustomizationsUpdatedAtKey) > 0
+            || PersonalizationSettings.hasCustomizedCloudUICustomizationValues() {
+            Self.setUserDefault(.double(0), forKey: uiCustomizationsSyncedAtKey)
         }
         await PlayLogService.shared.markAllUnsyncedForReUpload()
         await updatePendingCounts()
@@ -1468,6 +1600,7 @@ actor CloudKitSyncService {
             logDisabled(.recap, action: "recap marker reupload")
         }
         await pushLyricsServerSettingsIfNeeded()
+        await pushUICustomizationsIfNeeded()
         await refreshRadioStationsIfNeeded()
         await flushScrobbleQueue()
         await finishCurrentStatus(statusText("sync_status_complete"))
@@ -1543,6 +1676,7 @@ actor CloudKitSyncService {
             }
             resetChangeToken(for: .playHistory)
             resetChangeToken(for: .recap)
+            resetChangeToken(for: .uiCustomizations)
         }
 
         if canSync(.playHistory) {
@@ -1607,6 +1741,7 @@ actor CloudKitSyncService {
         await runVisibleStatusStep(statusText("sync_status_verifying_icloud")) {
             resetChangeToken(for: .playHistory)
             resetChangeToken(for: .recap)
+            resetChangeToken(for: .uiCustomizations)
             _ = await downloadChanges()
             _ = await uploadPendingEvents()
             if canSync(.recap), !activeServerId.isEmpty {
@@ -1615,6 +1750,7 @@ actor CloudKitSyncService {
                 _ = await cleanupShelvRecapPlaylistsOnServer(serverId: activeServerId)
             }
             await pushLyricsServerSettingsIfNeeded()
+            await pushUICustomizationsIfNeeded()
             await flushScrobbleQueue()
             await updatePendingCounts()
         }
@@ -1741,7 +1877,7 @@ actor CloudKitSyncService {
         guard beginSyncWorkflow(named: "What to Sync update") else { return }
         defer { endSyncWorkflow() }
 
-        log("What to Sync updated — Play History: \(playHistorySyncEnabled ? "on" : "off"), Recap: \(recapSyncEnabled ? "on" : "off"), Lyrics Server: \(lyricsServerSyncEnabled ? "on" : "off"), Radio Stations: \(radioStationsSyncEnabled ? "on" : "off")")
+        log("What to Sync updated — Play History: \(playHistorySyncEnabled ? "on" : "off"), Recap: \(recapSyncEnabled ? "on" : "off"), Lyrics Server: \(lyricsServerSyncEnabled ? "on" : "off"), Radio Stations: \(radioStationsSyncEnabled ? "on" : "off"), UI Customizations: \(uiCustomizationsSyncEnabled ? "on" : "off")")
         guard canSyncBase else {
             logDisabled(nil, action: "What to Sync update")
             return
@@ -1776,6 +1912,9 @@ actor CloudKitSyncService {
         await refreshRadioStationsIfNeeded()
         await runVisibleStatusStep(statusText("sync_status_checking_icloud")) {
             _ = await downloadChanges()
+        }
+        if canSync(.uiCustomizations) {
+            await pushUICustomizationsIfNeeded()
         }
         await updatePendingCounts()
         await finishCurrentStatus(statusText("sync_status_complete"))

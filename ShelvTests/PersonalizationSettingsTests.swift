@@ -25,6 +25,7 @@ final class PersonalizationSettingsTests: XCTestCase {
         XCTAssertTrue(defaults.bool(forKey: PersonalizationPreferenceKey.showFavoritesInLibrary))
         XCTAssertTrue(defaults.bool(forKey: PersonalizationPreferenceKey.showFavoriteActions))
         XCTAssertTrue(defaults.bool(forKey: PersonalizationPreferenceKey.showInstantMixActions))
+        XCTAssertTrue(defaults.bool(forKey: PersonalizationPreferenceKey.showDiscoverInsights))
         XCTAssertTrue(defaults.bool(forKey: PersonalizationPreferenceKey.showRadio))
         XCTAssertTrue(defaults.bool(forKey: PersonalizationPreferenceKey.showGenreFilter))
         XCTAssertEqual(defaults.object(forKey: PersonalizationPreferenceKey.showDiscoverAirPlay) as? Bool, false)
@@ -83,6 +84,7 @@ final class PersonalizationSettingsTests: XCTestCase {
             "iCloudSyncRecapEnabled",
             "iCloudSyncLyricsServerEnabled",
             "iCloudSyncRadioStationsEnabled",
+            "iCloudSyncUICustomizationsEnabled",
             "mixUseDatabase",
         ]
 
@@ -103,6 +105,7 @@ final class PersonalizationSettingsTests: XCTestCase {
         XCTAssertTrue(defaults.bool(forKey: "iCloudSyncRecapEnabled"))
         XCTAssertTrue(defaults.bool(forKey: "iCloudSyncLyricsServerEnabled"))
         XCTAssertTrue(defaults.bool(forKey: "iCloudSyncRadioStationsEnabled"))
+        XCTAssertTrue(defaults.bool(forKey: "iCloudSyncUICustomizationsEnabled"))
 
         XCTAssertFalse(defaults.bool(forKey: "offlineModeEnabled"))
         XCTAssertFalse(defaults.bool(forKey: "preventSleepDuringDownloads"))
@@ -132,6 +135,64 @@ final class PersonalizationSettingsTests: XCTestCase {
         ShelvDefaultSettings.registerDefaults(in: defaults)
 
         XCTAssertFalse(defaults.bool(forKey: "enableDownloads"))
+    }
+
+    func testCloudUICustomizationKeysCoverVisibleCustomizationSettings() {
+        var expected: Set<String> = [
+            PersonalizationPreferenceKey.showPlaylistsTab,
+            PersonalizationPreferenceKey.showPlaylistActions,
+            PersonalizationPreferenceKey.showFavoritesInLibrary,
+            PersonalizationPreferenceKey.showFavoriteActions,
+            PersonalizationPreferenceKey.showInstantMixActions,
+            PersonalizationPreferenceKey.showDiscoverInsights,
+            PersonalizationPreferenceKey.showRadio,
+            PersonalizationPreferenceKey.showGenreFilter,
+            PersonalizationPreferenceKey.showDiscoverAirPlay,
+            PersonalizationPreferenceKey.albumGenreFilter,
+            PersonalizationPreferenceKey.miniPlayerStyle,
+            PersonalizationPreferenceKey.discoverySectionOrder,
+        ]
+        for mix in PersonalizationSmartMix.allCases {
+            expected.insert(mix.storageKey)
+        }
+        for slot in PersonalizationSwipeSlot.allCases {
+            expected.insert(slot.storageKey)
+        }
+
+        XCTAssertEqual(PersonalizationSettings.cloudSyncedUICustomizationKeys, expected)
+    }
+
+    func testCloudUICustomizationSnapshotAppliesPlatformSpecificValues() {
+        PersonalizationSettings.registerDefaults(in: defaults)
+        defaults.set(false, forKey: PersonalizationPreferenceKey.showRadio)
+        defaults.set(false, forKey: PersonalizationPreferenceKey.showDiscoverInsights)
+        defaults.set(true, forKey: PersonalizationPreferenceKey.showDiscoverAirPlay)
+        defaults.set(PersonalizationMiniPlayerStyle.native.rawValue, forKey: PersonalizationPreferenceKey.miniPlayerStyle)
+        defaults.set("Jazz", forKey: PersonalizationPreferenceKey.albumGenreFilter)
+        PersonalizationSettings.setDiscoverySectionOrder([.randomAlbums, .smartMixes], in: defaults)
+        PersonalizationSettings.setSwipeAction(.playNext, for: .leftPrimary, in: defaults)
+
+        let snapshot = PersonalizationSettings.cloudUICustomizationSnapshot(in: defaults)
+
+        let targetSuiteName = "PersonalizationSettingsTests.target.\(UUID().uuidString)"
+        let targetDefaults = UserDefaults(suiteName: targetSuiteName)!
+        defer { targetDefaults.removePersistentDomain(forName: targetSuiteName) }
+        PersonalizationSettings.registerDefaults(in: targetDefaults)
+
+        PersonalizationSettings.applyCloudUICustomizationSnapshot(snapshot, in: targetDefaults)
+
+        XCTAssertFalse(targetDefaults.bool(forKey: PersonalizationPreferenceKey.showRadio))
+        XCTAssertFalse(targetDefaults.bool(forKey: PersonalizationPreferenceKey.showDiscoverInsights))
+        XCTAssertTrue(targetDefaults.bool(forKey: PersonalizationPreferenceKey.showDiscoverAirPlay))
+        XCTAssertEqual(targetDefaults.string(forKey: PersonalizationPreferenceKey.miniPlayerStyle), PersonalizationMiniPlayerStyle.native.rawValue)
+        XCTAssertEqual(targetDefaults.string(forKey: PersonalizationPreferenceKey.albumGenreFilter), "Jazz")
+        XCTAssertEqual(
+            PersonalizationSettings.discoverySectionOrder(
+                from: targetDefaults.string(forKey: PersonalizationPreferenceKey.discoverySectionOrder)
+            ),
+            [.randomAlbums, .smartMixes, .recentlyAdded, .recentlyPlayed, .frequentlyPlayed]
+        )
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .leftPrimary, in: targetDefaults), .playNext)
     }
 
     func testClearAlbumGenreFilterResetsStoredSelection() {

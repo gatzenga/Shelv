@@ -446,6 +446,7 @@
 "show_favorites_in_sidebar" = "在侧边栏中显示收藏";
 "show_favorite_actions" = "显示收藏操作";
 "show_instant_mix_actions" = "显示即时混音操作";
+"show_insights" = "显示洞察";
 "swipe_actions" = "滑动操作";
 "swipe_left" = "向左滑动";
 "swipe_right" = "向右滑动";
