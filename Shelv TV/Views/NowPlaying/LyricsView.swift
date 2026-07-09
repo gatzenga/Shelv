@@ -43,7 +43,7 @@ private struct TVNativeLyricLineRow: View {
 
     var body: some View {
         Text(line.text)
-            .font(.system(size: 42, weight: .bold))
+            .font(.system(size: 44, weight: .bold))
             .lineSpacing(7)
             .foregroundStyle(Color.primary.opacity(opacity))
             .fixedSize(horizontal: false, vertical: true)
@@ -59,7 +59,7 @@ private struct TVNativePlainLyricLine: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 37, weight: .semibold))
+            .font(.system(size: 39, weight: .semibold))
             .lineSpacing(7)
             .foregroundStyle(Color.primary.opacity(0.86))
             .fixedSize(horizontal: false, vertical: true)
@@ -72,6 +72,7 @@ private struct TVNativePlainLyricLine: View {
 /// Bewusst ohne eigenen Kopf (Titel/Künstler) — der steht links in der Now-Playing-Spalte.
 struct LyricsView: View {
     @ObservedObject var player = AudioPlayerService.shared
+    private let horizontalPadding: CGFloat
 
     @State private var parsedLines: [LyricLine] = []
     @State private var plainLines: [String] = []
@@ -92,6 +93,10 @@ struct LyricsView: View {
     @State private var scheduledStandardScrollIndex: Int?
     @State private var standardPreparedLineIndex: Int?
     @State private var standardPreparedScrollDuration: Double = 0.38
+
+    init(horizontalPadding: CGFloat = 54) {
+        self.horizontalPadding = horizontalPadding
+    }
 
     var body: some View {
         Group {
@@ -161,7 +166,7 @@ struct LyricsView: View {
                             .id(line.id)
                     }
                 }
-                .padding(.horizontal, 54)
+                .padding(.horizontal, horizontalPadding)
                 .padding(.top, 90)
                 .padding(.bottom, 120)
             }
@@ -176,7 +181,7 @@ struct LyricsView: View {
             .onChange(of: standardPreparedLineIndex) { _, index in
                 guard let index, index < parsedLines.count else { return }
                 withAnimation(.easeOut(duration: standardPreparedScrollDuration)) {
-                    proxy.scrollTo(parsedLines[index].id, anchor: lyricsNativeActiveLineAnchor)
+                    scrollToNativeLine(at: index, proxy: proxy, anchor: lyricsNativeActiveLineAnchor)
                 }
             }
             .onChange(of: activeLineIndex) { _, index in
@@ -184,7 +189,7 @@ struct LyricsView: View {
                 guard standardPreparedLineIndex != index else { return }
 
                 withAnimation(.easeOut(duration: 0.18)) {
-                    proxy.scrollTo(parsedLines[index].id, anchor: lyricsNativeActiveLineAnchor)
+                    scrollToNativeLine(at: index, proxy: proxy, anchor: lyricsNativeActiveLineAnchor)
                 }
             }
         }
@@ -199,7 +204,7 @@ struct LyricsView: View {
                     TVNativePlainLyricLine(text: line.isEmpty ? " " : line)
                 }
             }
-            .padding(.horizontal, 54)
+            .padding(.horizontal, horizontalPadding)
             .padding(.top, 90)
             .padding(.bottom, 120)
         }
@@ -415,8 +420,14 @@ struct LyricsView: View {
         var transaction = Transaction()
         transaction.disablesAnimations = true
         withTransaction(transaction) {
-            proxy.scrollTo(parsedLines[index].id, anchor: anchor)
+            scrollToNativeLine(at: index, proxy: proxy, anchor: anchor)
         }
+    }
+
+    private func scrollToNativeLine(at index: Int, proxy: ScrollViewProxy, anchor: UnitPoint) {
+        let targetIndex = max(0, index - 2)
+        guard parsedLines.indices.contains(targetIndex) else { return }
+        proxy.scrollTo(parsedLines[targetIndex].id, anchor: anchor)
     }
 
     private func parseLRC(_ lrc: String) -> [LyricLine] {

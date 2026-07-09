@@ -26,6 +26,14 @@ struct NowPlayingView: View {
     @State private var panel: TVNowPlayingPanel?
     @State private var showSleepTimer = false
 
+    private var sidePanelVisible: Bool {
+        panel != nil && !player.isRadioPlayback
+    }
+
+    private var playerColumnOffsetX: CGFloat {
+        sidePanelVisible ? -36 : 0
+    }
+
     init(
         activeSidePanel: Binding<TVNowPlayingPanel?> = .constant(nil),
         isRootVisible: Binding<Bool> = .constant(false)
@@ -43,12 +51,13 @@ struct NowPlayingView: View {
                     if player.hasActivePlayback {
                         HStack(spacing: 0) {
                             playerColumn
+                                .offset(x: playerColumnOffsetX)
                                 .frame(maxWidth: .infinity)
                                 .focusSection()
 
                             if let panel, !player.isRadioPlayback {
                                 sidePanel(panel)
-                                    .frame(width: 720)
+                                    .frame(width: 820)
                                     .focusSection()
                                     .transition(.move(edge: .trailing).combined(with: .opacity))
                             }
@@ -328,7 +337,7 @@ struct NowPlayingView: View {
         switch p {
         case .lyrics:
             // Kein Kopf — Titel/Künstler stehen links in der Now-Playing-Spalte.
-            LyricsView()
+            LyricsView(horizontalPadding: 36)
         case .queue:
             // Kein Kopf — die Sektionen (Als Nächstes / Nächste Titel / Deine Warteschlange) sind selbsterklärend.
             QueueView()

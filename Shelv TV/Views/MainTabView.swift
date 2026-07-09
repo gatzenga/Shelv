@@ -66,10 +66,14 @@ struct MainTabView: View {
         }
         .animation(.easeInOut(duration: 0.25), value: showIdleNowPlaying)
         .simultaneousGesture(TapGesture().onEnded {
-            registerUserActivity()
+            if !showIdleNowPlaying {
+                registerUserActivity()
+            }
         })
         .onMoveCommand { _ in
-            registerUserActivity()
+            if !showIdleNowPlaying {
+                registerUserActivity()
+            }
         }
         .onExitCommand {
             if showIdleNowPlaying {
@@ -77,9 +81,7 @@ struct MainTabView: View {
             }
         }
         .onPlayPauseCommand {
-            if showIdleNowPlaying {
-                player.togglePlayPause()
-            } else {
+            if !showIdleNowPlaying {
                 registerUserActivity()
                 player.togglePlayPause()
             }
@@ -141,16 +143,11 @@ struct MainTabView: View {
             get: { offlineMode.serverErrorBannerVisible },
             set: { if !$0 { offlineMode.dismissBanner() } }
         )) {
-            if offlineMode.downloadsFeatureEnabled {
-                Button(String(localized: "go_offline")) {
-                    offlineMode.enterOfflineMode()
-                }
-            }
             Button(String(localized: "ok"), role: .cancel) {
                 offlineMode.dismissBanner()
             }
         } message: {
-            Text(offlineMode.lastServerErrorMessage ?? String(localized: "switch_to_offline_mode_to_use_your_downloads"))
+            Text(offlineMode.lastServerErrorMessage ?? String(localized: "server_unreachable"))
         }
         .onAppear {
             scheduleIdleNowPlayingIfNeeded()
@@ -274,19 +271,25 @@ private struct TVIdleNowPlayingView: View {
     let onDismiss: () -> Void
 
     @ObservedObject private var player = AudioPlayerService.shared
+    @ObservedObject private var radioStore = RadioStationStore.shared
     @AppStorage("themeColor") private var themeColor = "violet"
+    @AppStorage("radioSortDirectionTV") private var radioSortDirectionRaw = SortDirection.ascending.rawValue
     @FocusState private var isFocused: Bool
     @State private var displayTime: Double = 0
     @State private var displayDuration: Double = 0
 
     private var accent: Color { AppTheme.color(for: themeColor) }
+    private var radioDisplayItems: [RadioStationDisplayItem] {
+        let direction = SortDirection(rawValue: radioSortDirectionRaw) ?? .ascending
+        return direction == .descending ? Array(radioStore.items.reversed()) : radioStore.items
+    }
 
     var body: some View {
         ZStack {
             background
 
             if panel == .lyrics, !player.isRadioPlayback {
-                HStack(alignment: .center, spacing: 64) {
+                HStack(alignment: .center, spacing: 100) {
                     VStack(alignment: .center, spacing: 34) {
                         artwork
                         VStack(alignment: .leading, spacing: 24) {
@@ -298,7 +301,7 @@ private struct TVIdleNowPlayingView: View {
                     .frame(width: 620)
 
                     LyricsView()
-                        .frame(width: 840, height: 840)
+                        .frame(width: 880, height: 900)
                 }
                 .frame(maxWidth: 1700, maxHeight: .infinity)
                 .padding(.horizontal, 70)
@@ -320,15 +323,30 @@ private struct TVIdleNowPlayingView: View {
         .focusable()
         .focused($isFocused)
         .onAppear {
-            isFocused = true
             syncDisplayFromPlayer()
+            isFocused = true
         }
         .onReceive(player.timePublisher) { t in
             displayTime = t.time
             displayDuration = t.duration
         }
-        .onTapGesture(perform: onDismiss)
-        .onMoveCommand { _ in onDismiss() }
+        .onTapGesture {
+            player.togglePlayPause()
+        }
+        .onMoveCommand { direction in
+            isFocused = true
+            switch direction {
+            case .left:
+                playPrevious()
+            case .right:
+                playNext()
+            default:
+                break
+            }
+        }
+        .onPlayPauseCommand {
+            player.togglePlayPause()
+        }
         .onExitCommand(perform: onDismiss)
     }
 
@@ -418,6 +436,22 @@ private struct TVIdleNowPlayingView: View {
     private func syncDisplayFromPlayer() {
         displayTime = player.currentTime
         displayDuration = player.duration
+    }
+
+    private func playPrevious() {
+        if player.isRadioPlayback {
+            player.playPreviousRadioStation(in: radioDisplayItems)
+        } else {
+            player.previous()
+        }
+    }
+
+    private func playNext() {
+        if player.isRadioPlayback {
+            player.playNextRadioStation(in: radioDisplayItems)
+        } else {
+            player.next(triggeredByUser: true)
+        }
     }
 }
 

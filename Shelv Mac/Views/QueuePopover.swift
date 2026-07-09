@@ -13,6 +13,8 @@ struct QueuePopover: View {
     @Environment(\.themeColor) private var themeColor
     @State private var showClearConfirm = false
     @State private var isEditing = false
+    @State private var isEditHovered = false
+    @State private var isClearHovered = false
     @AppStorage("infinityModeEnabled") private var infinityMode = false
 
     @State private var playNextEntries: [QueueEntry]
@@ -117,14 +119,24 @@ struct QueuePopover: View {
                         Button(isEditing ? String(localized: "done") : String(localized: "edit")) {
                             isEditing.toggle()
                         }
-                        .font(.caption)
-                        .foregroundStyle(isEditing ? themeColor : .secondary)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(isEditing || isEditHovered ? themeColor : .secondary)
                         .buttonStyle(.plain)
+                        .contentShape(Rectangle())
+                        .onHover { inside in
+                            isEditHovered = inside
+                            if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                        }
 
                         Button(String(localized: "clear")) { showClearConfirm = true }
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(isClearHovered ? themeColor : .secondary)
                             .buttonStyle(.plain)
+                            .contentShape(Rectangle())
+                            .onHover { inside in
+                                isClearHovered = inside
+                                if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                            }
                     }
 
                     MacSidePanelCloseButton {

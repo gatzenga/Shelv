@@ -24,7 +24,7 @@ private struct LyricLineRow: View {
     var body: some View {
         Button(action: onTap) {
             Text(line.text)
-                .font(.callout)
+                .font(.system(size: 15))
                 .foregroundStyle(isActive ? Color.primary : (isHovered ? Color.primary : Color.secondary))
                 .padding(.vertical, 6)
                 .padding(.horizontal, 12)
@@ -146,25 +146,12 @@ struct LyricsPanel: View {
     }
 
     var body: some View {
-        Group {
-            if usesNativeInterface {
-                ZStack(alignment: .topTrailing) {
-                    lyricsContent
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        VStack(spacing: 0) {
+            header
 
-                    nativePanelControls
-                        .padding(.top, 12)
-                        .padding(.trailing, 14)
-                }
-            } else {
-                VStack(spacing: 0) {
-                    header
+            Divider()
 
-                    Divider()
-
-                    lyricsContent
-                }
-            }
+            lyricsContent
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
@@ -231,20 +218,6 @@ struct LyricsPanel: View {
         .padding(.horizontal, 16)
         .padding(.top, 12)
         .padding(.bottom, 8)
-    }
-
-    private var nativePanelControls: some View {
-        HStack(spacing: 8) {
-            if let source = lyricsStore.currentLyrics?.source, source != "none" {
-                Text(source)
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                    .textCase(.uppercase)
-            }
-            MacSidePanelCloseButton {
-                appState.closePanel(.lyrics)
-            }
-        }
     }
 
     // MARK: - Content
@@ -340,7 +313,7 @@ struct LyricsPanel: View {
             LazyVStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
                     Text(line)
-                        .font(.callout)
+                        .font(.system(size: 15))
                         .padding(.vertical, 4)
                         .padding(.horizontal, 16)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -386,7 +359,7 @@ struct LyricsPanel: View {
                                 visualActiveLineIndex = index
                                 isUserScrolling = false
                                 withAnimation(.easeOut(duration: 0.12)) {
-                                    proxy.scrollTo(line.id, anchor: lyricsStandardActiveLineAnchor)
+                                    scrollToStandardLine(at: index, proxy: proxy, anchor: lyricsStandardActiveLineAnchor)
                                 }
                             }
                         )
@@ -405,11 +378,11 @@ struct LyricsPanel: View {
                     .allowsHitTesting(false)
             }
             .onAppear {
-                focusCurrentLineSoon(proxy: proxy, anchor: lyricsStandardActiveLineAnchor)
+                focusCurrentLineSoon(proxy: proxy, anchor: lyricsStandardActiveLineAnchor, lineOffset: -1)
             }
             .onChange(of: initialFocusRequest) { _, _ in
                 guard !isUserScrolling else { return }
-                focusCurrentLineSoon(proxy: proxy, anchor: lyricsStandardActiveLineAnchor)
+                focusCurrentLineSoon(proxy: proxy, anchor: lyricsStandardActiveLineAnchor, lineOffset: -1)
             }
             .onChange(of: standardPreparedLineIndex) { _, index in
                 guard !isUserScrolling,
@@ -418,7 +391,7 @@ struct LyricsPanel: View {
                       !usesNativeInterface else { return }
 
                 withAnimation(.easeOut(duration: standardPreparedScrollDuration)) {
-                    proxy.scrollTo(parsedLines[index].id, anchor: lyricsStandardActiveLineAnchor)
+                    scrollToStandardLine(at: index, proxy: proxy, anchor: lyricsStandardActiveLineAnchor)
                 }
             }
             .onChange(of: activeLineIndex) { _, index in
@@ -426,7 +399,7 @@ struct LyricsPanel: View {
                 guard standardPreparedLineIndex != index else { return }
 
                 withAnimation(.easeOut(duration: 0.18)) {
-                    proxy.scrollTo(parsedLines[index].id, anchor: lyricsStandardActiveLineAnchor)
+                    scrollToStandardLine(at: index, proxy: proxy, anchor: lyricsStandardActiveLineAnchor)
                 }
             }
             .onChange(of: autoScrollRefocusRequest) { _, _ in
@@ -435,7 +408,7 @@ struct LyricsPanel: View {
                       parsedLines.indices.contains(index) else { return }
 
                 withAnimation(.easeOut(duration: 0.18)) {
-                    proxy.scrollTo(parsedLines[index].id, anchor: lyricsStandardActiveLineAnchor)
+                    scrollToStandardLine(at: index, proxy: proxy, anchor: lyricsStandardActiveLineAnchor)
                 }
             }
         }
@@ -460,7 +433,7 @@ struct LyricsPanel: View {
                                 visualActiveLineIndex = index
                                 isUserScrolling = false
                                 withAnimation(.easeOut(duration: 0.14)) {
-                                    proxy.scrollTo(line.id, anchor: lyricsNativeActiveLineAnchor)
+                                    scrollToNativeLine(at: index, proxy: proxy, anchor: lyricsNativeActiveLineAnchor)
                                 }
                             }
                         )
@@ -482,16 +455,16 @@ struct LyricsPanel: View {
                     .allowsHitTesting(false)
             }
             .onAppear {
-                focusCurrentLineSoon(proxy: proxy, anchor: lyricsNativeActiveLineAnchor)
+                focusCurrentLineSoon(proxy: proxy, anchor: lyricsNativeActiveLineAnchor, lineOffset: 1)
             }
             .onChange(of: initialFocusRequest) { _, _ in
                 guard !isUserScrolling else { return }
-                focusCurrentLineSoon(proxy: proxy, anchor: lyricsNativeActiveLineAnchor)
+                focusCurrentLineSoon(proxy: proxy, anchor: lyricsNativeActiveLineAnchor, lineOffset: 1)
             }
             .onChange(of: activeLineIndex) { _, index in
                 guard !isUserScrolling, let index, index < parsedLines.count else { return }
                 withAnimation(.easeOut(duration: 0.14)) {
-                    proxy.scrollTo(parsedLines[index].id, anchor: lyricsNativeActiveLineAnchor)
+                    scrollToNativeLine(at: index, proxy: proxy, anchor: lyricsNativeActiveLineAnchor)
                 }
             }
             .onChange(of: visualActiveLineIndex) { _, index in
@@ -500,7 +473,7 @@ struct LyricsPanel: View {
                       parsedLines.indices.contains(index) else { return }
 
                 withAnimation(.easeOut(duration: 0.18)) {
-                    proxy.scrollTo(parsedLines[index].id, anchor: lyricsNativeActiveLineAnchor)
+                    scrollToNativeLine(at: index, proxy: proxy, anchor: lyricsNativeActiveLineAnchor)
                 }
             }
             .onChange(of: autoScrollRefocusRequest) { _, _ in
@@ -509,7 +482,7 @@ struct LyricsPanel: View {
                       parsedLines.indices.contains(index) else { return }
 
                 withAnimation(.easeOut(duration: 0.18)) {
-                    proxy.scrollTo(parsedLines[index].id, anchor: lyricsNativeActiveLineAnchor)
+                    scrollToNativeLine(at: index, proxy: proxy, anchor: lyricsNativeActiveLineAnchor)
                 }
             }
         }
@@ -699,22 +672,43 @@ struct LyricsPanel: View {
         standardPreparedScrollDuration = 0.38
     }
 
-    private func focusCurrentLineSoon(proxy: ScrollViewProxy, anchor: UnitPoint) {
-        focusCurrentLine(proxy: proxy, anchor: anchor)
+    private func focusCurrentLineSoon(proxy: ScrollViewProxy, anchor: UnitPoint, lineOffset: Int = 0) {
+        focusCurrentLine(proxy: proxy, anchor: anchor, lineOffset: lineOffset)
         DispatchQueue.main.async {
-            focusCurrentLine(proxy: proxy, anchor: anchor)
+            focusCurrentLine(proxy: proxy, anchor: anchor, lineOffset: lineOffset)
         }
     }
 
-    private func focusCurrentLine(proxy: ScrollViewProxy, anchor: UnitPoint) {
+    private func focusCurrentLine(proxy: ScrollViewProxy, anchor: UnitPoint, lineOffset: Int = 0) {
         guard let index = visualActiveLineIndex ?? activeLineIndex,
               parsedLines.indices.contains(index) else { return }
 
         var transaction = Transaction()
         transaction.disablesAnimations = true
         withTransaction(transaction) {
-            proxy.scrollTo(parsedLines[index].id, anchor: anchor)
+            scrollToLine(at: index, proxy: proxy, anchor: anchor, lineOffset: lineOffset)
         }
+    }
+
+    private func scrollToNativeLine(at index: Int, proxy: ScrollViewProxy, anchor: UnitPoint) {
+        scrollToLine(at: index, proxy: proxy, anchor: anchor, lineOffset: 1)
+    }
+
+    private func scrollToStandardLine(at index: Int, proxy: ScrollViewProxy, anchor: UnitPoint) {
+        scrollToLine(at: index, proxy: proxy, anchor: anchor, lineOffset: -1)
+    }
+
+    private func scrollToLine(
+        at index: Int,
+        proxy: ScrollViewProxy,
+        anchor: UnitPoint,
+        lineOffset: Int = 0
+    ) {
+        guard !parsedLines.isEmpty else { return }
+        let targetIndex = min(parsedLines.count - 1, max(0, index - lineOffset))
+        guard parsedLines.indices.contains(targetIndex) else { return }
+
+        proxy.scrollTo(parsedLines[targetIndex].id, anchor: anchor)
     }
 
     private func pauseAutoScroll() {

@@ -19,7 +19,7 @@ struct AVRoutePickerViewRepresentable: NSViewRepresentable {
     private func configure(_ view: AVRoutePickerView) {
         view.isRoutePickerButtonBordered = false
         view.setRoutePickerButtonColor(normalColor, for: .normal)
-        view.setRoutePickerButtonColor(normalColor, for: .normalHighlighted)
+        view.setRoutePickerButtonColor(activeColor, for: .normalHighlighted)
         view.setRoutePickerButtonColor(activeColor, for: .active)
         view.setRoutePickerButtonColor(activeColor, for: .activeHighlighted)
     }

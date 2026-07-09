@@ -404,7 +404,7 @@ struct LyricsSheetView: View {
                                 visualActiveLineIndex = index
                                 isUserScrolling = false
                                 withAnimation(.easeOut(duration: 0.14)) {
-                                    proxy.scrollTo(line.id, anchor: lyricsNativeActiveLineAnchor)
+                                    scrollToNativeLine(at: index, proxy: proxy, anchor: lyricsNativeActiveLineAnchor)
                                 }
                             }
                         )
@@ -422,16 +422,16 @@ struct LyricsSheetView: View {
                     .onChanged { _ in pauseAutoScroll() }
             )
             .onAppear {
-                focusCurrentLineSoon(proxy: proxy, anchor: lyricsNativeActiveLineAnchor)
+                focusCurrentLineSoon(proxy: proxy, anchor: lyricsNativeActiveLineAnchor, lineOffset: 1)
             }
             .onChange(of: initialFocusRequest) { _, _ in
                 guard !isUserScrolling else { return }
-                focusCurrentLineSoon(proxy: proxy, anchor: lyricsNativeActiveLineAnchor)
+                focusCurrentLineSoon(proxy: proxy, anchor: lyricsNativeActiveLineAnchor, lineOffset: 1)
             }
             .onChange(of: activeLineIndex) { _, index in
                 guard !isUserScrolling, let index, index < parsedLines.count else { return }
                 withAnimation(.easeOut(duration: 0.14)) {
-                    proxy.scrollTo(parsedLines[index].id, anchor: lyricsNativeActiveLineAnchor)
+                    scrollToNativeLine(at: index, proxy: proxy, anchor: lyricsNativeActiveLineAnchor)
                 }
             }
             .onChange(of: visualActiveLineIndex) { _, index in
@@ -440,7 +440,7 @@ struct LyricsSheetView: View {
                       parsedLines.indices.contains(index) else { return }
 
                 withAnimation(.easeOut(duration: 0.18)) {
-                    proxy.scrollTo(parsedLines[index].id, anchor: lyricsNativeActiveLineAnchor)
+                    scrollToNativeLine(at: index, proxy: proxy, anchor: lyricsNativeActiveLineAnchor)
                 }
             }
             .onChange(of: autoScrollRefocusRequest) { _, _ in
@@ -449,7 +449,7 @@ struct LyricsSheetView: View {
                       parsedLines.indices.contains(index) else { return }
 
                 withAnimation(.easeOut(duration: 0.18)) {
-                    proxy.scrollTo(parsedLines[index].id, anchor: lyricsNativeActiveLineAnchor)
+                    scrollToNativeLine(at: index, proxy: proxy, anchor: lyricsNativeActiveLineAnchor)
                 }
             }
         }
@@ -685,22 +685,37 @@ struct LyricsSheetView: View {
         standardPreparedScrollDuration = 0.38
     }
 
-    private func focusCurrentLineSoon(proxy: ScrollViewProxy, anchor: UnitPoint) {
-        focusCurrentLine(proxy: proxy, anchor: anchor)
+    private func focusCurrentLineSoon(proxy: ScrollViewProxy, anchor: UnitPoint, lineOffset: Int = 0) {
+        focusCurrentLine(proxy: proxy, anchor: anchor, lineOffset: lineOffset)
         DispatchQueue.main.async {
-            focusCurrentLine(proxy: proxy, anchor: anchor)
+            focusCurrentLine(proxy: proxy, anchor: anchor, lineOffset: lineOffset)
         }
     }
 
-    private func focusCurrentLine(proxy: ScrollViewProxy, anchor: UnitPoint) {
+    private func focusCurrentLine(proxy: ScrollViewProxy, anchor: UnitPoint, lineOffset: Int = 0) {
         guard let index = visualActiveLineIndex ?? activeLineIndex,
               parsedLines.indices.contains(index) else { return }
 
         var transaction = Transaction()
         transaction.disablesAnimations = true
         withTransaction(transaction) {
-            proxy.scrollTo(parsedLines[index].id, anchor: anchor)
+            scrollToLine(at: index, proxy: proxy, anchor: anchor, lineOffset: lineOffset)
         }
+    }
+
+    private func scrollToNativeLine(at index: Int, proxy: ScrollViewProxy, anchor: UnitPoint) {
+        scrollToLine(at: index, proxy: proxy, anchor: anchor, lineOffset: 1)
+    }
+
+    private func scrollToLine(
+        at index: Int,
+        proxy: ScrollViewProxy,
+        anchor: UnitPoint,
+        lineOffset: Int = 0
+    ) {
+        let targetIndex = max(0, index - lineOffset)
+        guard parsedLines.indices.contains(targetIndex) else { return }
+        proxy.scrollTo(parsedLines[targetIndex].id, anchor: anchor)
     }
 
     private func pauseAutoScroll() {

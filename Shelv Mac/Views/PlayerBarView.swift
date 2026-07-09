@@ -23,6 +23,7 @@ private struct NativeMacLinearSlider: View {
     var interaction: NativeMacSliderInteraction = .jumpWithGrabSafety
     var grabRadius: CGFloat = 18
     var grabActivationDistance: CGFloat = 2
+    var layoutHeight: CGFloat = 28
     var onEditingChanged: (Bool) -> Void = { _ in }
 
     @State private var isInteracting = false
@@ -80,7 +81,7 @@ private struct NativeMacLinearSlider: View {
             .animation(.spring(response: 0.24, dampingFraction: 0.78), value: isInteracting)
             .animation(.easeOut(duration: 0.14), value: isHovered)
         }
-        .frame(height: 28)
+        .frame(height: layoutHeight)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityValue("\(Int(normalizedValue * 100))%")
         .accessibilityAdjustableAction { direction in
@@ -311,128 +312,131 @@ struct PlayerBarView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.leading, 20)
 
-                VStack(spacing: 10) {
-                    if player.isRadioPlayback {
-                        radioTransportControls
-                    } else {
-                        HStack(spacing: 22) {
-                        Group {
-                            if showPlaylistActions, let song = player.currentSong {
-                                Button {
-                                    NotificationCenter.default.post(name: .addSongsToPlaylist, object: [song.id])
-                                } label: {
-                                    Image(systemName: "music.note.list")
-                                        .foregroundStyle(AnyShapeStyle(.primary.opacity(0.35)))
-                                }
-                                .buttonStyle(.plain)
-                                .help(String(localized: "add_to_playlist"))
-                            } else {
-                                Image(systemName: "music.note.list")
-                                    .hidden()
-                            }
-                        }
-                        .font(.title2)
-
+                VStack(spacing: Self.centerStackSpacing) {
+                    Group {
                         if player.isRadioPlayback {
-                            Image(systemName: "shuffle")
-                                .hidden()
-                                .font(.title2)
+                            radioTransportControls
                         } else {
-                            Button { player.toggleShuffle() } label: {
-                                Image(systemName: "shuffle")
-                                    .foregroundStyle(player.isShuffled ? AnyShapeStyle(themeColor) : AnyShapeStyle(.primary.opacity(0.35)))
-                            }
-                            .buttonStyle(.plain)
-                            .font(.title2)
-                            .help(player.isShuffled ? String(localized: "shuffle_off") : String(localized: "shuffle_on"))
-                        }
-
-                        if player.isRadioPlayback {
-                            Button { player.playPreviousRadioStation(in: radioDisplayItems) } label: {
-                                Image(systemName: "backward.fill")
-                            }
-                            .buttonStyle(.plain)
-                            .font(.title2)
-                            .disabled(radioDisplayItems.count <= 1)
-                        } else {
-                            Button { player.previous() } label: {
-                                Image(systemName: "backward.fill")
-                            }
-                            .buttonStyle(.plain)
-                            .font(.title2)
-                            .disabled(player.queue.isEmpty)
-                        }
-
-                        Button { player.togglePlayPause() } label: {
-                            ZStack {
-                                Circle().fill(themeColor)
-                                Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                                    .foregroundStyle(.white)
-                                    .font(.system(size: 17, weight: .semibold))
-                                    .offset(x: player.isPlaying ? 0 : 1.5)
-                            }
-                            .frame(width: 46, height: 46)
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(!player.hasActivePlayback)
-
-                        if player.isRadioPlayback {
-                            Button { player.playNextRadioStation(in: radioDisplayItems) } label: {
-                                Image(systemName: "forward.fill")
-                            }
-                            .buttonStyle(.plain)
-                            .font(.title2)
-                            .disabled(radioDisplayItems.count <= 1)
-                        } else {
-                            Button { player.next(triggeredByUser: true) } label: {
-                                Image(systemName: "forward.fill")
-                            }
-                            .buttonStyle(.plain)
-                            .font(.title2)
-                            .disabled(player.repeatMode == .off
-                                && player.currentIndex >= player.queue.count - 1
-                                && player.playNextQueue.isEmpty
-                                && player.userQueue.isEmpty)
-                        }
-
-                        if player.isRadioPlayback {
-                            Image(systemName: player.repeatMode.systemImage)
-                                .hidden()
-                                .font(.title2)
-                        } else {
-                            Button { player.cycleRepeatMode() } label: {
-                                Image(systemName: player.repeatMode.systemImage)
-                                    .foregroundStyle(player.repeatMode == .off ? AnyShapeStyle(.primary.opacity(0.35)) : AnyShapeStyle(themeColor))
-                            }
-                            .buttonStyle(.plain)
-                            .font(.title2)
-                            .help(repeatHelpText)
-                        }
-
-                        Group {
-                            if showFavoriteActions, let song = player.currentSong {
-                                let isStarred = libraryStore.isSongStarred(song)
-                                Button {
-                                    Task {
-                                        await libraryStore.toggleStarSong(song)
-                                        player.setCurrentSongStarred(!isStarred)
+                            HStack(spacing: 22) {
+                                Group {
+                                    if showPlaylistActions, let song = player.currentSong {
+                                        Button {
+                                            NotificationCenter.default.post(name: .addSongsToPlaylist, object: [song.id])
+                                        } label: {
+                                            Image(systemName: "music.note.list")
+                                                .foregroundStyle(AnyShapeStyle(.primary.opacity(0.35)))
+                                        }
+                                        .buttonStyle(.plain)
+                                        .help(String(localized: "add_to_playlist"))
+                                    } else {
+                                        Image(systemName: "music.note.list")
+                                            .hidden()
                                     }
-                                } label: {
-                                    Image(systemName: isStarred ? "heart.fill" : "heart")
-                                        .foregroundStyle(isStarred ? AnyShapeStyle(themeColor) : AnyShapeStyle(.primary.opacity(0.35)))
+                                }
+                                .font(.title2)
+
+                                if player.isRadioPlayback {
+                                    Image(systemName: "shuffle")
+                                        .hidden()
+                                        .font(.title2)
+                                } else {
+                                    Button { player.toggleShuffle() } label: {
+                                        Image(systemName: "shuffle")
+                                            .foregroundStyle(player.isShuffled ? AnyShapeStyle(themeColor) : AnyShapeStyle(.primary.opacity(0.35)))
+                                    }
+                                    .buttonStyle(.plain)
+                                    .font(.title2)
+                                    .help(player.isShuffled ? String(localized: "shuffle_off") : String(localized: "shuffle_on"))
+                                }
+
+                                if player.isRadioPlayback {
+                                    Button { player.playPreviousRadioStation(in: radioDisplayItems) } label: {
+                                        Image(systemName: "backward.fill")
+                                    }
+                                    .buttonStyle(.plain)
+                                    .font(.title2)
+                                    .disabled(radioDisplayItems.count <= 1)
+                                } else {
+                                    Button { player.previous() } label: {
+                                        Image(systemName: "backward.fill")
+                                    }
+                                    .buttonStyle(.plain)
+                                    .font(.title2)
+                                    .disabled(player.queue.isEmpty)
+                                }
+
+                                Button { player.togglePlayPause() } label: {
+                                    ZStack {
+                                        Circle().fill(themeColor)
+                                        Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                                            .foregroundStyle(.white)
+                                            .font(.system(size: 17, weight: .semibold))
+                                            .offset(x: player.isPlaying ? 0 : 1.5)
+                                    }
+                                    .frame(width: 46, height: 46)
                                 }
                                 .buttonStyle(.plain)
-                                .help(isStarred
-                                      ? String(localized: "remove_from_favorites")
-                                      : String(localized: "add_to_favorites"))
-                            } else {
-                                Image(systemName: "heart")
-                                    .hidden()
+                                .disabled(!player.hasActivePlayback)
+
+                                if player.isRadioPlayback {
+                                    Button { player.playNextRadioStation(in: radioDisplayItems) } label: {
+                                        Image(systemName: "forward.fill")
+                                    }
+                                    .buttonStyle(.plain)
+                                    .font(.title2)
+                                    .disabled(radioDisplayItems.count <= 1)
+                                } else {
+                                    Button { player.next(triggeredByUser: true) } label: {
+                                        Image(systemName: "forward.fill")
+                                    }
+                                    .buttonStyle(.plain)
+                                    .font(.title2)
+                                    .disabled(player.repeatMode == .off
+                                        && player.currentIndex >= player.queue.count - 1
+                                        && player.playNextQueue.isEmpty
+                                        && player.userQueue.isEmpty)
+                                }
+
+                                if player.isRadioPlayback {
+                                    Image(systemName: player.repeatMode.systemImage)
+                                        .hidden()
+                                        .font(.title2)
+                                } else {
+                                    Button { player.cycleRepeatMode() } label: {
+                                        Image(systemName: player.repeatMode.systemImage)
+                                            .foregroundStyle(player.repeatMode == .off ? AnyShapeStyle(.primary.opacity(0.35)) : AnyShapeStyle(themeColor))
+                                    }
+                                    .buttonStyle(.plain)
+                                    .font(.title2)
+                                    .help(repeatHelpText)
+                                }
+
+                                Group {
+                                    if showFavoriteActions, let song = player.currentSong {
+                                        let isStarred = libraryStore.isSongStarred(song)
+                                        Button {
+                                            Task {
+                                                await libraryStore.toggleStarSong(song)
+                                                player.setCurrentSongStarred(!isStarred)
+                                            }
+                                        } label: {
+                                            Image(systemName: isStarred ? "heart.fill" : "heart")
+                                                .foregroundStyle(isStarred ? AnyShapeStyle(themeColor) : AnyShapeStyle(.primary.opacity(0.35)))
+                                        }
+                                        .buttonStyle(.plain)
+                                        .help(isStarred
+                                              ? String(localized: "remove_from_favorites")
+                                              : String(localized: "add_to_favorites"))
+                                    } else {
+                                        Image(systemName: "heart")
+                                            .hidden()
+                                    }
+                                }
+                                .font(.title2)
                             }
-                        }
-                        .font(.title2)
                         }
                     }
+                    .frame(height: Self.transportControlsHeight)
 
                     Group {
                         if player.isRadioPlayback {
@@ -455,7 +459,9 @@ struct PlayerBarView: View {
                             }
                         }
                     }
+                    .frame(height: Self.progressRowHeight)
                 }
+                .frame(height: Self.centerStackHeight)
                 .frame(maxWidth: 560)
 
                 HStack(spacing: 12) {
@@ -486,8 +492,7 @@ struct PlayerBarView: View {
                             systemName: "list.bullet",
                             isActive: appState.activePanel == .queue,
                             helpText: String(localized: "queue"),
-                            iconSize: Self.rightIconSize + 1,
-                            usesNativeInterface: usesNativeInterface
+                            iconSize: Self.rightIconSize + 1
                         ) {
                             appState.togglePanel(.queue)
                         }
@@ -495,21 +500,19 @@ struct PlayerBarView: View {
                         MacPlayerUtilityButton(
                             systemName: "quote.bubble",
                             isActive: appState.activePanel == .lyrics,
-                            helpText: String(localized: "lyrics"),
-                            usesNativeInterface: usesNativeInterface
+                            helpText: String(localized: "lyrics")
                         ) {
                             appState.togglePanel(.lyrics)
                         }
                     }
 
-                    MacRoutePickerButton(usesNativeInterface: usesNativeInterface)
+                    MacRoutePickerButton()
 
                     MacPlayerUtilityButton(
                         systemName: volumeSystemImage,
                         isActive: false,
                         helpText: player.volume < 0.01 ? String(localized: "unmute") : String(localized: "mute"),
-                        weight: .regular,
-                        usesNativeInterface: usesNativeInterface
+                        weight: .regular
                     ) {
                         toggleMute()
                     }
@@ -550,6 +553,7 @@ struct PlayerBarView: View {
                 isEnabled: player.currentSong != nil && player.duration > 0,
                 interaction: .jumpWithGrabSafety,
                 grabRadius: 10,
+                layoutHeight: Self.nativePlaybackSliderHeight,
                 onEditingChanged: handleSeekEditing
             )
             .frame(maxWidth: 360)
@@ -755,6 +759,11 @@ struct PlayerBarView: View {
     fileprivate static let rightControlSize: CGFloat = 30
     fileprivate static let rightIconSize: CGFloat = 17
     fileprivate static let routePickerSize: CGFloat = 20
+    private static let transportControlsHeight: CGFloat = 46
+    private static let progressRowHeight: CGFloat = 22
+    private static let centerStackSpacing: CGFloat = 8
+    private static let centerStackHeight = transportControlsHeight + centerStackSpacing + progressRowHeight
+    private static let nativePlaybackSliderHeight: CGFloat = 20
     private static let sleepTimerOptions = [15, 30, 45, 60, 90, 120]
 
     private func sleepTimerRowLabel(minutes: Int) -> String {
@@ -794,7 +803,6 @@ private struct MacPlayerUtilityButton: View {
     let helpText: String
     var iconSize: CGFloat = PlayerBarView.rightIconSize
     var weight: Font.Weight = .medium
-    var usesNativeInterface = false
     let action: () -> Void
 
     @Environment(\.themeColor) private var themeColor
@@ -812,15 +820,9 @@ private struct MacPlayerUtilityButton: View {
         .buttonStyle(.plain)
         .help(helpText)
         .background {
-            if isHovered || (usesNativeInterface && isActive) {
-                RoundedRectangle(cornerRadius: usesNativeInterface ? 9 : 7, style: .continuous)
-                    .fill(Color.primary.opacity(nativeBackgroundOpacity))
-                    .overlay {
-                        if usesNativeInterface {
-                            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                .stroke(Color.primary.opacity(0.08), lineWidth: 0.5)
-                        }
-                    }
+            if isHovered {
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(Color.primary.opacity(0.06))
             }
         }
         .onHover { hovering in
@@ -830,37 +832,24 @@ private struct MacPlayerUtilityButton: View {
 
     private var foregroundColor: Color {
         if isActive {
-            return usesNativeInterface ? .primary : themeColor
+            return themeColor
         }
         return isHovered ? .primary : .secondary
-    }
-
-    private var nativeBackgroundOpacity: Double {
-        if usesNativeInterface {
-            return isActive ? 0.10 : 0.07
-        }
-        return 0.06
     }
 }
 
 private struct MacRoutePickerButton: View {
-    var usesNativeInterface = false
+    @Environment(\.themeColor) private var themeColor
     @State private var isHovered = false
 
     var body: some View {
         ZStack {
             if isHovered {
-                RoundedRectangle(cornerRadius: usesNativeInterface ? 9 : 7, style: .continuous)
-                    .fill(Color.primary.opacity(usesNativeInterface ? 0.07 : 0.06))
-                    .overlay {
-                        if usesNativeInterface {
-                            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                .stroke(Color.primary.opacity(0.08), lineWidth: 0.5)
-                        }
-                    }
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(Color.primary.opacity(0.06))
             }
 
-            AVRoutePickerViewRepresentable()
+            AVRoutePickerViewRepresentable(activeColor: NSColor(themeColor))
                 .frame(width: PlayerBarView.routePickerSize, height: PlayerBarView.routePickerSize)
         }
         .frame(width: PlayerBarView.rightControlSize, height: PlayerBarView.rightControlSize)
