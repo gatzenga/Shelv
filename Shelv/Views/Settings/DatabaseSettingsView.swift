@@ -28,10 +28,6 @@ struct DatabaseSettingsView: View {
     @State private var exportItem: ShareableFileWrap?
     @State private var exportError: String?
     @State private var showResetConfirm = false
-    @State private var showIcloudResetConfirm = false
-    @State private var showFullResetConfirm = false
-    @State private var isIcloudResetting = false
-    @State private var isFullResetting = false
     @State private var showCleanupConfirm = false
     @State private var isCleaningDatabase = false
     @State private var cleanupChecked = 0
@@ -157,41 +153,6 @@ struct DatabaseSettingsView: View {
                         .foregroundStyle(.red)
                     }
 
-                    Button(role: .destructive) {
-                        showIcloudResetConfirm = true
-                    } label: {
-                        if isIcloudResetting {
-                            HStack {
-                                ProgressView().tint(.red)
-                                Text(String(localized: "deleting")).foregroundStyle(.red)
-                            }
-                        } else {
-                            Label(
-                                String(localized: "delete_icloud_data"),
-                                systemImage: "icloud.slash"
-                            )
-                            .foregroundStyle(.red)
-                        }
-                    }
-                    .disabled(isIcloudResetting)
-
-                    Button(role: .destructive) {
-                        showFullResetConfirm = true
-                    } label: {
-                        if isFullResetting {
-                            HStack {
-                                ProgressView().tint(.red)
-                                Text(String(localized: "deleting")).foregroundStyle(.red)
-                            }
-                        } else {
-                            Label(
-                                String(localized: "delete_everything"),
-                                systemImage: "trash.slash"
-                            )
-                            .foregroundStyle(.red)
-                        }
-                    }
-                    .disabled(isFullResetting)
                 }
             }
 
@@ -234,38 +195,13 @@ struct DatabaseSettingsView: View {
                 guard let sid = serverStore.activeServer?.stableId else { return }
                 Task {
                     await PlayLogService.shared.resetLog(serverId: sid)
-                    await PlayLogService.shared.resetRegistry(serverId: sid)
                     await CloudKitSyncService.shared.resetChangeToken()
-                    await recapStore.loadEntries(serverId: sid)
-                    NotificationCenter.default.post(name: .recapRegistryUpdated, object: nil)
                     await refreshTotalPlays()
                 }
             }
             Button(String(localized: "cancel"), role: .cancel) {}
         } message: {
             Text(String(localized: "clears_the_local_cache_only_icloud_and_navidrome_s"))
-        }
-        .alert(
-            String(localized: "delete_icloud_data_2"),
-            isPresented: $showIcloudResetConfirm
-        ) {
-            Button(String(localized: "delete"), role: .destructive) {
-                Task { await performIcloudReset() }
-            }
-            Button(String(localized: "cancel"), role: .cancel) {}
-        } message: {
-            Text(String(localized: "all_icloud_records_for_this_server_will_be_deleted"))
-        }
-        .alert(
-            String(localized: "delete_everything_2"),
-            isPresented: $showFullResetConfirm
-        ) {
-            Button(String(localized: "delete_everything"), role: .destructive) {
-                Task { await performFullReset() }
-            }
-            Button(String(localized: "cancel"), role: .cancel) {}
-        } message: {
-            Text(String(localized: "all_recap_playlists_on_navidrome_local_play_logs_a"))
         }
         .alert(
             String(localized: "database_cleanup_2"),
@@ -353,33 +289,6 @@ struct DatabaseSettingsView: View {
         cleanupResult = String(format: String(localized: "cleanup_removed_format"), dead.count, removed)
     }
 
-    private func performIcloudReset() async {
-        guard let sid = serverStore.activeServer?.stableId else { return }
-        isIcloudResetting = true
-        defer { isIcloudResetting = false }
-        await CloudKitSyncService.shared.deleteZone(force: true)
-        await PlayLogService.shared.markServerUnsyncedForReUpload(serverId: sid)
-        await CloudKitSyncService.shared.updatePendingCounts()
-    }
-
-    private func performFullReset() async {
-        guard let sid = serverStore.activeServer?.stableId else { return }
-        isFullResetting = true
-        defer { isFullResetting = false }
-        let registry = await PlayLogService.shared.allRegistryEntries(serverId: sid)
-        for entry in registry {
-            try? await SubsonicAPIService.shared.deletePlaylist(id: entry.playlistId)
-        }
-        await CloudKitSyncService.shared.deleteZone(force: true)
-        await PlayLogService.shared.resetLog(serverId: sid)
-        await PlayLogService.shared.resetRegistry(serverId: sid)
-        await PlayLogService.shared.removeScrobbles(serverId: sid)
-        await CloudKitSyncService.shared.resetChangeToken()
-        await CloudKitSyncService.shared.updatePendingCounts()
-        await recapStore.loadEntries(serverId: sid)
-        await refreshTotalPlays()
-    }
-
     private var syncReportSheet: some View {
         NavigationStack {
             List(recapStore.syncReports) { report in
@@ -403,15 +312,18 @@ struct DatabaseSettingsView: View {
 }
 
 struct ICloudSyncSettingsView: View {
+    @EnvironmentObject var serverStore: ServerStore
     @EnvironmentObject var ckStatus: CloudKitSyncStatus
     @AppStorage("themeColor") private var themeColorName = "violet"
-    @AppStorage("iCloudSyncEnabled") private var iCloudSyncEnabled = true
+    @AppStorage("iCloudSyncEnabled") private var iCloudSyncEnabled = false
     @AppStorage("iCloudSyncPlayHistoryEnabled") private var playHistorySyncEnabled = true
     @AppStorage("iCloudSyncRecapEnabled") private var recapSyncEnabled = true
-    @AppStorage("iCloudSyncLyricsServerEnabled") private var lyricsServerSyncEnabled = false
+    @AppStorage("iCloudSyncLyricsServerEnabled") private var lyricsServerSyncEnabled = true
     @AppStorage("iCloudSyncRadioStationsEnabled") private var radioStationsSyncEnabled = true
 
     @State private var isSyncingManually = false
+    @State private var showIcloudResetConfirm = false
+    @State private var isIcloudResetting = false
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
@@ -442,112 +354,125 @@ struct ICloudSyncSettingsView: View {
                         Task { await CloudKitSyncService.shared.handleSyncEnabledChange() }
                     }
 
-                    if !iCloudSyncEnabled {
-                        Text(String(localized: "data_stays_local_multiple_devices_may_create_dupli"))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    HStack {
-                        Label { Text(String(localized: "last_sync")) } icon: {
-                            Image(systemName: "arrow.triangle.2.circlepath").foregroundStyle(accentColor)
-                        }
-                        Spacer()
-                        if let date = ckStatus.lastSyncDate {
-                            Text(date, style: .relative)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        } else {
-                            Text(String(localized: "never"))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    HStack {
-                        Label { Text(String(localized: "pending_uploads")) } icon: {
-                            Image(systemName: "icloud.and.arrow.up").foregroundStyle(accentColor)
-                        }
-                        Spacer()
-                        Text(ckStatus.pendingUploads > 0 ? "\(ckStatus.pendingUploads)" : "—")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .monospacedDigit()
-                    }
-
-                    Button {
-                        guard !isSyncingManually else { return }
-                        isSyncingManually = true
-                        Task {
-                            defer { isSyncingManually = false }
-                            await CloudKitSyncService.shared.syncNow()
-                        }
-                    } label: {
+                    if iCloudSyncEnabled {
                         HStack {
-                            Label { Text(String(localized: "sync_now")) } icon: {
+                            Label { Text(String(localized: "last_sync")) } icon: {
                                 Image(systemName: "arrow.triangle.2.circlepath").foregroundStyle(accentColor)
                             }
-                            if isSyncingManually { Spacer(); ProgressView() }
+                            Spacer()
+                            if let date = ckStatus.lastSyncDate {
+                                Text(date, style: .relative)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Text(String(localized: "never"))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+
+                        HStack {
+                            Label { Text(String(localized: "sync_status")) } icon: {
+                                Image(systemName: "waveform.path.ecg").foregroundStyle(accentColor)
+                            }
+                            Spacer()
+                            Text(syncStatusText)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Button {
+                            guard !isSyncingManually else { return }
+                            isSyncingManually = true
+                            Task {
+                                defer { isSyncingManually = false }
+                                await CloudKitSyncService.shared.syncNow()
+                            }
+                        } label: {
+                            HStack {
+                                Label { Text(String(localized: "sync_now")) } icon: {
+                                    Image(systemName: "arrow.triangle.2.circlepath").foregroundStyle(accentColor)
+                                }
+                                if isSyncingManually { Spacer(); ProgressView() }
+                            }
+                        }
+                        .disabled(isSyncingManually)
+                    }
+                }
+            }
+
+            if iCloudSyncEnabled {
+                Section(String(localized: "what_to_sync")) {
+                    Toggle(isOn: $playHistorySyncEnabled) {
+                        Label { Text(String(localized: "play_history")) } icon: {
+                            Image(systemName: "music.note.list").foregroundStyle(accentColor)
                         }
                     }
-                    .disabled(isSyncingManually)
-                }
-            }
+                    .tint(accentColor)
+                    .onChange(of: playHistorySyncEnabled) { _, _ in
+                        Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
+                    }
 
-            Section(String(localized: "what_to_sync")) {
-                Toggle(isOn: $playHistorySyncEnabled) {
-                    Label { Text(String(localized: "play_history")) } icon: {
-                        Image(systemName: "music.note.list").foregroundStyle(accentColor)
+                    Toggle(isOn: $recapSyncEnabled) {
+                        Label { Text(String(localized: "recap")) } icon: {
+                            Image(systemName: "calendar.badge.clock").foregroundStyle(accentColor)
+                        }
+                    }
+                    .tint(accentColor)
+                    .onChange(of: recapSyncEnabled) { _, _ in
+                        Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
+                    }
+
+                    Toggle(isOn: $lyricsServerSyncEnabled) {
+                        Label { Text(String(localized: "lyrics_server")) } icon: {
+                            Image(systemName: "text.bubble").foregroundStyle(accentColor)
+                        }
+                    }
+                    .tint(accentColor)
+                    .onChange(of: lyricsServerSyncEnabled) { _, _ in
+                        Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
+                    }
+
+                    Toggle(isOn: $radioStationsSyncEnabled) {
+                        Label { Text(String(localized: "radio_stations")) } icon: {
+                            Image(systemName: "dot.radiowaves.left.and.right").foregroundStyle(accentColor)
+                        }
+                    }
+                    .tint(accentColor)
+                    .onChange(of: radioStationsSyncEnabled) { _, _ in
+                        Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
                     }
                 }
-                .tint(accentColor)
-                .disabled(!iCloudSyncEnabled)
-                .onChange(of: playHistorySyncEnabled) { _, _ in
-                    Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
-                }
 
-                Toggle(isOn: $recapSyncEnabled) {
-                    Label { Text(String(localized: "recap")) } icon: {
-                        Image(systemName: "calendar.badge.clock").foregroundStyle(accentColor)
+                Section(String(localized: "logs")) {
+                    NavigationLink(destination:
+                        RecapSyncLogView()
+                            .environmentObject(ckStatus)
+                    ) {
+                        Label { Text(String(localized: "sync_log")) } icon: {
+                            Image(systemName: "doc.text").foregroundStyle(accentColor)
+                        }
                     }
                 }
-                .tint(accentColor)
-                .disabled(!iCloudSyncEnabled)
-                .onChange(of: recapSyncEnabled) { _, _ in
-                    Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
-                }
 
-                Toggle(isOn: $lyricsServerSyncEnabled) {
-                    Label { Text(String(localized: "lyrics_server")) } icon: {
-                        Image(systemName: "text.bubble").foregroundStyle(accentColor)
+                Section(String(localized: "destructive_actions")) {
+                    Button(role: .destructive) {
+                        showIcloudResetConfirm = true
+                    } label: {
+                        if isIcloudResetting {
+                            HStack {
+                                ProgressView().tint(.red)
+                                Text(String(localized: "deleting")).foregroundStyle(.red)
+                            }
+                        } else {
+                            Label(
+                                String(localized: "delete_icloud_data"),
+                                systemImage: "icloud.slash"
+                            )
+                            .foregroundStyle(.red)
+                        }
                     }
-                }
-                .tint(accentColor)
-                .disabled(!iCloudSyncEnabled)
-                .onChange(of: lyricsServerSyncEnabled) { _, _ in
-                    Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
-                }
-
-                Toggle(isOn: $radioStationsSyncEnabled) {
-                    Label { Text(String(localized: "radio_stations")) } icon: {
-                        Image(systemName: "dot.radiowaves.left.and.right").foregroundStyle(accentColor)
-                    }
-                }
-                .tint(accentColor)
-                .disabled(!iCloudSyncEnabled)
-                .onChange(of: radioStationsSyncEnabled) { _, _ in
-                    Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
-                }
-            }
-
-            Section(String(localized: "logs")) {
-                NavigationLink(destination:
-                    RecapSyncLogView()
-                        .environmentObject(ckStatus)
-                ) {
-                    Label { Text(String(localized: "sync_log")) } icon: {
-                        Image(systemName: "doc.text").foregroundStyle(accentColor)
-                    }
+                    .disabled(isIcloudResetting || serverStore.activeServer == nil)
                 }
             }
 
@@ -560,6 +485,40 @@ struct ICloudSyncSettingsView: View {
         .scrollIndicators(.hidden)
         .navigationTitle("iCloud")
         .navigationBarTitleDisplayMode(.inline)
+        .alert(
+            String(localized: "delete_icloud_data_2"),
+            isPresented: $showIcloudResetConfirm
+        ) {
+            Button(String(localized: "delete"), role: .destructive) {
+                Task { await performIcloudReset() }
+            }
+            Button(String(localized: "cancel"), role: .cancel) {}
+        } message: {
+            Text(String(localized: "all_icloud_records_for_this_server_will_be_deleted"))
+        }
+    }
+
+    private var syncStatusText: String {
+        if let message = ckStatus.currentMessage, !message.isEmpty {
+            return message
+        }
+        if ckStatus.isSyncing {
+            return String(localized: "sync_status_syncing")
+        }
+        if ckStatus.pendingUploads > 0 {
+            return String(format: String(localized: "sync_status_pending_format"), ckStatus.pendingUploads)
+        }
+        return String(localized: "sync_status_idle")
+    }
+
+    @MainActor
+    private func performIcloudReset() async {
+        guard let sid = serverStore.activeServer?.stableId else { return }
+        isIcloudResetting = true
+        defer { isIcloudResetting = false }
+        await CloudKitSyncService.shared.deleteZone(force: true)
+        await PlayLogService.shared.markServerUnsyncedForReUpload(serverId: sid)
+        await CloudKitSyncService.shared.updatePendingCounts()
     }
 }
 

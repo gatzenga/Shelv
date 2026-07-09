@@ -18,6 +18,7 @@ struct RecapTab: View {
     @State private var showMarkersLog = false
     @State private var showAdvanced = false
     @State private var showVerify = false
+    @State private var showAboutRecap = false
 
     @State private var weekRetentionDraft: Int = 1
     @State private var monthRetentionDraft: Int = 12
@@ -35,6 +36,14 @@ struct RecapTab: View {
         Form {
             Section {
                 Toggle(String(localized: "enable_recap"), isOn: $recapEnabled)
+
+                if recapEnabled {
+                    Button {
+                        showAboutRecap = true
+                    } label: {
+                        Label(String(localized: "about"), systemImage: "info.circle")
+                    }
+                }
             } footer: {
                 if !recapEnabled {
                     Text(String(localized: "track_your_listening_history_and_generate_automati"))
@@ -150,6 +159,9 @@ struct RecapTab: View {
                 RecapVerifyView(serverId: sid)
             }
         }
+        .sheet(isPresented: $showAboutRecap) {
+            RecapAboutSheet()
+        }
     }
 
     @ViewBuilder
@@ -228,5 +240,31 @@ struct RecapTab: View {
         case .month: return String(localized: "monthly_recaps")
         case .year:  return String(localized: "yearly_recaps")
         }
+    }
+}
+
+private struct RecapAboutSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text(String(localized: "recap_about_server_playlists"))
+                    Text(String(localized: "recap_about_icloud_recommended"))
+                    Text(String(localized: "recap_about_icloud_benefits"))
+                }
+                .font(.body)
+                .padding()
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .navigationTitle(String(localized: "recap"))
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(String(localized: "done")) { dismiss() }
+                }
+            }
+        }
+        .frame(minWidth: 420, minHeight: 260)
     }
 }

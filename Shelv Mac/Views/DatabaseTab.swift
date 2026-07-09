@@ -16,11 +16,7 @@ struct DatabaseTab: View {
     @State private var showPlayLog = false
     @State private var showDBLog = false
     @State private var showResetConfirm = false
-    @State private var showIcloudResetConfirm = false
-    @State private var showFullResetConfirm = false
     @State private var showCleanupConfirm = false
-    @State private var isIcloudResetting = false
-    @State private var isFullResetting = false
     @State private var isCleaningDatabase = false
     @State private var cleanupChecked = 0
     @State private var cleanupTotal = 0
@@ -113,35 +109,6 @@ struct DatabaseTab: View {
                         .foregroundStyle(.red)
                 }
 
-                Button(role: .destructive) {
-                    showIcloudResetConfirm = true
-                } label: {
-                    if isIcloudResetting {
-                        HStack {
-                            ProgressView().controlSize(.small).tint(.red)
-                            Text(String(localized: "deleting")).foregroundStyle(.red)
-                        }
-                    } else {
-                        Label(String(localized: "delete_icloud_data"), systemImage: "icloud.slash")
-                            .foregroundStyle(.red)
-                    }
-                }
-                .disabled(isIcloudResetting)
-
-                Button(role: .destructive) {
-                    showFullResetConfirm = true
-                } label: {
-                    if isFullResetting {
-                        HStack {
-                            ProgressView().controlSize(.small).tint(.red)
-                            Text(String(localized: "deleting")).foregroundStyle(.red)
-                        }
-                    } else {
-                        Label(String(localized: "delete_everything"), systemImage: "trash.slash")
-                            .foregroundStyle(.red)
-                    }
-                }
-                .disabled(isFullResetting)
             }
         }
         .formStyle(.grouped)
@@ -189,38 +156,13 @@ struct DatabaseTab: View {
                 guard let sid = appState.serverStore.activeServer?.stableId else { return }
                 Task {
                     await PlayLogService.shared.resetLog(serverId: sid)
-                    await PlayLogService.shared.resetRegistry(serverId: sid)
                     await CloudKitSyncService.shared.resetChangeToken()
-                    await recapStore.loadEntries(serverId: sid)
-                    NotificationCenter.default.post(name: .recapRegistryUpdated, object: nil)
                     await refreshTotalPlays()
                 }
             }
             Button(String(localized: "cancel"), role: .cancel) {}
         } message: {
             Text(String(localized: "clears_the_local_cache_only_icloud_and_navidrome_s"))
-        }
-        .confirmationDialog(
-            String(localized: "delete_icloud_data_2"),
-            isPresented: $showIcloudResetConfirm
-        ) {
-            Button(String(localized: "delete"), role: .destructive) {
-                Task { await performIcloudReset() }
-            }
-            Button(String(localized: "cancel"), role: .cancel) {}
-        } message: {
-            Text(String(localized: "all_icloud_records_for_this_server_will_be_deleted"))
-        }
-        .confirmationDialog(
-            String(localized: "delete_everything_2"),
-            isPresented: $showFullResetConfirm
-        ) {
-            Button(String(localized: "delete_everything"), role: .destructive) {
-                Task { await performFullReset() }
-            }
-            Button(String(localized: "cancel"), role: .cancel) {}
-        } message: {
-            Text(String(localized: "all_recap_playlists_on_navidrome_local_play_logs_a"))
         }
     }
 
@@ -290,33 +232,6 @@ struct DatabaseTab: View {
         cleanupResult = String(format: String(localized: "cleanup_removed_format"), dead.count, removed)
     }
 
-    private func performIcloudReset() async {
-        guard let sid = appState.serverStore.activeServer?.stableId else { return }
-        isIcloudResetting = true
-        defer { isIcloudResetting = false }
-        await CloudKitSyncService.shared.deleteZone(force: true)
-        await PlayLogService.shared.markServerUnsyncedForReUpload(serverId: sid)
-        await CloudKitSyncService.shared.updatePendingCounts()
-    }
-
-    private func performFullReset() async {
-        guard let sid = appState.serverStore.activeServer?.stableId else { return }
-        isFullResetting = true
-        defer { isFullResetting = false }
-        let registry = await PlayLogService.shared.allRegistryEntries(serverId: sid)
-        for entry in registry {
-            try? await SubsonicAPIService.shared.deletePlaylist(id: entry.playlistId)
-        }
-        await CloudKitSyncService.shared.deleteZone(force: true)
-        await PlayLogService.shared.resetLog(serverId: sid)
-        await PlayLogService.shared.resetRegistry(serverId: sid)
-        await PlayLogService.shared.removeScrobbles(serverId: sid)
-        await CloudKitSyncService.shared.resetChangeToken()
-        await CloudKitSyncService.shared.updatePendingCounts()
-        await recapStore.loadEntries(serverId: sid)
-        await refreshTotalPlays()
-    }
-
     private func runExportSavePanel(sourceURL: URL) {
         let panel = NSSavePanel()
         panel.title = String(localized: "save_recap_database")
@@ -345,17 +260,20 @@ struct DatabaseTab: View {
 }
 
 struct ICloudSyncTab: View {
+    @EnvironmentObject var serverStore: ServerStore
     @StateObject private var ckStatus = CloudKitSyncService.shared.status
     @Environment(\.themeColor) private var themeColor
 
-    @AppStorage("iCloudSyncEnabled") private var iCloudSyncEnabled = true
+    @AppStorage("iCloudSyncEnabled") private var iCloudSyncEnabled = false
     @AppStorage("iCloudSyncPlayHistoryEnabled") private var playHistorySyncEnabled = true
     @AppStorage("iCloudSyncRecapEnabled") private var recapSyncEnabled = true
-    @AppStorage("iCloudSyncLyricsServerEnabled") private var lyricsServerSyncEnabled = false
+    @AppStorage("iCloudSyncLyricsServerEnabled") private var lyricsServerSyncEnabled = true
     @AppStorage("iCloudSyncRadioStationsEnabled") private var radioStationsSyncEnabled = true
 
     @State private var isSyncingManually = false
     @State private var showSyncLog = false
+    @State private var showIcloudResetConfirm = false
+    @State private var isIcloudResetting = false
 
     var body: some View {
         Form {
@@ -365,88 +283,102 @@ struct ICloudSyncTab: View {
                         Task { await CloudKitSyncService.shared.handleSyncEnabledChange() }
                     }
 
-                if !iCloudSyncEnabled {
-                    Text(String(localized: "data_stays_local_multiple_devices_may_create_dupli"))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } else if !ckStatus.accountAvailable {
-                    Label {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(String(localized: "no_icloud_account"))
-                            Text(String(localized: "use_exportimport_as_backup_instead"))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    } icon: {
-                        Image(systemName: "icloud.slash")
-                            .foregroundStyle(.secondary)
-                    }
-                } else {
-                    LabeledContent(String(localized: "last_sync_2")) {
-                        if let date = ckStatus.lastSyncDate {
-                            Text(date, style: .relative)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        } else {
-                            Text(String(localized: "never"))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    LabeledContent(String(localized: "pending_uploads")) {
-                        Text(ckStatus.pendingUploads > 0 ? "\(ckStatus.pendingUploads)" : "—")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .monospacedDigit()
-                    }
-                    Button {
-                        guard !isSyncingManually else { return }
-                        isSyncingManually = true
-                        Task {
-                            defer { isSyncingManually = false }
-                            await CloudKitSyncService.shared.syncNow()
-                        }
-                    } label: {
+                if iCloudSyncEnabled {
+                    if !ckStatus.accountAvailable {
                         Label {
-                            Text(String(localized: "sync_now"))
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(String(localized: "no_icloud_account"))
+                                Text(String(localized: "use_exportimport_as_backup_instead"))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         } icon: {
-                            if isSyncingManually {
-                                ProgressView().controlSize(.small)
+                            Image(systemName: "icloud.slash")
+                                .foregroundStyle(.secondary)
+                        }
+                    } else {
+                        LabeledContent(String(localized: "last_sync_2")) {
+                            if let date = ckStatus.lastSyncDate {
+                                Text(date, style: .relative)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
                             } else {
-                                Image(systemName: "arrow.triangle.2.circlepath")
+                                Text(String(localized: "never"))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
                             }
                         }
+                        LabeledContent {
+                            Text(syncStatusText)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } label: {
+                            Label(String(localized: "sync_status"), systemImage: "waveform.path.ecg")
+                        }
+                        Button {
+                            guard !isSyncingManually else { return }
+                            isSyncingManually = true
+                            Task {
+                                defer { isSyncingManually = false }
+                                await CloudKitSyncService.shared.syncNow()
+                            }
+                        } label: {
+                            Label {
+                                Text(String(localized: "sync_now"))
+                            } icon: {
+                                if isSyncingManually {
+                                    ProgressView().controlSize(.small)
+                                } else {
+                                    Image(systemName: "arrow.triangle.2.circlepath")
+                                }
+                            }
+                        }
+                        .disabled(isSyncingManually)
                     }
-                    .disabled(isSyncingManually)
                 }
             }
 
-            Section(String(localized: "what_to_sync")) {
-                Toggle(String(localized: "play_history"), isOn: $playHistorySyncEnabled)
-                    .disabled(!iCloudSyncEnabled)
-                    .onChange(of: playHistorySyncEnabled) { _, _ in
-                        Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
-                    }
-                Toggle(String(localized: "recap"), isOn: $recapSyncEnabled)
-                    .disabled(!iCloudSyncEnabled)
-                    .onChange(of: recapSyncEnabled) { _, _ in
-                        Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
-                    }
-                Toggle(String(localized: "lyrics_server"), isOn: $lyricsServerSyncEnabled)
-                    .disabled(!iCloudSyncEnabled)
-                    .onChange(of: lyricsServerSyncEnabled) { _, _ in
-                        Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
-                    }
-                Toggle(String(localized: "radio_stations"), isOn: $radioStationsSyncEnabled)
-                    .disabled(!iCloudSyncEnabled)
-                    .onChange(of: radioStationsSyncEnabled) { _, _ in
-                        Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
-                    }
-            }
+            if iCloudSyncEnabled {
+                Section(String(localized: "what_to_sync")) {
+                    Toggle(String(localized: "play_history"), isOn: $playHistorySyncEnabled)
+                        .onChange(of: playHistorySyncEnabled) { _, _ in
+                            Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
+                        }
+                    Toggle(String(localized: "recap"), isOn: $recapSyncEnabled)
+                        .onChange(of: recapSyncEnabled) { _, _ in
+                            Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
+                        }
+                    Toggle(String(localized: "lyrics_server"), isOn: $lyricsServerSyncEnabled)
+                        .onChange(of: lyricsServerSyncEnabled) { _, _ in
+                            Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
+                        }
+                    Toggle(String(localized: "radio_stations"), isOn: $radioStationsSyncEnabled)
+                        .onChange(of: radioStationsSyncEnabled) { _, _ in
+                            Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
+                        }
+                }
 
-            Section(String(localized: "logs")) {
-                Button { showSyncLog = true } label: {
-                    Label(String(localized: "sync_log"), systemImage: "doc.text")
+                Section(String(localized: "logs")) {
+                    Button { showSyncLog = true } label: {
+                        Label(String(localized: "sync_log"), systemImage: "doc.text")
+                    }
+                }
+
+                Section(String(localized: "destructive_actions")) {
+                    Button(role: .destructive) {
+                        showIcloudResetConfirm = true
+                    } label: {
+                        if isIcloudResetting {
+                            HStack {
+                                ProgressView().controlSize(.small).tint(.red)
+                                Text(String(localized: "deleting")).foregroundStyle(.red)
+                            }
+                        } else {
+                            Label(String(localized: "delete_icloud_data"), systemImage: "icloud.slash")
+                                .foregroundStyle(.red)
+                        }
+                    }
+                    .disabled(isIcloudResetting || serverStore.activeServer == nil)
                 }
             }
         }
@@ -455,6 +387,40 @@ struct ICloudSyncTab: View {
         .sheet(isPresented: $showSyncLog) {
             RecapSyncLogView()
         }
+        .confirmationDialog(
+            String(localized: "delete_icloud_data_2"),
+            isPresented: $showIcloudResetConfirm
+        ) {
+            Button(String(localized: "delete"), role: .destructive) {
+                Task { await performIcloudReset() }
+            }
+            Button(String(localized: "cancel"), role: .cancel) {}
+        } message: {
+            Text(String(localized: "all_icloud_records_for_this_server_will_be_deleted"))
+        }
+    }
+
+    private var syncStatusText: String {
+        if let message = ckStatus.currentMessage, !message.isEmpty {
+            return message
+        }
+        if ckStatus.isSyncing {
+            return String(localized: "sync_status_syncing")
+        }
+        if ckStatus.pendingUploads > 0 {
+            return String(format: String(localized: "sync_status_pending_format"), ckStatus.pendingUploads)
+        }
+        return String(localized: "sync_status_idle")
+    }
+
+    @MainActor
+    private func performIcloudReset() async {
+        guard let sid = serverStore.activeServer?.stableId else { return }
+        isIcloudResetting = true
+        defer { isIcloudResetting = false }
+        await CloudKitSyncService.shared.deleteZone(force: true)
+        await PlayLogService.shared.markServerUnsyncedForReUpload(serverId: sid)
+        await CloudKitSyncService.shared.updatePendingCounts()
     }
 }
 

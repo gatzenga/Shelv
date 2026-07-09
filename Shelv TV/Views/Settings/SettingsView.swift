@@ -51,6 +51,11 @@ struct SettingsView: View {
 
                 Section {
                     Toggle(String(localized: "recaps"), isOn: $recapEnabled)
+                    if recapEnabled {
+                        NavigationLink(String(localized: "about")) {
+                            TVRecapAboutView()
+                        }
+                    }
                     NavigationLink(String(localized: "ui_customizations")) { TVUICustomizationsSettingsView() }
                     NavigationLink(String(localized: "playback")) { PlaybackSettingsView() }
                     NavigationLink(String(localized: "cache")) { CacheSettingsView() }
@@ -74,6 +79,23 @@ struct SettingsView: View {
                 }
             }
         }
+    }
+}
+
+private struct TVRecapAboutView: View {
+    var body: some View {
+        Form {
+            Text(String(localized: "recap"))
+                .font(.largeTitle).bold()
+                .listRowBackground(Color.clear)
+
+            Section(String(localized: "about")) {
+                Text(String(localized: "recap_about_server_playlists"))
+                Text(String(localized: "recap_about_icloud_recommended"))
+                Text(String(localized: "recap_about_icloud_benefits"))
+            }
+        }
+        .navigationTitle(String(localized: "recap"))
     }
 }
 

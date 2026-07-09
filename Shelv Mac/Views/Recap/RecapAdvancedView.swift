@@ -10,12 +10,15 @@ struct RecapAdvancedView: View {
     @State private var resetLastWeekResult: String?
     @State private var resetLastMonthResult: String?
     @State private var resetLastYearResult: String?
+    @State private var deleteAllRecapsResult: String?
     @State private var showResetLastWeekConfirm = false
     @State private var showResetLastMonthConfirm = false
     @State private var showResetLastYearConfirm = false
+    @State private var showDeleteAllRecapsConfirm = false
     @State private var isResettingLastWeek = false
     @State private var isResettingLastMonth = false
     @State private var isResettingLastYear = false
+    @State private var isDeletingAllRecaps = false
 
     var body: some View {
         Form {
@@ -46,7 +49,9 @@ struct RecapAdvancedView: View {
                 if let err = recapStore.generationError {
                     Text(err).font(.caption).foregroundStyle(.red)
                 }
+            }
 
+            Section(String(localized: "destructive_actions")) {
                 Button(role: .destructive) {
                     showResetLastWeekConfirm = true
                 } label: {
@@ -106,6 +111,26 @@ struct RecapAdvancedView: View {
                 if let result = resetLastYearResult {
                     Text(result).font(.caption).foregroundStyle(.secondary)
                 }
+
+                Button(role: .destructive) {
+                    showDeleteAllRecapsConfirm = true
+                } label: {
+                    if isDeletingAllRecaps {
+                        HStack {
+                            ProgressView().controlSize(.small)
+                            Text(String(localized: "deleting")).foregroundStyle(.red)
+                        }
+                    } else {
+                        Label(String(localized: "delete_all_recaps"),
+                              systemImage: "trash")
+                            .foregroundStyle(.red)
+                    }
+                }
+                .disabled(isDeletingAllRecaps)
+
+                if let result = deleteAllRecapsResult {
+                    Text(result).font(.caption).foregroundStyle(.secondary)
+                }
             }
 
         }
@@ -151,6 +176,17 @@ struct RecapAdvancedView: View {
         } message: {
             Text(String(localized: "deletes_the_newest_yearly_recap_and_clears_its_aut"))
         }
+        .confirmationDialog(
+            String(localized: "delete_all_recaps_2"),
+            isPresented: $showDeleteAllRecapsConfirm
+        ) {
+            Button(String(localized: "delete_all_recaps"), role: .destructive) {
+                Task { await performDeleteAllRecaps() }
+            }
+            Button(String(localized: "cancel"), role: .cancel) {}
+        } message: {
+            Text(String(localized: "deletes_all_recap_playlists_icloud_markers_local_entries"))
+        }
     }
 
     private func performResetLastWeek() async {
@@ -181,6 +217,27 @@ struct RecapAdvancedView: View {
         resetLastYearResult = removed
             ? String(localized: "removed_restart_the_app_to_regenerate")
             : String(localized: "no_yearly_recap_to_reset")
+    }
+
+    private func performDeleteAllRecaps() async {
+        isDeletingAllRecaps = true
+        defer { isDeletingAllRecaps = false }
+        deleteAllRecapsResult = nil
+        let result = await recapStore.deleteAllRecaps(serverId: serverId)
+        if result.failedCount > 0 {
+            deleteAllRecapsResult = String(
+                format: String(localized: "deleted_recaps_with_failures_format"),
+                result.deletedCount,
+                result.failedCount
+            )
+        } else if result.deletedCount > 0 {
+            deleteAllRecapsResult = String(
+                format: String(localized: "deleted_recaps_format"),
+                result.deletedCount
+            )
+        } else {
+            deleteAllRecapsResult = String(localized: "no_recap_playlists_yet")
+        }
     }
 
 }
