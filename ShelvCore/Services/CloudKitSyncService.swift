@@ -164,6 +164,8 @@ actor CloudKitSyncService {
     private var lastDisabledLogAt: [String: Date] = [:]
     private let minimumVisibleStatusDuration: TimeInterval = 3
     private var isSyncWorkflowRunning = false
+    private var isSyncNowQueued = false
+    private var recapSyncFailureMessage: String?
     private var currentStatusChangedAt = Date.distantPast
     private var isApplyingRemoteUICustomizations = false
     private var lastUICustomizationSnapshot: [String: PersonalizationCloudValue]?
@@ -304,6 +306,9 @@ actor CloudKitSyncService {
 
     private func endSyncWorkflow() {
         isSyncWorkflowRunning = false
+        guard isSyncNowQueued else { return }
+        isSyncNowQueued = false
+        Task { await self.syncNow() }
     }
 
     // MARK: - Device ID
@@ -785,6 +790,7 @@ actor CloudKitSyncService {
                 let playedAt   = record["playedAt"]      as? Double,
                 let duration   = record["songDuration"]  as? Double
             else { return stats }
+            if isPlayEventPendingDeletion(uuid) { return stats }
             let changed = await PlayLogService.shared.insertIfNotExists(
                 uuid: uuid, songId: songId, serverId: serverId,
                 playedAt: playedAt, songDuration: duration
@@ -969,12 +975,83 @@ actor CloudKitSyncService {
         }
     }
 
-    // MARK: - Lösch-Warteliste für Recap-Marker
+    // MARK: - Lösch-Wartelisten
 
-    // Garantiert, dass eine lokale Registry-Löschung den iCloud-Marker irgendwann
-    // sicher mitnimmt: lokal wird sofort gelöscht (auch offline), der Marker landet
-    // auf einer persistenten Warteliste und wird bei jedem Sync erneut versucht.
-    // handleIncomingRecord ignoriert wartende Marker (Wiederauferstehungs-Schutz).
+    private static let pendingPlayEventDeletionsKey = "shelv_ck_pending_play_event_deletions"
+
+    private var pendingPlayEventDeletions: [String] {
+        get { UserDefaults.standard.stringArray(forKey: Self.pendingPlayEventDeletionsKey) ?? [] }
+        set { Self.setUserDefault(.stringArray(newValue), forKey: Self.pendingPlayEventDeletionsKey) }
+    }
+
+    private func isPlayEventPendingDeletion(_ uuid: String) -> Bool {
+        pendingPlayEventDeletions.contains(uuid)
+    }
+
+    private func clearPendingPlayEventDeletions() {
+        Self.removeUserDefault(forKey: Self.pendingPlayEventDeletionsKey)
+    }
+
+    private func queuePlayEventDeletions(uuids: [String], force: Bool = false) async {
+        let newIds = Set(uuids).subtracting(pendingPlayEventDeletions)
+        if !newIds.isEmpty {
+            pendingPlayEventDeletions.append(contentsOf: newIds)
+        }
+        await flushPendingPlayEventDeletions(force: force)
+    }
+
+    private func flushPendingPlayEventDeletions(force: Bool = false) async {
+        guard canSync(.playHistory) || force else {
+            if !pendingPlayEventDeletions.isEmpty {
+                logDisabled(.playHistory, action: "queued play event deletion")
+            }
+            return
+        }
+
+        let queue = pendingPlayEventDeletions
+        guard !queue.isEmpty else { return }
+
+        for start in stride(from: 0, to: queue.count, by: 400) {
+            let names = Array(queue[start..<min(start + 400, queue.count)])
+            let ids = names.map { CKRecord.ID(recordName: $0, zoneID: zoneID) }
+            do {
+                let (_, deleteResults) = try await db.modifyRecords(
+                    saving: [],
+                    deleting: ids,
+                    atomically: false
+                )
+                var dispositions: [String: PendingDeletionDisposition] = [:]
+                for (name, id) in zip(names, ids) {
+                    guard let result = deleteResults[id] else {
+                        dispositions[name] = .retry
+                        log("Play event deletion returned no result — will retry on next sync", isError: true)
+                        continue
+                    }
+                    switch result {
+                    case .success:
+                        dispositions[name] = .completed
+                    case .failure(let error) where Self.isGoneError(error):
+                        dispositions[name] = .completed
+                    case .failure(let error):
+                        dispositions[name] = .retry
+                        log("Play event deletion failed — will retry on next sync: \(error.localizedDescription)", isError: true)
+                    }
+                }
+                let completed = RecapSyncLogic.completedDeletionIDs(from: dispositions)
+                pendingPlayEventDeletions.removeAll { completed.contains($0) }
+            } catch {
+                if let ckError = error as? CKError, ckError.code == .zoneNotFound {
+                    pendingPlayEventDeletions.removeAll { names.contains($0) }
+                } else {
+                    log("Play event deletion failed — will retry on next sync: \(error.localizedDescription)", isError: true)
+                }
+            }
+        }
+    }
+
+    // Recap markers use the same persistent retry pattern. Incoming records that
+    // are queued for deletion are ignored so a failed CloudKit request cannot
+    // resurrect data that was already removed locally.
 
     private static let pendingMarkerDeletionsKey = "shelv_ck_pending_marker_deletions"
 
@@ -1257,53 +1334,12 @@ actor CloudKitSyncService {
     }
 
     func deletePlayEvent(uuid: String, force: Bool = false) async {
-        guard canSync(.playHistory) || force else {
-            logDisabled(.playHistory, action: "play event deletion")
-            return
-        }
-        await MainActor.run { status.isSyncing = true }
-        log("Syncing…")
-        let rid = CKRecord.ID(recordName: uuid, zoneID: zoneID)
-        do {
-            _ = try await db.modifyRecords(saving: [], deleting: [rid])
-            await MainActor.run {
-                status.lastSyncDate = Date()
-                status.isSyncing = false
-            }
-            log("Play event deleted")
-        } catch {
-            await MainActor.run { status.isSyncing = false }
-            log("Play event deletion failed: \(error.localizedDescription)", isError: true)
-        }
+        await queuePlayEventDeletions(uuids: [uuid], force: force)
     }
 
     func deletePlayEvents(uuids: [String], force: Bool = false) async {
-        guard canSync(.playHistory) || force else {
-            logDisabled(.playHistory, action: "play event deletion")
-            return
-        }
         guard !uuids.isEmpty else { return }
-        await MainActor.run { status.isSyncing = true }
-        log("Syncing…")
-        let rids = uuids.map { CKRecord.ID(recordName: $0, zoneID: zoneID) }
-        var failed = 0
-        for start in stride(from: 0, to: rids.count, by: 400) {
-            let chunk = Array(rids[start..<min(start + 400, rids.count)])
-            do {
-                _ = try await db.modifyRecords(saving: [], deleting: chunk)
-            } catch {
-                failed += chunk.count
-            }
-        }
-        await MainActor.run {
-            status.lastSyncDate = Date()
-            status.isSyncing = false
-        }
-        if failed == 0 {
-            log("Deleted \(uuids.count) play events")
-        } else {
-            log("Deleted \(uuids.count - failed) play events, \(failed) failed", isError: true)
-        }
+        await queuePlayEventDeletions(uuids: uuids, force: force)
     }
 
     func deleteZone(force: Bool = false) async {
@@ -1314,6 +1350,7 @@ actor CloudKitSyncService {
             _ = try await db.deleteRecordZone(withID: zoneID)
             isZoneReady = false
             clearChangeTokens()
+            clearPendingPlayEventDeletions()
             clearPendingMarkerDeletions()   // Zone weg = wartende Marker-Löschungen erledigt
             await markLocalAsUnsyncedForReUpload()
             await MainActor.run {
@@ -1326,6 +1363,7 @@ actor CloudKitSyncService {
             if let ck = error as? CKError, ck.code == .zoneNotFound {
                 isZoneReady = false
                 clearChangeTokens()
+                clearPendingPlayEventDeletions()
                 clearPendingMarkerDeletions()
                 await markLocalAsUnsyncedForReUpload()
                 log("iCloud zone already gone")
@@ -1546,8 +1584,13 @@ actor CloudKitSyncService {
     }
 
     func syncNow() async {
-        guard beginSyncWorkflow(named: "Sync") else { return }
+        guard beginSyncWorkflow(named: "Sync") else {
+            isSyncNowQueued = true
+            log("Sync queued — another sync is already running")
+            return
+        }
         defer { endSyncWorkflow() }
+        recapSyncFailureMessage = nil
 
         // Queue-Sync hängt an einem eigenen Toggle und läuft unabhängig vom Play-Log-Sync.
         // Bei jedem Sync-Auslöser (Foreground, Pull-to-Refresh, Mac-Refresh, Netz-Reconnect)
@@ -1563,6 +1606,7 @@ actor CloudKitSyncService {
         }
         guard await refreshAccountAvailability(action: "iCloud sync") else { return }
         log("Syncing…")
+        await flushPendingPlayEventDeletions()
         if canSync(.recap) {
             await flushPendingMarkerDeletions()
         } else {
@@ -1603,7 +1647,7 @@ actor CloudKitSyncService {
         await pushUICustomizationsIfNeeded()
         await refreshRadioStationsIfNeeded()
         await flushScrobbleQueue()
-        await finishCurrentStatus(statusText("sync_status_complete"))
+        await finishCurrentStatus(recapSyncFailureMessage ?? statusText("sync_status_complete"))
         log("Sync done")
     }
 
@@ -1659,6 +1703,7 @@ actor CloudKitSyncService {
     private func runInitialICloudReconcile() async {
         guard beginSyncWorkflow(named: "Initial iCloud sync") else { return }
         defer { endSyncWorkflow() }
+        recapSyncFailureMessage = nil
 
         log("iCloud sync enabled — merging local and iCloud data")
         guard await refreshAccountAvailability(action: "Initial iCloud sync") else {
@@ -1680,6 +1725,7 @@ actor CloudKitSyncService {
         }
 
         if canSync(.playHistory) {
+            await flushPendingPlayEventDeletions()
             await runVisibleStatusStep(statusText("sync_status_checking_icloud")) {
                 _ = await downloadChanges(for: .playHistory)
             }
@@ -1745,8 +1791,10 @@ actor CloudKitSyncService {
             _ = await downloadChanges()
             _ = await uploadPendingEvents()
             if canSync(.recap), !activeServerId.isEmpty {
+                recapSyncFailureMessage = nil
                 await reuploadAllRecapMarkers()
                 await canonicalizeLocalRecapRegistry(serverId: activeServerId)
+                _ = await applyRecapDiffsWithNavidrome(serverId: activeServerId)
                 _ = await cleanupShelvRecapPlaylistsOnServer(serverId: activeServerId)
             }
             await pushLyricsServerSettingsIfNeeded()
@@ -1755,7 +1803,7 @@ actor CloudKitSyncService {
             await updatePendingCounts()
         }
 
-        await finishCurrentStatus(statusText("sync_status_complete"))
+        await finishCurrentStatus(recapSyncFailureMessage ?? statusText("sync_status_complete"))
         await MainActor.run { status.lastSyncDate = Date() }
         log("Initial iCloud sync complete")
     }
@@ -1785,12 +1833,29 @@ actor CloudKitSyncService {
 
         guard !dead.isEmpty else { return (ids.count, 0, 0) }
 
-        let uuids = await PlayLogService.shared.uuids(forSongIds: dead, serverId: serverId)
-        let removed = await PlayLogService.shared.deletePlays(forSongIds: dead, serverId: serverId)
+        let cleanup = await removeDeadPlayLogEntries(songIds: dead, serverId: serverId)
+        return (ids.count, cleanup.removedRows, cleanup.deletedCloudEvents)
+    }
+
+    func removeDeadPlayLogEntries(
+        songIds: [String],
+        serverId: String
+    ) async -> (removedRows: Int, deletedCloudEvents: Int) {
+        let idsToDelete = Array(Set(songIds))
+        guard !idsToDelete.isEmpty else { return (0, 0) }
+
+        let uuids = await PlayLogService.shared.uuids(forSongIds: idsToDelete, serverId: serverId)
         if !uuids.isEmpty {
             await deletePlayEvents(uuids: uuids, force: true)
         }
-        return (ids.count, removed, uuids.count)
+        let removed = await PlayLogService.shared.deletePlays(
+            forSongIds: idsToDelete,
+            serverId: serverId
+        )
+        if removed > 0 {
+            log("Removed \(removed) play rows for \(idsToDelete.count) missing Navidrome song ID(s)")
+        }
+        return (removed, uuids.count)
     }
 
     private nonisolated static func songIsDead(id: String) async -> Bool {
@@ -1798,9 +1863,7 @@ actor CloudKitSyncService {
             _ = try await SubsonicAPIService.shared.getSong(id: id)
             return false
         } catch SubsonicAPIError.apiError(let code, let message) {
-            if code == 70 { return true }
-            if code == 0, (message ?? "").range(of: "not found", options: .caseInsensitive) != nil { return true }
-            return false
+            return RecapSyncLogic.isDefinitiveNotFound(code: code, message: message)
         } catch {
             return false
         }
@@ -1824,7 +1887,16 @@ actor CloudKitSyncService {
     }
 
     private func applyRecapDiffsWithNavidrome(serverId: String) async -> Int {
-        let diffs = await RecapStore.shared.computeDiffs(serverId: serverId)
+        let diffs: [RecapDiff]
+        do {
+            diffs = try await RecapStore.shared.computeDiffs(serverId: serverId)
+        } catch {
+            if recapSyncFailureMessage == nil {
+                recapSyncFailureMessage = error.localizedDescription
+            }
+            log("Recap playlist inspection failed: \(error.localizedDescription)", isError: true)
+            return 0
+        }
         guard !diffs.isEmpty else { return 0 }
 
         var applied = 0
@@ -1834,6 +1906,9 @@ actor CloudKitSyncService {
                 try await RecapStore.shared.applyDiff(diff, decision: decision, serverId: serverId)
                 applied += 1
             } catch {
+                if recapSyncFailureMessage == nil {
+                    recapSyncFailureMessage = error.localizedDescription
+                }
                 log("Recap playlist update failed: \(error.localizedDescription)", isError: true)
             }
         }
@@ -1876,6 +1951,7 @@ actor CloudKitSyncService {
     func handleSyncCategoryChange() async {
         guard beginSyncWorkflow(named: "What to Sync update") else { return }
         defer { endSyncWorkflow() }
+        recapSyncFailureMessage = nil
 
         log("What to Sync updated — Play History: \(playHistorySyncEnabled ? "on" : "off"), Recap: \(recapSyncEnabled ? "on" : "off"), Lyrics Server: \(lyricsServerSyncEnabled ? "on" : "off"), Radio Stations: \(radioStationsSyncEnabled ? "on" : "off"), UI Customizations: \(uiCustomizationsSyncEnabled ? "on" : "off")")
         guard canSyncBase else {
@@ -1884,12 +1960,16 @@ actor CloudKitSyncService {
         }
         guard await refreshAccountAvailability(action: "What to Sync update") else { return }
         if canSync(.playHistory) {
+            await flushPendingPlayEventDeletions()
             let pendingUploads = await PlayLogService.shared.pendingUploadCount()
             if pendingUploads > 0 {
                 await runVisibleStatusStep(statusText("sync_status_uploading_plays_format", count: pendingUploads)) {
                     _ = await uploadPendingEvents()
                 }
             }
+        }
+        await runVisibleStatusStep(statusText("sync_status_checking_icloud")) {
+            _ = await downloadChanges()
         }
         if canSync(.recap) {
             await runVisibleStatusStep(statusText("sync_status_syncing_recaps")) {
@@ -1910,14 +1990,11 @@ actor CloudKitSyncService {
             await pushLyricsServerSettingsIfNeeded()
         }
         await refreshRadioStationsIfNeeded()
-        await runVisibleStatusStep(statusText("sync_status_checking_icloud")) {
-            _ = await downloadChanges()
-        }
         if canSync(.uiCustomizations) {
             await pushUICustomizationsIfNeeded()
         }
         await updatePendingCounts()
-        await finishCurrentStatus(statusText("sync_status_complete"))
+        await finishCurrentStatus(recapSyncFailureMessage ?? statusText("sync_status_complete"))
     }
 
     private func reuploadAllRecapMarkers() async {
@@ -1983,9 +2060,9 @@ actor CloudKitSyncService {
         for conflict in conflicts {
             let recordName = makeRecapMarkerRecordName(serverId: stableId, periodKey: conflict.periodKey, isTest: conflict.entry.isTest)
 
-            if onlyLocalOnly {
-                let remoteExists = (try? await SubsonicAPIService.shared.getPlaylist(id: conflict.existingPlaylistId)) != nil
-                if remoteExists {
+            do {
+                _ = try await SubsonicAPIService.shared.getPlaylist(id: conflict.existingPlaylistId)
+                if onlyLocalOnly {
                     CloudKitSyncService.debugLog("[Reupload] conflict: iCloud playlistId=\(conflict.existingPlaylistId) exists on Navidrome — adopting, keeping local \(conflict.entry.playlistId) as orphan")
                     let updated = RecapRegistryRecord(
                         playlistId: conflict.existingPlaylistId,
@@ -1999,15 +2076,6 @@ actor CloudKitSyncService {
                     await PlayLogService.shared.deleteRegistryEntry(playlistId: conflict.entry.playlistId)
                     await PlayLogService.shared.registerPlaylist(updated)
                 } else {
-                    CloudKitSyncService.debugLog("[Reupload] conflict: iCloud playlistId=\(conflict.existingPlaylistId) MISSING on Navidrome — keeping local \(conflict.entry.playlistId), clearing stale iCloud marker")
-                    await deleteRecapMarker(ckRecordName: recordName)
-                    var entry = conflict.entry
-                    entry.ckRecordName = nil
-                    _ = try? await saveRecapMarker(entry, periodKey: conflict.periodKey)
-                }
-            } else {
-                let remoteExists = (try? await SubsonicAPIService.shared.getPlaylist(id: conflict.existingPlaylistId)) != nil
-                if remoteExists {
                     CloudKitSyncService.debugLog("[Reupload] conflict (full): iCloud has playlistId=\(conflict.existingPlaylistId), local had \(conflict.entry.playlistId) — adopting iCloud")
                     try? await SubsonicAPIService.shared.deletePlaylist(id: conflict.entry.playlistId)
                     let updated = RecapRegistryRecord(
@@ -2021,13 +2089,20 @@ actor CloudKitSyncService {
                     )
                     await PlayLogService.shared.deleteRegistryEntry(playlistId: conflict.entry.playlistId)
                     await PlayLogService.shared.keepOnlyRegistryEntryForSamePeriod(updated)
-                } else {
-                    CloudKitSyncService.debugLog("[Reupload] conflict (full): iCloud playlistId=\(conflict.existingPlaylistId) MISSING on Navidrome — keeping local \(conflict.entry.playlistId), clearing stale iCloud marker")
-                    await deleteRecapMarker(ckRecordName: recordName)
-                    var entry = conflict.entry
-                    entry.ckRecordName = nil
-                    _ = try? await saveRecapMarker(entry, periodKey: conflict.periodKey)
                 }
+            } catch SubsonicAPIError.apiError(let code, let message)
+                where RecapSyncLogic.isDefinitiveNotFound(code: code, message: message) {
+                let scope = onlyLocalOnly ? "" : " (full)"
+                CloudKitSyncService.debugLog("[Reupload] conflict\(scope): iCloud playlistId=\(conflict.existingPlaylistId) MISSING on Navidrome — keeping local \(conflict.entry.playlistId), clearing stale iCloud marker")
+                await deleteRecapMarker(ckRecordName: recordName)
+                var entry = conflict.entry
+                entry.ckRecordName = nil
+                _ = try? await saveRecapMarker(entry, periodKey: conflict.periodKey)
+            } catch {
+                if recapSyncFailureMessage == nil {
+                    recapSyncFailureMessage = error.localizedDescription
+                }
+                log("Could not resolve recap marker conflict: \(error.localizedDescription)", isError: true)
             }
         }
     }

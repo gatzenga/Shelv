@@ -9,6 +9,7 @@ struct RecapVerifyView: View {
 
     @State private var diffs: [RecapDiff] = []
     @State private var isLoading = true
+    @State private var loadError: String?
     @State private var processingDiffId: UUID?
     @State private var completedByButton = false
 
@@ -17,7 +18,7 @@ struct RecapVerifyView: View {
             HStack {
                 Text(String(localized: "sync")).font(.title3.bold())
                 Spacer()
-                if !isImportContext || diffs.isEmpty {
+                if !isImportContext || (diffs.isEmpty && loadError == nil) {
                     Button(String(localized: "done")) {
                         completedByButton = true
                         if isImportContext {
@@ -40,6 +41,13 @@ struct RecapVerifyView: View {
                         Text(String(localized: "checking_playlists"))
                             .font(.subheadline).foregroundStyle(.secondary)
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if let loadError {
+                    ContentUnavailableView(
+                        String(localized: "sync"),
+                        systemImage: "exclamationmark.triangle",
+                        description: Text(loadError)
+                    )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if diffs.isEmpty {
                     ContentUnavailableView(
@@ -190,7 +198,13 @@ struct RecapVerifyView: View {
 
     private func loadDiffs() async {
         isLoading = true
-        diffs = await recapStore.computeDiffs(serverId: serverId)
+        loadError = nil
+        do {
+            diffs = try await recapStore.computeDiffs(serverId: serverId)
+        } catch {
+            diffs = []
+            loadError = error.localizedDescription
+        }
         isLoading = false
     }
 
@@ -198,11 +212,20 @@ struct RecapVerifyView: View {
         processingDiffId = diff.id
         Task {
             do {
-                try await recapStore.applyDiff(diff, decision: decision, serverId: serverId)
+                let appliedDecision = try await recapStore.applyLatestDiff(
+                    matching: diff,
+                    preferredDecision: decision,
+                    serverId: serverId
+                )
                 diffs.removeAll { $0.id == diff.id }
-                NotificationCenter.default.post(name: .showToast, object: decision == .update
-                    ? String(localized: "playlist_updated")
-                    : String(localized: "new_playlist_created"))
+                let message: String
+                switch appliedDecision {
+                case .some(.createNew):
+                    message = String(localized: "new_playlist_created")
+                default:
+                    message = String(localized: "playlist_updated")
+                }
+                NotificationCenter.default.post(name: .showToast, object: message)
             } catch {
                 NotificationCenter.default.post(name: .showToast, object: error.localizedDescription)
             }

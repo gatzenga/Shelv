@@ -112,6 +112,77 @@ final class PlayLogServiceTests: XCTestCase {
         XCTAssertEqual(topSongs.map(\.count), [2, 2, 2, 1])
     }
 
+    func testDeadSongCleanupPromotesValidSongsWithinOneStabilization() async throws {
+        let service = try await makeService()
+        let start = Date(timeIntervalSince1970: 1_750_000_000)
+        let end = Date(timeIntervalSince1970: 1_750_001_000)
+
+        for offset in [10.0, 20.0, 30.0] {
+            await service.insertLegacyPlayForTesting(
+                songId: "dead-a",
+                serverId: "server-a",
+                playedAt: start.timeIntervalSince1970 + offset,
+                songDuration: 180
+            )
+        }
+        for offset in [40.0, 50.0] {
+            await service.insertLegacyPlayForTesting(
+                songId: "dead-b",
+                serverId: "server-a",
+                playedAt: start.timeIntervalSince1970 + offset,
+                songDuration: 180
+            )
+        }
+        await service.insertLegacyPlayForTesting(
+            songId: "valid",
+            serverId: "server-a",
+            playedAt: start.timeIntervalSince1970 + 60,
+            songDuration: 180
+        )
+
+        let deadSongIds = Set(["dead-a", "dead-b"])
+        var cleanupCalls: [[String]] = []
+        let finalIds: [String] = try await RecapSyncLogic.stabilized(
+            scan: {
+                let ids = await service.topSongs(
+                    serverId: "server-a",
+                    from: start,
+                    to: end,
+                    limit: 1
+                ).map(\.songId)
+                return (ids, Set(ids.filter { deadSongIds.contains($0) }))
+            },
+            removeDeadSongIds: { ids in
+                cleanupCalls.append(ids)
+                return await service.deletePlays(forSongIds: ids, serverId: "server-a")
+            }
+        )
+
+        let remainingSongIds = await service.allPlayLogs(serverId: "server-a").map(\.songId)
+        XCTAssertEqual(finalIds, ["valid"])
+        XCTAssertEqual(cleanupCalls, [["dead-a"], ["dead-b"]])
+        XCTAssertEqual(remainingSongIds, ["valid"])
+
+        let secondPassIds: [String] = try await RecapSyncLogic.stabilized(
+            scan: {
+                let ids = await service.topSongs(
+                    serverId: "server-a",
+                    from: start,
+                    to: end,
+                    limit: 1
+                ).map(\.songId)
+                return (ids, Set(ids.filter { deadSongIds.contains($0) }))
+            },
+            removeDeadSongIds: { ids in
+                cleanupCalls.append(ids)
+                return await service.deletePlays(forSongIds: ids, serverId: "server-a")
+            }
+        )
+
+        XCTAssertEqual(secondPassIds, ["valid"])
+        XCTAssertEqual(cleanupCalls, [["dead-a"], ["dead-b"]])
+    }
+
     func testKeepOnlyRegistryEntryForSamePeriodKeepsCanonicalRecordOnlyForMatchingBucket() async throws {
         let service = try await makeService()
         let monthStart = Date(timeIntervalSince1970: 1_746_144_000).timeIntervalSince1970

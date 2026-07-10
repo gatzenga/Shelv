@@ -279,14 +279,17 @@ struct DatabaseSettingsView: View {
             return
         }
 
-        let uuids   = await PlayLogService.shared.uuids(forSongIds: dead, serverId: sid)
-        let removed = await PlayLogService.shared.deletePlays(forSongIds: dead, serverId: sid)
-        if !uuids.isEmpty {
-            await CloudKitSyncService.shared.deletePlayEvents(uuids: uuids, force: true)
-        }
+        let cleanup = await CloudKitSyncService.shared.removeDeadPlayLogEntries(
+            songIds: dead,
+            serverId: sid
+        )
         await refreshTotalPlays()
         cleanupDone = true
-        cleanupResult = String(format: String(localized: "cleanup_removed_format"), dead.count, removed)
+        cleanupResult = String(
+            format: String(localized: "cleanup_removed_format"),
+            dead.count,
+            cleanup.removedRows
+        )
     }
 
     private var syncReportSheet: some View {

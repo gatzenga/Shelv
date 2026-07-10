@@ -445,13 +445,41 @@ class RecapStore: ObservableObject {
 
     // MARK: - Diff Computation
 
-    func computeDiffs(serverId: String) async -> [RecapDiff] {
+    private struct RecapDiffScan {
+        let diffs: [RecapDiff]
+        let deadSongIds: Set<String>
+    }
+
+    private struct SongResolution {
+        let song: Song
+        let isDead: Bool
+    }
+
+    func computeDiffs(serverId: String) async throws -> [RecapDiff] {
         isGenerating = true
         defer { isGenerating = false }
+
+        return try await RecapSyncLogic.stabilized(
+            scan: {
+                let scan = try await self.scanDiffs(serverId: serverId)
+                return (scan.diffs, scan.deadSongIds)
+            },
+            removeDeadSongIds: { songIds in
+                let cleanup = await CloudKitSyncService.shared.removeDeadPlayLogEntries(
+                    songIds: songIds,
+                    serverId: serverId
+                )
+                return cleanup.removedRows
+            }
+        )
+    }
+
+    private func scanDiffs(serverId: String) async throws -> RecapDiffScan {
 
         let api = SubsonicAPIService.shared
         let entries = await PlayLogService.shared.allRegistryEntries(serverId: serverId)
         var diffs: [RecapDiff] = []
+        var deadSongIds: Set<String> = []
 
         for entry in entries {
             guard let type = RecapPeriod.PeriodType(rawValue: entry.periodType) else { continue }
@@ -463,17 +491,25 @@ class RecapStore: ObservableObject {
                 serverId: serverId, from: periodStart, to: periodEnd, limit: type.songLimit
             ).map(\.songId)
 
-            let current = try? await api.getPlaylist(id: entry.playlistId)
+            let current: Playlist?
+            do {
+                current = try await api.getPlaylist(id: entry.playlistId)
+            } catch where isDefinitiveNotFound(error) {
+                current = nil
+            } catch {
+                CloudKitSyncService.debugLog(
+                    "[RecapSync] Could not inspect playlist \(entry.playlistId): \(error.localizedDescription)"
+                )
+                throw error
+            }
 
             guard let current else {
                 guard !expectedIds.isEmpty else { continue }
                 var expectedSongs: [Song] = []
                 for id in expectedIds {
-                    if let song = try? await api.getSong(id: id) {
-                        expectedSongs.append(song)
-                    } else {
-                        expectedSongs.append(placeholderSong(id: id))
-                    }
+                    let resolution = try await resolveSong(id: id)
+                    expectedSongs.append(resolution.song)
+                    if resolution.isDead { deadSongIds.insert(id) }
                 }
                 diffs.append(RecapDiff(
                     entry: entry,
@@ -510,11 +546,9 @@ class RecapStore: ObservableObject {
 
             var missingSongs: [Song] = []
             for id in missingIds {
-                if let song = try? await api.getSong(id: id) {
-                    missingSongs.append(song)
-                } else {
-                    missingSongs.append(placeholderSong(id: id))
-                }
+                let resolution = try await resolveSong(id: id)
+                missingSongs.append(resolution.song)
+                if resolution.isDead { deadSongIds.insert(id) }
             }
 
             let extraSongs = currentSongs.filter { !expectedIdSet.contains($0.id) }
@@ -544,7 +578,35 @@ class RecapStore: ObservableObject {
             if diff.hasAnyDiff { diffs.append(diff) }
         }
 
-        return diffs
+        return RecapDiffScan(diffs: diffs, deadSongIds: deadSongIds)
+    }
+
+    private func resolveSong(id: String) async throws -> SongResolution {
+        guard !id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return SongResolution(song: placeholderSong(id: id), isDead: true)
+        }
+        do {
+            return SongResolution(
+                song: try await SubsonicAPIService.shared.getSong(id: id),
+                isDead: false
+            )
+        } catch {
+            let isDead = isDefinitiveNotFound(error)
+            if isDead {
+                return SongResolution(song: placeholderSong(id: id), isDead: true)
+            }
+            CloudKitSyncService.debugLog(
+                "[RecapSync] Could not resolve song \(id): \(error.localizedDescription)"
+            )
+            throw error
+        }
+    }
+
+    private func isDefinitiveNotFound(_ error: Error) -> Bool {
+        guard let apiError = error as? SubsonicAPIError,
+              case .apiError(let code, let message) = apiError
+        else { return false }
+        return RecapSyncLogic.isDefinitiveNotFound(code: code, message: message)
     }
 
     private func placeholderSong(id: String) -> Song {
@@ -553,6 +615,33 @@ class RecapStore: ObservableObject {
             track: nil, discNumber: nil, duration: nil, coverArt: nil, year: nil, genre: nil,
             playCount: nil, starred: nil, suffix: nil, bitRate: nil, replayGain: nil
         )
+    }
+
+    @discardableResult
+    func applyLatestDiff(
+        matching original: RecapDiff,
+        preferredDecision: RecapDiffDecision,
+        serverId: String
+    ) async throws -> RecapDiffDecision? {
+        let latestDiffs = try await computeDiffs(serverId: serverId)
+        guard let latest = latestDiffs.first(where: { candidate in
+            candidate.entry.serverId == original.entry.serverId
+                && candidate.entry.periodType == original.entry.periodType
+                && candidate.entry.periodStart == original.entry.periodStart
+                && candidate.entry.periodEnd == original.entry.periodEnd
+                && candidate.entry.isTest == original.entry.isTest
+        }) else {
+            return nil
+        }
+
+        let decision: RecapDiffDecision
+        if latest.serverMissing, case .update = preferredDecision {
+            decision = .createNew
+        } else {
+            decision = preferredDecision
+        }
+        try await applyDiff(latest, decision: decision, serverId: serverId)
+        return decision
     }
 
     func applyDiff(_ diff: RecapDiff, decision: RecapDiffDecision, serverId: String) async throws {
@@ -565,13 +654,10 @@ class RecapStore: ObservableObject {
                 throw NSError(domain: "RecapStore", code: 2,
                               userInfo: [NSLocalizedDescriptionKey: "Playlist no longer exists on server"])
             }
-            let contentDiffers = !diff.missingSongs.isEmpty || !diff.extraSongs.isEmpty || diff.orderChanged
-            try await api.updatePlaylist(
+            try await synchronizePlaylist(
                 id: diff.entry.playlistId,
-                name: diff.nameMismatch ? diff.playlistName : nil,
-                comment: diff.commentMissing ? "Shelv Recap" : nil,
-                songIdsToAdd: contentDiffers ? expectedIds : [],
-                songIndicesToRemove: contentDiffers ? Array(0..<diff.currentOrder.count) : []
+                name: diff.playlistName,
+                expectedIds: expectedIds
             )
         case .createNew:
             guard !expectedIds.isEmpty else {
@@ -617,8 +703,8 @@ class RecapStore: ObservableObject {
                 case .created:
                     newEntry.ckRecordName = recordName
                 case .conflict(let existingPlaylistId):
-                    let remoteExists = (try? await api.getPlaylist(id: existingPlaylistId)) != nil
-                    if remoteExists {
+                    do {
+                        _ = try await api.getPlaylist(id: existingPlaylistId)
                         CloudKitSyncService.debugLog("[ApplyDiff] conflict: iCloud playlistId=\(existingPlaylistId) exists — adopting, discarding newly created \(newPlaylist.id)")
                         try? await api.deletePlaylist(id: newPlaylist.id)
                         newEntry = RecapRegistryRecord(
@@ -630,18 +716,64 @@ class RecapStore: ObservableObject {
                             ckRecordName: recordName,
                             isTest: diff.entry.isTest
                         )
-                    } else {
+                    } catch where isDefinitiveNotFound(error) {
                         CloudKitSyncService.debugLog("[ApplyDiff] conflict: iCloud playlistId=\(existingPlaylistId) MISSING on Navidrome — overwriting stale marker with new local \(newPlaylist.id)")
                         await CloudKitSyncService.shared.deleteRecapMarker(ckRecordName: recordName)
                         if case .created = try? await CloudKitSyncService.shared.saveRecapMarker(newEntry, periodKey: periodKey) {
                             newEntry.ckRecordName = recordName
                         }
+                    } catch {
+                        try? await api.deletePlaylist(id: newPlaylist.id)
+                        throw error
                     }
                 }
             }
 
+            try await synchronizePlaylist(
+                id: newEntry.playlistId,
+                name: diff.playlistName,
+                expectedIds: expectedIds
+            )
             await PlayLogService.shared.registerPlaylist(newEntry)
             await loadEntries(serverId: serverId)
+        }
+    }
+
+    private func synchronizePlaylist(id: String, name: String, expectedIds: [String]) async throws {
+        let api = SubsonicAPIService.shared
+        let current = try await api.getPlaylist(id: id)
+        let currentIds = (current.songs ?? []).map(\.id)
+        let mutation = RecapPlaylistMutationPlan(currentIds: currentIds, expectedIds: expectedIds)
+        let nameDiffers = current.name != name
+        let commentDiffers = (current.comment ?? "") != "Shelv Recap"
+
+        if mutation != nil || nameDiffers || commentDiffers {
+            try await api.updatePlaylist(
+                id: id,
+                name: nameDiffers ? name : nil,
+                comment: commentDiffers ? "Shelv Recap" : nil,
+                songIdsToAdd: mutation?.songIdsToAdd ?? [],
+                songIndicesToRemove: mutation?.songIndicesToRemove ?? []
+            )
+        }
+
+        let verified = try await api.getPlaylist(id: id)
+        let verifiedIds = (verified.songs ?? []).map(\.id)
+        guard RecapSyncLogic.playlistMatches(
+            ids: verifiedIds,
+            name: verified.name,
+            comment: verified.comment,
+            expectedIds: expectedIds,
+            expectedName: name
+        ) else {
+            CloudKitSyncService.debugLog(
+                "[RecapSync] Verification failed for \(name): expected \(expectedIds), received \(verifiedIds)"
+            )
+            throw NSError(
+                domain: "RecapStore",
+                code: 4,
+                userInfo: [NSLocalizedDescriptionKey: String(localized: "server_returned_an_error")]
+            )
         }
     }
 
