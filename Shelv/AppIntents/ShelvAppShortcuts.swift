@@ -261,10 +261,11 @@ struct ShelvAppShortcuts: AppShortcutsProvider {
             intent: ShelvShuffleAllIntent(),
             phrases: [
                 "Shuffle all in \(.applicationName)",
-                "Play shuffle all in \(.applicationName)",
                 "Shuffle all tracks in \(.applicationName)",
                 "Shuffle all songs in \(.applicationName)",
                 "Shuffle my library in \(.applicationName)",
+                "Ask \(.applicationName) to shuffle music",
+                "Shuffle music with \(.applicationName)",
             ],
             shortTitle: "shortcut_shuffle_all_short",
             systemImageName: "shuffle"
@@ -283,12 +284,22 @@ struct ShelvAppShortcuts: AppShortcutsProvider {
         )
 
         AppShortcut(
+            intent: ShelvShufflePlayableIntent(),
+            phrases: [
+                "Ask \(.applicationName) to shuffle \(\.$playable)",
+                "Play \(\.$playable) shuffled with \(.applicationName)",
+                "Choose music to shuffle in \(.applicationName)",
+            ],
+            shortTitle: "shortcut_shuffle_playable_short",
+            systemImageName: "shuffle"
+        )
+
+        AppShortcut(
             intent: ShelvPlayMixIntent(),
             phrases: [
                 "Play a mix in \(.applicationName)",
                 "Play \(\.$mix) in \(.applicationName)",
                 "Play \(\.$mix) tracks in \(.applicationName)",
-                "Ask \(.applicationName) to play \(\.$mix)",
                 "Start \(\.$mix) in \(.applicationName)",
             ],
             shortTitle: "shortcut_play_mix_short",
@@ -296,22 +307,23 @@ struct ShelvAppShortcuts: AppShortcutsProvider {
         )
 
         AppShortcut(
-            intent: ShelvPlayPlaylistIntent(),
+            intent: ShelvInstantMixIntent(),
             phrases: [
-                "Play a playlist in \(.applicationName)",
-                "Play \(\.$playlist) in \(.applicationName)",
-                "Play playlist \(\.$playlist) in \(.applicationName)",
-                "Ask \(.applicationName) to play playlist \(\.$playlist)",
+                "Ask \(.applicationName) to play an instant mix",
+                "Play an instant mix in \(.applicationName)",
+                "Play instant mix for \(\.$playable) in \(.applicationName)",
+                "Play an instant mix for \(\.$playable) in \(.applicationName)",
+                "Create an instant mix from \(\.$playable) in \(.applicationName)",
+                "Ask \(.applicationName) to play an instant mix for \(\.$playable)",
             ],
-            shortTitle: "shortcut_play_playlist_short",
-            systemImageName: "music.note.list"
+            shortTitle: "shortcut_instant_mix_short",
+            systemImageName: "wand.and.stars"
         )
 
         AppShortcut(
             intent: ShelvPlayDownloadsIntent(),
             phrases: [
                 "Play downloads in \(.applicationName)",
-                "Play \(\.$mode) in \(.applicationName)",
                 "Play \(\.$mode) downloads in \(.applicationName)",
                 "Play downloaded music in \(.applicationName)",
                 "Shuffle downloads in \(.applicationName)",
@@ -343,18 +355,6 @@ struct ShelvAppShortcuts: AppShortcutsProvider {
             ],
             shortTitle: "shortcut_now_playing_short",
             systemImageName: "music.note"
-        )
-
-        AppShortcut(
-            intent: ShelvOpenSearchIntent(),
-            phrases: [
-                "Open search in \(.applicationName)",
-                "Open \(.applicationName) search",
-                "Show search in \(.applicationName)",
-                "Search in \(.applicationName)",
-            ],
-            shortTitle: "shortcut_search_short",
-            systemImageName: "magnifyingglass"
         )
 
         AppShortcut(

@@ -708,6 +708,29 @@ class AudioPlayerService: ObservableObject {
     }
 
     func playRadioStationAndWait(_ item: RadioStationDisplayItem) async -> PlaybackStartOutcome {
+        await startRadioStationAndWait(item)
+    }
+
+    func currentSongReferenceForSystemIntent() -> ShortcutPlayableReference? {
+        guard let song = currentSong,
+              let serverConfigID = currentPlaybackServerConfigId
+                ?? SubsonicAPIService.shared.activeServer?.id.uuidString
+        else { return nil }
+        return ShortcutPlayableReference(
+            serverConfigID: serverConfigID,
+            kind: .song,
+            contentID: song.id
+        )
+    }
+
+    /// A system intent reports success only after the stream has produced
+    /// playable audio. Merely handing a URL to the engine would acknowledge
+    /// dead stations and DNS failures as successful Siri requests.
+    func startRadioStationForSystemIntent(_ item: RadioStationDisplayItem) async -> PlaybackStartOutcome {
+        await startRadioStationAndWait(item)
+    }
+
+    private func startRadioStationAndWait(_ item: RadioStationDisplayItem) async -> PlaybackStartOutcome {
         guard URL(string: item.streamURL) != nil else { return .failed(.streamURLUnavailable) }
         playRadioStation(item)
         let generation = playbackGeneration

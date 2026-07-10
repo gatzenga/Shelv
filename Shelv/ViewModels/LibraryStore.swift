@@ -63,6 +63,14 @@ class LibraryStore: ObservableObject {
         return try? JSONDecoder().decode(type, from: data)
     }
 
+    nonisolated static func cachedPlaylistNamesForSystemIntent(serverID: UUID) -> [String: String] {
+        let playlists = readFromDisk([Playlist].self, name: "playlists", serverID: serverID) ?? []
+        return Dictionary(
+            playlists.map { ($0.id, $0.name) },
+            uniquingKeysWith: { first, _ in first }
+        )
+    }
+
     private var activeServerID: UUID? { api.activeServer?.id }
 
     private var activeServerSignature: String? {

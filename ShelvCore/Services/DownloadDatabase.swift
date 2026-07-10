@@ -3,7 +3,7 @@ import GRDB
 
 // MARK: - Records
 
-struct DownloadRecord: Codable, FetchableRecord, PersistableRecord {
+struct DownloadRecord: Codable, FetchableRecord, PersistableRecord, Sendable {
     var songId: String
     var serverId: String
     var albumId: String
@@ -82,6 +82,11 @@ struct MissingStrikeRecord: Codable, FetchableRecord, PersistableRecord {
     var lastStrikeAt: Double
 
     static let databaseTableName = "missing_song_strikes"
+}
+
+nonisolated struct DownloadedPlaylistMarker: Sendable {
+    let id: String
+    let name: String
 }
 
 // MARK: - DownloadDatabase
@@ -267,6 +272,26 @@ actor DownloadDatabase {
                 }
             }
         }
+        m.registerMigration("v6_scope_playlist_registry_to_server") { db in
+            try db.execute(sql: """
+                CREATE TABLE downloaded_playlists_v6 (
+                    server_id TEXT NOT NULL,
+                    playlist_id TEXT NOT NULL,
+                    playlist_name TEXT NOT NULL,
+                    downloaded_at INTEGER NOT NULL,
+                    PRIMARY KEY (server_id, playlist_id)
+                )
+                """)
+            try db.execute(sql: """
+                INSERT INTO downloaded_playlists_v6 (
+                    server_id, playlist_id, playlist_name, downloaded_at
+                )
+                SELECT '', playlist_id, playlist_name, downloaded_at
+                FROM downloaded_playlists
+                """)
+            try db.drop(table: "downloaded_playlists")
+            try db.rename(table: "downloaded_playlists_v6", to: "downloaded_playlists")
+        }
         try m.migrate(p)
         return p
     }
@@ -359,6 +384,25 @@ actor DownloadDatabase {
         safeWrite { db in try record.insert(db, onConflict: .replace) }
     }
 
+    func repairFilePath(
+        songId: String,
+        serverId: String,
+        expectedPath: String,
+        expectedAddedAt: Double,
+        replacementPath: String
+    ) {
+        safeWrite { db in
+            try db.execute(
+                sql: """
+                UPDATE downloads
+                SET filePath = ?
+                WHERE songId = ? AND serverId = ? AND filePath = ? AND addedAt = ?
+                """,
+                arguments: [replacementPath, songId, serverId, expectedPath, expectedAddedAt]
+            )
+        }
+    }
+
     func setFavorite(songId: String, serverId: String, isFavorite: Bool) {
         safeWrite { db in
             try db.execute(
@@ -397,6 +441,23 @@ actor DownloadDatabase {
             try db.execute(
                 sql: "DELETE FROM missing_song_strikes WHERE songId = ? AND serverId = ?",
                 arguments: [songId, serverId]
+            )
+        }
+    }
+
+    func deleteIfFilePathMatches(
+        songId: String,
+        serverId: String,
+        expectedPath: String,
+        expectedAddedAt: Double
+    ) {
+        safeWrite { db in
+            try db.execute(
+                sql: """
+                DELETE FROM downloads
+                WHERE songId = ? AND serverId = ? AND filePath = ? AND addedAt = ?
+                """,
+                arguments: [songId, serverId, expectedPath, expectedAddedAt]
             )
         }
     }
@@ -456,7 +517,12 @@ actor DownloadDatabase {
         return (try? pool.read { db in
             try DownloadRecord
                 .filter(Column("serverId") == serverId)
-                .order(Column("artistName").asc, Column("albumTitle").asc, Column("track").asc)
+                .order(
+                    Column("artistName").asc,
+                    Column("albumTitle").asc,
+                    Column("disc").asc,
+                    Column("track").asc
+                )
                 .fetchAll(db)
         }) ?? []
     }
@@ -562,30 +628,78 @@ actor DownloadDatabase {
 
     // MARK: - Playlist Registry (macOS: Marker in der DB; iOS nutzt UserDefaults)
 
-    func markPlaylistDownloaded(id: String, name: String) {
+    func markPlaylistDownloaded(id: String, name: String, serverId: String) {
         safeWrite { db in
             try db.execute(
-                sql: "INSERT OR REPLACE INTO downloaded_playlists (playlist_id, playlist_name, downloaded_at) VALUES (?, ?, ?)",
-                arguments: [id, name, Int(Date().timeIntervalSince1970)]
+                sql: """
+                INSERT OR REPLACE INTO downloaded_playlists (
+                    server_id, playlist_id, playlist_name, downloaded_at
+                ) VALUES (?, ?, ?, ?)
+                """,
+                arguments: [serverId, id, name, Int(Date().timeIntervalSince1970)]
             )
         }
     }
 
-    func unmarkPlaylistDownloaded(id: String) {
+    func unmarkPlaylistDownloaded(id: String, serverId: String) {
         safeWrite { db in
             try db.execute(
-                sql: "DELETE FROM downloaded_playlists WHERE playlist_id = ?",
-                arguments: [id]
+                sql: "DELETE FROM downloaded_playlists WHERE server_id = ? AND playlist_id = ?",
+                arguments: [serverId, id]
             )
         }
     }
 
-    func loadDownloadedPlaylistIds() -> Set<String> {
+    func loadDownloadedPlaylistIds(serverId: String) -> Set<String> {
         guard let pool else { return [] }
         let ids: [String] = (try? pool.read { db in
-            try String.fetchAll(db, sql: "SELECT playlist_id FROM downloaded_playlists")
+            try String.fetchAll(
+                db,
+                sql: "SELECT playlist_id FROM downloaded_playlists WHERE server_id = ?",
+                arguments: [serverId]
+            )
         }) ?? []
         return Set(ids)
+    }
+
+    func loadDownloadedPlaylistMarkers(serverId: String) -> [DownloadedPlaylistMarker] {
+        guard let pool else { return [] }
+        return (try? pool.read { db in
+            try Row.fetchAll(
+                db,
+                sql: """
+                SELECT playlist_id, playlist_name
+                FROM downloaded_playlists
+                WHERE server_id = ?
+                ORDER BY playlist_name COLLATE NOCASE ASC
+                """,
+                arguments: [serverId]
+            ).map {
+                DownloadedPlaylistMarker(
+                    id: $0["playlist_id"],
+                    name: $0["playlist_name"]
+                )
+            }
+        }) ?? []
+    }
+
+    func adoptLegacyPlaylistMarkers(serverId: String, playlistIds: Set<String>) {
+        guard !playlistIds.isEmpty else { return }
+        safeWrite { db in
+            for id in playlistIds {
+                try db.execute(
+                    sql: """
+                    INSERT OR IGNORE INTO downloaded_playlists (
+                        server_id, playlist_id, playlist_name, downloaded_at
+                    )
+                    SELECT ?, playlist_id, playlist_name, downloaded_at
+                    FROM downloaded_playlists
+                    WHERE server_id = '' AND playlist_id = ?
+                    """,
+                    arguments: [serverId, id]
+                )
+            }
+        }
     }
 
     // MARK: - Missing Song Strikes

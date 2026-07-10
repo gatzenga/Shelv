@@ -44,6 +44,27 @@ enum SubsonicAPIError: LocalizedError {
     }
 }
 
+extension SubsonicAPIError: ShortcutRemoteErrorClassifying {
+    nonisolated var shortcutPlaybackError: ShortcutPlaybackError {
+        switch self {
+        case .noServer:
+            return .noActiveServer
+        case .networkError(let error):
+            if error is CancellationError { return .cancelled }
+            if let urlError = error as? URLError, urlError.code == .cancelled {
+                return .cancelled
+            }
+            return .noNetwork
+        case .httpError(let code):
+            return code == 404 ? .notFound : .playbackFailed
+        case .apiError(let code, _):
+            return code == 70 ? .notFound : .playbackFailed
+        case .noPassword, .invalidURL, .decodingError:
+            return .playbackFailed
+        }
+    }
+}
+
 /// Ergebnis von `getPlayQueue` — die serverseitig gespeicherte Wiedergabe-Queue.
 nonisolated struct SubsonicPlayQueue {
     let songs: [Song]

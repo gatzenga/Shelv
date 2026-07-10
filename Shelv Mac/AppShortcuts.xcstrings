@@ -9,10 +9,11 @@
             "state": "new",
             "values": [
               "Shuffle all in ${applicationName}",
-              "Play shuffle all in ${applicationName}",
               "Shuffle all tracks in ${applicationName}",
               "Shuffle all songs in ${applicationName}",
-              "Shuffle my library in ${applicationName}"
+              "Shuffle my library in ${applicationName}",
+              "Ask ${applicationName} to shuffle music",
+              "Shuffle music with ${applicationName}"
             ]
           }
         },
@@ -21,10 +22,11 @@
             "state": "translated",
             "values": [
               "Alles in ${applicationName} mischen",
-              "Alles gemischt in ${applicationName} abspielen",
               "Alle Titel in ${applicationName} mischen",
               "Alle Songs in ${applicationName} mischen",
-              "Meine Mediathek in ${applicationName} mischen"
+              "Meine Mediathek in ${applicationName} mischen",
+              "${applicationName} soll Musik mischen",
+              "Musik mit ${applicationName} mischen"
             ]
           }
         },
@@ -33,10 +35,11 @@
             "state": "translated",
             "values": [
               "在 ${applicationName} 中随机播放全部",
-              "用 ${applicationName} 随机播放全部",
               "在 ${applicationName} 中随机播放所有曲目",
               "在 ${applicationName} 中随机播放所有歌曲",
-              "在 ${applicationName} 中随机播放我的音乐库"
+              "在 ${applicationName} 中随机播放我的音乐库",
+              "让 ${applicationName} 随机播放音乐",
+              "用 ${applicationName} 随机播放音乐"
             ]
           }
         }
@@ -80,6 +83,41 @@
         }
       }
     },
+    "Ask ${applicationName} to shuffle ${playable}": {
+      "extractionState": "extracted_with_value",
+      "localizations": {
+        "en": {
+          "stringSet": {
+            "state": "new",
+            "values": [
+              "Ask ${applicationName} to shuffle ${playable}",
+              "Play ${playable} shuffled with ${applicationName}",
+              "Choose music to shuffle in ${applicationName}"
+            ]
+          }
+        },
+        "de": {
+          "stringSet": {
+            "state": "translated",
+            "values": [
+              "${applicationName} soll ${playable} mischen",
+              "${playable} gemischt mit ${applicationName} abspielen",
+              "Musik zum Mischen in ${applicationName} auswählen"
+            ]
+          }
+        },
+        "zh-Hans": {
+          "stringSet": {
+            "state": "translated",
+            "values": [
+              "让 ${applicationName} 随机播放 ${playable}",
+              "用 ${applicationName} 随机播放 ${playable}",
+              "在 ${applicationName} 中选择要随机播放的音乐"
+            ]
+          }
+        }
+      }
+    },
     "Play a mix in ${applicationName}": {
       "extractionState": "extracted_with_value",
       "localizations": {
@@ -90,7 +128,6 @@
               "Play a mix in ${applicationName}",
               "Play ${mix} in ${applicationName}",
               "Play ${mix} tracks in ${applicationName}",
-              "Ask ${applicationName} to play ${mix}",
               "Start ${mix} in ${applicationName}"
             ]
           }
@@ -102,7 +139,6 @@
               "Einen Mix in ${applicationName} abspielen",
               "${mix} in ${applicationName} abspielen",
               "Titel aus ${mix} in ${applicationName} abspielen",
-              "${applicationName} soll ${mix} abspielen",
               "${mix} in ${applicationName} starten"
             ]
           }
@@ -114,24 +150,25 @@
               "在 ${applicationName} 中播放混音",
               "在 ${applicationName} 中播放 ${mix}",
               "在 ${applicationName} 中播放 ${mix} 曲目",
-              "让 ${applicationName} 播放 ${mix}",
               "在 ${applicationName} 中启动 ${mix}"
             ]
           }
         }
       }
     },
-    "Play a playlist in ${applicationName}": {
+    "Ask ${applicationName} to play an instant mix": {
       "extractionState": "extracted_with_value",
       "localizations": {
         "en": {
           "stringSet": {
             "state": "new",
             "values": [
-              "Play a playlist in ${applicationName}",
-              "Play ${playlist} in ${applicationName}",
-              "Play playlist ${playlist} in ${applicationName}",
-              "Ask ${applicationName} to play playlist ${playlist}"
+              "Ask ${applicationName} to play an instant mix",
+              "Play an instant mix in ${applicationName}",
+              "Play instant mix for ${playable} in ${applicationName}",
+              "Play an instant mix for ${playable} in ${applicationName}",
+              "Create an instant mix from ${playable} in ${applicationName}",
+              "Ask ${applicationName} to play an instant mix for ${playable}"
             ]
           }
         },
@@ -139,10 +176,12 @@
           "stringSet": {
             "state": "translated",
             "values": [
-              "Eine Playlist in ${applicationName} abspielen",
-              "${playlist} in ${applicationName} abspielen",
-              "Playlist ${playlist} in ${applicationName} abspielen",
-              "${applicationName} soll die Playlist ${playlist} abspielen"
+              "${applicationName} soll einen Instant Mix abspielen",
+              "Einen Instant Mix in ${applicationName} abspielen",
+              "Instant Mix für ${playable} in ${applicationName} abspielen",
+              "Einen Instant Mix für ${playable} in ${applicationName} abspielen",
+              "Einen Instant Mix aus ${playable} in ${applicationName} erstellen",
+              "${applicationName} soll einen Instant Mix für ${playable} abspielen"
             ]
           }
         },
@@ -150,10 +189,12 @@
           "stringSet": {
             "state": "translated",
             "values": [
-              "在 ${applicationName} 中播放列表",
-              "在 ${applicationName} 中播放 ${playlist}",
-              "在 ${applicationName} 中播放播放列表 ${playlist}",
-              "让 ${applicationName} 播放播放列表 ${playlist}"
+              "让 ${applicationName} 播放即时混音",
+              "在 ${applicationName} 中播放即时混音",
+              "在 ${applicationName} 中为 ${playable} 播放即时混音",
+              "在 ${applicationName} 中为 ${playable} 播放一个即时混音",
+              "在 ${applicationName} 中从 ${playable} 创建即时混音",
+              "让 ${applicationName} 为 ${playable} 播放即时混音"
             ]
           }
         }
@@ -167,7 +208,6 @@
             "state": "new",
             "values": [
               "Play downloads in ${applicationName}",
-              "Play ${mode} in ${applicationName}",
               "Play ${mode} downloads in ${applicationName}",
               "Play downloaded music in ${applicationName}",
               "Shuffle downloads in ${applicationName}"
@@ -179,7 +219,6 @@
             "state": "translated",
             "values": [
               "Downloads in ${applicationName} abspielen",
-              "${mode} in ${applicationName} abspielen",
               "${mode} Downloads in ${applicationName} abspielen",
               "Geladene Musik in ${applicationName} abspielen",
               "Downloads in ${applicationName} mischen"
@@ -191,7 +230,6 @@
             "state": "translated",
             "values": [
               "在 ${applicationName} 中播放下载",
-              "在 ${applicationName} 中播放 ${mode}",
               "在 ${applicationName} 中播放 ${mode} 下载",
               "在 ${applicationName} 中播放已下载音乐",
               "在 ${applicationName} 中随机播放下载"
@@ -274,44 +312,6 @@
               "在 ${applicationName} 中显示播放器",
               "在 ${applicationName} 中打开正在播放",
               "在 ${applicationName} 中显示正在播放"
-            ]
-          }
-        }
-      }
-    },
-    "Open search in ${applicationName}": {
-      "extractionState": "extracted_with_value",
-      "localizations": {
-        "en": {
-          "stringSet": {
-            "state": "new",
-            "values": [
-              "Open search in ${applicationName}",
-              "Open ${applicationName} search",
-              "Show search in ${applicationName}",
-              "Search in ${applicationName}"
-            ]
-          }
-        },
-        "de": {
-          "stringSet": {
-            "state": "translated",
-            "values": [
-              "Suche in ${applicationName} öffnen",
-              "${applicationName}-Suche öffnen",
-              "Suche in ${applicationName} anzeigen",
-              "In ${applicationName} suchen"
-            ]
-          }
-        },
-        "zh-Hans": {
-          "stringSet": {
-            "state": "translated",
-            "values": [
-              "在 ${applicationName} 中打开搜索",
-              "打开 ${applicationName} 搜索",
-              "在 ${applicationName} 中显示搜索",
-              "在 ${applicationName} 中搜索"
             ]
           }
         }

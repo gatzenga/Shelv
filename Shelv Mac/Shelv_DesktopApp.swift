@@ -88,6 +88,7 @@ struct Shelv_DesktopApp: App {
                 }
                 .onChange(of: scenePhase) { _, phase in
                     guard phase == .active else { return }
+                    ShelvPlatformAppShortcuts.updateAppShortcutParameters()
                     // syncNow prüft die Remote-Queue automatisch mit.
                     Task { await CloudKitSyncService.shared.syncNow() }
                     if let active = appState.serverStore.activeServer {

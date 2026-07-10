@@ -83,14 +83,12 @@ struct ShelvAudioSongQuery: EntityStringQuery {
     }
 
     func suggestedEntities() async throws -> [ShelvAudioSongEntity] {
-        try await ShelvIntentCatalog.shared.suggestedItems()
-            .filter { $0.reference.kind == .song }
+        try await ShelvIntentCatalog.shared.suggestedItems(allowedKinds: [.song])
             .map(ShelvAudioSongEntity.init)
     }
 
     func entities(matching string: String) async throws -> [ShelvAudioSongEntity] {
-        try await ShelvIntentCatalog.shared.items(matching: string)
-            .filter { $0.reference.kind == .song }
+        try await ShelvIntentCatalog.shared.items(matching: string, allowedKinds: [.song])
             .map(ShelvAudioSongEntity.init)
     }
 }
@@ -166,14 +164,12 @@ struct ShelvAudioAlbumQuery: EntityStringQuery {
     }
 
     func suggestedEntities() async throws -> [ShelvAudioAlbumEntity] {
-        try await ShelvIntentCatalog.shared.suggestedItems()
-            .filter { $0.reference.kind == .album }
+        try await ShelvIntentCatalog.shared.suggestedItems(allowedKinds: [.album])
             .map(ShelvAudioAlbumEntity.init)
     }
 
     func entities(matching string: String) async throws -> [ShelvAudioAlbumEntity] {
-        try await ShelvIntentCatalog.shared.items(matching: string)
-            .filter { $0.reference.kind == .album }
+        try await ShelvIntentCatalog.shared.items(matching: string, allowedKinds: [.album])
             .map(ShelvAudioAlbumEntity.init)
     }
 }
@@ -222,14 +218,12 @@ struct ShelvAudioArtistQuery: EntityStringQuery {
     }
 
     func suggestedEntities() async throws -> [ShelvAudioArtistEntity] {
-        try await ShelvIntentCatalog.shared.suggestedItems()
-            .filter { $0.reference.kind == .artist }
+        try await ShelvIntentCatalog.shared.suggestedItems(allowedKinds: [.artist])
             .map(ShelvAudioArtistEntity.init)
     }
 
     func entities(matching string: String) async throws -> [ShelvAudioArtistEntity] {
-        try await ShelvIntentCatalog.shared.items(matching: string)
-            .filter { $0.reference.kind == .artist }
+        try await ShelvIntentCatalog.shared.items(matching: string, allowedKinds: [.artist])
             .map(ShelvAudioArtistEntity.init)
     }
 }
@@ -288,14 +282,12 @@ struct ShelvAudioPlaylistQuery: EntityStringQuery {
     }
 
     func suggestedEntities() async throws -> [ShelvAudioPlaylistEntity] {
-        try await ShelvIntentCatalog.shared.suggestedItems()
-            .filter { $0.reference.kind == .playlist }
+        try await ShelvIntentCatalog.shared.suggestedItems(allowedKinds: [.playlist])
             .map(ShelvAudioPlaylistEntity.init)
     }
 
     func entities(matching string: String) async throws -> [ShelvAudioPlaylistEntity] {
-        try await ShelvIntentCatalog.shared.items(matching: string)
-            .filter { $0.reference.kind == .playlist }
+        try await ShelvIntentCatalog.shared.items(matching: string, allowedKinds: [.playlist])
             .map(ShelvAudioPlaylistEntity.init)
     }
 }
@@ -339,14 +331,12 @@ struct ShelvAudioRadioQuery: EntityStringQuery {
     }
 
     func suggestedEntities() async throws -> [ShelvAudioRadioEntity] {
-        try await ShelvIntentCatalog.shared.suggestedItems()
-            .filter { $0.reference.kind == .radio }
+        try await ShelvIntentCatalog.shared.suggestedItems(allowedKinds: [.radio])
             .map(ShelvAudioRadioEntity.init)
     }
 
     func entities(matching string: String) async throws -> [ShelvAudioRadioEntity] {
-        try await ShelvIntentCatalog.shared.items(matching: string)
-            .filter { $0.reference.kind == .radio }
+        try await ShelvIntentCatalog.shared.items(matching: string, allowedKinds: [.radio])
             .map(ShelvAudioRadioEntity.init)
     }
 }
@@ -378,7 +368,10 @@ extension ShelvAudioEntity {
             let items: [ShelvIntentCatalogItem]
             switch input.criteria {
             case .searchQuery(let query):
-                items = try await ShelvIntentCatalog.shared.items(matching: query)
+                items = try await ShelvIntentCatalog.shared.items(
+                    matching: query,
+                    requiresExplicitRadio: true
+                )
             case .unspecified:
                 items = try await ShelvIntentCatalog.shared.suggestedItems()
             case .url:
@@ -442,6 +435,7 @@ struct ShelvPlayAudioIntent: AudioPlaybackIntent {
     static let description = IntentDescription("shortcut_media_play_description")
     static let openAppWhenRun = false
     static let authenticationPolicy: IntentAuthenticationPolicy = .alwaysAllowed
+    static let supportedModes: IntentModes = .background
 
     var audioEntity: ShelvAudioEntity
 
@@ -467,6 +461,25 @@ struct ShelvPlayAudioIntent: AudioPlaybackIntent {
             placement: placement,
             repeats: playbackAttributes.contains(.repeat)
         )
+        return .result()
+    }
+}
+
+@available(iOS 27.0, macOS 27.0, *)
+@AppIntent(schema: .audio.createStation)
+struct ShelvCreateStationIntent: AudioPlaybackIntent {
+    static let title: LocalizedStringResource = "shortcut_media_create_station_title"
+    static let description = IntentDescription("shortcut_media_create_station_description")
+    static let openAppWhenRun = false
+    static let authenticationPolicy: IntentAuthenticationPolicy = .alwaysAllowed
+    static let supportedModes: IntentModes = .background
+
+    @MainActor
+    func perform() async throws -> some IntentResult {
+        guard let reference = AudioPlayerService.shared.currentSongReferenceForSystemIntent() else {
+            throw ShortcutPlaybackError.noPlayableContent
+        }
+        try await ShelvSystemIntentPlaybackService.shared.execute(.instantMix(reference))
         return .result()
     }
 }

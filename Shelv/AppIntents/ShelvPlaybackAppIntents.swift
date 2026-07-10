@@ -67,6 +67,43 @@ private extension ShortcutPlayableKind {
     }
 }
 
+/// A shuffle source can be any catalog item except a live radio station.
+/// Keeping radio out of the entity query prevents Siri from offering a
+/// semantically impossible "shuffle this station" action.
+struct ShelvShuffleSourceEntity: AppEntity, Identifiable, Hashable, Sendable {
+    let playable: ShelvPlayableEntity
+
+    static let typeDisplayRepresentation: TypeDisplayRepresentation = "shortcut_shuffle_source_type"
+    static let defaultQuery = ShelvShuffleSourceQuery()
+
+    var id: String { playable.id }
+    var displayRepresentation: DisplayRepresentation { playable.displayRepresentation }
+    var reference: ShortcutPlayableReference { playable.reference }
+}
+
+struct ShelvShuffleSourceQuery: EntityStringQuery {
+    private let playableQuery = ShelvPlayableQuery(
+        allowedKinds: [.song, .album, .artist, .playlist]
+    )
+
+    func entities(for identifiers: [ShelvShuffleSourceEntity.ID]) async throws -> [ShelvShuffleSourceEntity] {
+        try await playableQuery.entities(for: identifiers).compactMap(Self.wrap)
+    }
+
+    func suggestedEntities() async throws -> [ShelvShuffleSourceEntity] {
+        try await playableQuery.suggestedEntities().compactMap(Self.wrap)
+    }
+
+    func entities(matching string: String) async throws -> [ShelvShuffleSourceEntity] {
+        try await playableQuery.entities(matching: string).compactMap(Self.wrap)
+    }
+
+    private static func wrap(_ playable: ShelvPlayableEntity) -> ShelvShuffleSourceEntity? {
+        guard playable.kind != .radio else { return nil }
+        return ShelvShuffleSourceEntity(playable: playable)
+    }
+}
+
 struct ShelvPlayableQuery: EntityStringQuery {
     @MainActor private static var lastPlaylistRefresh: [String: Date] = [:]
     @MainActor private static var lastRadioRefresh: [String: Date] = [:]
@@ -101,23 +138,31 @@ struct ShelvPlayableQuery: EntityStringQuery {
         await publishShortcutCaches()
 
         var result = await MainActor.run {
-            let downloadedSongs = allowedKinds.contains(.song) ? DownloadStore.shared.songs.prefix(6).map {
+            let downloadedSongs = allowedKinds.contains(.song) ? DownloadStore.shared.songs.prefix(4).map {
                 makeSong($0.asSong(), server: server)
             } : []
-            let downloadedAlbums = allowedKinds.contains(.album) ? DownloadStore.shared.albums.prefix(6).map {
+            let downloadedAlbums = allowedKinds.contains(.album) ? DownloadStore.shared.albums.prefix(4).map {
                 makeAlbum($0.asAlbum(), server: server)
             } : []
             let downloadedArtists = allowedKinds.contains(.artist) ? DownloadStore.shared.artists.prefix(4).map {
                 makeArtist($0.asArtist(), server: server)
             } : []
             let playlists = allowedKinds.contains(.playlist)
-                ? store.playlists.prefix(8).map { makePlaylist($0, server: server) }
+                ? store.playlists.prefix(6).map { makePlaylist($0, server: server) }
                 : []
             let recentAlbums = allowedKinds.contains(.album)
-                ? store.recentlyPlayed.prefix(6).map { makeAlbum($0, server: server) }
+                ? store.recentlyPlayed.prefix(4).map { makeAlbum($0, server: server) }
+                : []
+            let frequentAlbums = allowedKinds.contains(.album)
+                ? store.frequentlyPlayed.prefix(4).map { makeAlbum($0, server: server) }
+                : []
+            let contextualArtists = allowedKinds.contains(.artist)
+                ? (store.recentlyPlayed + store.frequentlyPlayed + store.starredAlbums)
+                    .compactMap { makeArtist(from: $0, server: server) }
+                    .prefix(8)
                 : []
             let starredSongs = allowedKinds.contains(.song)
-                ? store.starredSongs.prefix(6).map { makeSong($0, server: server) }
+                ? store.starredSongs.prefix(4).map { makeSong($0, server: server) }
                 : []
             let starredAlbums = allowedKinds.contains(.album)
                 ? store.starredAlbums.prefix(4).map { makeAlbum($0, server: server) }
@@ -125,8 +170,9 @@ struct ShelvPlayableQuery: EntityStringQuery {
             let starredArtists = allowedKinds.contains(.artist)
                 ? store.starredArtists.prefix(4).map { makeArtist($0, server: server) }
                 : []
-            return downloadedSongs + downloadedAlbums + downloadedArtists + playlists
-                + recentAlbums + starredSongs + starredAlbums + starredArtists
+            return Array(contextualArtists) + downloadedArtists + starredArtists
+                + downloadedAlbums + recentAlbums + frequentAlbums + starredAlbums
+                + downloadedSongs + starredSongs + playlists
         }
 
         if allowedKinds.contains(.radio) {
@@ -134,7 +180,7 @@ struct ShelvPlayableQuery: EntityStringQuery {
                 RadioStationStore.shared.items.prefix(6).map { makeRadio($0, server: server) }
             }
         }
-        return unique(result, limit: 30)
+        return balancedUnique(result, limit: 40)
     }
 
     func entities(matching string: String) async throws -> [ShelvPlayableEntity] {
@@ -143,13 +189,7 @@ struct ShelvPlayableQuery: EntityStringQuery {
         guard let server = await activeServer() else { return [] }
         await publishShortcutCaches()
 
-        let isOffline = await MainActor.run { OfflineModeService.shared.isOffline }
-        let hasNetwork: Bool
-        if isOffline {
-            hasNetwork = false
-        } else {
-            hasNetwork = await NetworkStatus.shared.waitUntilNetworkAvailable()
-        }
+        let hasNetwork = await networkAvailable()
         async let collectionRefresh: Void = refreshCollectionsForSearch(
             hasNetwork: hasNetwork,
             serverConfigID: server.id.uuidString
@@ -181,6 +221,13 @@ struct ShelvPlayableQuery: EntityStringQuery {
             RadioStationStore.shared.publishShortcutCacheIfNeeded()
         }
         _ = await (libraryCache, radioCache)
+    }
+
+    private func networkAvailable() async -> Bool {
+        let isOffline = await MainActor.run { OfflineModeService.shared.isOffline }
+        guard !isOffline else { return false }
+        await NetworkStatus.shared.waitUntilReady()
+        return NetworkStatus.shared.hasNetwork
     }
 
     private func refreshCollectionsForSearch(
@@ -265,13 +312,10 @@ struct ShelvPlayableQuery: EntityStringQuery {
         server: SubsonicServer
     ) async -> ShelvPlayableEntity? {
         guard allowedKinds.contains(kind) else { return nil }
-        let isOffline = await MainActor.run { OfflineModeService.shared.isOffline }
         if let local = await localEntity(kind: kind, contentID: contentID, server: server) {
             return local
         }
-        guard !isOffline,
-              await NetworkStatus.shared.waitUntilNetworkAvailable()
-        else { return nil }
+        guard await networkAvailable(), !Task.isCancelled else { return nil }
 
         switch kind {
         case .song:
@@ -344,6 +388,36 @@ struct ShelvPlayableQuery: EntityStringQuery {
         return Array(entities.filter { seen.insert($0.id).inserted }.prefix(limit))
     }
 
+    private func balancedUnique(
+        _ entities: [ShelvPlayableEntity],
+        limit: Int
+    ) -> [ShelvPlayableEntity] {
+        guard limit > 0 else { return [] }
+        let kinds = ShortcutPlayableKind.allCases.filter(allowedKinds.contains)
+        var buckets = Dictionary(grouping: entities.filter {
+            allowedKinds.contains($0.kind)
+        }, by: { $0.kind })
+        var seen = Set<ShelvPlayableEntity.ID>()
+        for kind in kinds {
+            buckets[kind] = buckets[kind]?.filter { seen.insert($0.id).inserted }
+        }
+
+        var indices = Dictionary(uniqueKeysWithValues: kinds.map { ($0, 0) })
+        var result: [ShelvPlayableEntity] = []
+        while result.count < limit {
+            var appended = false
+            for kind in kinds where result.count < limit {
+                let index = indices[kind, default: 0]
+                guard let bucket = buckets[kind], index < bucket.count else { continue }
+                result.append(bucket[index])
+                indices[kind] = index + 1
+                appended = true
+            }
+            if !appended { break }
+        }
+        return result
+    }
+
     private func makeSong(_ song: Song, server: SubsonicServer) -> ShelvPlayableEntity {
         ShelvPlayableEntity(
             serverConfigID: server.id.uuidString,
@@ -372,6 +446,15 @@ struct ShelvPlayableQuery: EntityStringQuery {
             name: artist.name,
             detail: nil
         )
+    }
+
+    private func makeArtist(from album: Album, server: SubsonicServer) -> ShelvPlayableEntity? {
+        guard let id = album.artistId?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !id.isEmpty,
+              let name = album.artist?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !name.isEmpty
+        else { return nil }
+        return makeArtist(Artist(id: id, name: name), server: server)
     }
 
     private func makePlaylist(_ playlist: Playlist, server: SubsonicServer) -> ShelvPlayableEntity {
@@ -479,6 +562,27 @@ struct ShelvPlayPlayableIntent: ShelvBackgroundPlaybackIntent {
 
     func perform() async throws -> some IntentResult {
         try await playback.execute(.playable(playable.reference, order: order))
+        return .result()
+    }
+}
+
+struct ShelvShufflePlayableIntent: ShelvBackgroundPlaybackIntent {
+    static let title: LocalizedStringResource = "shortcut_shuffle_playable_title"
+    static let description = IntentDescription("shortcut_shuffle_playable_description")
+
+    @Parameter(title: "shortcut_playable_parameter")
+    var playable: ShelvShuffleSourceEntity
+
+    @Dependency private var playback: ShortcutPlaybackCoordinator
+
+    static var parameterSummary: some ParameterSummary {
+        Summary("shortcut_shuffle_playable_summary") {
+            \.$playable
+        }
+    }
+
+    func perform() async throws -> some IntentResult {
+        try await playback.execute(.playable(playable.reference, order: .shuffled))
         return .result()
     }
 }

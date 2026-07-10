@@ -586,6 +586,7 @@
 "shortcut_downloads_newest" = "Neueste Downloads";
 "shortcut_downloads_parameter" = "Downloads";
 "shortcut_playable_type" = "Musik oder Radio";
+"shortcut_shuffle_source_type" = "Musik";
 "shortcut_kind_song" = "Song";
 "shortcut_kind_album" = "Album";
 "shortcut_kind_artist" = "Künstler";
@@ -598,6 +599,9 @@
 "shortcut_play_description" = "Einen Song, ein Album, einen Künstler, eine Playlist oder einen Radiosender in Shelv abspielen.";
 "shortcut_playable_parameter" = "Musik oder Radio";
 "shortcut_play_summary" = "Musik oder Radio abspielen";
+"shortcut_shuffle_playable_title" = "In Shelv mischen";
+"shortcut_shuffle_playable_description" = "Einen ausgewählten Song, ein Album, einen Künstler oder eine Playlist gemischt abspielen.";
+"shortcut_shuffle_playable_summary" = "Ausgewählte Musik mischen";
 "shortcut_play_mix_title" = "Mix in Shelv abspielen";
 "shortcut_play_mix_description" = "Einen der intelligenten Mixe von Shelv starten.";
 "shortcut_play_mix_summary" = "Einen intelligenten Mix abspielen";
@@ -633,7 +637,9 @@
 "shortcut_open_recap_description" = "Shelv öffnen und Recap anzeigen.";
 "shortcut_shuffle_all_short" = "Alles mischen";
 "shortcut_play_short" = "Abspielen";
+"shortcut_shuffle_playable_short" = "Musik mischen";
 "shortcut_play_mix_short" = "Mix abspielen";
+"shortcut_instant_mix_short" = "Instant Mix";
 "shortcut_play_playlist_short" = "Playlist abspielen";
 "shortcut_play_downloads_short" = "Downloads abspielen";
 "shortcut_play_pause_short" = "Abspielen/Pause";

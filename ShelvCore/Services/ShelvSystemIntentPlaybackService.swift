@@ -28,7 +28,15 @@ final class ShelvSystemIntentPlaybackService: @unchecked Sendable {
     private init() {}
 
     func execute(_ command: ShortcutPlaybackCommand) async throws {
-        try await execute(.command(command))
+        let action = command.diagnosticAction
+        ShelvIntentDiagnostics.began(action: action, reference: command.diagnosticReference)
+        do {
+            try await execute(.command(command))
+            ShelvIntentDiagnostics.completed(action: action)
+        } catch let error as ShortcutPlaybackError {
+            ShelvIntentDiagnostics.failed(action: action, error: error)
+            throw error
+        }
     }
 
     func play(
@@ -37,7 +45,15 @@ final class ShelvSystemIntentPlaybackService: @unchecked Sendable {
         placement: ShortcutQueuePlacement = .replace,
         repeats: Bool = false
     ) async throws {
-        try await execute(.playable(reference, order: order, placement: placement, repeats: repeats))
+        let action = order == .shuffled ? "media.shuffle" : "media.play"
+        ShelvIntentDiagnostics.began(action: action, reference: reference)
+        do {
+            try await execute(.playable(reference, order: order, placement: placement, repeats: repeats))
+            ShelvIntentDiagnostics.completed(action: action)
+        } catch let error as ShortcutPlaybackError {
+            ShelvIntentDiagnostics.failed(action: action, error: error)
+            throw error
+        }
     }
 
     private func execute(_ request: Request) async throws {
@@ -55,7 +71,7 @@ final class ShelvSystemIntentPlaybackService: @unchecked Sendable {
             } catch is CancellationError {
                 return .failure(.cancelled)
             } catch {
-                return .failure(.playbackFailed)
+                return .failure(.remoteFailure(error))
             }
         }
         flight = Flight(id: flightID, task: task)
@@ -144,7 +160,11 @@ final class ShelvSystemIntentPlaybackService: @unchecked Sendable {
         }
     }
 
-    private typealias ServerContext = (server: SubsonicServer, storageServerID: String)
+    private struct ServerContext {
+        let server: SubsonicServer
+        let storageServerID: String
+        let records: [DownloadRecord]
+    }
 
     private func prepareServer(
         expectedConfigID: String?,
@@ -159,10 +179,17 @@ final class ShelvSystemIntentPlaybackService: @unchecked Sendable {
         }
         await DownloadDatabase.shared.setup()
         await PlayLogService.shared.setup()
+        let storageServerID = server.stableId.isEmpty ? server.id.uuidString : server.stableId
+        let downloads = await LocalDownloadCatalog.load(serverId: storageServerID)
         try validateFlight(flightID, serverConfigID: server.id.uuidString)
-        return (
-            server,
-            server.stableId.isEmpty ? server.id.uuidString : server.stableId
+        LocalDownloadIndex.shared.replace(
+            serverId: storageServerID,
+            pathsBySongId: downloads.pathsBySongId
+        )
+        return ServerContext(
+            server: server,
+            storageServerID: storageServerID,
+            records: downloads.records
         )
     }
 
@@ -177,7 +204,8 @@ final class ShelvSystemIntentPlaybackService: @unchecked Sendable {
 
     private func networkAvailable() async -> Bool {
         guard !OfflineModeService.shared.isOffline else { return false }
-        return await NetworkStatus.shared.waitUntilNetworkAvailable()
+        await NetworkStatus.shared.waitUntilReady()
+        return NetworkStatus.shared.hasNetwork
     }
 
     private func requireNetwork() async throws {
@@ -192,12 +220,12 @@ final class ShelvSystemIntentPlaybackService: @unchecked Sendable {
         context: ServerContext,
         flightID: UInt64
     ) async throws {
-        let records = await DownloadDatabase.shared.allRecords(serverId: context.storageServerID)
-        let hasNetwork = await networkAvailable()
+        let records = context.records
+        let mayLoadRemote = await networkAvailable()
 
         if reference.kind == .radio {
             guard placement == .replace else { throw ShortcutPlaybackError.unsupportedQueueOperation }
-            guard hasNetwork else { throw ShortcutPlaybackError.radioUnavailableOffline }
+            guard mayLoadRemote else { throw ShortcutPlaybackError.radioUnavailableOffline }
             if RadioStationStore.shared.items.isEmpty {
                 await RadioStationStore.shared.refresh(waitForCloudMetadata: false)
             }
@@ -205,14 +233,15 @@ final class ShelvSystemIntentPlaybackService: @unchecked Sendable {
             guard let station = RadioStationStore.shared.items.first(where: { $0.id == reference.contentID }) else {
                 throw ShortcutPlaybackError.notFound
             }
-            try requireStarted(await AudioPlayerService.shared.playRadioStationAndWait(station))
+            try requireStarted(await AudioPlayerService.shared.startRadioStationForSystemIntent(station))
             return
         }
 
         let songs = try await songs(
             for: reference,
             records: records,
-            hasNetwork: hasNetwork
+            storageServerID: context.storageServerID,
+            mayLoadRemote: mayLoadRemote
         )
         try validateFlight(flightID, serverConfigID: context.server.id.uuidString)
         try await apply(
@@ -226,55 +255,110 @@ final class ShelvSystemIntentPlaybackService: @unchecked Sendable {
     private func songs(
         for reference: ShortcutPlayableReference,
         records: [DownloadRecord],
-        hasNetwork: Bool
+        storageServerID: String,
+        mayLoadRemote: Bool
     ) async throws -> [Song] {
         switch reference.kind {
         case .song:
             let local = records.first(where: { $0.songId == reference.contentID })?
                 .toDownloadedSong().asSong()
-            if hasNetwork, let remote = try? await SubsonicAPIService.shared.getSong(id: reference.contentID) {
-                return [remote]
+            guard mayLoadRemote else {
+                guard let local else { throw ShortcutPlaybackError.unavailableOffline }
+                return [local]
             }
-            guard let local else { throw ShortcutPlaybackError.unavailableOffline }
-            return [local]
+            do {
+                return [try await SubsonicAPIService.shared.getSong(id: reference.contentID)]
+            } catch {
+                guard let local else { throw ShortcutPlaybackError.remoteFailure(error) }
+                return [local]
+            }
 
         case .album:
             let local = records.filter { $0.albumId == reference.contentID }
                 .map { $0.toDownloadedSong().asSong() }
-            if hasNetwork,
-               let remote = try? await SubsonicAPIService.shared.getAlbum(id: reference.contentID).song,
-               !remote.isEmpty {
-                return remote
+                .sorted(by: Self.albumTrackSort)
+            guard mayLoadRemote else {
+                guard !local.isEmpty else { throw ShortcutPlaybackError.unavailableOffline }
+                return local
             }
-            guard !local.isEmpty else { throw ShortcutPlaybackError.unavailableOffline }
-            return local
+            do {
+                let remote = try await SubsonicAPIService.shared.getAlbum(id: reference.contentID).song ?? []
+                if !remote.isEmpty { return remote }
+                guard !local.isEmpty else { throw ShortcutPlaybackError.noPlayableContent }
+                return local
+            } catch let error as ShortcutPlaybackError {
+                throw error
+            } catch {
+                guard !local.isEmpty else { throw ShortcutPlaybackError.remoteFailure(error) }
+                return local
+            }
 
         case .artist:
             let local = records.filter { $0.artistId == reference.contentID }
                 .map { $0.toDownloadedSong().asSong() }
-            if hasNetwork,
-               let detail = try? await SubsonicAPIService.shared.getArtist(id: reference.contentID),
-               let remote = try? await SubsonicAPIService.shared.getTopSongs(
-                   artistName: detail.name,
-                   count: 100
-               ),
-               !remote.isEmpty {
-                return remote
+                .sorted(by: Self.downloadSort)
+            guard mayLoadRemote else {
+                guard !local.isEmpty else { throw ShortcutPlaybackError.unavailableOffline }
+                return local
             }
-            guard !local.isEmpty else { throw ShortcutPlaybackError.unavailableOffline }
-            return local
+            do {
+                let detail = try await SubsonicAPIService.shared.getArtist(id: reference.contentID)
+                let remote = try await SubsonicAPIService.shared.getTopSongs(
+                    artistName: detail.name,
+                    count: 100
+                )
+                if !remote.isEmpty { return remote }
+                guard !local.isEmpty else { throw ShortcutPlaybackError.noPlayableContent }
+                return local
+            } catch let error as ShortcutPlaybackError {
+                throw error
+            } catch {
+                guard !local.isEmpty else { throw ShortcutPlaybackError.remoteFailure(error) }
+                return local
+            }
 
         case .playlist:
-            guard hasNetwork else { throw ShortcutPlaybackError.unavailableOffline }
-            guard let playlist = try? await SubsonicAPIService.shared.getPlaylist(id: reference.contentID),
-                  let songs = playlist.songs,
-                  !songs.isEmpty
-            else { throw ShortcutPlaybackError.notFound }
-            return songs
+            let local = localPlaylistSongs(
+                playlistID: reference.contentID,
+                records: records,
+                storageServerID: storageServerID
+            )
+            guard mayLoadRemote else {
+                guard !local.isEmpty else { throw ShortcutPlaybackError.unavailableOffline }
+                return local
+            }
+            let playlist: Playlist
+            do {
+                playlist = try await SubsonicAPIService.shared.getPlaylist(id: reference.contentID)
+            } catch {
+                if !local.isEmpty { return local }
+                throw ShortcutPlaybackError.remoteFailure(error)
+            }
+            let remote = playlist.songs ?? []
+            if !remote.isEmpty { return remote }
+            guard !local.isEmpty else { throw ShortcutPlaybackError.noPlayableContent }
+            return local
 
         case .radio:
             throw ShortcutPlaybackError.unsupportedQueueOperation
         }
+    }
+
+    private func localPlaylistSongs(
+        playlistID: String,
+        records: [DownloadRecord],
+        storageServerID: String?
+    ) -> [Song] {
+        guard let storageServerID else { return [] }
+        let orderedIDs = LocalOfflinePlaylistCatalog.songIds(
+            serverId: storageServerID
+        )[playlistID] ?? []
+        guard !orderedIDs.isEmpty else { return [] }
+        let songsByID = Dictionary(
+            records.map { ($0.songId, $0.toDownloadedSong().asSong()) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        return orderedIDs.compactMap { songsByID[$0] }
     }
 
     private func apply(
@@ -284,15 +368,18 @@ final class ShelvSystemIntentPlaybackService: @unchecked Sendable {
         repeats: Bool
     ) async throws {
         guard !songs.isEmpty else { throw ShortcutPlaybackError.noPlayableContent }
-        let orderedSongs = order == .shuffled ? songs.shuffled() : songs
         let player = AudioPlayerService.shared
 
+        if placement != .replace, player.isRadioPlayback {
+            throw ShortcutPlaybackError.unsupportedQueueOperation
+        }
         if placement != .replace, player.hasActivePlayback {
+            let queuedSongs = order == .shuffled ? songs.shuffled() : songs
             switch placement {
             case .next:
-                player.addPlayNext(orderedSongs)
+                player.addPlayNext(queuedSongs)
             case .tail:
-                player.addToQueue(orderedSongs)
+                player.addToQueue(queuedSongs)
             case .replace:
                 break
             }
@@ -303,9 +390,9 @@ final class ShelvSystemIntentPlaybackService: @unchecked Sendable {
         let outcome: PlaybackStartOutcome
         switch order {
         case .inOrder:
-            outcome = await player.playAndWait(songs: orderedSongs)
+            outcome = await player.playAndWait(songs: songs)
         case .shuffled:
-            outcome = await player.playShuffledAndWait(songs: orderedSongs)
+            outcome = await player.playShuffledAndWait(songs: songs)
         }
         try requireStarted(outcome)
         player.repeatMode = repeats ? .all : .off
@@ -364,13 +451,14 @@ final class ShelvSystemIntentPlaybackService: @unchecked Sendable {
         context: ServerContext,
         flightID: UInt64
     ) async throws {
-        let records = await DownloadDatabase.shared.allRecords(serverId: context.storageServerID)
+        let records = context.records
         try validateFlight(flightID, serverConfigID: context.server.id.uuidString)
         guard !records.isEmpty else { throw ShortcutPlaybackError.noPlayableContent }
 
         switch mode {
         case .all:
             let songs = records.map { $0.toDownloadedSong().asSong() }
+                .sorted(by: Self.downloadSort)
             try await apply(
                 songs: Array(songs.prefix(500)),
                 order: .inOrder,
@@ -378,7 +466,11 @@ final class ShelvSystemIntentPlaybackService: @unchecked Sendable {
                 repeats: false
             )
         case .shuffled:
-            let songs = records.shuffled().prefix(500).map { $0.toDownloadedSong().asSong() }
+            let selected = records.count > 500
+                ? Array(records.shuffled().prefix(500))
+                : records
+            let songs = selected.map { $0.toDownloadedSong().asSong() }
+                .sorted(by: Self.downloadSort)
             try await apply(songs: songs, order: .shuffled, placement: .replace, repeats: false)
         case .newest:
             let songs = records.sorted { $0.addedAt > $1.addedAt }
@@ -386,6 +478,41 @@ final class ShelvSystemIntentPlaybackService: @unchecked Sendable {
                 .map { $0.toDownloadedSong().asSong() }
             try await apply(songs: songs, order: .shuffled, placement: .replace, repeats: false)
         }
+    }
+
+    private static func downloadSort(_ lhs: Song, _ rhs: Song) -> Bool {
+        let leftArtist = stripArticle(lhs.artist ?? "")
+        let rightArtist = stripArticle(rhs.artist ?? "")
+        let artistOrder = leftArtist.localizedStandardCompare(rightArtist)
+        if artistOrder != .orderedSame { return artistOrder == .orderedAscending }
+
+        let albumOrder = (lhs.album ?? "").localizedStandardCompare(rhs.album ?? "")
+        if albumOrder != .orderedSame { return albumOrder == .orderedAscending }
+        if (lhs.discNumber ?? 1) != (rhs.discNumber ?? 1) {
+            return (lhs.discNumber ?? 1) < (rhs.discNumber ?? 1)
+        }
+        if (lhs.track ?? Int.max) != (rhs.track ?? Int.max) {
+            return (lhs.track ?? Int.max) < (rhs.track ?? Int.max)
+        }
+        return lhs.title.localizedStandardCompare(rhs.title) == .orderedAscending
+    }
+
+    private static func albumTrackSort(_ lhs: Song, _ rhs: Song) -> Bool {
+        if (lhs.discNumber ?? 1) != (rhs.discNumber ?? 1) {
+            return (lhs.discNumber ?? 1) < (rhs.discNumber ?? 1)
+        }
+        if (lhs.track ?? Int.max) != (rhs.track ?? Int.max) {
+            return (lhs.track ?? Int.max) < (rhs.track ?? Int.max)
+        }
+        return lhs.title.localizedStandardCompare(rhs.title) == .orderedAscending
+    }
+
+    private static func stripArticle(_ value: String) -> String {
+        let lowered = value.lowercased()
+        for prefix in ["the ", "a ", "an "] where lowered.hasPrefix(prefix) {
+            return String(value.dropFirst(prefix.count))
+        }
+        return value
     }
 
     private func playInstantMix(

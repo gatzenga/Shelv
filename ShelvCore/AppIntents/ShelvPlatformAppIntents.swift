@@ -72,6 +72,44 @@ struct ShelvPlatformPlayableQuery: EntityStringQuery {
     }
 }
 
+struct ShelvPlatformShuffleSourceEntity: AppEntity, Identifiable, Hashable, Sendable {
+    let playable: ShelvPlatformPlayableEntity
+
+    static let typeDisplayRepresentation: TypeDisplayRepresentation = "shortcut_shuffle_source_type"
+    static let defaultQuery = ShelvPlatformShuffleSourceQuery()
+
+    var id: String { playable.id }
+    var displayRepresentation: DisplayRepresentation { playable.displayRepresentation }
+    var reference: ShortcutPlayableReference { playable.reference }
+}
+
+struct ShelvPlatformShuffleSourceQuery: EntityStringQuery {
+    func entities(for identifiers: [ShelvPlatformShuffleSourceEntity.ID]) async throws -> [ShelvPlatformShuffleSourceEntity] {
+        try await ShelvIntentCatalog.shared.items(for: identifiers)
+            .compactMap(Self.entity)
+    }
+
+    func suggestedEntities() async throws -> [ShelvPlatformShuffleSourceEntity] {
+        try await ShelvIntentCatalog.shared.suggestedItems(
+            allowedKinds: [.song, .album, .artist, .playlist]
+        )
+            .compactMap(Self.entity)
+    }
+
+    func entities(matching string: String) async throws -> [ShelvPlatformShuffleSourceEntity] {
+        try await ShelvIntentCatalog.shared.items(
+            matching: string,
+            allowedKinds: [.song, .album, .artist, .playlist]
+        )
+            .compactMap(Self.entity)
+    }
+
+    private static func entity(_ item: ShelvIntentCatalogItem) -> ShelvPlatformShuffleSourceEntity? {
+        guard item.reference.kind != .radio else { return nil }
+        return ShelvPlatformShuffleSourceEntity(playable: .init(item: item))
+    }
+}
+
 struct ShelvPlatformPlaylistEntity: AppEntity, Identifiable, Hashable, Sendable {
     let reference: ShortcutPlayableReference
     let title: String
@@ -108,14 +146,15 @@ struct ShelvPlatformPlaylistQuery: EntityStringQuery {
     }
 
     func suggestedEntities() async throws -> [ShelvPlatformPlaylistEntity] {
-        try await ShelvIntentCatalog.shared.suggestedItems()
-            .filter { $0.reference.kind == .playlist }
+        try await ShelvIntentCatalog.shared.suggestedItems(allowedKinds: [.playlist])
             .map(ShelvPlatformPlaylistEntity.init)
     }
 
     func entities(matching string: String) async throws -> [ShelvPlatformPlaylistEntity] {
-        try await ShelvIntentCatalog.shared.items(matching: string)
-            .filter { $0.reference.kind == .playlist }
+        try await ShelvIntentCatalog.shared.items(
+            matching: string,
+            allowedKinds: [.playlist]
+        )
             .map(ShelvPlatformPlaylistEntity.init)
     }
 }
@@ -137,12 +176,17 @@ struct ShelvPlatformInstantMixQuery: EntityStringQuery {
     }
 
     func suggestedEntities() async throws -> [ShelvPlatformInstantMixEntity] {
-        try await ShelvIntentCatalog.shared.suggestedItems()
+        try await ShelvIntentCatalog.shared.suggestedItems(
+            allowedKinds: [.song, .album, .artist]
+        )
             .compactMap(Self.entity)
     }
 
     func entities(matching string: String) async throws -> [ShelvPlatformInstantMixEntity] {
-        try await ShelvIntentCatalog.shared.items(matching: string)
+        try await ShelvIntentCatalog.shared.items(
+            matching: string,
+            allowedKinds: [.song, .album, .artist]
+        )
             .compactMap(Self.entity)
     }
 
@@ -188,6 +232,26 @@ struct ShelvPlatformPlayPlayableIntent: ShelvPlatformPlaybackIntent {
 
     func perform() async throws -> some IntentResult {
         try await ShelvSystemIntentPlaybackService.shared.play(playable.reference, order: order)
+        return .result()
+    }
+}
+
+struct ShelvPlatformShufflePlayableIntent: ShelvPlatformPlaybackIntent {
+    static let title: LocalizedStringResource = "shortcut_shuffle_playable_title"
+    static let description = IntentDescription("shortcut_shuffle_playable_description")
+
+    @Parameter(title: "shortcut_playable_parameter")
+    var playable: ShelvPlatformShuffleSourceEntity
+
+    static var parameterSummary: some ParameterSummary {
+        Summary("shortcut_shuffle_playable_summary") { \.$playable }
+    }
+
+    func perform() async throws -> some IntentResult {
+        try await ShelvSystemIntentPlaybackService.shared.play(
+            playable.reference,
+            order: .shuffled
+        )
         return .result()
     }
 }
@@ -322,8 +386,6 @@ private protocol ShelvPlatformNavigationIntent: AppIntent {
 }
 
 extension ShelvPlatformNavigationIntent {
-    static var openAppWhenRun: Bool { true }
-
     func perform() async throws -> some IntentResult {
         ShelvShortcutHandoff.request(Self.destination)
         return .result()
@@ -333,24 +395,36 @@ extension ShelvPlatformNavigationIntent {
 struct ShelvPlatformOpenPlayerIntent: ShelvPlatformNavigationIntent {
     static let title: LocalizedStringResource = "shortcut_open_player_title"
     static let description = IntentDescription("shortcut_open_player_description")
+    static let openAppWhenRun = true
+    @available(macOS 26.0, tvOS 26.0, *)
+    static let supportedModes: IntentModes = .foreground(.immediate)
     static let destination = ShelvShortcutDestination.nowPlaying
 }
 
 struct ShelvPlatformOpenSearchIntent: ShelvPlatformNavigationIntent {
     static let title: LocalizedStringResource = "shortcut_open_search_title"
     static let description = IntentDescription("shortcut_open_search_description")
+    static let openAppWhenRun = true
+    @available(macOS 26.0, tvOS 26.0, *)
+    static let supportedModes: IntentModes = .foreground(.immediate)
     static let destination = ShelvShortcutDestination.search
 }
 
 struct ShelvPlatformOpenLibraryIntent: ShelvPlatformNavigationIntent {
     static let title: LocalizedStringResource = "shortcut_open_library_title"
     static let description = IntentDescription("shortcut_open_library_description")
+    static let openAppWhenRun = true
+    @available(macOS 26.0, tvOS 26.0, *)
+    static let supportedModes: IntentModes = .foreground(.immediate)
     static let destination = ShelvShortcutDestination.library
 }
 
 struct ShelvPlatformOpenRecapIntent: ShelvPlatformNavigationIntent {
     static let title: LocalizedStringResource = "shortcut_open_recap_title"
     static let description = IntentDescription("shortcut_open_recap_description")
+    static let openAppWhenRun = true
+    @available(macOS 26.0, tvOS 26.0, *)
+    static let supportedModes: IntentModes = .foreground(.immediate)
     static let destination = ShelvShortcutDestination.recap
 }
 
@@ -362,10 +436,11 @@ struct ShelvPlatformAppShortcuts: AppShortcutsProvider {
             intent: ShelvPlatformShuffleAllIntent(),
             phrases: [
                 "Shuffle all in \(.applicationName)",
-                "Play shuffle all in \(.applicationName)",
                 "Shuffle all tracks in \(.applicationName)",
                 "Shuffle all songs in \(.applicationName)",
                 "Shuffle my library in \(.applicationName)",
+                "Ask \(.applicationName) to shuffle music",
+                "Shuffle music with \(.applicationName)",
             ],
             shortTitle: "shortcut_shuffle_all_short",
             systemImageName: "shuffle"
@@ -384,28 +459,53 @@ struct ShelvPlatformAppShortcuts: AppShortcutsProvider {
         )
 
         AppShortcut(
+            intent: ShelvPlatformShufflePlayableIntent(),
+            phrases: [
+                "Ask \(.applicationName) to shuffle \(\.$playable)",
+                "Play \(\.$playable) shuffled with \(.applicationName)",
+                "Choose music to shuffle in \(.applicationName)",
+            ],
+            shortTitle: "shortcut_shuffle_playable_short",
+            systemImageName: "shuffle"
+        )
+
+        AppShortcut(
             intent: ShelvPlatformPlayMixIntent(),
             phrases: [
                 "Play a mix in \(.applicationName)",
                 "Play \(\.$mix) in \(.applicationName)",
                 "Play \(\.$mix) tracks in \(.applicationName)",
-                "Ask \(.applicationName) to play \(\.$mix)",
                 "Start \(\.$mix) in \(.applicationName)",
             ],
             shortTitle: "shortcut_play_mix_short",
             systemImageName: "sparkles"
         )
 
+        #if os(tvOS)
+            AppShortcut(
+                intent: ShelvPlatformPlayPlaylistIntent(),
+                phrases: [
+                    "Play a playlist in \(.applicationName)",
+                    "Play playlist \(\.$playlist) in \(.applicationName)",
+                    "Ask \(.applicationName) to play playlist \(\.$playlist)",
+                ],
+                shortTitle: "shortcut_play_playlist_short",
+                systemImageName: "music.note.list"
+            )
+        #endif
+
         AppShortcut(
-            intent: ShelvPlatformPlayPlaylistIntent(),
+            intent: ShelvPlatformInstantMixIntent(),
             phrases: [
-                "Play a playlist in \(.applicationName)",
-                "Play \(\.$playlist) in \(.applicationName)",
-                "Play playlist \(\.$playlist) in \(.applicationName)",
-                "Ask \(.applicationName) to play playlist \(\.$playlist)",
+                "Ask \(.applicationName) to play an instant mix",
+                "Play an instant mix in \(.applicationName)",
+                "Play instant mix for \(\.$playable) in \(.applicationName)",
+                "Play an instant mix for \(\.$playable) in \(.applicationName)",
+                "Create an instant mix from \(\.$playable) in \(.applicationName)",
+                "Ask \(.applicationName) to play an instant mix for \(\.$playable)",
             ],
-            shortTitle: "shortcut_play_playlist_short",
-            systemImageName: "music.note.list"
+            shortTitle: "shortcut_instant_mix_short",
+            systemImageName: "wand.and.stars"
         )
 
         #if os(macOS)
@@ -413,7 +513,6 @@ struct ShelvPlatformAppShortcuts: AppShortcutsProvider {
                 intent: ShelvPlatformPlayDownloadsIntent(),
                 phrases: [
                     "Play downloads in \(.applicationName)",
-                    "Play \(\.$mode) in \(.applicationName)",
                     "Play \(\.$mode) downloads in \(.applicationName)",
                     "Play downloaded music in \(.applicationName)",
                     "Shuffle downloads in \(.applicationName)",
@@ -446,18 +545,6 @@ struct ShelvPlatformAppShortcuts: AppShortcutsProvider {
             ],
             shortTitle: "shortcut_now_playing_short",
             systemImageName: "music.note"
-        )
-
-        AppShortcut(
-            intent: ShelvPlatformOpenSearchIntent(),
-            phrases: [
-                "Open search in \(.applicationName)",
-                "Open \(.applicationName) search",
-                "Show search in \(.applicationName)",
-                "Search in \(.applicationName)",
-            ],
-            shortTitle: "shortcut_search_short",
-            systemImageName: "magnifyingglass"
         )
 
         AppShortcut(

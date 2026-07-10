@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 nonisolated enum ShortcutPlayableKind: String, CaseIterable, Hashable, Sendable {
     case song
@@ -30,6 +31,10 @@ nonisolated enum ShortcutQueuePlacement: Hashable, Sendable {
     case replace
     case next
     case tail
+}
+
+nonisolated protocol ShortcutRemoteErrorClassifying: Error {
+    var shortcutPlaybackError: ShortcutPlaybackError { get }
 }
 
 nonisolated struct ShortcutPlayableReference: Hashable, Sendable {
@@ -84,6 +89,51 @@ nonisolated enum ShortcutPlaybackCommand: Hashable, Sendable {
     case playPause
     case next
     case previous
+
+    var diagnosticAction: String {
+        switch self {
+        case .playable(_, let order): order == .shuffled ? "playable.shuffle" : "playable.play"
+        case .mix(let mix): "mix.\(mix.rawValue)"
+        case .downloads(let mode): "downloads.\(mode.rawValue)"
+        case .instantMix: "instantMix"
+        case .playPause: "playPause"
+        case .next: "next"
+        case .previous: "previous"
+        }
+    }
+
+    var diagnosticReference: ShortcutPlayableReference? {
+        switch self {
+        case .playable(let reference, _), .instantMix(let reference): reference
+        case .mix, .downloads, .playPause, .next, .previous: nil
+        }
+    }
+}
+
+nonisolated enum ShelvIntentDiagnostics {
+    private static let logger = Logger(subsystem: "ch.vkugler.Shelv", category: "AppIntents")
+
+    static func began(action: String, reference: ShortcutPlayableReference? = nil) {
+        logger.notice(
+            "Intent began action=\(action, privacy: .public) kind=\(reference?.kind.rawValue ?? "none", privacy: .public) item=\(reference?.contentID ?? "none", privacy: .private(mask: .hash))"
+        )
+    }
+
+    static func completed(action: String) {
+        logger.notice("Intent completed action=\(action, privacy: .public)")
+    }
+
+    static func failed(action: String, error: ShortcutPlaybackError) {
+        logger.error(
+            "Intent failed action=\(action, privacy: .public) error=\(String(describing: error), privacy: .public)"
+        )
+    }
+
+    static func catalogResolved(queryLength: Int, resultCount: Int) {
+        logger.debug(
+            "Catalog resolved queryLength=\(queryLength, privacy: .public) resultCount=\(resultCount, privacy: .public)"
+        )
+    }
 }
 
 nonisolated enum ShortcutPlaybackError: Error, Equatable, Sendable,
@@ -118,6 +168,15 @@ nonisolated enum ShortcutPlaybackError: Error, Equatable, Sendable,
 
     var errorDescription: String? {
         String(localized: localizedStringResource)
+    }
+
+    static func remoteFailure(_ error: Error) -> ShortcutPlaybackError {
+        if error is CancellationError { return .cancelled }
+        if let urlError = error as? URLError {
+            return urlError.code == .cancelled ? .cancelled : .noNetwork
+        }
+        return (error as? ShortcutRemoteErrorClassifying)?.shortcutPlaybackError
+            ?? .playbackFailed
     }
 }
 

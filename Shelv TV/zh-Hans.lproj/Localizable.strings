@@ -586,6 +586,7 @@
 "shortcut_downloads_newest" = "最新下载";
 "shortcut_downloads_parameter" = "下载";
 "shortcut_playable_type" = "音乐或电台";
+"shortcut_shuffle_source_type" = "音乐";
 "shortcut_kind_song" = "歌曲";
 "shortcut_kind_album" = "专辑";
 "shortcut_kind_artist" = "艺人";
@@ -598,6 +599,9 @@
 "shortcut_play_description" = "在 Shelv 中播放歌曲、专辑、艺人、播放列表或电台。";
 "shortcut_playable_parameter" = "音乐或电台";
 "shortcut_play_summary" = "播放音乐或电台";
+"shortcut_shuffle_playable_title" = "在 Shelv 中随机播放";
+"shortcut_shuffle_playable_description" = "随机播放所选歌曲、专辑、艺人或播放列表。";
+"shortcut_shuffle_playable_summary" = "随机播放所选音乐";
 "shortcut_play_mix_title" = "在 Shelv 中播放混音";
 "shortcut_play_mix_description" = "启动 Shelv 的智能混音。";
 "shortcut_play_mix_summary" = "播放智能混音";
@@ -633,7 +637,9 @@
 "shortcut_open_recap_description" = "打开 Shelv 并显示回顾。";
 "shortcut_shuffle_all_short" = "随机播放全部";
 "shortcut_play_short" = "播放";
+"shortcut_shuffle_playable_short" = "随机播放音乐";
 "shortcut_play_mix_short" = "播放混音";
+"shortcut_instant_mix_short" = "即时混音";
 "shortcut_play_playlist_short" = "播放列表";
 "shortcut_play_downloads_short" = "播放下载";
 "shortcut_play_pause_short" = "播放/暂停";

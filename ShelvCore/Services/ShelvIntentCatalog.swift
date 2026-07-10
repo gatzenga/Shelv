@@ -37,47 +37,106 @@ final class ShelvIntentCatalog {
     private let api = SubsonicAPIService.shared
     private init() {}
 
-    func suggestedItems(limit: Int = 40) async throws -> [ShelvIntentCatalogItem] {
+    func suggestedItems(
+        limit: Int = 40,
+        allowedKinds: Set<ShortcutPlayableKind> = Set(ShortcutPlayableKind.allCases)
+    ) async throws -> [ShelvIntentCatalogItem] {
         let context = try await activeContext()
-        let records = await DownloadDatabase.shared.allRecords(serverId: context.storageServerID)
-        var items = records.prefix(8).map { songItem($0.toDownloadedSong().asSong(), server: context.server) }
-
-        guard await networkAvailable() else {
-            items += localCollectionItems(from: records, server: context.server)
-            try validate(context)
-            return unique(items, limit: limit)
+        let records = await LocalDownloadCatalog.load(
+            serverId: context.storageServerID
+        ).records
+        var items: [ShelvIntentCatalogItem] = []
+        if allowedKinds.contains(.song) {
+            items += records.prefix(8).map {
+                songItem($0.toDownloadedSong().asSong(), server: context.server)
+            }
+        }
+        items += localCollectionItems(from: records, server: context.server)
+            .filter { allowedKinds.contains($0.reference.kind) }
+            .prefix(16)
+        if allowedKinds.contains(.playlist) {
+            let availableSongIDs = Set(records.map(\.songId))
+            let playlists = await LocalOfflinePlaylistCatalog.descriptors(
+                serverId: context.storageServerID,
+                serverConfigID: context.server.id
+            )
+            items += playlists.filter {
+                $0.songIds.contains(where: availableSongIDs.contains)
+            }.map {
+                localPlaylistItem($0, records: records, server: context.server)
+            }
         }
 
-        async let starredResult = try? api.getStarred()
-        async let playlistsResult = try? api.getPlaylists()
-        async let recentResult = try? api.getRecentSongs(albumCount: 12, limit: 12)
-        async let radioRefresh: Void = RadioStationStore.shared.refresh(waitForCloudMetadata: false)
+        guard await networkAvailable() else {
+            try validate(context)
+            return balancedUnique(items, allowedKinds: allowedKinds, limit: limit)
+        }
 
-        let (starred, playlists, recent, _) = await (
-            starredResult,
-            playlistsResult,
-            recentResult,
-            radioRefresh
+        let needsMusicCatalog = !allowedKinds.isDisjoint(with: [.song, .album, .artist])
+        async let starredResult = needsMusicCatalog ? remoteStarred() : nil
+        async let playlistsResult = allowedKinds.contains(.playlist) ? remotePlaylists() : []
+        async let recentResult = needsMusicCatalog ? remoteRecentSongs() : []
+        async let radioResult = allowedKinds.contains(.radio) ? remoteRadios() : []
+
+        let (starred, playlists, recent, radios) = await (
+            starredResult, playlistsResult, recentResult, radioResult
         )
 
         if let starred {
-            items += (starred.song ?? []).prefix(8).map { songItem($0, server: context.server) }
-            items += (starred.album ?? []).prefix(6).map { albumItem($0, server: context.server) }
-            items += (starred.artist ?? []).prefix(6).map { artistItem($0, server: context.server) }
+            if allowedKinds.contains(.song) {
+                items += (starred.song ?? []).prefix(8).map { songItem($0, server: context.server) }
+            }
+            if allowedKinds.contains(.album) {
+                items += (starred.album ?? []).prefix(6).map { albumItem($0, server: context.server) }
+            }
+            if allowedKinds.contains(.artist) {
+                items += (starred.artist ?? []).prefix(6).map { artistItem($0, server: context.server) }
+            }
         }
-        items += (playlists ?? []).prefix(8).map { playlistItem($0, server: context.server) }
-        items += (recent ?? []).prefix(8).map { songItem($0, server: context.server) }
-        items += RadioStationStore.shared.items.prefix(6).map { radioItem($0, server: context.server) }
+        if allowedKinds.contains(.playlist) {
+            for playlist in playlists {
+                await LocalOfflinePlaylistCatalog.updateName(
+                    serverId: context.storageServerID,
+                    id: playlist.id,
+                    name: playlist.name
+                )
+            }
+            items += playlists.prefix(8).map { playlistItem($0, server: context.server) }
+        }
+        let recentSongs = Array(recent.prefix(8))
+        if allowedKinds.contains(.artist) {
+            items += recentSongs.compactMap { artistItem(from: $0, server: context.server) }
+        }
+        if allowedKinds.contains(.album) {
+            items += recentSongs.compactMap { albumItem(from: $0, server: context.server) }
+        }
+        if allowedKinds.contains(.song) {
+            items += recentSongs.map { songItem($0, server: context.server) }
+        }
+        if allowedKinds.contains(.radio) {
+            items += radios.prefix(6).map { radioItem($0, server: context.server) }
+        }
         try validate(context)
-        return unique(items, limit: limit)
+        return balancedUnique(items, allowedKinds: allowedKinds, limit: limit)
     }
 
-    func items(matching rawQuery: String, limit: Int = 60) async throws -> [ShelvIntentCatalogItem] {
+    func items(
+        matching rawQuery: String,
+        limit: Int = 60,
+        requiresExplicitRadio: Bool = false,
+        allowedKinds: Set<ShortcutPlayableKind> = Set(ShortcutPlayableKind.allCases)
+    ) async throws -> [ShelvIntentCatalogItem] {
         let query = rawQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return try await suggestedItems(limit: limit) }
+        guard !query.isEmpty else {
+            return try await suggestedItems(limit: limit, allowedKinds: allowedKinds)
+        }
 
         let context = try await activeContext()
         let terms = ShelvIntentSearchVocabulary.searchTerms(for: query)
+        let localRecords = await LocalDownloadCatalog.load(
+            serverId: context.storageServerID
+        ).records
+        let validLocalSongIDs = Set(localRecords.map(\.songId))
         var scored: [ShortcutPlayableReference: (item: ShelvIntentCatalogItem, score: Int)] = [:]
 
         for term in terms {
@@ -85,58 +144,113 @@ final class ShelvIntentCatalog {
                 serverId: context.storageServerID,
                 query: term,
                 limit: 60
-            )
+            ).filter { validLocalSongIDs.contains($0.songId) }
             for item in records.flatMap({ localItems(for: $0, server: context.server) }) {
+                guard ShelvIntentSearchVocabulary.allows(
+                    item.reference.kind,
+                    for: query,
+                    requiresExplicitRadio: requiresExplicitRadio
+                ), allowedKinds.contains(item.reference.kind) else { continue }
                 merge(item, query: query, into: &scored)
             }
         }
 
-        if await networkAvailable() {
-            let api = self.api
-            let results = await withTaskGroup(of: SearchResult?.self, returning: [SearchResult].self) { group in
-                for term in terms {
-                    group.addTask { try? await api.search(query: term) }
-                }
-                var values: [SearchResult] = []
-                for await result in group {
-                    if let result { values.append(result) }
-                }
-                return values
+        if allowedKinds.contains(.playlist), ShelvIntentSearchVocabulary.allows(
+            .playlist,
+            for: query,
+            requiresExplicitRadio: requiresExplicitRadio
+        ) {
+            let playlists = await LocalOfflinePlaylistCatalog.descriptors(
+                serverId: context.storageServerID,
+                serverConfigID: context.server.id
+            )
+            let availableSongIDs = Set(localRecords.map(\.songId))
+            for playlist in playlists where playlist.songIds.contains(
+                where: availableSongIDs.contains
+            ) && matches(
+                playlist.name ?? String(localized: "shortcut_kind_playlist"),
+                query: query,
+                terms: terms
+            ) {
+                merge(
+                    localPlaylistItem(playlist, records: localRecords, server: context.server),
+                    query: query,
+                    into: &scored
+                )
             }
+        }
+
+        if await networkAvailable() {
+            let needsMusicCatalog = !allowedKinds.isDisjoint(with: [.song, .album, .artist])
+            async let searchResults = needsMusicCatalog ? remoteSearchResults(for: terms) : []
+            async let playlists = allowedKinds.contains(.playlist) ? remotePlaylists() : []
+            async let radios = allowedKinds.contains(.radio) ? remoteRadios() : []
+            let (results, playlistResults, radioResults) = await (
+                searchResults, playlists, radios
+            )
 
             for result in results {
-                for song in result.song ?? [] {
+                for song in result.song ?? [] where ShelvIntentSearchVocabulary.allows(
+                    .song,
+                    for: query,
+                    requiresExplicitRadio: requiresExplicitRadio
+                ) && allowedKinds.contains(.song) {
                     merge(songItem(song, server: context.server), query: query, into: &scored)
                 }
-                for album in result.album ?? [] {
+                for album in result.album ?? [] where ShelvIntentSearchVocabulary.allows(
+                    .album,
+                    for: query,
+                    requiresExplicitRadio: requiresExplicitRadio
+                ) && allowedKinds.contains(.album) {
                     merge(albumItem(album, server: context.server), query: query, into: &scored)
                 }
-                for artist in result.artist ?? [] {
+                for artist in result.artist ?? [] where ShelvIntentSearchVocabulary.allows(
+                    .artist,
+                    for: query,
+                    requiresExplicitRadio: requiresExplicitRadio
+                ) && allowedKinds.contains(.artist) {
                     merge(artistItem(artist, server: context.server), query: query, into: &scored)
                 }
             }
 
-            async let playlistsResult = try? api.getPlaylists()
-            async let radioRefresh: Void = RadioStationStore.shared.refresh(waitForCloudMetadata: false)
-            let (playlists, _) = await (playlistsResult, radioRefresh)
-            for playlist in playlists ?? [] where matches(playlist.name, query: query, terms: terms) {
+            for playlist in playlistResults where ShelvIntentSearchVocabulary.allows(
+                .playlist,
+                for: query,
+                requiresExplicitRadio: requiresExplicitRadio
+            ) && allowedKinds.contains(.playlist)
+                && matches(playlist.name, query: query, terms: terms) {
                 merge(playlistItem(playlist, server: context.server), query: query, into: &scored)
+                await LocalOfflinePlaylistCatalog.updateName(
+                    serverId: context.storageServerID,
+                    id: playlist.id,
+                    name: playlist.name
+                )
             }
-            for radio in RadioStationStore.shared.items where matches(radio.name, query: query, terms: terms) {
+            for radio in radioResults where ShelvIntentSearchVocabulary.allows(
+                .radio,
+                for: query,
+                requiresExplicitRadio: requiresExplicitRadio
+            ) && allowedKinds.contains(.radio)
+                && matches(radio.name, query: query, terms: terms) {
                 merge(radioItem(radio, server: context.server), query: query, into: &scored)
             }
         }
 
         try validate(context)
-        return scored.values
+        let resolved = scored.values
             .sorted {
                 if $0.score != $1.score { return $0.score > $1.score }
                 let titleOrder = $0.item.title.localizedStandardCompare($1.item.title)
                 if titleOrder != .orderedSame { return titleOrder == .orderedAscending }
-                return $0.item.reference.kind.rawValue < $1.item.reference.kind.rawValue
+                let leftKind = $0.item.reference.kind.rawValue
+                let rightKind = $1.item.reference.kind.rawValue
+                if leftKind != rightKind { return leftKind < rightKind }
+                return $0.item.reference.identifier < $1.item.reference.identifier
             }
             .prefix(limit)
             .map(\.item)
+        ShelvIntentDiagnostics.catalogResolved(queryLength: query.count, resultCount: resolved.count)
+        return resolved
     }
 
     func items(for identifiers: [String]) async throws -> [ShelvIntentCatalogItem] {
@@ -148,8 +262,10 @@ final class ShelvIntentCatalog {
         let context = try await activeContext()
         let matching = references.filter { $0.serverConfigID == context.server.id.uuidString }
         guard !matching.isEmpty else { return [] }
-        let records = await DownloadDatabase.shared.allRecords(serverId: context.storageServerID)
-        let hasNetwork = await networkAvailable()
+        let records = await LocalDownloadCatalog.load(
+            serverId: context.storageServerID
+        ).records
+        let mayLoadRemote = await networkAvailable()
 
         var result: [ShelvIntentCatalogItem] = []
         for reference in matching {
@@ -157,7 +273,7 @@ final class ShelvIntentCatalog {
                 reference,
                 server: context.server,
                 records: records,
-                hasNetwork: hasNetwork
+                mayLoadRemote: mayLoadRemote
             ) {
                 result.append(item)
             }
@@ -178,7 +294,73 @@ final class ShelvIntentCatalog {
 
     private func networkAvailable() async -> Bool {
         guard !OfflineModeService.shared.isOffline else { return false }
-        return await NetworkStatus.shared.waitUntilNetworkAvailable()
+        await NetworkStatus.shared.waitUntilReady()
+        return NetworkStatus.shared.hasNetwork
+    }
+
+    private func remoteSearchResults(for terms: [String]) async -> [SearchResult] {
+        let api = self.api
+        return await withTaskGroup(of: (Int, SearchResult?).self, returning: [SearchResult].self) { group in
+            for (index, term) in terms.enumerated() {
+                group.addTask {
+                    let result: SearchResult? = await Self.valueBeforeDeadline {
+                        try? await api.search(query: term)
+                    }
+                    return (index, result)
+                }
+            }
+            var values: [(Int, SearchResult)] = []
+            for await (index, result) in group {
+                if let result { values.append((index, result)) }
+            }
+            return values.sorted { $0.0 < $1.0 }.map(\.1)
+        }
+    }
+
+    private func remoteStarred() async -> StarredResult? {
+        let api = self.api
+        return await Self.valueBeforeDeadline {
+            try? await api.getStarred()
+        }
+    }
+
+    private func remotePlaylists() async -> [Playlist] {
+        let api = self.api
+        return await Self.valueBeforeDeadline {
+            try? await api.getPlaylists()
+        } ?? []
+    }
+
+    private func remoteRecentSongs() async -> [Song] {
+        let api = self.api
+        return await Self.valueBeforeDeadline {
+            try? await api.getRecentSongs(albumCount: 12, limit: 12)
+        } ?? []
+    }
+
+    private func remoteRadios() async -> [RadioStationDisplayItem] {
+        RadioStationStore.shared.publishShortcutCacheIfNeeded()
+        let refreshed: [RadioStationDisplayItem]? = await Self.valueBeforeDeadline {
+            await RadioStationStore.shared.refresh(waitForCloudMetadata: false)
+            return await RadioStationStore.shared.items
+        }
+        return refreshed ?? RadioStationStore.shared.items
+    }
+
+    private nonisolated static func valueBeforeDeadline<Value: Sendable>(
+        _ duration: Duration = .seconds(6),
+        operation: @escaping @Sendable () async -> Value?
+    ) async -> Value? {
+        await withTaskGroup(of: Value?.self, returning: Value?.self) { group in
+            group.addTask { await operation() }
+            group.addTask {
+                try? await Task.sleep(for: duration)
+                return nil
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
+        }
     }
 
     private func validate(_ context: (server: SubsonicServer, storageServerID: String)) throws {
@@ -191,14 +373,14 @@ final class ShelvIntentCatalog {
         _ reference: ShortcutPlayableReference,
         server: SubsonicServer,
         records: [DownloadRecord],
-        hasNetwork: Bool
+        mayLoadRemote: Bool
     ) async -> ShelvIntentCatalogItem? {
         switch reference.kind {
         case .song:
             if let record = records.first(where: { $0.songId == reference.contentID }) {
                 return songItem(record.toDownloadedSong().asSong(), server: server)
             }
-            guard hasNetwork, let song = try? await api.getSong(id: reference.contentID) else { return nil }
+            guard mayLoadRemote, let song = try? await api.getSong(id: reference.contentID) else { return nil }
             return songItem(song, server: server)
 
         case .album:
@@ -206,7 +388,7 @@ final class ShelvIntentCatalog {
             if let first = local.first {
                 return albumItem(local, first: first, server: server)
             }
-            guard hasNetwork, let album = try? await api.getAlbum(id: reference.contentID) else { return nil }
+            guard mayLoadRemote, let album = try? await api.getAlbum(id: reference.contentID) else { return nil }
             return albumItem(album, server: server)
 
         case .artist:
@@ -214,15 +396,34 @@ final class ShelvIntentCatalog {
             if let first = local.first {
                 return artistItem(local, first: first, server: server)
             }
-            guard hasNetwork, let artist = try? await api.getArtist(id: reference.contentID) else { return nil }
+            guard mayLoadRemote, let artist = try? await api.getArtist(id: reference.contentID) else { return nil }
             return artistItem(artist, server: server)
 
         case .playlist:
-            guard hasNetwork, let playlist = try? await api.getPlaylist(id: reference.contentID) else { return nil }
-            return playlistItem(playlist, server: server)
+            let localPlaylists = await LocalOfflinePlaylistCatalog.descriptors(
+                serverId: server.stableId.isEmpty ? server.id.uuidString : server.stableId,
+                serverConfigID: server.id
+            )
+            let availableSongIDs = Set(records.map(\.songId))
+            let local = localPlaylists.first(where: {
+                $0.id == reference.contentID
+                    && $0.songIds.contains(where: availableSongIDs.contains)
+            })
+            if mayLoadRemote, let playlist = try? await api.getPlaylist(id: reference.contentID) {
+                await LocalOfflinePlaylistCatalog.updateName(
+                    serverId: server.stableId.isEmpty ? server.id.uuidString : server.stableId,
+                    id: playlist.id,
+                    name: playlist.name
+                )
+                return playlistItem(playlist, server: server)
+            }
+            if let local {
+                return localPlaylistItem(local, records: records, server: server)
+            }
+            return nil
 
         case .radio:
-            if RadioStationStore.shared.items.isEmpty, hasNetwork {
+            if RadioStationStore.shared.items.isEmpty, mayLoadRemote {
                 await RadioStationStore.shared.refresh(waitForCloudMetadata: false)
             } else {
                 RadioStationStore.shared.publishShortcutCacheIfNeeded()
@@ -291,6 +492,25 @@ final class ShelvIntentCatalog {
         )
     }
 
+    private func albumItem(from song: Song, server: SubsonicServer) -> ShelvIntentCatalogItem? {
+        guard let id = song.albumId?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !id.isEmpty,
+              let title = song.album?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !title.isEmpty
+        else { return nil }
+        return ShelvIntentCatalogItem(
+            reference: .init(serverConfigID: server.id.uuidString, kind: .album, contentID: id),
+            title: title,
+            artistID: song.artistId,
+            artistName: song.artist,
+            albumID: id,
+            albumTitle: title,
+            duration: nil,
+            itemCount: nil,
+            internationalStandardRecordingCode: nil
+        )
+    }
+
     private func albumItem(_ album: AlbumDetail, server: SubsonicServer) -> ShelvIntentCatalogItem {
         ShelvIntentCatalogItem(
             reference: .init(serverConfigID: server.id.uuidString, kind: .album, contentID: album.id),
@@ -333,6 +553,25 @@ final class ShelvIntentCatalog {
             albumTitle: nil,
             duration: nil,
             itemCount: artist.albumCount,
+            internationalStandardRecordingCode: nil
+        )
+    }
+
+    private func artistItem(from song: Song, server: SubsonicServer) -> ShelvIntentCatalogItem? {
+        guard let id = song.artistId?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !id.isEmpty,
+              let name = song.artist?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !name.isEmpty
+        else { return nil }
+        return ShelvIntentCatalogItem(
+            reference: .init(serverConfigID: server.id.uuidString, kind: .artist, contentID: id),
+            title: name,
+            artistID: id,
+            artistName: name,
+            albumID: nil,
+            albumTitle: nil,
+            duration: nil,
+            itemCount: nil,
             internationalStandardRecordingCode: nil
         )
     }
@@ -388,6 +627,30 @@ final class ShelvIntentCatalog {
         )
     }
 
+    private func localPlaylistItem(
+        _ playlist: OfflinePlaylistDescriptor,
+        records: [DownloadRecord],
+        server: SubsonicServer
+    ) -> ShelvIntentCatalogItem {
+        let availableIDs = Set(records.map(\.songId))
+        let count = playlist.songIds.filter(availableIDs.contains).count
+        return ShelvIntentCatalogItem(
+            reference: .init(
+                serverConfigID: server.id.uuidString,
+                kind: .playlist,
+                contentID: playlist.id
+            ),
+            title: playlist.name ?? String(localized: "shortcut_kind_playlist"),
+            artistID: nil,
+            artistName: nil,
+            albumID: nil,
+            albumTitle: nil,
+            duration: nil,
+            itemCount: count,
+            internationalStandardRecordingCode: nil
+        )
+    }
+
     private func radioItem(
         _ radio: RadioStationDisplayItem,
         server: SubsonicServer
@@ -416,35 +679,13 @@ final class ShelvIntentCatalog {
     }
 
     private func relevance(of item: ShelvIntentCatalogItem, for query: String) -> Int {
-        let normalizedQuery = ShelvIntentSearchVocabulary.normalized(query)
-        let fields = [item.title, item.artistName, item.albumTitle]
-            .compactMap { $0 }
-            .map(ShelvIntentSearchVocabulary.normalized)
-        let queryWords = Set(normalizedQuery.split(separator: " ").map(String.init))
-        var score = 0
-        for field in fields {
-            if field == normalizedQuery { score += 120 }
-            else if field.contains(normalizedQuery) { score += 60 }
-            let words = Set(field.split(separator: " ").map(String.init))
-            score += queryWords.intersection(words).count * 12
-        }
-
-        let lowered = query.lowercased()
-        switch item.reference.kind {
-        case .song where lowered.contains("song") || lowered.contains("track") || lowered.contains("titel"):
-            score += 35
-        case .album where lowered.contains("album"):
-            score += 35
-        case .artist where lowered.contains("artist") || lowered.contains("künstler") || lowered.contains(" by ") || lowered.contains(" von "):
-            score += 25
-        case .playlist where lowered.contains("playlist"):
-            score += 35
-        case .radio where lowered.contains("radio") || lowered.contains("station") || lowered.contains("sender"):
-            score += 35
-        default:
-            break
-        }
-        return score
+        ShelvIntentSearchRanking.score(
+            kind: item.reference.kind,
+            title: item.title,
+            artistName: item.artistName,
+            albumTitle: item.albumTitle,
+            query: query
+        )
     }
 
     private func matches(_ value: String, query: String, terms: [String]) -> Bool {
@@ -453,11 +694,45 @@ final class ShelvIntentCatalog {
         return terms.contains { normalizedValue.contains(ShelvIntentSearchVocabulary.normalized($0)) }
     }
 
-    private func unique(
+    private func balancedUnique(
         _ items: [ShelvIntentCatalogItem],
+        allowedKinds: Set<ShortcutPlayableKind>,
         limit: Int
     ) -> [ShelvIntentCatalogItem] {
+        guard limit > 0 else { return [] }
+        let kinds = ShortcutPlayableKind.allCases.filter(allowedKinds.contains)
+        var buckets = Dictionary(grouping: items.filter {
+            allowedKinds.contains($0.reference.kind)
+        }, by: { $0.reference.kind })
         var seen = Set<ShortcutPlayableReference>()
-        return Array(items.filter { seen.insert($0.reference).inserted }.prefix(limit))
+        for kind in kinds {
+            guard let bucket = buckets[kind] else { continue }
+            var positions: [ShortcutPlayableReference: Int] = [:]
+            var uniqueBucket: [ShelvIntentCatalogItem] = []
+            for item in bucket {
+                if let index = positions[item.reference] {
+                    uniqueBucket[index] = item
+                } else {
+                    positions[item.reference] = uniqueBucket.count
+                    uniqueBucket.append(item)
+                }
+            }
+            buckets[kind] = uniqueBucket.filter { seen.insert($0.reference).inserted }
+        }
+
+        var indices = Dictionary(uniqueKeysWithValues: kinds.map { ($0, 0) })
+        var result: [ShelvIntentCatalogItem] = []
+        while result.count < limit {
+            var appended = false
+            for kind in kinds where result.count < limit {
+                let index = indices[kind, default: 0]
+                guard let bucket = buckets[kind], index < bucket.count else { continue }
+                result.append(bucket[index])
+                indices[kind] = index + 1
+                appended = true
+            }
+            if !appended { break }
+        }
+        return result
     }
 }

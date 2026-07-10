@@ -88,6 +88,7 @@ struct Shelv_TVApp: App {
                 }
                 .onChange(of: scenePhase) { _, phase in
                     guard phase == .active else { return }
+                    ShelvPlatformAppShortcuts.updateAppShortcutParameters()
                     #if DEBUG
                     AudioPlayerService.shared.ensureDemoStandby()
                     #endif

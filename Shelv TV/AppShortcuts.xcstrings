@@ -200,17 +200,16 @@
         }
       }
     },
-    "Play downloads in ${applicationName}": {
+    "Play a playlist in ${applicationName}": {
       "extractionState": "extracted_with_value",
       "localizations": {
         "en": {
           "stringSet": {
             "state": "new",
             "values": [
-              "Play downloads in ${applicationName}",
-              "Play ${mode} downloads in ${applicationName}",
-              "Play downloaded music in ${applicationName}",
-              "Shuffle downloads in ${applicationName}"
+              "Play a playlist in ${applicationName}",
+              "Play playlist ${playlist} in ${applicationName}",
+              "Ask ${applicationName} to play playlist ${playlist}"
             ]
           }
         },
@@ -218,10 +217,9 @@
           "stringSet": {
             "state": "translated",
             "values": [
-              "Downloads in ${applicationName} abspielen",
-              "${mode} Downloads in ${applicationName} abspielen",
-              "Geladene Musik in ${applicationName} abspielen",
-              "Downloads in ${applicationName} mischen"
+              "Eine Playlist in ${applicationName} abspielen",
+              "Playlist ${playlist} in ${applicationName} abspielen",
+              "${applicationName} soll die Playlist ${playlist} abspielen"
             ]
           }
         },
@@ -229,10 +227,9 @@
           "stringSet": {
             "state": "translated",
             "values": [
-              "在 ${applicationName} 中播放下载",
-              "在 ${applicationName} 中播放 ${mode} 下载",
-              "在 ${applicationName} 中播放已下载音乐",
-              "在 ${applicationName} 中随机播放下载"
+              "在 ${applicationName} 中播放列表",
+              "在 ${applicationName} 中播放播放列表 ${playlist}",
+              "让 ${applicationName} 播放播放列表 ${playlist}"
             ]
           }
         }
@@ -394,5 +391,5 @@
       }
     }
   },
-  "version": "1.0"
+  "version": "1.3"
 }
