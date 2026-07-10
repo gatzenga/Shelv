@@ -94,8 +94,8 @@ private struct ServerRow: View {
         HStack(spacing: 12) {
             Image(systemName: isActive ? "checkmark.circle.fill" : "circle")
                 .foregroundStyle(isActive ? AnyShapeStyle(themeColor) : AnyShapeStyle(.tertiary))
-                .font(.body)
-                .frame(width: 20)
+                .font(.system(size: 15, weight: .medium))
+                .frame(width: 26, height: 26)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(server.displayName)
@@ -124,13 +124,15 @@ private struct ServerRow: View {
             if !isActive {
                 Button(String(localized: "connect")) { onActivate() }
                     .buttonStyle(.borderless)
-                    .font(.caption)
+                    .font(.system(size: 12, weight: .medium))
+                    .frame(minHeight: 26)
             }
 
             if server.hasSecondaryURL {
                 Button { onToggleURLSlot() } label: {
                     Image(systemName: "arrow.triangle.2.circlepath")
-                        .font(.caption)
+                        .font(.system(size: 15, weight: .medium))
+                        .frame(width: 26, height: 26)
                         .foregroundStyle(server.isUsingSecondaryURL ? AnyShapeStyle(themeColor) : AnyShapeStyle(.secondary))
                 }
                 .buttonStyle(.borderless)
@@ -138,12 +140,16 @@ private struct ServerRow: View {
             }
 
             Button { onEdit() } label: {
-                Image(systemName: "pencil").font(.caption)
+                Image(systemName: "pencil")
+                    .font(.system(size: 15, weight: .medium))
+                    .frame(width: 26, height: 26)
             }
             .buttonStyle(.borderless)
 
             Button(role: .destructive) { onDelete() } label: {
-                Image(systemName: "trash").font(.caption)
+                Image(systemName: "trash")
+                    .font(.system(size: 15, weight: .medium))
+                    .frame(width: 26, height: 26)
             }
             .buttonStyle(.borderless)
         }
