@@ -134,10 +134,7 @@ struct MainTabView: View {
             Text(String(localized: "queue_available_subtitle"))
         }
         .task(id: queueSync.pendingRemote?.signature) {
-            guard let pendingSignature = queueSync.pendingRemote?.signature else { return }
-            try? await Task.sleep(for: .seconds(6))
-            guard queueSync.pendingRemote?.signature == pendingSignature else { return }
-            queueSync.dismissPending()
+            await dismissPendingQueueAfterDelay()
         }
         .alert(serverErrorAlertTitle, isPresented: Binding(
             get: { offlineMode.serverErrorBannerVisible },
@@ -204,6 +201,16 @@ struct MainTabView: View {
     private func syncVisibleTabs() {
         visibleShowPlaylistsTab = showPlaylistsTab
         visibleShowRadio = showRadio && !offlineMode.isOffline
+    }
+
+    private func dismissPendingQueueAfterDelay() async {
+        guard let pending = queueSync.pendingRemote else { return }
+        let pendingSignature = pending.signature
+        try? await Task.sleep(for: .seconds(6))
+        guard let currentPending = queueSync.pendingRemote else { return }
+        let currentSignature = currentPending.signature
+        guard currentSignature == pendingSignature else { return }
+        queueSync.dismissPending()
     }
 
     private var canShowIdleNowPlaying: Bool {
