@@ -23,6 +23,7 @@ struct MainTabView: View {
     @State private var showIdleNowPlaying = false
     @State private var nowPlayingSidePanel: TVNowPlayingPanel?
     @State private var nowPlayingRootVisible = false
+    @State private var recapNavigationRequest = 0
     @State private var idleNowPlayingTask: Task<Void, Never>?
 
     private var serverErrorAlertTitle: String {
@@ -148,6 +149,19 @@ struct MainTabView: View {
         }
         .onAppear {
             scheduleIdleNowPlayingIfNeeded()
+            if let destination = ShelvShortcutHandoff.consumePendingDestination() {
+                handleShortcutDestination(destination)
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .shelvShortcutDestinationRequested)) { note in
+            let pendingDestination = ShelvShortcutHandoff.consumePendingDestination()
+            guard let rawValue = note.object as? String,
+                  let destination = ShelvShortcutDestination(rawValue: rawValue)
+            else {
+                if let pendingDestination { handleShortcutDestination(pendingDestination) }
+                return
+            }
+            handleShortcutDestination(destination)
         }
         .onDisappear {
             idleNowPlayingTask?.cancel()
@@ -164,7 +178,7 @@ struct MainTabView: View {
             }
 
             Tab(String(localized: "discover"), systemImage: "sparkles", value: Self.discoverTab) {
-                DiscoverView()
+                DiscoverView(recapNavigationRequest: recapNavigationRequest)
             }
 
             Tab(String(localized: "library"), systemImage: "square.stack", value: "library") {
@@ -196,6 +210,23 @@ struct MainTabView: View {
     private func syncVisibleTabsIfAllowed() {
         guard selection != "settings" else { return }
         syncVisibleTabs()
+    }
+
+    private func handleShortcutDestination(_ destination: ShelvShortcutDestination) {
+        dismissIdleNowPlaying()
+        switch destination {
+        case .discover:
+            selection = Self.discoverTab
+        case .library:
+            selection = "library"
+        case .search:
+            selection = "search"
+        case .recap:
+            selection = Self.discoverTab
+            recapNavigationRequest &+= 1
+        case .nowPlaying:
+            selection = Self.nowPlayingTab
+        }
     }
 
     private func syncVisibleTabs() {

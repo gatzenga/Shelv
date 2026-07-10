@@ -1,6 +1,12 @@
 import SwiftUI
 
 struct DiscoverView: View {
+    let recapNavigationRequest: Int
+
+    init(recapNavigationRequest: Int = 0) {
+        self.recapNavigationRequest = recapNavigationRequest
+    }
+
     @ObservedObject var library = LibraryStore.shared
     @AppStorage("mixUseDatabase") private var mixUseDatabase = false
     @AppStorage("themeColor") private var themeColor = "violet"
@@ -39,6 +45,8 @@ struct DiscoverView: View {
     @State private var recent: [Album] = []
     @State private var frequent: [Album] = []
     @State private var random: [Album] = []
+    @State private var showRequestedRecap = false
+    @State private var handledRecapNavigationRequest = 0
 
     var body: some View {
         NavigationStack {
@@ -85,7 +93,22 @@ struct DiscoverView: View {
                 .padding(.vertical, 50)
             }
             .task(id: library.reloadID) { await load() }
+            .navigationDestination(isPresented: $showRequestedRecap) {
+                RecapView()
+            }
+            .onChange(of: recapNavigationRequest) { _, _ in
+                handleRecapNavigationRequest()
+            }
+            .onAppear {
+                handleRecapNavigationRequest()
+            }
         }
+    }
+
+    private func handleRecapNavigationRequest() {
+        guard recapNavigationRequest != handledRecapNavigationRequest else { return }
+        handledRecapNavigationRequest = recapNavigationRequest
+        showRequestedRecap = true
     }
 
     // MARK: - Daten

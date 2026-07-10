@@ -668,6 +668,14 @@
 "shortcut_error_playback_failed" = "Shelv could not start playback.";
 "shortcut_error_playback_timed_out" = "Playback took too long to start. Please try again.";
 "shortcut_error_cancelled" = "The playback request was cancelled.";
+"shortcut_error_unsupported_queue_operation" = "That item cannot be added at the requested queue position.";
+"shortcut_media_play_title" = "Play Music in Shelv";
+"shortcut_media_play_description" = "Play a song, album, artist, playlist, or radio station from Shelv.";
+"shortcut_media_attribute_shuffle" = "Shuffle";
+"shortcut_media_attribute_repeat" = "Repeat";
+"shortcut_media_queue_next" = "Next";
+"shortcut_media_queue_last" = "Last";
+"shortcut_media_queue_ready" = "Audio queue ready";
 "siri_shortcuts" = "Siri & Shortcuts";
 "siri_shortcuts_intro" = "Shelv actions are available in Siri, Shortcuts, personal automations, and CarPlay automations. Playback runs without opening the app.";
 "siri_shortcuts_actions" = "Available Actions";

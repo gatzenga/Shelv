@@ -78,6 +78,7 @@ private struct KeepLibraryOfflineBanner: View {
 }
 
 struct MainWindowView: View {
+    @Environment(\.openWindow) private var openWindow
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var serverStore: ServerStore
     @EnvironmentObject var lyricsStore: LyricsStore
@@ -182,6 +183,21 @@ struct MainWindowView: View {
         .onReceive(NotificationCenter.default.publisher(for: .instantMixUnavailable)) { _ in
             showToast(String(localized: "no_instant_mix_available"), isError: true)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .shelvShortcutDestinationRequested)) { note in
+            let pendingDestination = ShelvShortcutHandoff.consumePendingDestination()
+            guard let rawValue = note.object as? String,
+                  let destination = ShelvShortcutDestination(rawValue: rawValue)
+            else {
+                if let pendingDestination { handleShortcutDestination(pendingDestination) }
+                return
+            }
+            handleShortcutDestination(destination)
+        }
+        .onAppear {
+            if let destination = ShelvShortcutHandoff.consumePendingDestination() {
+                handleShortcutDestination(destination)
+            }
+        }
         .sheet(isPresented: $showAddToPlaylist) {
             AddToPlaylistPanel(songIds: playlistSongIds)
                 .environmentObject(libraryStore)
@@ -198,6 +214,29 @@ struct MainWindowView: View {
             toastMessage = nil
             toastIsError = false
         }
+    }
+
+    private func handleShortcutDestination(_ destination: ShelvShortcutDestination) {
+        switch destination {
+        case .discover:
+            resetMainNavigation()
+            appState.selectedSidebar = .discover
+        case .library:
+            resetMainNavigation()
+            appState.selectedSidebar = .albums
+        case .search:
+            resetMainNavigation()
+            appState.selectedSidebar = .search
+        case .recap:
+            openWindow(id: "recap")
+        case .nowPlaying:
+            appState.activePanel = nil
+        }
+    }
+
+    private func resetMainNavigation() {
+        appState.selectedPlaylist = nil
+        appState.navigationPath = NavigationPath()
     }
 
     @ViewBuilder

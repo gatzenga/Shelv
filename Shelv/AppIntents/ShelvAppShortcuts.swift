@@ -1,54 +1,6 @@
 import AppIntents
 import Foundation
 
-enum ShelvShortcutDestination: String, AppEnum {
-    case discover
-    case library
-    case search
-    case recap
-    case nowPlaying
-
-    static var typeDisplayRepresentation: TypeDisplayRepresentation {
-        "Shelv Destination"
-    }
-
-    static var caseDisplayRepresentations: [ShelvShortcutDestination: DisplayRepresentation] {
-        [
-            .discover: "Discover",
-            .library: "Library",
-            .search: "Search",
-            .recap: "Recap",
-            .nowPlaying: "Now Playing",
-        ]
-    }
-}
-
-extension Notification.Name {
-    static let shelvShortcutDestinationRequested = Notification.Name("shelvShortcutDestinationRequested")
-}
-
-enum ShelvShortcutHandoff {
-    private static let pendingDestinationKey = "shelv.shortcut.pendingDestination"
-
-    @MainActor
-    static func request(_ destination: ShelvShortcutDestination) {
-        UserDefaults.standard.set(destination.rawValue, forKey: pendingDestinationKey)
-        NotificationCenter.default.post(
-            name: .shelvShortcutDestinationRequested,
-            object: destination.rawValue
-        )
-    }
-
-    @MainActor
-    static func consumePendingDestination() -> ShelvShortcutDestination? {
-        guard let rawValue = UserDefaults.standard.string(forKey: pendingDestinationKey) else {
-            return nil
-        }
-        UserDefaults.standard.removeObject(forKey: pendingDestinationKey)
-        return ShelvShortcutDestination(rawValue: rawValue)
-    }
-}
-
 struct ShelvPlaylistEntity: AppEntity, Identifiable {
     let id: String
     let name: String
@@ -310,6 +262,9 @@ struct ShelvAppShortcuts: AppShortcutsProvider {
             phrases: [
                 "Shuffle all in \(.applicationName)",
                 "Play shuffle all in \(.applicationName)",
+                "Shuffle all tracks in \(.applicationName)",
+                "Shuffle all songs in \(.applicationName)",
+                "Shuffle my library in \(.applicationName)",
             ],
             shortTitle: "shortcut_shuffle_all_short",
             systemImageName: "shuffle"
@@ -320,6 +275,8 @@ struct ShelvAppShortcuts: AppShortcutsProvider {
             phrases: [
                 "Play something in \(.applicationName)",
                 "Play \(\.$playable) in \(.applicationName)",
+                "Ask \(.applicationName) to play \(\.$playable)",
+                "Play \(\.$playable) with \(.applicationName)",
             ],
             shortTitle: "shortcut_play_short",
             systemImageName: "play.fill"
@@ -330,6 +287,9 @@ struct ShelvAppShortcuts: AppShortcutsProvider {
             phrases: [
                 "Play a mix in \(.applicationName)",
                 "Play \(\.$mix) in \(.applicationName)",
+                "Play \(\.$mix) tracks in \(.applicationName)",
+                "Ask \(.applicationName) to play \(\.$mix)",
+                "Start \(\.$mix) in \(.applicationName)",
             ],
             shortTitle: "shortcut_play_mix_short",
             systemImageName: "sparkles"
@@ -340,6 +300,8 @@ struct ShelvAppShortcuts: AppShortcutsProvider {
             phrases: [
                 "Play a playlist in \(.applicationName)",
                 "Play \(\.$playlist) in \(.applicationName)",
+                "Play playlist \(\.$playlist) in \(.applicationName)",
+                "Ask \(.applicationName) to play playlist \(\.$playlist)",
             ],
             shortTitle: "shortcut_play_playlist_short",
             systemImageName: "music.note.list"
@@ -350,6 +312,9 @@ struct ShelvAppShortcuts: AppShortcutsProvider {
             phrases: [
                 "Play downloads in \(.applicationName)",
                 "Play \(\.$mode) in \(.applicationName)",
+                "Play \(\.$mode) downloads in \(.applicationName)",
+                "Play downloaded music in \(.applicationName)",
+                "Shuffle downloads in \(.applicationName)",
             ],
             shortTitle: "shortcut_play_downloads_short",
             systemImageName: "arrow.down.circle.fill"
@@ -360,6 +325,8 @@ struct ShelvAppShortcuts: AppShortcutsProvider {
             phrases: [
                 "Play or pause \(.applicationName)",
                 "Toggle playback in \(.applicationName)",
+                "Toggle \(.applicationName) playback",
+                "Play or pause music in \(.applicationName)",
             ],
             shortTitle: "shortcut_play_pause_short",
             systemImageName: "playpause.fill"
@@ -370,6 +337,9 @@ struct ShelvAppShortcuts: AppShortcutsProvider {
             phrases: [
                 "Open player in \(.applicationName)",
                 "Open \(.applicationName) player",
+                "Show player in \(.applicationName)",
+                "Open Now Playing in \(.applicationName)",
+                "Show Now Playing in \(.applicationName)",
             ],
             shortTitle: "shortcut_now_playing_short",
             systemImageName: "music.note"
@@ -380,6 +350,8 @@ struct ShelvAppShortcuts: AppShortcutsProvider {
             phrases: [
                 "Open search in \(.applicationName)",
                 "Open \(.applicationName) search",
+                "Show search in \(.applicationName)",
+                "Search in \(.applicationName)",
             ],
             shortTitle: "shortcut_search_short",
             systemImageName: "magnifyingglass"
@@ -390,6 +362,8 @@ struct ShelvAppShortcuts: AppShortcutsProvider {
             phrases: [
                 "Open library in \(.applicationName)",
                 "Show library in \(.applicationName)",
+                "Open my library in \(.applicationName)",
+                "Show my library in \(.applicationName)",
             ],
             shortTitle: "shortcut_library_short",
             systemImageName: "books.vertical.fill"
@@ -400,6 +374,8 @@ struct ShelvAppShortcuts: AppShortcutsProvider {
             phrases: [
                 "Open Recap in \(.applicationName)",
                 "Show Recap in \(.applicationName)",
+                "Open my Recap in \(.applicationName)",
+                "Show my Recap in \(.applicationName)",
             ],
             shortTitle: "shortcut_recap_short",
             systemImageName: "calendar.badge.clock"

@@ -1,48 +1,6 @@
 import AppIntents
 import Foundation
 
-nonisolated extension ShortcutPlaybackOrder: AppEnum {
-    static var typeDisplayRepresentation: TypeDisplayRepresentation {
-        "shortcut_order_type"
-    }
-
-    static var caseDisplayRepresentations: [ShortcutPlaybackOrder: DisplayRepresentation] {
-        [
-            .inOrder: "shortcut_order_in_order",
-            .shuffled: "shortcut_order_shuffled",
-        ]
-    }
-}
-
-nonisolated extension ShortcutSmartMix: AppEnum {
-    static var typeDisplayRepresentation: TypeDisplayRepresentation {
-        "shortcut_mix_type"
-    }
-
-    static var caseDisplayRepresentations: [ShortcutSmartMix: DisplayRepresentation] {
-        [
-            .newest: "shortcut_mix_newest",
-            .frequent: "shortcut_mix_frequent",
-            .recent: "shortcut_mix_recent",
-            .shuffleAll: "shortcut_shuffle_all",
-        ]
-    }
-}
-
-nonisolated extension ShortcutDownloadsMode: AppEnum {
-    static var typeDisplayRepresentation: TypeDisplayRepresentation {
-        "shortcut_downloads_type"
-    }
-
-    static var caseDisplayRepresentations: [ShortcutDownloadsMode: DisplayRepresentation] {
-        [
-            .all: "shortcut_downloads_all",
-            .shuffled: "shortcut_downloads_shuffled",
-            .newest: "shortcut_downloads_newest",
-        ]
-    }
-}
-
 struct ShelvPlayableEntity: AppEntity, Identifiable, Hashable, Sendable {
     let serverConfigID: String
     let kind: ShortcutPlayableKind
@@ -53,13 +11,7 @@ struct ShelvPlayableEntity: AppEntity, Identifiable, Hashable, Sendable {
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "shortcut_playable_type"
     static let defaultQuery = ShelvPlayableQuery()
 
-    var id: String {
-        let encodedID = Data(contentID.utf8).base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
-        return "\(serverConfigID)|\(kind.rawValue)|\(encodedID)"
-    }
+    var id: String { reference.identifier }
 
     var displayRepresentation: DisplayRepresentation {
         let kindName = String(localized: kind.localizedName)
@@ -67,7 +19,26 @@ struct ShelvPlayableEntity: AppEntity, Identifiable, Hashable, Sendable {
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
             .joined(separator: " · ")
-        return DisplayRepresentation(title: "\(name)", subtitle: "\(subtitle)")
+        return DisplayRepresentation(
+            title: "\(name)",
+            subtitle: "\(subtitle)",
+            synonyms: spokenSynonyms
+        )
+    }
+
+    private var spokenSynonyms: [LocalizedStringResource] {
+        switch kind {
+        case .song:
+            return ["song \(name)", "track \(name)"]
+        case .album:
+            return ["album \(name)"]
+        case .artist:
+            return ["music by \(name)", "songs by \(name)"]
+        case .playlist:
+            return ["\(name) playlist", "playlist \(name)"]
+        case .radio:
+            return ["\(name) radio", "\(name) station"]
+        }
     }
 
     var reference: ShortcutPlayableReference {
@@ -79,20 +50,8 @@ struct ShelvPlayableEntity: AppEntity, Identifiable, Hashable, Sendable {
     }
 
     fileprivate static func parse(identifier: String) -> (String, ShortcutPlayableKind, String)? {
-        let components = identifier.split(separator: "|", omittingEmptySubsequences: false)
-        guard components.count == 3,
-              let kind = ShortcutPlayableKind(rawValue: String(components[1]))
-        else { return nil }
-
-        var encoded = String(components[2])
-            .replacingOccurrences(of: "-", with: "+")
-            .replacingOccurrences(of: "_", with: "/")
-        let remainder = encoded.count % 4
-        if remainder != 0 { encoded += String(repeating: "=", count: 4 - remainder) }
-        guard let data = Data(base64Encoded: encoded),
-              let contentID = String(data: data, encoding: .utf8)
-        else { return nil }
-        return (String(components[0]), kind, contentID)
+        guard let reference = ShortcutPlayableReference(identifier: identifier) else { return nil }
+        return (reference.serverConfigID, reference.kind, reference.contentID)
     }
 }
 

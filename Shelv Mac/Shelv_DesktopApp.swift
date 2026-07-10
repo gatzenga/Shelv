@@ -1,3 +1,4 @@
+import AppIntents
 import SwiftUI
 
 let appLang: String = Locale.preferredLanguages.first?.hasPrefix("de") == true ? "de" : "en"
@@ -25,6 +26,7 @@ struct Shelv_DesktopApp: App {
         if d.string(forKey: "transcodingDownloadCodec") == "aac" { d.set("raw", forKey: "transcodingDownloadCodec") }
         PersonalizationSettings.registerDefaults()
         ShelvDefaultSettings.registerDefaults()
+        ShelvPlatformAppShortcuts.updateAppShortcutParameters()
     }
 
     var body: some Scene {
@@ -82,6 +84,7 @@ struct Shelv_DesktopApp: App {
                     PinnedPlaylistStore.shared.setActiveServer(server.stableId)
                     await QueueSyncService.shared.checkForRemoteQueue()
                     await runKeepLibraryOfflineCheck(serverId: server.stableId)
+                    ShelvPlatformAppShortcuts.updateAppShortcutParameters()
                 }
                 .onChange(of: scenePhase) { _, phase in
                     guard phase == .active else { return }

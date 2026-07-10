@@ -1,3 +1,4 @@
+import AppIntents
 import SwiftUI
 
 @main
@@ -11,6 +12,7 @@ struct Shelv_TVApp: App {
     init() {
         PersonalizationSettings.registerDefaults()
         ShelvDefaultSettings.registerDefaults()
+        ShelvPlatformAppShortcuts.updateAppShortcutParameters()
     }
 
     private var preferredScheme: ColorScheme? {
@@ -44,6 +46,7 @@ struct Shelv_TVApp: App {
                     await LibraryStore.shared.loadStarred()
                     await LibraryStore.shared.loadArtists()
                     await QueueSyncService.shared.checkForRemoteQueue()
+                    ShelvPlatformAppShortcuts.updateAppShortcutParameters()
                 }
                 // Einmaliges App-Setup: Tracking starten, remoteUserId-Backfill, iCloud-Sync.
                 .task {

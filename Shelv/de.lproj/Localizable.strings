@@ -668,6 +668,14 @@
 "shortcut_error_playback_failed" = "Shelv konnte die Wiedergabe nicht starten.";
 "shortcut_error_playback_timed_out" = "Der Start der Wiedergabe hat zu lange gedauert. Versuche es erneut.";
 "shortcut_error_cancelled" = "Die Wiedergabeanfrage wurde abgebrochen.";
+"shortcut_error_unsupported_queue_operation" = "Dieser Inhalt kann nicht an der gewünschten Position zur Warteschlange hinzugefügt werden.";
+"shortcut_media_play_title" = "Musik in Shelv abspielen";
+"shortcut_media_play_description" = "Einen Song, ein Album, einen Künstler, eine Playlist oder einen Radiosender aus Shelv abspielen.";
+"shortcut_media_attribute_shuffle" = "Mischen";
+"shortcut_media_attribute_repeat" = "Wiederholen";
+"shortcut_media_queue_next" = "Als Nächstes";
+"shortcut_media_queue_last" = "Am Ende";
+"shortcut_media_queue_ready" = "Audiowarteschlange bereit";
 "siri_shortcuts" = "Siri & Kurzbefehle";
 "siri_shortcuts_intro" = "Shelv-Aktionen stehen in Siri, Kurzbefehlen, persönlichen Automationen und CarPlay-Automationen zur Verfügung. Die Wiedergabe startet, ohne die App zu öffnen.";
 "siri_shortcuts_actions" = "Verfügbare Aktionen";
