@@ -29,15 +29,11 @@ extension AudioPlayerService {
     }
 
     nonisolated private static func configureAudioSession() throws {
-        #if os(tvOS)
-        try AVAudioSession.sharedInstance().setCategory(.playback)
-        #else
-        try AVAudioSession.sharedInstance().setCategory(
-            .playback,
-            mode: .default,
-            options: [.allowAirPlay, .allowBluetoothHFP]
-        )
-        #endif
+        // AirPlay and Bluetooth A2DP are implicit for the playback category.
+        // allowAirPlay and allowBluetoothHFP are only valid with input-capable
+        // categories such as playAndRecord and make setCategory fail with
+        // paramErr (-50) on a physical iPhone.
+        try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
         try AVAudioSession.sharedInstance().setActive(true)
     }
 
