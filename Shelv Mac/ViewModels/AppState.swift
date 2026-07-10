@@ -54,7 +54,7 @@ class AppState: ObservableObject {
 
     let api = SubsonicAPIService.shared
     let player = AudioPlayerService.shared
-    let serverStore = ServerStore()
+    let serverStore = ServerStore.shared
 
     private init() {
         #if DEBUG

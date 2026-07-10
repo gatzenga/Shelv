@@ -246,6 +246,77 @@ final class PlayLogServiceTests: XCTestCase {
         XCTAssertNil(removedServerBOne)
     }
 
+    func testRecordPlayAndQueueScrobblePersistsBothAtomically() async throws {
+        let service = try await makeService()
+        let playedAt = 1_750_000_123.5
+
+        let uuid = await service.recordPlayAndQueueScrobble(
+            songId: "offline-song",
+            serverId: "server-a",
+            serverConfigId: "11111111-1111-1111-1111-111111111111",
+            playedAt: playedAt,
+            songDuration: 240
+        )
+
+        let logs = await service.allPlayLogs(serverId: "server-a")
+        let pending = await service.pendingScrobbles(limit: 10)
+        XCTAssertNotNil(uuid)
+        XCTAssertEqual(logs.count, 1)
+        XCTAssertEqual(logs.first?.uuid, uuid)
+        XCTAssertEqual(logs.first?.playedAt, playedAt)
+        XCTAssertEqual(pending.count, 1)
+        XCTAssertEqual(pending.first?.songId, "offline-song")
+        XCTAssertEqual(pending.first?.serverConfigId, "11111111-1111-1111-1111-111111111111")
+        XCTAssertEqual(pending.first?.playedAt, playedAt)
+    }
+
+    func testPendingScrobbleSurvivesDatabaseRestartUntilAcknowledged() async throws {
+        let service = try await makeService()
+        _ = await service.recordPlayAndQueueScrobble(
+            songId: "restart-song",
+            serverId: "server-a",
+            serverConfigId: "22222222-2222-2222-2222-222222222222",
+            playedAt: 1_750_000_321,
+            songDuration: 180
+        )
+
+        await service.shutdown()
+        await service.setup()
+
+        let restored = await service.pendingScrobbles(afterId: nil, limit: 10)
+        XCTAssertEqual(restored.map(\.songId), ["restart-song"])
+        if let id = restored.first?.id {
+            await service.markScrobbleDone(id: id)
+        }
+        let remaining = await service.pendingScrobbles(limit: 10)
+        XCTAssertTrue(remaining.isEmpty)
+    }
+
+    func testRecapImportRewriteDropsForeignOutboxAndRestoresLocalPendingEvents() async throws {
+        let service = try await makeService()
+        _ = await service.addPendingScrobble(
+            songId: "local-offline-song",
+            serverId: "local-server",
+            serverConfigId: "33333333-3333-3333-3333-333333333333",
+            playedAt: 1_750_000_456
+        )
+        let localPending = await service.allPendingScrobbles()
+
+        await service.rewriteAllServerIds(to: "import-target")
+        let importedOutboxWasCleared = await service.allPendingScrobbles().isEmpty
+        let didRestore = await service.restorePendingScrobbles(localPending)
+        XCTAssertTrue(importedOutboxWasCleared)
+        XCTAssertTrue(didRestore)
+
+        let restored = await service.allPendingScrobbles()
+        XCTAssertEqual(restored.map(\.songId), ["local-offline-song"])
+        XCTAssertEqual(restored.first?.serverId, "local-server")
+        XCTAssertEqual(
+            restored.first?.serverConfigId,
+            "33333333-3333-3333-3333-333333333333"
+        )
+    }
+
     private func makeService() async throws -> PlayLogService {
         XCTAssertNotNil(PlayLogService.testDatabaseURL)
         await PlayLogService.shared.shutdown()

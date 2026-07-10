@@ -172,33 +172,18 @@ class RecapStore: ObservableObject {
         isImporting = true
         defer { isImporting = false }
 
-        let dest = PlayLogService.dbURL
         do {
             _ = url.startAccessingSecurityScopedResource()
             defer { url.stopAccessingSecurityScopedResource() }
 
-            try await PlayLogService.shared.createImportRollback()
-            await PlayLogService.shared.shutdown()
-
-            try FileManager.default.createDirectory(
-                at: dest.deletingLastPathComponent(),
-                withIntermediateDirectories: true
+            try await PlayLogService.shared.replaceDatabaseFromImport(
+                sourceURL: url,
+                serverId: serverId
             )
-            for suffix in ["", "-wal", "-shm"] {
-                let path = dest.path + suffix
-                if FileManager.default.fileExists(atPath: path) {
-                    try? FileManager.default.removeItem(atPath: path)
-                }
-            }
-            try FileManager.default.copyItem(at: url, to: dest)
-
-            await PlayLogService.shared.setup()
-            await PlayLogService.shared.rewriteAllServerIds(to: serverId)
             await CloudKitSyncService.shared.resetChangeToken()
             await CloudKitSyncService.shared.syncNow()
             await recreateMissingPlaylists(serverId: serverId)
             await loadEntries(serverId: serverId)
-            await PlayLogService.shared.cleanupImportRollback()
 
             syncReports = [RecapSyncReport(
                 message: String(localized: "import_finished"),
@@ -206,22 +191,36 @@ class RecapStore: ObservableObject {
             )]
             showSyncReport = true
             NotificationCenter.default.post(name: .recapRegistryUpdated, object: nil)
-        } catch {
-            let importError = error.localizedDescription
-            do {
-                try await PlayLogService.shared.applyImportRollback()
-                await PlayLogService.shared.cleanupImportRollback()
-                await loadEntries(serverId: serverId)
+        } catch let error as PlayLogImportError {
+            switch error {
+            case .restored(let importMessage):
                 syncReports = [RecapSyncReport(
-                    message: String(format: String(localized: "import_failed_restored_format"), String(describing: importError)),
+                    message: String(
+                        format: String(localized: "import_failed_restored_format"),
+                        importMessage
+                    ),
                     isError: true
                 )]
-            } catch let rollbackError {
+            case .rollbackFailed(let importMessage, let rollbackMessage):
                 syncReports = [RecapSyncReport(
-                    message: String(format: String(localized: "import_rollback_failed_format"), String(describing: importError), rollbackError.localizedDescription),
+                    message: String(
+                        format: String(localized: "import_rollback_failed_format"),
+                        importMessage,
+                        rollbackMessage
+                    ),
                     isError: true
                 )]
             }
+            await loadEntries(serverId: serverId)
+            showSyncReport = true
+        } catch {
+            syncReports = [RecapSyncReport(
+                message: String(
+                    format: String(localized: "import_failed_restored_format"),
+                    error.localizedDescription
+                ),
+                isError: true
+            )]
             showSyncReport = true
         }
     }

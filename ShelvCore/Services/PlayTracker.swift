@@ -1,7 +1,15 @@
 import Foundation
 import Combine
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
-// Beobachtet AudioPlayerService rein passiv via Combine — greift nie aktiv ein.
+/// Beobachtet den gemeinsamen Player und persistiert einen Play beim erstmaligen
+/// Erreichen der Hörschwelle. Die Audioquelle (Stream, Precache oder Download)
+/// spielt dabei bewusst keine Rolle.
+@MainActor
 final class PlayTracker {
     static let shared = PlayTracker()
 
@@ -10,23 +18,32 @@ final class PlayTracker {
 
     private var trackedSongId: String?
     private var trackedServerId: String?
+    private var trackedServerConfigId: String?
     private var trackedDuration: Double = 0
     private var playedSeconds: Double = 0
     private var lastTime: Double = -1
+    private var hasRecordedCurrentPlay = false
+    private var trackingToken = UUID()
 
     private init() {
-        // Song-Wechsel: vorherigen Song finalisieren, neuen starten
-        player.$currentSong
+        // Eine neue logische Wiedergabe wird explizit vom Player gemeldet. Dadurch
+        // lösen reine Metadatenänderungen am currentSong keinen zweiten Play aus.
+        player.playbackStartedPublisher
             .receive(on: RunLoop.main)
-            .sink { [weak self] newSong in
+            .sink { [weak self] event in
                 self?.finalize()
-                if let song = newSong {
-                    self?.startTracking(song: song)
-                }
+                self?.startTracking(event)
             }
             .store(in: &cancellables)
 
-        // Zeit-Akkumulation via timePublisher
+        // Stop, Queue-Ende oder Wechsel zu Radio finalisiert die aktuelle Session.
+        player.$currentSong
+            .receive(on: RunLoop.main)
+            .sink { [weak self] song in
+                if song == nil { self?.finalize() }
+            }
+            .store(in: &cancellables)
+
         player.timePublisher
             .receive(on: RunLoop.main)
             .sink { [weak self] (time, _) in
@@ -34,68 +51,118 @@ final class PlayTracker {
                 let delta = time - self.lastTime
                 if self.lastTime >= 0 && delta > 0 && delta < 2.0 {
                     self.playedSeconds += delta
+                    self.recordPlayIfNeeded()
                 }
                 self.lastTime = time
             }
             .store(in: &cancellables)
 
-        // Seek: lastTime zurücksetzen damit kein falscher Delta gezählt wird
         player.$isSeeking
             .receive(on: RunLoop.main)
             .sink { [weak self] seeking in
                 if seeking { self?.lastTime = -1 }
             }
             .store(in: &cancellables)
+
+        // Scrobble-Outbox ist unabhängig von CloudKit und reagiert direkt auf Netzrückkehr.
+        NotificationCenter.default.publisher(for: .networkStatusChanged)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                guard NetworkStatus.shared.hasNetwork else { return }
+                self?.handleConnectivityAvailable()
+            }
+            .store(in: &cancellables)
+
+        OfflineModeService.shared.$isOffline
+            .removeDuplicates()
+            .dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] isOffline in
+                if !isOffline { self?.handleConnectivityAvailable() }
+            }
+            .store(in: &cancellables)
+
+        #if canImport(UIKit)
+        let didBecomeActive = UIApplication.didBecomeActiveNotification
+        #elseif canImport(AppKit)
+        let didBecomeActive = NSApplication.didBecomeActiveNotification
+        #endif
+        NotificationCenter.default.publisher(for: didBecomeActive)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.handleConnectivityAvailable() }
+            .store(in: &cancellables)
+
+        Task { [weak self] in
+            await ScrobbleService.shared.setup()
+            self?.handleConnectivityAvailable()
+        }
     }
 
-    private func startTracking(song: Song) {
-        trackedSongId = song.id
-        trackedServerId = SubsonicAPIService.shared.activeServer?.stableId
-        trackedDuration = song.duration.map { Double($0) } ?? 0
+    private func startTracking(_ event: PlaybackTrackingStart) {
+        trackedSongId = event.song.id
+        trackedServerConfigId = event.serverConfigId
+        trackedServerId = event.serverId
+        trackedDuration = event.song.duration.map(Double.init) ?? 0
         playedSeconds = 0
         lastTime = -1
+        hasRecordedCurrentPlay = false
+        trackingToken = UUID()
+    }
+
+    private func recordPlayIfNeeded() {
+        guard !hasRecordedCurrentPlay,
+              let songId = trackedSongId,
+              let serverId = trackedServerId,
+              let serverConfigId = trackedServerConfigId,
+              trackedDuration > 0
+        else { return }
+
+        let configuredPercent = Double(UserDefaults.standard.integer(forKey: "recapThreshold"))
+        let threshold = configuredPercent > 0 ? configuredPercent / 100.0 : 0.3
+        guard playedSeconds / trackedDuration >= threshold else { return }
+
+        hasRecordedCurrentPlay = true
+        let token = trackingToken
+        let playedAt = Date().timeIntervalSince1970
+        let duration = trackedDuration
+
+        Task { [weak self] in
+            let recorded = await ScrobbleService.shared.recordPlay(
+                songId: songId,
+                serverId: serverId,
+                serverConfigId: serverConfigId,
+                playedAt: playedAt,
+                songDuration: duration
+            )
+            guard recorded else {
+                if self?.trackingToken == token {
+                    self?.hasRecordedCurrentPlay = false
+                }
+                return
+            }
+            await CloudKitSyncService.shared.uploadPendingEvents()
+        }
     }
 
     private func finalize() {
-        guard let songId = trackedSongId,
-              let serverId = trackedServerId,
-              trackedDuration > 0
-        else {
-            reset()
-            return
-        }
-        let pct = Double(UserDefaults.standard.integer(forKey: "recapThreshold"))
-        let threshold = pct > 0 ? pct / 100.0 : 0.3
-        if playedSeconds / trackedDuration >= threshold {
-            // Server-Scrobble: Song gilt ab der eingestellten Schwelle als gehört
-            // (submission=true → Play-Count auf Navidrome). Bei Fehler in die
-            // scrobble_queue für späteren Flush.
-            let scrobbleAt = Date().timeIntervalSince1970
-            Task.detached(priority: .utility) {
-                do {
-                    try await SubsonicAPIService.shared.scrobble(songId: songId, playedAt: scrobbleAt)
-                } catch {
-                    await PlayLogService.shared.addPendingScrobble(
-                        songId: songId, serverId: serverId, playedAt: scrobbleAt
-                    )
-                }
-            }
-            // Play-Log: immer schreiben — die SQLite-DB ist unabhängig von Recap.
-            // Recap, Mixe und Insights sind allesamt nur Konsumenten dieser Daten.
-            let dur = trackedDuration
-            Task.detached(priority: .utility) {
-                await PlayLogService.shared.log(songId: songId, serverId: serverId, songDuration: dur)
-                await CloudKitSyncService.shared.uploadPendingEvents()
-            }
-        }
+        recordPlayIfNeeded()
         reset()
+    }
+
+    private func handleConnectivityAvailable() {
+        guard NetworkStatus.shared.hasNetwork, !OfflineModeService.shared.isOffline else { return }
+        player.refreshNavidromeNowPlaying()
+        Task { await ScrobbleService.shared.flushPendingScrobbles() }
     }
 
     private func reset() {
         trackedSongId = nil
         trackedServerId = nil
+        trackedServerConfigId = nil
         trackedDuration = 0
         playedSeconds = 0
         lastTime = -1
+        hasRecordedCurrentPlay = false
+        trackingToken = UUID()
     }
 }

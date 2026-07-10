@@ -1565,21 +1565,7 @@ actor CloudKitSyncService {
     // MARK: - Scrobble Queue
 
     func flushScrobbleQueue() async {
-        let activeServerId = await MainActor.run { SubsonicAPIService.shared.activeServer?.stableId }
-        let pending = await PlayLogService.shared.pendingScrobbles()
-        await PlayLogService.shared.removeExhaustedScrobbles()
-
-        for item in pending {
-            guard let itemId = item.id else { continue }
-            // Nur für aktiven Server – andere bleiben in der Queue bis Server-Wechsel
-            guard item.serverId == activeServerId else { continue }
-            do {
-                try await SubsonicAPIService.shared.scrobble(songId: item.songId, playedAt: item.playedAt)
-                await PlayLogService.shared.markScrobbleDone(id: itemId)
-            } catch {
-                await PlayLogService.shared.incrementScrobbleRetry(id: itemId)
-            }
-        }
+        await ScrobbleService.shared.flushPendingScrobbles()
         await updatePendingCounts()
     }
 
@@ -1596,6 +1582,8 @@ actor CloudKitSyncService {
         // Bei jedem Sync-Auslöser (Foreground, Pull-to-Refresh, Mac-Refresh, Netz-Reconnect)
         // die Remote-Queue mitprüfen — so wird ein fremder Stand zuverlässig überall erkannt.
         Task { @MainActor in await QueueSyncService.shared.checkForRemoteQueue() }
+        // Navidrome-Outbox ist ausdrücklich unabhängig von den folgenden iCloud-Gates.
+        await flushScrobbleQueue()
         guard canSyncBase else {
             logDisabled(nil, action: "iCloud sync")
             return
@@ -1646,7 +1634,6 @@ actor CloudKitSyncService {
         await pushLyricsServerSettingsIfNeeded()
         await pushUICustomizationsIfNeeded()
         await refreshRadioStationsIfNeeded()
-        await flushScrobbleQueue()
         await finishCurrentStatus(recapSyncFailureMessage ?? statusText("sync_status_complete"))
         log("Sync done")
     }

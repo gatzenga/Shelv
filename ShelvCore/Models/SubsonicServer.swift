@@ -1,11 +1,11 @@
 import Foundation
 
-nonisolated enum ServerURLSlot: String, Codable {
+nonisolated enum ServerURLSlot: String, Codable, Sendable {
     case primary
     case secondary
 }
 
-nonisolated struct SubsonicServer: Identifiable, Codable {
+nonisolated struct SubsonicServer: Identifiable, Codable, Sendable {
     let id: UUID
     var name: String
     var baseURL: String

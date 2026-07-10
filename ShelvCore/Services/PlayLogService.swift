@@ -30,6 +30,7 @@ struct ScrobbleQueueRecord: Codable, FetchableRecord, PersistableRecord {
     var id: Int64?
     var songId: String
     var serverId: String
+    var serverConfigId: String?
     var playedAt: Double       // Date.timeIntervalSince1970
     var retries: Int
 
@@ -43,10 +44,21 @@ struct RecapSongCount {
     let count: Int
 }
 
+enum PlayLogImportError: Error, Sendable {
+    case restored(importMessage: String)
+    case rollbackFailed(importMessage: String, rollbackMessage: String)
+}
+
 // MARK: - PlayLogService
 
 actor PlayLogService {
     static let shared = PlayLogService()
+
+    #if os(tvOS) && !SHELV_LOGIC_TESTS
+    /// tvOS darf den Caches-Container unter Speicherdruck leeren. Für die kleine,
+    /// zustellkritische Outbox ist UserDefaults deshalb die autoritative Quelle.
+    private static let tvScrobbleBackupKey = "shelv_pending_scrobbles_v1"
+    #endif
 
     #if SHELV_LOGIC_TESTS
     nonisolated(unsafe) static var testDatabaseURL: URL?
@@ -77,6 +89,7 @@ actor PlayLogService {
     }
 
     func setup() {
+        guard pool == nil else { return }
         let url = Self.dbURL
         do {
             try FileManager.default.createDirectory(
@@ -152,8 +165,22 @@ actor PlayLogService {
                     t.add(column: "isTest", .boolean).notNull().defaults(to: false)
                 }
             }
+            m.registerMigration("v6_scrobble_server_config") { db in
+                let cols = try db.columns(in: "scrobble_queue").map(\.name)
+                guard !cols.contains("serverConfigId") else { return }
+                try db.alter(table: "scrobble_queue") { t in
+                    t.add(column: "serverConfigId", .text)
+                }
+                try db.create(
+                    index: "idx_scrobble_queue_server_config",
+                    on: "scrobble_queue",
+                    columns: ["serverConfigId", "id"],
+                    ifNotExists: true
+                )
+            }
             try m.migrate(p)
             pool = p
+            migrateTVScrobbleJournalIfNeeded()
             Self.applyDataProtection(at: url)
         } catch {
             DBErrorLog.logPlayLog("DB setup failed: \(error.localizedDescription)")
@@ -230,6 +257,58 @@ actor PlayLogService {
         let wrote = safeWrite { db in try record.insert(db) }
         guard wrote else { return nil }
         return uuid
+    }
+
+    /// iOS/macOS schreiben lokalen Play und Server-Outbox in derselben
+    /// GRDB-Transaktion. tvOS schreibt die zustellkritische Outbox zuerst in sein
+    /// nicht purgeable Journal und danach den lokalen Play in die Cache-Datenbank.
+    @discardableResult
+    func recordPlayAndQueueScrobble(
+        songId: String,
+        serverId: String,
+        serverConfigId: String,
+        playedAt: Double,
+        songDuration: Double
+    ) -> String? {
+        #if !(os(tvOS) && !SHELV_LOGIC_TESTS)
+        guard pool != nil else { return nil }
+        #endif
+        let uuid = UUID().uuidString.lowercased()
+        let play = PlayLogRecord(
+            songId: songId,
+            serverId: serverId,
+            playedAt: playedAt,
+            songDuration: songDuration,
+            uuid: uuid,
+            syncedAt: nil
+        )
+        let pending = ScrobbleQueueRecord(
+            id: nil,
+            songId: songId,
+            serverId: serverId,
+            serverConfigId: serverConfigId,
+            playedAt: playedAt,
+            retries: 0
+        )
+        #if os(tvOS) && !SHELV_LOGIC_TESTS
+        // Outbox-first: selbst wenn die purgeable Recap-DB direkt danach ausfällt
+        // oder entfernt wird, bleibt der Server-Scrobble dauerhaft vorgemerkt.
+        var journal = loadTVScrobbleJournal()
+        var durablePending = pending
+        durablePending.id = nextTVScrobbleId(in: journal)
+        journal.append(durablePending)
+        guard saveTVScrobbleJournal(journal) else { return nil }
+        _ = safeWrite { try play.insert($0) }
+        return uuid
+        #else
+        let wrote = safeWrite {
+            try play.insert($0)
+            try pending.insert($0)
+        }
+        guard wrote else { return nil }
+        syncTVScrobbleBackup()
+        return uuid
+        #endif
     }
 
     func topSongs(serverId: String, from start: Date, to end: Date, limit: Int) -> [RecapSongCount] {
@@ -374,13 +453,43 @@ actor PlayLogService {
 
     // MARK: - Scrobble Queue
 
-    func addPendingScrobble(songId: String, serverId: String, playedAt: Double) {
+    @discardableResult
+    func addPendingScrobble(
+        songId: String,
+        serverId: String,
+        serverConfigId: String? = nil,
+        playedAt: Double
+    ) -> Bool {
         
-        let record = ScrobbleQueueRecord(id: nil, songId: songId, serverId: serverId, playedAt: playedAt, retries: 0)
-        safeWrite { db in try record.insert(db) }
+        let record = ScrobbleQueueRecord(
+            id: nil,
+            songId: songId,
+            serverId: serverId,
+            serverConfigId: serverConfigId,
+            playedAt: playedAt,
+            retries: 0
+        )
+        #if os(tvOS) && !SHELV_LOGIC_TESTS
+        var journal = loadTVScrobbleJournal()
+        var durableRecord = record
+        durableRecord.id = nextTVScrobbleId(in: journal)
+        journal.append(durableRecord)
+        return saveTVScrobbleJournal(journal)
+        #else
+        let wrote = safeWrite { db in try record.insert(db) }
+        if wrote { syncTVScrobbleBackup() }
+        return wrote
+        #endif
     }
 
     func pendingScrobbles(limit: Int = 50) -> [ScrobbleQueueRecord] {
+        #if os(tvOS) && !SHELV_LOGIC_TESTS
+        return Array(
+            loadTVScrobbleJournal()
+                .sorted { $0.playedAt < $1.playedAt }
+                .prefix(max(0, limit))
+        )
+        #else
         guard let pool else { return [] }
         return (try? pool.read { db in
             try ScrobbleQueueRecord
@@ -388,41 +497,145 @@ actor PlayLogService {
                 .limit(limit)
                 .fetchAll(db)
         }) ?? []
+        #endif
+    }
+
+    func allPendingScrobbles() -> [ScrobbleQueueRecord] {
+        #if os(tvOS) && !SHELV_LOGIC_TESTS
+        return loadTVScrobbleJournal().sorted { ($0.id ?? 0) < ($1.id ?? 0) }
+        #else
+        guard let pool else { return [] }
+        return (try? pool.read { db in
+            try ScrobbleQueueRecord
+                .order(Column("id").asc)
+                .fetchAll(db)
+        }) ?? []
+        #endif
+    }
+
+    @discardableResult
+    func restorePendingScrobbles(_ records: [ScrobbleQueueRecord]) -> Bool {
+        guard !records.isEmpty else { return true }
+        #if os(tvOS) && !SHELV_LOGIC_TESTS
+        var journal = loadTVScrobbleJournal()
+        for record in records where !journal.contains(where: { sameScrobbleEvent($0, record) }) {
+            var restored = record
+            restored.id = nextTVScrobbleId(in: journal)
+            journal.append(restored)
+        }
+        return saveTVScrobbleJournal(journal)
+        #else
+        let wrote = safeWrite { db in
+            for record in records {
+                var restored = record
+                restored.id = nil
+                try restored.insert(db)
+            }
+        }
+        if wrote { syncTVScrobbleBackup() }
+        return wrote
+        #endif
+    }
+
+    func pendingScrobbles(afterId: Int64?, limit: Int = 50) -> [ScrobbleQueueRecord] {
+        #if os(tvOS) && !SHELV_LOGIC_TESTS
+        return Array(
+            loadTVScrobbleJournal()
+                .filter { ($0.id ?? 0) > (afterId ?? 0) }
+                .sorted { ($0.id ?? 0) < ($1.id ?? 0) }
+                .prefix(max(0, limit))
+        )
+        #else
+        guard let pool else { return [] }
+        return (try? pool.read { db in
+            var request = ScrobbleQueueRecord
+                .order(Column("id").asc)
+                .limit(limit)
+            if let afterId {
+                request = request.filter(Column("id") > afterId)
+            }
+            return try request.fetchAll(db)
+        }) ?? []
+        #endif
     }
 
     func markScrobbleDone(id: Int64) {
-        
+        #if os(tvOS) && !SHELV_LOGIC_TESTS
+        var journal = loadTVScrobbleJournal()
+        journal.removeAll { $0.id == id }
+        _ = saveTVScrobbleJournal(journal)
+        #else
         safeWrite { db in
             try db.execute(sql: "DELETE FROM scrobble_queue WHERE id = ?", arguments: [id])
         }
+        syncTVScrobbleBackup()
+        #endif
     }
 
     func incrementScrobbleRetry(id: Int64) {
-        
+        #if os(tvOS) && !SHELV_LOGIC_TESTS
+        var journal = loadTVScrobbleJournal()
+        if let index = journal.firstIndex(where: { $0.id == id }) {
+            journal[index].retries += 1
+            _ = saveTVScrobbleJournal(journal)
+        }
+        #else
         safeWrite { db in
             try db.execute(sql: "UPDATE scrobble_queue SET retries = retries + 1 WHERE id = ?", arguments: [id])
         }
-    }
-
-    func removeExhaustedScrobbles(maxRetries: Int = 5) {
-        
-        safeWrite { db in
-            try db.execute(sql: "DELETE FROM scrobble_queue WHERE retries >= ?", arguments: [maxRetries])
-        }
+        syncTVScrobbleBackup()
+        #endif
     }
 
     func removeScrobbles(serverId: String) {
-        
+        #if os(tvOS) && !SHELV_LOGIC_TESTS
+        var journal = loadTVScrobbleJournal()
+        journal.removeAll { $0.serverId == serverId }
+        _ = saveTVScrobbleJournal(journal)
+        #else
         safeWrite { db in
             try db.execute(sql: "DELETE FROM scrobble_queue WHERE serverId = ?", arguments: [serverId])
         }
+        syncTVScrobbleBackup()
+        #endif
+    }
+
+    func removeScrobbles(serverConfigId: String) {
+        #if os(tvOS) && !SHELV_LOGIC_TESTS
+        var journal = loadTVScrobbleJournal()
+        journal.removeAll { $0.serverConfigId == serverConfigId }
+        _ = saveTVScrobbleJournal(journal)
+        #else
+        safeWrite { db in
+            try db.execute(
+                sql: "DELETE FROM scrobble_queue WHERE serverConfigId = ?",
+                arguments: [serverConfigId]
+            )
+        }
+        syncTVScrobbleBackup()
+        #endif
+    }
+
+    func removeAllScrobbles() {
+        #if os(tvOS) && !SHELV_LOGIC_TESTS
+        _ = saveTVScrobbleJournal([])
+        #else
+        safeWrite { db in
+            try db.execute(sql: "DELETE FROM scrobble_queue")
+        }
+        syncTVScrobbleBackup()
+        #endif
     }
 
     func pendingScrobbleCount() -> Int {
+        #if os(tvOS) && !SHELV_LOGIC_TESTS
+        return loadTVScrobbleJournal().count
+        #else
         guard let pool else { return 0 }
         return (try? pool.read { db in
             try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM scrobble_queue")
         }) ?? 0
+        #endif
     }
 
     func migrateServerId(from oldId: String, to newId: String) {
@@ -433,9 +646,89 @@ actor PlayLogService {
                 arguments: [newId, oldId]
             )
             try db.execute(sql: "UPDATE recap_registry SET serverId = ? WHERE serverId = ?", arguments: [newId, oldId])
+            #if !(os(tvOS) && !SHELV_LOGIC_TESTS)
             try db.execute(sql: "UPDATE scrobble_queue SET serverId = ? WHERE serverId = ?", arguments: [newId, oldId])
+            #endif
         }
+        #if os(tvOS) && !SHELV_LOGIC_TESTS
+        var journal = loadTVScrobbleJournal()
+        for index in journal.indices where journal[index].serverId == oldId {
+            journal[index].serverId = newId
+        }
+        _ = saveTVScrobbleJournal(journal)
+        #else
+        syncTVScrobbleBackup()
+        #endif
     }
+
+    #if os(tvOS) && !SHELV_LOGIC_TESTS
+    private func loadTVScrobbleJournal() -> [ScrobbleQueueRecord] {
+        guard let data = UserDefaults.standard.data(forKey: Self.tvScrobbleBackupKey),
+              let records = try? JSONDecoder().decode([ScrobbleQueueRecord].self, from: data)
+        else { return [] }
+        return records
+    }
+
+    @discardableResult
+    private func saveTVScrobbleJournal(_ records: [ScrobbleQueueRecord]) -> Bool {
+        if records.isEmpty {
+            UserDefaults.standard.removeObject(forKey: Self.tvScrobbleBackupKey)
+            return true
+        }
+        guard let data = try? JSONEncoder().encode(records) else { return false }
+        UserDefaults.standard.set(data, forKey: Self.tvScrobbleBackupKey)
+        return true
+    }
+
+    private func nextTVScrobbleId(in records: [ScrobbleQueueRecord]) -> Int64 {
+        (records.compactMap(\.id).max() ?? 0) + 1
+    }
+
+    private func sameScrobbleEvent(_ lhs: ScrobbleQueueRecord, _ rhs: ScrobbleQueueRecord) -> Bool {
+        lhs.songId == rhs.songId
+            && lhs.serverId == rhs.serverId
+            && lhs.serverConfigId == rhs.serverConfigId
+            && lhs.playedAt == rhs.playedAt
+    }
+
+    /// Einmalige Migration der bisherigen SQLite+Mirror-Lösung. Danach ist nur
+    /// noch das nicht purgeable UserDefaults-Journal für die Outbox zuständig.
+    private func migrateTVScrobbleJournalIfNeeded() {
+        guard let pool else { return }
+        var journal = loadTVScrobbleJournal()
+        var usedIds = Set<Int64>()
+        for index in journal.indices {
+            if let id = journal[index].id, usedIds.insert(id).inserted {
+                continue
+            }
+            journal[index].id = nextTVScrobbleId(in: journal)
+            if let id = journal[index].id { usedIds.insert(id) }
+        }
+
+        let legacyRows: [ScrobbleQueueRecord]
+        do {
+            legacyRows = try pool.read { db in
+                try ScrobbleQueueRecord.order(Column("id").asc).fetchAll(db)
+            }
+        } catch {
+            DBErrorLog.logPlayLog("tvOS scrobble migration read failed: \(error.localizedDescription)")
+            return
+        }
+        for row in legacyRows where !journal.contains(where: { sameScrobbleEvent($0, row) }) {
+            var migrated = row
+            migrated.id = nextTVScrobbleId(in: journal)
+            journal.append(migrated)
+        }
+
+        guard saveTVScrobbleJournal(journal) else { return }
+        safeWrite { db in try db.execute(sql: "DELETE FROM scrobble_queue") }
+    }
+
+    private func syncTVScrobbleBackup() {}
+    #else
+    private func migrateTVScrobbleJournalIfNeeded() {}
+    private func syncTVScrobbleBackup() {}
+    #endif
 
     // MARK: - Server Cleanup (CloudKit)
 
@@ -448,10 +741,6 @@ actor PlayLogService {
             )
             try db.execute(
                 sql: "UPDATE recap_registry SET ckRecordName = NULL WHERE serverId = ?",
-                arguments: [serverId]
-            )
-            try db.execute(
-                sql: "DELETE FROM scrobble_queue WHERE serverId = ?",
                 arguments: [serverId]
             )
         }
@@ -675,6 +964,59 @@ actor PlayLogService {
             .appendingPathComponent("shelv_recap_import_rollback.db")
     }
 
+    /// Hält den PlayLog-Actor während Snapshot, Dateiaustausch und
+    /// Outbox-Wiederherstellung exklusiv. Neue Plays warten dadurch bis nach dem
+    /// Import und können weder in der alten DB verschwinden noch sie neu öffnen.
+    func replaceDatabaseFromImport(sourceURL: URL, serverId: String) throws {
+        let localPendingScrobbles = allPendingScrobbles()
+        do {
+            try createImportRollback()
+        } catch {
+            // Die Live-DB wurde noch nicht verändert und ist damit bereits der
+            // vollständig erhaltene Ausgangszustand.
+            throw PlayLogImportError.restored(importMessage: error.localizedDescription)
+        }
+
+        do {
+            pool = nil
+            let destination = Self.dbURL
+            try FileManager.default.createDirectory(
+                at: destination.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            for suffix in ["", "-wal", "-shm"] {
+                let path = destination.path + suffix
+                if FileManager.default.fileExists(atPath: path) {
+                    try? FileManager.default.removeItem(atPath: path)
+                }
+            }
+            try FileManager.default.copyItem(at: sourceURL, to: destination)
+            try discardImportedScrobbleQueueBeforeSetup()
+
+            setup()
+            guard pool != nil else {
+                throw CocoaError(.fileReadCorruptFile)
+            }
+            rewriteAllServerIds(to: serverId)
+            guard restorePendingScrobbles(localPendingScrobbles) else {
+                throw CocoaError(.fileWriteUnknown)
+            }
+            cleanupImportRollback()
+        } catch {
+            let importMessage = error.localizedDescription
+            do {
+                try applyImportRollback()
+                cleanupImportRollback()
+            } catch {
+                throw PlayLogImportError.rollbackFailed(
+                    importMessage: importMessage,
+                    rollbackMessage: error.localizedDescription
+                )
+            }
+            throw PlayLogImportError.restored(importMessage: importMessage)
+        }
+    }
+
     func createImportRollback() throws {
         guard let pool else {
             throw NSError(domain: "PlayLogService", code: 1,
@@ -694,6 +1036,25 @@ actor PlayLogService {
         guard size > 0 else {
             throw NSError(domain: "PlayLogService", code: 5,
                           userInfo: [NSLocalizedDescriptionKey: "Rollback backup was created but is empty"])
+        }
+    }
+
+    /// Entfernt nur die transportbezogene Queue aus einer gerade kopierten,
+    /// noch geschlossenen Recap-Datenbank. Sie gehört zum Quellgerät und darf
+    /// weder migriert noch an eine lokale Serverkonfiguration umgeschrieben werden.
+    func discardImportedScrobbleQueueBeforeSetup() throws {
+        guard pool == nil else {
+            throw NSError(
+                domain: "PlayLogService",
+                code: 6,
+                userInfo: [NSLocalizedDescriptionKey: "Database must be closed before import sanitization"]
+            )
+        }
+        let database = try DatabaseQueue(path: Self.dbURL.path)
+        try database.write { db in
+            if try db.tableExists("scrobble_queue") {
+                try db.execute(sql: "DELETE FROM scrobble_queue")
+            }
         }
     }
 
@@ -798,9 +1159,12 @@ actor PlayLogService {
                            arguments: [newId, newId])
             try db.execute(sql: "UPDATE recap_registry SET serverId = ?, ckRecordName = NULL WHERE serverId != ?",
                            arguments: [newId, newId])
-            try db.execute(sql: "UPDATE scrobble_queue SET serverId = ? WHERE serverId != ?",
-                           arguments: [newId, newId])
+            // Ein Recap-DB-Import darf keine transportbezogene Outbox des
+            // Quellgeräts übernehmen. Deren Zielkonfiguration ist nicht Teil des
+            // Backups und ein Rewrite könnte Plays an den falschen Server senden.
+            try db.execute(sql: "DELETE FROM scrobble_queue")
         }
+        syncTVScrobbleBackup()
     }
 
     func resetRegistry(serverId: String) {

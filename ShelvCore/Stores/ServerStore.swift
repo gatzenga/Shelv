@@ -49,6 +49,7 @@ class ServerStore: ObservableObject {
         activeServerID = server.id
         UserDefaults.standard.set(server.id.uuidString, forKey: activeKey)
         applyToAPIService(server: server)
+        Task { await ScrobbleService.shared.flushPendingScrobbles() }
     }
 
     private func activateStoredServer() {
@@ -83,6 +84,7 @@ class ServerStore: ObservableObject {
 
     func update(server: SubsonicServer, password: String?) {
         if let idx = servers.firstIndex(where: { $0.id == server.id }) {
+            let previous = servers[idx]
             var updated = server
             updated.sanitizeURLSlots()
             var updatedServers = servers
@@ -91,6 +93,12 @@ class ServerStore: ObservableObject {
             if let pw = password { KeychainService.save(password: pw, for: server.id) }
             save()
             if activeServerID == server.id { applyToAPIService(server: updated) }
+            let oldScopeId = previous.stableId.isEmpty ? previous.id.uuidString : previous.stableId
+            let newScopeId = updated.stableId.isEmpty ? updated.id.uuidString : updated.stableId
+            if oldScopeId != newScopeId {
+                Task { await PlayLogService.shared.migrateServerId(from: oldScopeId, to: newScopeId) }
+            }
+            Task { await ScrobbleService.shared.flushPendingScrobbles() }
         }
     }
 
@@ -109,6 +117,7 @@ class ServerStore: ObservableObject {
         if activeServerID == serverID {
             applyToAPIService(server: updated)
         }
+        Task { await ScrobbleService.shared.flushPendingScrobbles() }
     }
 
     func toggleURLSlot(for server: SubsonicServer) {
@@ -132,17 +141,19 @@ class ServerStore: ObservableObject {
         }
 
         let serverStableId = server.stableId
-        if !serverStableId.isEmpty {
-            Task.detached(priority: .utility) {
+        Task.detached(priority: .utility) {
+            if !serverStableId.isEmpty {
                 await PlayLogService.shared.resetLog(serverId: serverStableId)
                 await PlayLogService.shared.resetRegistry(serverId: serverStableId)
-                await PlayLogService.shared.removeScrobbles(serverId: serverStableId)
                 await DownloadService.shared.deleteAllForServer(serverStableId)
-                await CloudKitSyncService.shared.updatePendingCounts()
-                await MainActor.run {
-                    NotificationCenter.default.post(name: .recapRegistryUpdated, object: nil)
-                    NotificationCenter.default.post(name: .downloadsLibraryChanged, object: nil)
-                }
+            }
+            // Neue Outbox-Zeilen sind an die lokale Konfiguration gebunden. Nur
+            // diese löschen; dieselbe Remote-ID kann in mehreren Configs vorkommen.
+            await PlayLogService.shared.removeScrobbles(serverConfigId: server.id.uuidString)
+            await CloudKitSyncService.shared.updatePendingCounts()
+            await MainActor.run {
+                NotificationCenter.default.post(name: .recapRegistryUpdated, object: nil)
+                NotificationCenter.default.post(name: .downloadsLibraryChanged, object: nil)
             }
         }
     }
@@ -155,6 +166,7 @@ class ServerStore: ObservableObject {
     /// (macOS-Serververwaltung: „Alle Server löschen").
     func clearAll() {
         let stableIds = servers.map { $0.stableId }.filter { !$0.isEmpty }
+        let configIds = servers.map { $0.id.uuidString }
         for server in servers { KeychainService.delete(for: server.id) }
         servers = []
         activeServerID = nil
@@ -162,13 +174,13 @@ class ServerStore: ObservableObject {
         UserDefaults.standard.removeObject(forKey: activeKey)
         clearAPIService()
 
-        guard !stableIds.isEmpty else { return }
+        guard !stableIds.isEmpty || !configIds.isEmpty else { return }
         Task.detached(priority: .utility) {
             for sid in stableIds {
                 await PlayLogService.shared.resetLog(serverId: sid)
                 await PlayLogService.shared.resetRegistry(serverId: sid)
-                await PlayLogService.shared.removeScrobbles(serverId: sid)
             }
+            await PlayLogService.shared.removeAllScrobbles()
             await CloudKitSyncService.shared.updatePendingCounts()
             await MainActor.run {
                 NotificationCenter.default.post(name: .recapRegistryUpdated, object: nil)

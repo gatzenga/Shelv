@@ -2,7 +2,8 @@ import SwiftUI
 
 @main
 struct Shelv_TVApp: App {
-    @StateObject private var serverStore = ServerStore()
+    @StateObject private var serverStore = ServerStore.shared
+    private let _playTracker = PlayTracker.shared
     @Environment(\.scenePhase) private var scenePhase
 
     @AppStorage("appAppearance") private var appAppearance = "system"
@@ -47,7 +48,6 @@ struct Shelv_TVApp: App {
                 // Einmaliges App-Setup: Tracking starten, remoteUserId-Backfill, iCloud-Sync.
                 .task {
                     await PlayLogService.shared.setup()
-                    _ = PlayTracker.shared   // startet Play-Erfassung (Combine-Observer)
                     for server in serverStore.servers where server.remoteUserId == nil {
                         guard let pw = serverStore.password(for: server) else { continue }
                         do {

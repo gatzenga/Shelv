@@ -14,6 +14,12 @@ enum AudioPlaybackMode: String {
     case radio
 }
 
+struct PlaybackTrackingStart {
+    let song: Song
+    let serverId: String
+    let serverConfigId: String
+}
+
 class AudioPlayerService: ObservableObject {
     static let shared = AudioPlayerService()
 
@@ -49,6 +55,8 @@ class AudioPlayerService: ObservableObject {
     var currentTime: Double = 0
     var duration: Double = 0
     let timePublisher = PassthroughSubject<(time: Double, duration: Double), Never>()
+    /// Feuert nur für eine neue logische Wiedergabe, nicht bei internen Stream-Reconnects.
+    let playbackStartedPublisher = PassthroughSubject<PlaybackTrackingStart, Never>()
     @Published var isSeeking: Bool = false
     @Published var isShuffled: Bool = false {
         didSet { nowPlaying.applyPlaybackMode(isShuffled: isShuffled, repeatMode: repeatMode) }
@@ -83,6 +91,12 @@ class AudioPlayerService: ObservableObject {
 
     private var fastSeekTimer: Timer?
     private var sleepCountdownTimer: Timer?
+    private var navidromeNowPlayingTask: Task<Void, Never>?
+    /// Bindet die laufende Wiedergabe an genau die Serverkonfiguration, von der
+    /// der Titel stammt. Ein UI-Serverwechsel darf den alten Titel nie am neuen
+    /// Server als „aktuell" melden.
+    private var currentPlaybackServerConfigId: String?
+    private var currentPlaybackServerId: String?
     private var currentStreamURL: URL?
     private var streamTimeOffset: Double = 0
     private var pendingNowPlayingElapsedStartTime: Double?
@@ -274,7 +288,10 @@ class AudioPlayerService: ObservableObject {
                     self.networkResumeSong = nil
                     let t = self.networkResumeTime
                     self.networkResumeTime = 0
-                    self.startPlayback(song: song, seekTo: t)
+                    self.startPlayback(song: song, seekTo: t, startsNewTrackingSession: false)
+                } else if isAvailable {
+                    self.refreshNavidromeNowPlaying()
+                    Task { await ScrobbleService.shared.flushPendingScrobbles() }
                 }
             }
         }
@@ -522,11 +539,20 @@ class AudioPlayerService: ObservableObject {
         // (isEngineLoaded == true). Ohne Reset würde resume() den alten Item via
         // engine.resume() weiterspielen, obwohl currentSong bereits der neue ist.
         // isEngineLoaded zuerst auf false, damit der Time-Sink das Stop ignoriert.
+        playbackGeneration += 1
+        navidromeNowPlayingTask?.cancel()
+        navidromeNowPlayingTask = nil
+        currentPlaybackServerConfigId = nil
+        currentPlaybackServerId = nil
+        cancelAllManagedStreamCaches()
         isEngineLoaded = false
         engine.stop()
         isPlaying = false
         isBuffering = false
 
+        // Beendet eine eventuell noch laufende Tracking-Session, ohne die neue,
+        // bewusst pausierte Snapshot-Auswahl als Wiedergabe zu zählen.
+        currentSong = nil
         currentSong = restoredQueue.isEmpty ? nil : restoredQueue[currentIndex]
         // Bewusst keine Positions-Übernahme: der Song startet bei 0.
         resumeTime = 0
@@ -599,6 +625,9 @@ class AudioPlayerService: ObservableObject {
 
     private func playRadioStation(_ item: RadioStationDisplayItem, resetReconnectAttempts: Bool) {
         guard let url = URL(string: item.streamURL) else { return }
+        navidromeNowPlayingTask?.cancel()
+        currentPlaybackServerConfigId = nil
+        currentPlaybackServerId = nil
         stopFastSeeking()
         if resetReconnectAttempts {
             radioReconnectAttempts = 0
@@ -1045,10 +1074,22 @@ class AudioPlayerService: ObservableObject {
         }
     }
 
-    private func startPlayback(song: Song, seekTo: Double = 0) {
+    private func startPlayback(
+        song: Song,
+        seekTo: Double = 0,
+        startsNewTrackingSession: Bool = true
+    ) {
         cancelRemoteStreamStallWatchdog()
         prepareForSongPlayback()
         stopFastSeeking()
+        let activeServer = SubsonicAPIService.shared.activeServer
+        let expectedServerConfigId = startsNewTrackingSession
+            ? activeServer?.id.uuidString
+            : currentPlaybackServerConfigId ?? SubsonicAPIService.shared.activeServer?.id.uuidString
+        let expectedServerId = startsNewTrackingSession
+            ? activeServer.map { $0.stableId.isEmpty ? $0.id.uuidString : $0.stableId }
+            : currentPlaybackServerId
+                ?? activeServer.map { $0.stableId.isEmpty ? $0.id.uuidString : $0.stableId }
         #if os(iOS) || os(tvOS) || os(macOS)
         prewarmNowPlayingArtwork(startingWith: song)
         if resolveURL(for: song) != nil {
@@ -1071,7 +1112,10 @@ class AudioPlayerService: ObservableObject {
             self.isEngineLoaded = false
             await NetworkStatus.shared.waitUntilReady()
 
-            guard self.playbackGeneration == gen else { return }
+            guard self.playbackGeneration == gen,
+                  let expectedServerConfigId,
+                  SubsonicAPIService.shared.activeServer?.id.uuidString == expectedServerConfigId
+            else { return }
 
             guard let url = self.resolveURL(for: song) else {
                 self.pendingNowPlayingElapsedStartTime = nil
@@ -1094,6 +1138,8 @@ class AudioPlayerService: ObservableObject {
             self.formatProbe.cancel()
             self.actualStreamFormat = nil
             self.currentSong = song
+            self.currentPlaybackServerConfigId = expectedServerConfigId
+            self.currentPlaybackServerId = expectedServerId
             self.trimManagedStreamCaches(keeping: self.currentStreamCacheKeepIds())
             self.scheduleLyricsAutoFetch(for: song)
             self.applyReplayGain(for: song)
@@ -1107,16 +1153,25 @@ class AudioPlayerService: ObservableObject {
             self.timePublisher.send((time: playbackStartTime, duration: self.duration))
 
             self.isPlaying = true
+            if startsNewTrackingSession, let expectedServerId {
+                self.playbackStartedPublisher.send(
+                    PlaybackTrackingStart(
+                        song: song,
+                        serverId: expectedServerId,
+                        serverConfigId: expectedServerConfigId
+                    )
+                )
+            }
             if song.coverArt != self.lastArtworkCoverArt {
                 self.artworkReloadToken = UUID()
                 self.lastArtworkCoverArt = song.coverArt
             }
             MPNowPlayingInfoCenter.default().playbackState = .playing
             self.nowPlaying.update(song: song, currentTime: self.currentTime, playbackRate: 0)
-            #if os(macOS)
-            // Navidrome-„spielt gerade"-Anzeige (kein Play-Count): bisheriges Desktop-Verhalten.
-            Task { try? await SubsonicAPIService.shared.scrobble(songId: song.id, submission: false) }
-            #endif
+            self.reportNavidromeNowPlaying(
+                for: song,
+                expectedServerConfigId: expectedServerConfigId
+            )
 
             if !url.isFileURL && !NetworkStatus.shared.hasNetwork {
                 if await self.playCachedStreamIfAvailable(song: song, songId: song.id, seekTo: seekTo, generation: gen) {
@@ -1193,7 +1248,51 @@ class AudioPlayerService: ObservableObject {
         }
     }
 
+    /// Erneuert die ephemere Serveranzeige nach App-Aktivierung, Reconnect oder
+    /// langem Pause/Resume. Offline gestartete, bereits beendete Titel werden nie
+    /// nachträglich als „aktuell" gemeldet.
+    func refreshNavidromeNowPlaying() {
+        guard playbackMode == .songs, isPlaying, let song = currentSong else { return }
+        reportNavidromeNowPlaying(for: song)
+    }
+
+    private func reportNavidromeNowPlaying(
+        for song: Song,
+        expectedServerConfigId: String? = nil
+    ) {
+        navidromeNowPlayingTask?.cancel()
+        guard playbackMode == .songs,
+              isPlaying,
+              currentSong?.id == song.id,
+              let serverConfigId = expectedServerConfigId
+                ?? currentPlaybackServerConfigId
+        else {
+            navidromeNowPlayingTask = nil
+            return
+        }
+
+        navidromeNowPlayingTask = Task { @MainActor [weak self] in
+            guard let self,
+                  !Task.isCancelled,
+                  self.playbackMode == .songs,
+                  self.isPlaying,
+                  self.currentSong?.id == song.id,
+                  SubsonicAPIService.shared.activeServer?.id.uuidString == serverConfigId
+            else { return }
+            await ScrobbleService.shared.reportNowPlaying(
+                songId: song.id,
+                serverConfigId: serverConfigId
+            )
+        }
+    }
+
     private func clearPlaybackState() {
+        // Asynchrone Starts/Cache-Waits zuverlässig invalidieren (auch beim Serverwechsel).
+        playbackGeneration += 1
+        navidromeNowPlayingTask?.cancel()
+        navidromeNowPlayingTask = nil
+        currentPlaybackServerConfigId = nil
+        currentPlaybackServerId = nil
         cancelAllManagedStreamCaches()
         cancelRadioReconnect()
         cancelRemoteStreamStallWatchdog()
@@ -1236,6 +1335,7 @@ class AudioPlayerService: ObservableObject {
 
     func pause() {
         networkResumeSong = nil
+        navidromeNowPlayingTask?.cancel()
         cancelRemoteStreamStallWatchdog()
         #if os(tvOS)
         resumeWatchdog?.cancel()
@@ -1300,6 +1400,7 @@ class AudioPlayerService: ObservableObject {
         #if os(iOS)
         repushNowPlayingArtworkIfNeeded()
         #endif
+        reportNavidromeNowPlaying(for: song)
 
         #if os(tvOS)
         // tvOS verwirft den Puffer eines pausierten HTTP-Streams; play() am alten Item läuft
@@ -1313,7 +1414,11 @@ class AudioPlayerService: ObservableObject {
             guard let self, !Task.isCancelled, self.isPlaying,
                   self.currentSong?.id == expectedId,
                   self.currentTime <= resumePosition + 0.3 else { return }
-            self.startPlayback(song: song, seekTo: resumePosition)
+            self.startPlayback(
+                song: song,
+                seekTo: resumePosition,
+                startsNewTrackingSession: false
+            )
         }
         #endif
     }
@@ -2003,12 +2108,20 @@ class AudioPlayerService: ObservableObject {
                 #endif
                 self.nowPlaying.update(song: song, currentTime: self.currentTime)
                 MPNowPlayingInfoCenter.default().playbackState = .playing
+                if let serverId = self.currentPlaybackServerId,
+                   let serverConfigId = self.currentPlaybackServerConfigId {
+                    self.playbackStartedPublisher.send(
+                        PlaybackTrackingStart(
+                            song: song,
+                            serverId: serverId,
+                            serverConfigId: serverConfigId
+                        )
+                    )
+                }
                 if let url {
                     self.probeStreamFormat(for: song, url: url)
                 }
-                #if os(macOS)
-                Task { try? await SubsonicAPIService.shared.scrobble(songId: song.id, submission: false) }
-                #endif
+                self.reportNavidromeNowPlaying(for: song)
                 self.saveState()
             } else {
                 self.gaplessPreloadTriggered = false

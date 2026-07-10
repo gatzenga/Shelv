@@ -582,10 +582,27 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
 
     private func fetchData(for server: SubsonicServer, password: String, path: String, extra: [URLQueryItem] = []) async throws -> Data {
         let url = try buildURL(for: server, password: password, path: path, extra: extra)
+        await NetworkStatus.shared.waitUntilReady()
+        guard NetworkStatus.shared.hasNetwork else {
+            throw SubsonicAPIError.networkError(URLError(.notConnectedToInternet))
+        }
         do {
-            let (data, _) = try await session.data(from: url)
+            var request = URLRequest(url: url)
+            request.timeoutInterval = Self.requestTimeout
+            let (data, response) = try await session.data(for: request)
+            if let http = response as? HTTPURLResponse,
+               !(200...299).contains(http.statusCode) {
+                throw SubsonicAPIError.httpError(http.statusCode)
+            }
             return data
+        } catch let error as SubsonicAPIError {
+            throw error
+        } catch is CancellationError {
+            throw CancellationError()
         } catch {
+            if Task.isCancelled || (error as? URLError)?.code == .cancelled {
+                throw CancellationError()
+            }
             throw SubsonicAPIError.networkError(error)
         }
     }
@@ -805,6 +822,45 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
     }
 
     func scrobble(songId: String, submission: Bool = true, playedAt: Double? = nil) async throws {
+        #if DEBUG
+        if isDemoActive { return }
+        #endif
+        let data = try await fetchData(
+            path: "scrobble",
+            extra: scrobbleQueryItems(songId: songId, submission: submission, playedAt: playedAt)
+        )
+        try validateScrobbleResponse(data)
+    }
+
+    /// Servergebundene Variante für die persistente Outbox. Sie verwendet nicht
+    /// den global aktiven Server und kann deshalb auch nach einem Serverwechsel
+    /// niemals einen alten Play an die falsche Instanz senden.
+    func scrobble(
+        songId: String,
+        submission: Bool = true,
+        playedAt: Double? = nil,
+        server: SubsonicServer,
+        password: String
+    ) async throws {
+        #if DEBUG
+        if server.baseURL == DemoContent.serverBaseURL || server.activeBaseURL == DemoContent.serverBaseURL {
+            return
+        }
+        #endif
+        let data = try await fetchData(
+            for: server,
+            password: password,
+            path: "scrobble",
+            extra: scrobbleQueryItems(songId: songId, submission: submission, playedAt: playedAt)
+        )
+        try validateScrobbleResponse(data)
+    }
+
+    private func scrobbleQueryItems(
+        songId: String,
+        submission: Bool,
+        playedAt: Double?
+    ) -> [URLQueryItem] {
         var extra = [
             URLQueryItem(name: "id", value: songId),
             URLQueryItem(name: "submission", value: submission ? "true" : "false")
@@ -813,7 +869,12 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
             // Subsonic erwartet Millisekunden seit Epoch
             extra.append(URLQueryItem(name: "time", value: String(Int64(ts * 1000))))
         }
-        _ = try await fetchData(path: "scrobble", extra: extra)
+        return extra
+    }
+
+    private func validateScrobbleResponse(_ data: Data) throws {
+        let body = try decoder.decode(Envelope<PingBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
     }
 
     /// Speichert die Wiedergabe-Queue serverseitig (`savePlayQueue`).
