@@ -502,7 +502,8 @@ actor LibraryDatabase {
 
     private func openAndMigrate(at url: URL) throws -> DatabasePool {
         var config = Configuration()
-        config.targetQueue = DispatchQueue(label: "shelv.db.library", qos: .userInitiated)
+        config.label = "shelv.db.library"
+        config.qos = .userInitiated
         let pool = try DatabasePool(path: url.path, configuration: config)
 
         var migrator = DatabaseMigrator()

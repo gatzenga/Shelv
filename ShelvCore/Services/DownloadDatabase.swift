@@ -156,7 +156,8 @@ actor DownloadDatabase {
 
     private func openAndMigrate(at url: URL) throws -> DatabasePool {
         var config = Configuration()
-        config.targetQueue = DispatchQueue(label: "shelv.db.downloads", qos: .userInitiated)
+        config.label = "shelv.db.downloads"
+        config.qos = .userInitiated
         let p = try DatabasePool(path: url.path, configuration: config)
         var m = DatabaseMigrator()
         m.registerMigration("v1_create") { db in

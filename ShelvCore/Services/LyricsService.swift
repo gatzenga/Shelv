@@ -175,7 +175,8 @@ actor LyricsService {
                 withIntermediateDirectories: true
             )
             var config = Configuration()
-            config.targetQueue = DispatchQueue(label: "shelv.db.lyrics", qos: .userInitiated)
+            config.label = "shelv.db.lyrics"
+            config.qos = .userInitiated
             let p = try DatabasePool(path: url.path, configuration: config)
             Self.applyDataProtection(at: url)
             var m = DatabaseMigrator()

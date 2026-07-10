@@ -103,7 +103,8 @@ actor PlayLogService {
                 try? FileManager.default.moveItem(at: legacy, to: url)
             }
             var config = Configuration()
-            config.targetQueue = DispatchQueue(label: "shelv.db.playlog", qos: .userInitiated)
+            config.label = "shelv.db.playlog"
+            config.qos = .userInitiated
             let p = try DatabasePool(path: url.path, configuration: config)
             var m = DatabaseMigrator()
             m.registerMigration("v1_create") { db in
