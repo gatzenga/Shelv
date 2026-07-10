@@ -8,6 +8,9 @@ final class PlayerEngine: ObservableObject {
     @Published private(set) var currentTime: TimeInterval = 0
     @Published private(set) var duration: TimeInterval = 0
     @Published private(set) var isPlaying: Bool = false
+    /// Reflects AVPlayer's actual playback state. Unlike `isPlaying`, this only
+    /// becomes true after AVFoundation has started advancing the current item.
+    @Published private(set) var isActuallyPlaying: Bool = false
     @Published private(set) var isWaiting: Bool = false
     @Published private(set) var isLikelyToKeepUp: Bool = true
 
@@ -31,6 +34,7 @@ final class PlayerEngine: ObservableObject {
     private var likelyKeepUpObservation: NSKeyValueObservation?
     private var timeControlObservation: NSKeyValueObservation?
     private var currentURL: URL?
+    private var playbackToken = UUID()
     private var hasFailed = false
     private var isSeeking = false
     private var gaplessNextItem: AVPlayerItem?
@@ -44,8 +48,14 @@ final class PlayerEngine: ObservableObject {
         p.automaticallyWaitsToMinimizeStalling = false
         player = p
         timeControlObservation = p.observe(\.timeControlStatus, options: [.initial, .new]) { [weak self] player, _ in
-            let waiting = player.timeControlStatus == .waitingToPlayAtSpecifiedRate
-            Task { @MainActor [weak self] in self?.isWaiting = waiting }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                // Re-read on the main actor. A status captured before this hop may
+                // belong to an item that stop()/play() has already replaced.
+                let currentStatus = player.timeControlStatus
+                self.isWaiting = currentStatus == .waitingToPlayAtSpecifiedRate
+                self.isActuallyPlaying = currentStatus == .playing
+            }
         }
     }
 
@@ -62,16 +72,19 @@ final class PlayerEngine: ObservableObject {
     }
 
     func play(url: URL) {
+        playbackToken = UUID()
+        let token = playbackToken
         currentURL = url
         trustedDuration = 0
         gaplessPreloaded = false
         gaplessNextItem = nil
         gaplessNextURL = nil
-        loadAndPlay(url: url)
+        loadAndPlay(url: url, token: token)
     }
 
-    private func loadAndPlay(url: URL) {
+    private func loadAndPlay(url: URL, token: UUID) {
         hasFailed = false
+        isActuallyPlaying = false
         gaplessPreloaded = false
         gaplessNextItem = nil
         gaplessNextURL = nil
@@ -87,17 +100,17 @@ final class PlayerEngine: ObservableObject {
         player.play()
 
         isPlaying = true
-        setupTimeObserver()
-        setupItemFinishedObserverForItem(item)
-        setupFailureObservation(item: item, url: url)
+        setupTimeObserver(for: token)
+        setupItemFinishedObserverForItem(item, token: token)
+        setupFailureObservation(item: item, url: url, token: token)
     }
 
-    private func setupFailureObservation(item: AVPlayerItem, url: URL) {
+    private func setupFailureObservation(item: AVPlayerItem, url: URL, token: UUID) {
         itemStatusObservation?.invalidate()
         itemStatusObservation = item.observe(\.status, options: [.new]) { [weak self] observedItem, _ in
             guard let self else { return }
             if observedItem.status == .failed {
-                Task { @MainActor in self.notifyFailure(for: url) }
+                Task { @MainActor in self.notifyFailure(for: url, token: token) }
             }
         }
 
@@ -106,6 +119,7 @@ final class PlayerEngine: ObservableObject {
             let likely = observedItem.isPlaybackLikelyToKeepUp
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                guard self.playbackToken == token else { return }
                 self.isLikelyToKeepUp = likely
                 if likely && self.pendingResumeAfterBuffer {
                     self.pendingResumeAfterBuffer = false
@@ -122,7 +136,7 @@ final class PlayerEngine: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             guard let self else { return }
-            Task { @MainActor in self.notifyFailure(for: url) }
+            Task { @MainActor in self.notifyFailure(for: url, token: token) }
         }
 
         if let obs = itemStallObserver { NotificationCenter.default.removeObserver(obs) }
@@ -131,19 +145,23 @@ final class PlayerEngine: ObservableObject {
             object: item,
             queue: .main
         ) { [weak self] _ in
-            guard let self, let currentItem = self.player.currentItem else { return }
+            guard let self,
+                  self.playbackToken == token,
+                  let currentItem = self.player.currentItem
+            else { return }
             self.onPlaybackStalled?()
             if currentItem.status == .failed {
-                Task { @MainActor in self.notifyFailure(for: url) }
+                Task { @MainActor in self.notifyFailure(for: url, token: token) }
             }
         }
     }
 
     @MainActor
-    private func notifyFailure(for url: URL) {
-        guard currentURL == url, !hasFailed else { return }
+    private func notifyFailure(for url: URL, token: UUID) {
+        guard playbackToken == token, currentURL == url, !hasFailed else { return }
         hasFailed = true
         isPlaying = false
+        isActuallyPlaying = false
         onPlaybackFailed?()
     }
 
@@ -177,11 +195,12 @@ final class PlayerEngine: ObservableObject {
         }
 
         if let item = swappedItem {
-            setupItemFinishedObserverForItem(item)
+            setupItemFinishedObserverForItem(item, token: playbackToken)
             if let url = swappedURL {
-                setupFailureObservation(item: item, url: url)
+                let token = playbackToken
+                setupFailureObservation(item: item, url: url, token: token)
                 if item.status == .failed {
-                    Task { @MainActor [weak self] in self?.notifyFailure(for: url) }
+                    Task { @MainActor [weak self] in self?.notifyFailure(for: url, token: token) }
                 }
             }
         } else {
@@ -195,6 +214,7 @@ final class PlayerEngine: ObservableObject {
         pendingResumeAfterBuffer = false
         player.pause()
         isPlaying = false
+        isActuallyPlaying = false
     }
 
     func resume() {
@@ -275,6 +295,7 @@ final class PlayerEngine: ObservableObject {
     }
 
     func stop() {
+        playbackToken = UUID()
         removeTimeObserver()
         removeItemFinishedObserver()
         removeFailureObservation()
@@ -286,6 +307,7 @@ final class PlayerEngine: ObservableObject {
         player.pause()
         player.removeAllItems()
         isPlaying = false
+        isActuallyPlaying = false
         isWaiting = false
         isLikelyToKeepUp = true
         gaplessPreloaded = false
@@ -321,7 +343,7 @@ final class PlayerEngine: ObservableObject {
         }
     }
 
-    private func setupTimeObserver() {
+    private func setupTimeObserver(for token: UUID) {
         removeTimeObserver()
         let interval = CMTime(seconds: 0.5, preferredTimescale: 1000)
         timeObserverToken = player.addPeriodicTimeObserver(
@@ -330,6 +352,7 @@ final class PlayerEngine: ObservableObject {
         ) { [weak self] time in
             guard let self else { return }
             Task { @MainActor in
+                guard self.playbackToken == token else { return }
                 self.refreshDuration()
                 guard !self.isSeeking else { return }
                 self.currentTime = time.seconds
@@ -345,10 +368,10 @@ final class PlayerEngine: ObservableObject {
 
     private func setupItemFinishedObserver() {
         guard let item = player.currentItem else { return }
-        setupItemFinishedObserverForItem(item)
+        setupItemFinishedObserverForItem(item, token: playbackToken)
     }
 
-    private func setupItemFinishedObserverForItem(_ item: AVPlayerItem) {
+    private func setupItemFinishedObserverForItem(_ item: AVPlayerItem, token: UUID) {
         removeItemFinishedObserver()
         itemFinishedObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,
@@ -357,11 +380,13 @@ final class PlayerEngine: ObservableObject {
         ) { [weak self] _ in
             guard let self else { return }
             Task { @MainActor in
+                guard self.playbackToken == token else { return }
                 if self.gaplessPreloaded {
                     self.performGaplessSwap()
                     self.onTrackFinished?()
                 } else {
                     self.isPlaying = false
+                    self.isActuallyPlaying = false
                     self.onTrackFinished?()
                 }
             }

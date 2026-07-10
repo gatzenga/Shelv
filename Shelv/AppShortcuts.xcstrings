@@ -1,0 +1,126 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "Open ${applicationName} player" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "${applicationName}-Player öffnen" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "打开 ${applicationName} 播放器" } }
+      }
+    },
+    "Open ${applicationName} search" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "${applicationName}-Suche öffnen" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "打开 ${applicationName} 搜索" } }
+      }
+    },
+    "Open library in ${applicationName}" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Mediathek in ${applicationName} öffnen" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在 ${applicationName} 中打开音乐库" } }
+      }
+    },
+    "Open player in ${applicationName}" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Player in ${applicationName} öffnen" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在 ${applicationName} 中打开播放器" } }
+      }
+    },
+    "Open Recap in ${applicationName}" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Recap in ${applicationName} öffnen" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在 ${applicationName} 中打开回顾" } }
+      }
+    },
+    "Open search in ${applicationName}" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Suche in ${applicationName} öffnen" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在 ${applicationName} 中打开搜索" } }
+      }
+    },
+    "Play ${playable} in ${applicationName}" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "${playable} in ${applicationName} abspielen" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在 ${applicationName} 中播放 ${playable}" } }
+      }
+    },
+    "Play ${playlist} in ${applicationName}" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "${playlist} in ${applicationName} abspielen" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在 ${applicationName} 中播放 ${playlist}" } }
+      }
+    },
+    "Play ${mix} in ${applicationName}" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "${mix} in ${applicationName} abspielen" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在 ${applicationName} 中播放 ${mix}" } }
+      }
+    },
+    "Play ${mode} in ${applicationName}" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "${mode} in ${applicationName} abspielen" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在 ${applicationName} 中播放 ${mode}" } }
+      }
+    },
+    "Play a mix in ${applicationName}" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Einen Mix in ${applicationName} abspielen" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在 ${applicationName} 中播放混音" } }
+      }
+    },
+    "Play a playlist in ${applicationName}" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Eine Playlist in ${applicationName} abspielen" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在 ${applicationName} 中播放列表" } }
+      }
+    },
+    "Play downloads in ${applicationName}" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Downloads in ${applicationName} abspielen" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在 ${applicationName} 中播放下载" } }
+      }
+    },
+    "Play or pause ${applicationName}" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "${applicationName} abspielen oder pausieren" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "播放或暂停 ${applicationName}" } }
+      }
+    },
+    "Play shuffle all in ${applicationName}" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Alles gemischt in ${applicationName} abspielen" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "用 ${applicationName} 随机播放所有音乐" } }
+      }
+    },
+    "Play something in ${applicationName}" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Etwas in ${applicationName} abspielen" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在 ${applicationName} 中播放内容" } }
+      }
+    },
+    "Show library in ${applicationName}" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Mediathek in ${applicationName} anzeigen" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在 ${applicationName} 中显示音乐库" } }
+      }
+    },
+    "Show Recap in ${applicationName}" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Recap in ${applicationName} anzeigen" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在 ${applicationName} 中显示回顾" } }
+      }
+    },
+    "Shuffle all in ${applicationName}" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Alles in ${applicationName} mischen" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在 ${applicationName} 中随机播放全部" } }
+      }
+    },
+    "Toggle playback in ${applicationName}" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Wiedergabe in ${applicationName} umschalten" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "切换 ${applicationName} 的播放状态" } }
+      }
+    }
+  },
+  "version" : "1.0"
+}

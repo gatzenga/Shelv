@@ -221,7 +221,7 @@ struct PlaylistsView: View {
             Task {
                 if let loaded = await libraryStore.loadPlaylistDetail(id: playlist.id),
                    let songs = loaded.songs, !songs.isEmpty {
-                    await MainActor.run { player.play(songs: songs, startIndex: 0) }
+                    _ = await MainActor.run { player.play(songs: songs, startIndex: 0) }
                 }
             }
         } label: { Label(String(localized: "play"), systemImage: "play.fill") }
@@ -230,7 +230,7 @@ struct PlaylistsView: View {
             Task {
                 if let loaded = await libraryStore.loadPlaylistDetail(id: playlist.id),
                    let songs = loaded.songs, !songs.isEmpty {
-                    await MainActor.run { player.playShuffled(songs: songs) }
+                    _ = await MainActor.run { player.playShuffled(songs: songs) }
                 }
             }
         } label: { Label(String(localized: "shuffle"), systemImage: "shuffle") }

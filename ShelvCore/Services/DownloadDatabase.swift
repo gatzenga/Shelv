@@ -109,6 +109,10 @@ actor DownloadDatabase {
     }
 
     func setup() {
+        // The actor serializes setup calls. Once the pool exists, reopening it is
+        // unnecessary and can introduce GRDB queue churn during cold App Intent
+        // launches where several stores initialize at the same time.
+        guard pool == nil else { return }
         let url = databaseURL
         let dir = url.deletingLastPathComponent()
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

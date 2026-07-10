@@ -74,6 +74,13 @@ final class RadioStationStore: ObservableObject {
         }
     }
 
+    /// Makes the persisted station list available to App Entity suggestions
+    /// without turning a cold Shortcuts picker into a network request.
+    func publishShortcutCacheIfNeeded() {
+        guard let serverId = activeServerId else { return }
+        publishCachedStationsIfNeeded(serverId: serverId)
+    }
+
     func createStation(
         name: String,
         streamURL: String,

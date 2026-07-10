@@ -26,6 +26,7 @@ final class DownloadStore: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var artistCoverByName: [String: String] = [:]
     private var pendingReload = false
+    private var reloadWaiters: [CheckedContinuation<Void, Never>] = []
     private var protectedPlaylistIds: Set<String> = []
     private var pendingInserts: [DownloadRecord] = []
     private var flushTask: Task<Void, Never>?
@@ -79,7 +80,10 @@ final class DownloadStore: ObservableObject {
     }
 
     func setActiveServer(_ serverId: String) async {
-        guard self.serverId != serverId else { return }
+        guard self.serverId != serverId else {
+            await waitForReloadIfNeeded()
+            return
+        }
         self.serverId = serverId
         let saved = UserDefaults.standard.stringArray(forKey: "shelv_offline_playlists_\(serverId)") ?? []
         offlinePlaylistIds = Set(saved)
@@ -127,7 +131,13 @@ final class DownloadStore: ObservableObject {
             DownloadStatusCache.shared.rebuild(albumIds: [])
             return
         }
-        guard !isLoading else { pendingReload = true; return }
+        guard !isLoading else {
+            pendingReload = true
+            await withCheckedContinuation { continuation in
+                reloadWaiters.append(continuation)
+            }
+            return
+        }
         isLoading = true
         pendingReload = false
         let sid = serverId
@@ -270,6 +280,16 @@ final class DownloadStore: ObservableObject {
         if pendingReload {
             pendingReload = false
             await reload()
+        }
+        let waiters = reloadWaiters
+        reloadWaiters.removeAll()
+        waiters.forEach { $0.resume() }
+    }
+
+    private func waitForReloadIfNeeded() async {
+        guard isLoading else { return }
+        await withCheckedContinuation { continuation in
+            reloadWaiters.append(continuation)
         }
     }
 
