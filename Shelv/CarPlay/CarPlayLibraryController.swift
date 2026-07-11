@@ -240,10 +240,10 @@ final class CarPlayLibraryController {
     }
 
     private func makeAlbumSections(_ albums: [Album]) -> CarPlaySectionBuild {
-        let sorted = albums.sorted {
-            stripArticle($0.name).localizedStandardCompare(stripArticle($1.name)) == .orderedAscending
+        let sorted = LibraryRepository.locallySortedAlbums(albums, sort: .name, direction: .ascending)
+        let grouped = Dictionary(grouping: sorted) {
+            firstSortLetter($0.name, sortName: $0.sortName)
         }
-        let grouped = Dictionary(grouping: sorted) { firstSortLetter($0.name) }
         let letters = grouped.keys.sorted()
         var remainingItems = CPListTemplate.maximumItemCount
         var itemsByCoverId: [String: [CPListItem]] = [:]
@@ -335,10 +335,10 @@ final class CarPlayLibraryController {
     }
 
     private func makeArtistSections(_ artists: [Artist], counts: [String: Int]) -> CarPlaySectionBuild {
-        let sorted = artists.sorted {
-            stripArticle($0.name).localizedStandardCompare(stripArticle($1.name)) == .orderedAscending
+        let sorted = LibraryRepository.locallySortedArtists(artists)
+        let grouped = Dictionary(grouping: sorted) {
+            firstSortLetter($0.name, sortName: $0.sortName)
         }
-        let grouped = Dictionary(grouping: sorted) { firstSortLetter($0.name) }
         let letters = grouped.keys.sorted()
         var remainingItems = CPListTemplate.maximumItemCount
         var itemsByCoverId: [String: [CPListItem]] = [:]

@@ -40,7 +40,10 @@ private struct LibraryAlbumRecord: Codable, FetchableRecord, PersistableRecord {
     var stableId: String?
     var id: String
     var name: String
+    /// Normalized effective key used by SQLite ordering.
     var sortName: String
+    /// Raw OpenSubsonic sort name for round-tripping into the model.
+    var metadataSortName: String?
     var artist: String?
     var artistId: String?
     var coverArt: String?
@@ -61,7 +64,11 @@ private struct LibraryAlbumRecord: Codable, FetchableRecord, PersistableRecord {
         self.stableId = stableId
         self.id = album.id
         self.name = album.name
-        self.sortName = Self.makeSortName(album.name)
+        self.sortName = LibrarySortKey.normalized(
+            displayName: album.name,
+            explicitSortName: album.sortName
+        )
+        self.metadataSortName = album.sortName
         self.artist = album.artist
         self.artistId = album.artistId
         self.coverArt = album.coverArt
@@ -80,6 +87,7 @@ private struct LibraryAlbumRecord: Codable, FetchableRecord, PersistableRecord {
         Album(
             id: id,
             name: name,
+            sortName: metadataSortName,
             artist: artist,
             artistId: artistId,
             coverArt: coverArt,
@@ -92,12 +100,6 @@ private struct LibraryAlbumRecord: Codable, FetchableRecord, PersistableRecord {
             created: created.map(Date.init(timeIntervalSince1970:))
         )
     }
-
-    private static func makeSortName(_ value: String) -> String {
-        value
-            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
-            .lowercased()
-    }
 }
 
 private struct LibraryArtistRecord: Codable, FetchableRecord, PersistableRecord {
@@ -105,7 +107,10 @@ private struct LibraryArtistRecord: Codable, FetchableRecord, PersistableRecord 
     var stableId: String?
     var id: String
     var name: String
+    /// Normalized effective key used by SQLite ordering.
     var sortName: String
+    /// Raw OpenSubsonic sort name for round-tripping into the model.
+    var metadataSortName: String?
     var albumCount: Int?
     var coverArt: String?
     var starred: Double?
@@ -119,7 +124,11 @@ private struct LibraryArtistRecord: Codable, FetchableRecord, PersistableRecord 
         self.stableId = stableId
         self.id = artist.id
         self.name = artist.name
-        self.sortName = Self.makeSortName(artist.name)
+        self.sortName = LibrarySortKey.normalized(
+            displayName: artist.name,
+            explicitSortName: artist.sortName
+        )
+        self.metadataSortName = artist.sortName
         self.albumCount = artist.albumCount
         self.coverArt = artist.coverArt
         self.starred = artist.starred?.timeIntervalSince1970
@@ -131,16 +140,11 @@ private struct LibraryArtistRecord: Codable, FetchableRecord, PersistableRecord 
         Artist(
             id: id,
             name: name,
+            sortName: metadataSortName,
             albumCount: albumCount,
             coverArt: coverArt,
             starred: starred.map(Date.init(timeIntervalSince1970:))
         )
-    }
-
-    private static func makeSortName(_ value: String) -> String {
-        value
-            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
-            .lowercased()
     }
 }
 
@@ -575,8 +579,51 @@ actor LibraryDatabase {
                 createIndexes: Self.createLibraryArtistIndexes
             )
         }
+        migrator.registerMigration("v3_library_sort_metadata") { db in
+            try db.alter(table: "library_albums") { table in
+                table.add(column: "metadataSortName", .text)
+            }
+            try db.alter(table: "library_artists") { table in
+                table.add(column: "metadataSortName", .text)
+            }
+
+            // Existing cache rows predate article-aware ordering. Rebuild only
+            // their derived keys; metadata correctly remains nil until refresh.
+            try Self.rebuildLegacySortKeys(db, table: "library_albums")
+            try Self.rebuildLegacySortKeys(db, table: "library_artists")
+        }
         try migrator.migrate(pool)
         return pool
+    }
+
+    private static func rebuildLegacySortKeys(_ db: Database, table: String) throws {
+        let cursor = try Row.fetchCursor(
+            db,
+            sql: "SELECT serverKey, syncGeneration, id, name, sortName FROM \(table)"
+        )
+        var updates: [(key: String, serverKey: String, generation: String, id: String)] = []
+        while let row = try cursor.next() {
+            let name: String = row["name"]
+            let oldKey: String = row["sortName"]
+            let newKey = LibrarySortKey.normalized(displayName: name)
+            guard newKey != oldKey else { continue }
+            updates.append((
+                key: newKey,
+                serverKey: row["serverKey"],
+                generation: row["syncGeneration"],
+                id: row["id"]
+            ))
+        }
+
+        for update in updates {
+            try db.execute(
+                sql: """
+                UPDATE \(table) SET sortName = ?
+                WHERE serverKey = ? AND syncGeneration = ? AND id = ?
+                """,
+                arguments: [update.key, update.serverKey, update.generation, update.id]
+            )
+        }
     }
 
     private static func createLibraryAlbumsTable(_ db: Database) throws {

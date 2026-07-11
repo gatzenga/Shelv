@@ -24,7 +24,8 @@ struct ArtistDetailView: View {
     private var displayAlbums: [Album] {
         var result = albums
         switch sort {
-        case .alphabetical: result.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        case .alphabetical:
+            result = LibraryRepository.locallySortedAlbums(result, sort: .name, direction: .ascending)
         case .newest:       result.sort { ($0.created ?? .distantPast) < ($1.created ?? .distantPast) }
         case .year:         result.sort { ($0.year ?? 0) < ($1.year ?? 0) }
         case .frequent:     result.sort { ($0.playCount ?? 0) < ($1.playCount ?? 0) }

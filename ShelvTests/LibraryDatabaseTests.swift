@@ -35,6 +35,7 @@ final class LibraryDatabaseTests: XCTestCase {
         let album = Album(
             id: "album-1",
             name: "Alpha",
+            sortName: "Alpha, The",
             artist: "Artist A",
             artistId: "artist-1",
             coverArt: "cover-1",
@@ -53,6 +54,7 @@ final class LibraryDatabaseTests: XCTestCase {
         XCTAssertEqual(fetched.count, 1)
         XCTAssertEqual(fetched[0].id, album.id)
         XCTAssertEqual(fetched[0].name, album.name)
+        XCTAssertEqual(fetched[0].sortName, album.sortName)
         XCTAssertEqual(fetched[0].artist, album.artist)
         XCTAssertEqual(fetched[0].artistId, album.artistId)
         XCTAssertEqual(fetched[0].coverArt, album.coverArt)
@@ -97,6 +99,30 @@ final class LibraryDatabaseTests: XCTestCase {
         XCTAssertEqual(byPlayCount, ["a2", "a1", "a3"])
         XCTAssertEqual(byCreated, ["a2", "a3", "a1"])
         XCTAssertEqual(byArtist, ["a3", "a2", "a1"])
+    }
+
+    func testDatabaseSortingUsesMetadataTagBeforeArticleFallback() async throws {
+        let database = try await makeDatabase()
+        let albums = [
+            Album(id: "tagged", name: "The Police", sortName: "The Police"),
+            Album(id: "queen", name: "Queen"),
+            Album(id: "untagged", name: "The Police"),
+        ]
+        let artists = [
+            Artist(id: "tagged", name: "The Police", sortName: "The Police"),
+            Artist(id: "queen", name: "Queen"),
+            Artist(id: "untagged", name: "The Police"),
+        ]
+
+        try await writeAlbums(albums, to: database, serverKey: "server-a", generation: "g1")
+        try await writeArtists(artists, to: database, serverKey: "server-a", generation: "g1")
+
+        let sortedAlbums = try await database.albums(serverKey: "server-a")
+        let sortedArtists = try await database.artists(serverKey: "server-a")
+        XCTAssertEqual(sortedAlbums.map(\.id), ["untagged", "queen", "tagged"])
+        XCTAssertEqual(sortedArtists.map(\.id), ["untagged", "queen", "tagged"])
+        XCTAssertEqual(sortedAlbums.last?.sortName, "The Police")
+        XCTAssertEqual(sortedArtists.last?.sortName, "The Police")
     }
 
     func testAlbumPaginationAppliesAfterStableSort() async throws {

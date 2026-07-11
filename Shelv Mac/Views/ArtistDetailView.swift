@@ -43,7 +43,7 @@ struct ArtistDetailView: View {
         let filtered = searchQuery.isEmpty ? base : base.filter { $0.name.localizedCaseInsensitiveContains(searchQuery) }
         switch sortOption {
         case .name:
-            return filtered.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            return LibraryRepository.locallySortedAlbums(filtered, sort: .name, direction: .ascending)
         case .mostPlayed:
             let sorted = filtered.sorted { ($0.playCount ?? 0) < ($1.playCount ?? 0) }
             return direction == .ascending ? sorted : Array(sorted.reversed())

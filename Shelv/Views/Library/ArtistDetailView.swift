@@ -38,28 +38,6 @@ struct ArtistDetailView: View {
         SortDirection(rawValue: directionRaw) ?? .descending
     }
 
-    private static let sortArticles: [String] = [
-        "the ", "an ", "a ",
-        "der ", "die ", "das ", "dem ", "den ", "des ",
-        "eine ", "einer ", "einem ", "einen ", "ein ",
-        "les ", "le ", "la ", "l\u{2019}", "l'",
-        "une ", "un ",
-        "los ", "las ", "el ", "una ",
-        "gli ", "uno ", "il ", "lo ",
-        "umas ", "uma ", "uns ", "um ", "os ", "as ",
-        "het ", "een ", "de ",
-    ]
-
-    private func sortKey(for name: String) -> String {
-        let lower = name.lowercased()
-        for article in Self.sortArticles {
-            if lower.hasPrefix(article) {
-                return String(name.dropFirst(article.count))
-            }
-        }
-        return name
-    }
-
     private var filteredAlbums: [Album] {
         guard !searchQuery.isEmpty else { return sortedAlbums }
         return sortedAlbums.filter { $0.name.localizedCaseInsensitiveContains(searchQuery) }
@@ -70,9 +48,7 @@ struct ArtistDetailView: View {
         switch sortOption {
         case .alphabetical:
             // Name immer A-Z, unabhängig von direction
-            return albums.sorted {
-                sortKey(for: $0.name).localizedCaseInsensitiveCompare(sortKey(for: $1.name)) == .orderedAscending
-            }
+            return LibraryRepository.locallySortedAlbums(albums, sort: .name, direction: .ascending)
         case .frequent:
             let base = albums.sorted { ($0.playCount ?? 0) < ($1.playCount ?? 0) }
             return direction == .ascending ? base : Array(base.reversed())

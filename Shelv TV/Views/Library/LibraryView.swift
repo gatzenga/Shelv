@@ -147,9 +147,10 @@ struct LibraryView: View {
                 )
             }()
 
-            let nextArtists: [Artist] = artistDirection == .descending
-                ? Array(artists.reversed())
-                : artists
+            let nextArtists = LibraryRepository.locallySortedArtists(
+                artists,
+                direction: artistDirection == .ascending ? .ascending : .descending
+            )
 
             let nextAlbumCountByArtist: [String: Int] = {
                 var counts: [String: Int] = [:]
