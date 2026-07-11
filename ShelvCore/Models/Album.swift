@@ -3,6 +3,8 @@ import Foundation
 nonisolated struct Album: Identifiable, Codable, Hashable, Sendable {
     let id: String
     let name: String
+    /// OpenSubsonic's authoritative album sort name, when supplied.
+    let sortName: String?
     let artist: String?
     let artistId: String?
     let coverArt: String?
@@ -23,12 +25,13 @@ nonisolated struct Album: Identifiable, Codable, Hashable, Sendable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, artist, artistId, coverArt, songCount, duration, year, genre, playCount, starred, created
+        case id, name, sortName, artist, artistId, coverArt, songCount, duration, year, genre, playCount, starred, created
     }
 
     init(
         id: String,
         name: String,
+        sortName: String? = nil,
         artist: String? = nil,
         artistId: String? = nil,
         coverArt: String? = nil,
@@ -43,6 +46,7 @@ nonisolated struct Album: Identifiable, Codable, Hashable, Sendable {
     ) {
         self.id = id
         self.name = name
+        self.sortName = sortName
         self.artist = artist
         self.artistId = artistId
         self.coverArt = coverArt
@@ -60,6 +64,7 @@ nonisolated struct Album: Identifiable, Codable, Hashable, Sendable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
         name = try c.decode(String.self, forKey: .name)
+        sortName = try c.decodeIfPresent(String.self, forKey: .sortName)
         artist = try c.decodeIfPresent(String.self, forKey: .artist)
         artistId = try c.decodeIfPresent(String.self, forKey: .artistId)
         coverArt = try c.decodeIfPresent(String.self, forKey: .coverArt)

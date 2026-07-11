@@ -38,6 +38,7 @@ struct ArtistsView: View {
                         Artist(
                             id: $0.id,
                             name: $0.name,
+                            sortName: $0.sortName,
                             albumCount: downloadedCountByName[$0.name],
                             coverArt: $0.coverArt,
                             starred: $0.starred

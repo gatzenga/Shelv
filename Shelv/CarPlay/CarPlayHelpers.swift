@@ -143,27 +143,11 @@ func loadCoverArt(coverArtId: String?, size: Int = 300, completion: @escaping (U
 // MARK: - Article Stripping
 
 func stripArticle(_ title: String) -> String {
-    let lower = title.lowercased()
-    let prefixes: [String] = [
-        "the ", "an ", "a ",
-        "der ", "die ", "das ", "dem ", "den ", "des ",
-        "eine ", "einer ", "einem ", "einen ", "ein ",
-        "les ", "le ", "la ", "l\u{2019}", "l'",
-        "une ", "des ", "un ",
-        "los ", "las ", "el ", "una ", "un ",
-        "gli ", "uno ", "una ", "il ", "lo ",
-        "umas ", "uma ", "uns ", "um ", "os ", "as ",
-        "het ", "een ", "de ",
-    ]
-    for p in prefixes where lower.hasPrefix(p) { return String(title.dropFirst(p.count)) }
-    return title
+    LibrarySortKey.removingLeadingArticle(from: title)
 }
 
-func firstSortLetter(_ title: String) -> String {
-    let key = stripArticle(title)
-    let raw = String(key.prefix(1))
-    let base = raw.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current).uppercased()
-    return (base.first?.isLetter == true) ? String(base.prefix(1)) : "#"
+func firstSortLetter(_ title: String, sortName: String? = nil) -> String {
+    LibrarySortKey.sectionLetter(displayName: title, explicitSortName: sortName)
 }
 
 // MARK: - CPListItem Factories

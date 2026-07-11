@@ -1001,20 +1001,7 @@ private struct OfflineRecapToolbarItem: View {
 }
 
 private func desktopStripArticle(_ title: String) -> String {
-    let lower = title.lowercased()
-    let prefixes: [String] = [
-        "the ", "an ", "a ",
-        "der ", "die ", "das ", "dem ", "den ", "des ",
-        "eine ", "einer ", "einem ", "einen ", "ein ",
-        "les ", "le ", "la ", "l\u{2019}", "l'",
-        "une ", "des ", "un ",
-        "los ", "las ", "el ", "una ", "un ",
-        "gli ", "uno ", "una ", "il ", "lo ",
-        "umas ", "uma ", "uns ", "um ", "os ", "as ",
-        "het ", "een ", "de ",
-    ]
-    for p in prefixes where lower.hasPrefix(p) { return String(title.dropFirst(p.count)) }
-    return title
+    LibrarySortKey.removingLeadingArticle(from: title)
 }
 
 #Preview {

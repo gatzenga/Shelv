@@ -5,6 +5,71 @@ protocol LibraryAPIClient: AnyObject {
     func getAllArtists() async throws -> [Artist]
 }
 
+/// Builds one deterministic library order across every Shelv platform.
+///
+/// OpenSubsonic's `sortName` is authoritative when the server supplies a
+/// non-empty value. Otherwise a leading article is ignored for sorting and
+/// section grouping while the original display name remains untouched.
+nonisolated enum LibrarySortKey {
+    private static let articlePrefixes: [String] = [
+        // English
+        "the ", "an ", "a ",
+        // German
+        "eine ", "ein ", "der ", "die ", "das ",
+        // French
+        "les ", "le ", "la ", "l\u{2019}", "l'", "une ", "un ",
+        // Spanish
+        "los ", "las ", "el ", "la ", "una ", "un ",
+        // Italian
+        "gli ", "uno ", "una ", "il ", "lo ", "la ", "le ", "i ", "un\u{2019}", "un'", "un ",
+        // Portuguese
+        "uma ", "um ", "os ", "as ", "o ", "a ",
+    ]
+
+    static func normalized(displayName: String, explicitSortName: String? = nil) -> String {
+        if let explicit = trimmedNonEmpty(explicitSortName) {
+            return normalize(explicit)
+        }
+        return normalize(removingLeadingArticle(from: displayName))
+    }
+
+    static func sectionLetter(displayName: String, explicitSortName: String? = nil) -> String {
+        let key = normalized(displayName: displayName, explicitSortName: explicitSortName)
+        guard let first = key.first, first.isLetter else { return "#" }
+        return String(String(first).uppercased().prefix(1))
+    }
+
+    static func removingLeadingArticle(from value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lowered = trimmed.lowercased()
+        for prefix in articlePrefixes where lowered.hasPrefix(prefix) {
+            let remainder = trimmed.dropFirst(prefix.count)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !remainder.isEmpty {
+                return remainder
+            }
+        }
+        return trimmed
+    }
+
+    private static func normalize(_ value: String) -> String {
+        value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(
+                options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive],
+                locale: Locale(identifier: "en_US_POSIX")
+            )
+            .lowercased()
+    }
+
+    private static func trimmedNonEmpty(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty
+        else { return nil }
+        return trimmed
+    }
+}
+
 #if !SHELV_LOGIC_TESTS
 extension SubsonicAPIService: LibraryAPIClient {}
 #endif
@@ -164,8 +229,14 @@ nonisolated final class LibraryRepository {
         albums.sorted { lhs, rhs in
             switch sort {
             case .name:
-                let lhsKey = normalizedSortKey(lhs.name)
-                let rhsKey = normalizedSortKey(rhs.name)
+                let lhsKey = LibrarySortKey.normalized(
+                    displayName: lhs.name,
+                    explicitSortName: lhs.sortName
+                )
+                let rhsKey = LibrarySortKey.normalized(
+                    displayName: rhs.name,
+                    explicitSortName: rhs.sortName
+                )
                 if lhsKey != rhsKey {
                     return ordered(lhsKey, rhsKey, direction: direction)
                 }
@@ -173,34 +244,54 @@ nonisolated final class LibraryRepository {
             case .artist:
                 let lhsArtist = lhs.artist ?? ""
                 let rhsArtist = rhs.artist ?? ""
-                let lhsArtistKey = normalizedSortKey(lhsArtist)
-                let rhsArtistKey = normalizedSortKey(rhsArtist)
+                let lhsArtistKey = LibrarySortKey.normalized(displayName: lhsArtist)
+                let rhsArtistKey = LibrarySortKey.normalized(displayName: rhsArtist)
                 if lhsArtistKey != rhsArtistKey {
                     return ordered(lhsArtistKey, rhsArtistKey, direction: direction)
                 }
-                return compareStrings(lhs.name, rhs.name, lhs.id, rhs.id)
+                return compareAlbums(lhs, rhs)
             case .year:
                 let lhsYear = lhs.year ?? 0
                 let rhsYear = rhs.year ?? 0
                 if lhsYear != rhsYear {
                     return ordered(lhsYear, rhsYear, direction: direction)
                 }
-                return compareStrings(lhs.name, rhs.name, lhs.id, rhs.id)
+                return compareAlbums(lhs, rhs)
             case .playCount:
                 let lhsCount = lhs.playCount ?? 0
                 let rhsCount = rhs.playCount ?? 0
                 if lhsCount != rhsCount {
                     return ordered(lhsCount, rhsCount, direction: direction)
                 }
-                return compareStrings(lhs.name, rhs.name, lhs.id, rhs.id)
+                return compareAlbums(lhs, rhs)
             case .created:
                 let lhsCreated = lhs.created?.timeIntervalSince1970 ?? 0
                 let rhsCreated = rhs.created?.timeIntervalSince1970 ?? 0
                 if lhsCreated != rhsCreated {
                     return ordered(lhsCreated, rhsCreated, direction: direction)
                 }
-                return compareStrings(lhs.name, rhs.name, lhs.id, rhs.id)
+                return compareAlbums(lhs, rhs)
             }
+        }
+    }
+
+    static func locallySortedArtists(
+        _ artists: [Artist],
+        direction: LibraryDatabaseSortDirection = .ascending
+    ) -> [Artist] {
+        artists.sorted { lhs, rhs in
+            let lhsKey = LibrarySortKey.normalized(
+                displayName: lhs.name,
+                explicitSortName: lhs.sortName
+            )
+            let rhsKey = LibrarySortKey.normalized(
+                displayName: rhs.name,
+                explicitSortName: rhs.sortName
+            )
+            if lhsKey != rhsKey {
+                return ordered(lhsKey, rhsKey, direction: direction)
+            }
+            return lhs.id < rhs.id
         }
     }
 
@@ -215,11 +306,17 @@ nonisolated final class LibraryRepository {
         }
     }
 
-    private static func compareStrings(_ lhs: String, _ rhs: String, _ lhsId: String, _ rhsId: String) -> Bool {
-        let lhsKey = normalizedSortKey(lhs)
-        let rhsKey = normalizedSortKey(rhs)
+    private static func compareAlbums(_ lhs: Album, _ rhs: Album) -> Bool {
+        let lhsKey = LibrarySortKey.normalized(
+            displayName: lhs.name,
+            explicitSortName: lhs.sortName
+        )
+        let rhsKey = LibrarySortKey.normalized(
+            displayName: rhs.name,
+            explicitSortName: rhs.sortName
+        )
         if lhsKey != rhsKey { return lhsKey < rhsKey }
-        return lhsId < rhsId
+        return lhs.id < rhs.id
     }
 
     private static func ordered<T: Comparable>(
@@ -233,11 +330,5 @@ nonisolated final class LibraryRepository {
         case .descending:
             return lhs > rhs
         }
-    }
-
-    private static func normalizedSortKey(_ value: String) -> String {
-        value
-            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
-            .lowercased()
     }
 }

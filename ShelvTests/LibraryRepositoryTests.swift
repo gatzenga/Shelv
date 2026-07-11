@@ -175,6 +175,100 @@ final class LibraryRepositoryTests: XCTestCase {
         XCTAssertEqual(cachedArtistIds, ["artist-a", "artist-b"])
     }
 
+    func testLibrarySortKeyIgnoresArticlesInSupportedLanguages() {
+        let examples: [(name: String, expected: String)] = [
+            ("The Police", "police"),
+            ("Eine kleine Geschichte", "kleine geschichte"),
+            ("L’Amour Toujours", "amour toujours"),
+            ("Los Lobos", "lobos"),
+            ("Gli Anni", "anni"),
+            ("Os Mutantes", "mutantes"),
+        ]
+
+        for example in examples {
+            XCTAssertEqual(
+                LibrarySortKey.normalized(displayName: example.name),
+                example.expected,
+                example.name
+            )
+        }
+    }
+
+    func testExplicitSortNameAlwaysWinsOverArticleFallback() {
+        XCTAssertEqual(
+            LibrarySortKey.normalized(
+                displayName: "The Police",
+                explicitSortName: "The Police"
+            ),
+            "the police"
+        )
+        XCTAssertEqual(
+            LibrarySortKey.sectionLetter(
+                displayName: "The Police",
+                explicitSortName: "The Police"
+            ),
+            "T"
+        )
+        XCTAssertEqual(
+            LibrarySortKey.sectionLetter(displayName: "The Police"),
+            "P"
+        )
+    }
+
+    func testBlankSortNameFallsBackAndArticlesMustBeWholeWords() {
+        XCTAssertEqual(
+            LibrarySortKey.normalized(displayName: "The Cranberries", explicitSortName: "  "),
+            "cranberries"
+        )
+        XCTAssertEqual(
+            LibrarySortKey.normalized(displayName: "Theatre of Tragedy"),
+            "theatre of tragedy"
+        )
+        XCTAssertEqual(LibrarySortKey.normalized(displayName: "The"), "the")
+    }
+
+    func testLocalAlbumSortingUsesTagBeforeArticleFallback() {
+        let albums = [
+            Album(id: "tagged", name: "The Police", sortName: "The Police"),
+            Album(id: "queen", name: "Queen"),
+            Album(id: "untagged", name: "The Police"),
+        ]
+
+        let sorted = LibraryRepository.locallySortedAlbums(
+            albums,
+            sort: .name,
+            direction: .ascending
+        )
+
+        XCTAssertEqual(sorted.map(\.id), ["untagged", "queen", "tagged"])
+    }
+
+    func testLocalArtistSortingUsesTagBeforeArticleFallback() {
+        let artists = [
+            Artist(id: "tagged", name: "The Police", sortName: "The Police"),
+            Artist(id: "queen", name: "Queen"),
+            Artist(id: "untagged", name: "The Police"),
+        ]
+
+        let sorted = LibraryRepository.locallySortedArtists(artists)
+
+        XCTAssertEqual(sorted.map(\.id), ["untagged", "queen", "tagged"])
+    }
+
+    func testAlbumAndArtistDecodeOpenSubsonicSortName() throws {
+        let album = try JSONDecoder().decode(
+            Album.self,
+            from: Data(#"{"id":"album-1","name":"The Wall","sortName":"Wall, The"}"#.utf8)
+        )
+        let artist = try JSONDecoder().decode(
+            Artist.self,
+            from: Data(#"{"id":"artist-1","name":"The Police","sortName":"Police, The"}"#.utf8)
+        )
+
+        XCTAssertEqual(album.sortName, "Wall, The")
+        XCTAssertEqual(artist.sortName, "Police, The")
+    }
+
     private func makeDatabase() async throws -> LibraryDatabase {
         let database = LibraryDatabase(databaseURL: tempDir.appendingPathComponent("library.db"))
         try await database.setup()
@@ -268,12 +362,14 @@ private final class GeneratedLibraryAPIClient: LibraryAPIClient {
 private func album(
     id: String,
     name: String,
+    sortName: String? = nil,
     year: Int? = nil,
     created: TimeInterval? = nil
 ) -> Album {
     Album(
         id: id,
         name: name,
+        sortName: sortName,
         year: year,
         created: created.map(Date.init(timeIntervalSince1970:))
     )
