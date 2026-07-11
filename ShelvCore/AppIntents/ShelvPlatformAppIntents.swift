@@ -203,6 +203,9 @@ extension ShelvPlatformPlaybackIntent {
     static var authenticationPolicy: IntentAuthenticationPolicy { .alwaysAllowed }
 }
 
+// These actions remain available in the Shortcuts action catalog. Only tvOS
+// publishes natural-language playback phrases below because it has no native
+// Media Intents route. On macOS 27, the audio schema is the single Siri route.
 struct ShelvPlatformShuffleAllIntent: ShelvPlatformPlaybackIntent {
     static let title: LocalizedStringResource = "shortcut_shuffle_all_title"
     static let description = IntentDescription("shortcut_shuffle_all_description")
@@ -432,6 +435,7 @@ struct ShelvPlatformAppShortcuts: AppShortcutsProvider {
     static var shortcutTileColor: ShortcutTileColor { .purple }
 
     static var appShortcuts: [AppShortcut] {
+        #if os(tvOS)
         AppShortcut(
             intent: ShelvPlatformShuffleAllIntent(),
             phrases: [
@@ -476,23 +480,23 @@ struct ShelvPlatformAppShortcuts: AppShortcutsProvider {
                 "Play \(\.$mix) in \(.applicationName)",
                 "Play \(\.$mix) tracks in \(.applicationName)",
                 "Start \(\.$mix) in \(.applicationName)",
+                "Ask \(.applicationName) to play the \(\.$mix) mix",
+                "Play the \(\.$mix) mix in \(.applicationName)",
             ],
             shortTitle: "shortcut_play_mix_short",
             systemImageName: "sparkles"
         )
 
-        #if os(tvOS)
-            AppShortcut(
-                intent: ShelvPlatformPlayPlaylistIntent(),
-                phrases: [
-                    "Play a playlist in \(.applicationName)",
-                    "Play playlist \(\.$playlist) in \(.applicationName)",
-                    "Ask \(.applicationName) to play playlist \(\.$playlist)",
-                ],
-                shortTitle: "shortcut_play_playlist_short",
-                systemImageName: "music.note.list"
-            )
-        #endif
+        AppShortcut(
+            intent: ShelvPlatformPlayPlaylistIntent(),
+            phrases: [
+                "Play a playlist in \(.applicationName)",
+                "Play playlist \(\.$playlist) in \(.applicationName)",
+                "Ask \(.applicationName) to play playlist \(\.$playlist)",
+            ],
+            shortTitle: "shortcut_play_playlist_short",
+            systemImageName: "music.note.list"
+        )
 
         AppShortcut(
             intent: ShelvPlatformInstantMixIntent(),
@@ -508,20 +512,6 @@ struct ShelvPlatformAppShortcuts: AppShortcutsProvider {
             systemImageName: "wand.and.stars"
         )
 
-        #if os(macOS)
-            AppShortcut(
-                intent: ShelvPlatformPlayDownloadsIntent(),
-                phrases: [
-                    "Play downloads in \(.applicationName)",
-                    "Play \(\.$mode) downloads in \(.applicationName)",
-                    "Play downloaded music in \(.applicationName)",
-                    "Shuffle downloads in \(.applicationName)",
-                ],
-                shortTitle: "shortcut_play_downloads_short",
-                systemImageName: "arrow.down.circle.fill"
-            )
-        #endif
-
         AppShortcut(
             intent: ShelvPlatformPlayPauseIntent(),
             phrases: [
@@ -533,6 +523,7 @@ struct ShelvPlatformAppShortcuts: AppShortcutsProvider {
             shortTitle: "shortcut_play_pause_short",
             systemImageName: "playpause.fill"
         )
+        #endif
 
         AppShortcut(
             intent: ShelvPlatformOpenPlayerIntent(),
@@ -546,6 +537,19 @@ struct ShelvPlatformAppShortcuts: AppShortcutsProvider {
             shortTitle: "shortcut_now_playing_short",
             systemImageName: "music.note"
         )
+
+        #if os(macOS)
+        AppShortcut(
+            intent: ShelvPlatformOpenSearchIntent(),
+            phrases: [
+                "Open search in \(.applicationName)",
+                "Search in \(.applicationName)",
+                "Show search in \(.applicationName)",
+            ],
+            shortTitle: "shortcut_search_short",
+            systemImageName: "magnifyingglass"
+        )
+        #endif
 
         AppShortcut(
             intent: ShelvPlatformOpenLibraryIntent(),

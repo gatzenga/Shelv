@@ -88,65 +88,27 @@ class DiscoverViewModel: ObservableObject {
     }
 
     func playMixNewest() async {
-        do {
-            let songs = try await api.getNewestSongs()
-            player.playShuffled(songs: songs)
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+        await playMix(.newest)
     }
 
     func playMixFrequent() async {
-        do {
-            let songs = try await frequentMixSongs()
-            player.playShuffled(songs: songs)
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+        await playMix(.frequent)
     }
 
     func playMixRandom() async {
-        do {
-            let songs = try await api.getRandomSongs(size: 500)
-            player.playShuffled(songs: songs)
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+        await playMix(.shuffleAll)
     }
 
     func playMixRecent() async {
+        await playMix(.recent)
+    }
+
+    private func playMix(_ mix: ShortcutSmartMix) async {
         do {
-            let songs = try await recentMixSongs()
+            let songs = try await SmartMixPlaybackService.songs(for: mix)
             player.playShuffled(songs: songs)
         } catch {
             errorMessage = error.localizedDescription
         }
-    }
-
-    private func frequentMixSongs() async throws -> [Song] {
-        if UserDefaults.standard.bool(forKey: "mixUseDatabase"),
-           let serverId = AppState.shared.serverStore.activeServer?.stableId,
-           !serverId.isEmpty,
-           await PlayLogService.shared.distinctSongCount(serverId: serverId) >= 50 {
-            let counts = await PlayLogService.shared.topSongs(
-                serverId: serverId, from: .distantPast, to: Date(), limit: 50)
-            if !counts.isEmpty {
-                return try await api.getSongsOrdered(ids: counts.map(\.songId))
-            }
-        }
-        return try await api.frequentMixFallbackSongs()
-    }
-
-    private func recentMixSongs() async throws -> [Song] {
-        if UserDefaults.standard.bool(forKey: "mixUseDatabase"),
-           let serverId = AppState.shared.serverStore.activeServer?.stableId,
-           !serverId.isEmpty,
-           await PlayLogService.shared.distinctSongCount(serverId: serverId) >= 50 {
-            let ids = await PlayLogService.shared.recentUniqueSongIds(serverId: serverId, limit: 50)
-            if !ids.isEmpty {
-                return try await api.getSongsOrdered(ids: ids)
-            }
-        }
-        return try await api.getRecentSongs(limit: 50)
     }
 }

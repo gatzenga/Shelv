@@ -258,89 +258,62 @@ final class ShelvSystemIntentPlaybackService: @unchecked Sendable {
         storageServerID: String,
         mayLoadRemote: Bool
     ) async throws -> [Song] {
+        let local: [Song]
         switch reference.kind {
         case .song:
-            let local = records.first(where: { $0.songId == reference.contentID })?
-                .toDownloadedSong().asSong()
-            guard mayLoadRemote else {
-                guard let local else { throw ShortcutPlaybackError.unavailableOffline }
-                return [local]
-            }
-            do {
-                return [try await SubsonicAPIService.shared.getSong(id: reference.contentID)]
-            } catch {
-                guard let local else { throw ShortcutPlaybackError.remoteFailure(error) }
-                return [local]
-            }
-
+            local = records.first(where: { $0.songId == reference.contentID })
+                .map { [$0.toDownloadedSong().asSong()] } ?? []
         case .album:
-            let local = records.filter { $0.albumId == reference.contentID }
+            local = records.filter { $0.albumId == reference.contentID }
                 .map { $0.toDownloadedSong().asSong() }
                 .sorted(by: Self.albumTrackSort)
-            guard mayLoadRemote else {
-                guard !local.isEmpty else { throw ShortcutPlaybackError.unavailableOffline }
-                return local
-            }
-            do {
-                let remote = try await SubsonicAPIService.shared.getAlbum(id: reference.contentID).song ?? []
-                if !remote.isEmpty { return remote }
-                guard !local.isEmpty else { throw ShortcutPlaybackError.noPlayableContent }
-                return local
-            } catch let error as ShortcutPlaybackError {
-                throw error
-            } catch {
-                guard !local.isEmpty else { throw ShortcutPlaybackError.remoteFailure(error) }
-                return local
-            }
-
         case .artist:
-            let local = records.filter { $0.artistId == reference.contentID }
+            local = records.filter { $0.artistId == reference.contentID }
                 .map { $0.toDownloadedSong().asSong() }
                 .sorted(by: Self.downloadSort)
-            guard mayLoadRemote else {
-                guard !local.isEmpty else { throw ShortcutPlaybackError.unavailableOffline }
-                return local
-            }
-            do {
-                let detail = try await SubsonicAPIService.shared.getArtist(id: reference.contentID)
-                let remote = try await SubsonicAPIService.shared.getTopSongs(
-                    artistName: detail.name,
-                    count: 100
-                )
-                if !remote.isEmpty { return remote }
-                guard !local.isEmpty else { throw ShortcutPlaybackError.noPlayableContent }
-                return local
-            } catch let error as ShortcutPlaybackError {
-                throw error
-            } catch {
-                guard !local.isEmpty else { throw ShortcutPlaybackError.remoteFailure(error) }
-                return local
-            }
-
         case .playlist:
-            let local = localPlaylistSongs(
+            local = localPlaylistSongs(
                 playlistID: reference.contentID,
                 records: records,
                 storageServerID: storageServerID
             )
-            guard mayLoadRemote else {
-                guard !local.isEmpty else { throw ShortcutPlaybackError.unavailableOffline }
-                return local
-            }
-            let playlist: Playlist
-            do {
-                playlist = try await SubsonicAPIService.shared.getPlaylist(id: reference.contentID)
-            } catch {
-                if !local.isEmpty { return local }
-                throw ShortcutPlaybackError.remoteFailure(error)
-            }
-            let remote = playlist.songs ?? []
+        case .radio:
+            throw ShortcutPlaybackError.unsupportedQueueOperation
+        }
+
+        guard mayLoadRemote else {
+            guard !local.isEmpty else { throw ShortcutPlaybackError.unavailableOffline }
+            return local
+        }
+
+        let api = SubsonicAPIService.shared
+        let artistAlbumPreference = ArtistAlbumPlaybackOrder.storedPreference()
+        let provider = PlaybackContentProvider(
+            song: { try await api.getSong(id: $0) },
+            albumSongs: { try await api.getAlbum(id: $0).song ?? [] },
+            artistAlbums: { artistID in
+                let albums = try await api.getArtist(id: artistID).album ?? []
+                return ArtistAlbumPlaybackOrder.sorted(
+                    albums,
+                    preference: artistAlbumPreference
+                )
+            },
+            playlistSongs: { try await api.getPlaylist(id: $0).songs ?? [] }
+        )
+        do {
+            let remote = try await PlaybackContentResolver.songs(
+                for: reference.kind,
+                contentID: reference.contentID,
+                provider: provider
+            )
             if !remote.isEmpty { return remote }
             guard !local.isEmpty else { throw ShortcutPlaybackError.noPlayableContent }
             return local
-
-        case .radio:
-            throw ShortcutPlaybackError.unsupportedQueueOperation
+        } catch let error as ShortcutPlaybackError {
+            throw error
+        } catch {
+            guard !local.isEmpty else { throw ShortcutPlaybackError.remoteFailure(error) }
+            return local
         }
     }
 
@@ -404,46 +377,12 @@ final class ShelvSystemIntentPlaybackService: @unchecked Sendable {
         flightID: UInt64
     ) async throws {
         try await requireNetwork()
-        let songs: [Song]
-        switch mix {
-        case .newest:
-            songs = try await SubsonicAPIService.shared.getNewestSongs()
-        case .frequent:
-            songs = try await frequentSongs(serverID: context.storageServerID)
-        case .recent:
-            songs = try await recentSongs(serverID: context.storageServerID)
-        case .shuffleAll:
-            songs = try await SubsonicAPIService.shared.getRandomSongs(size: 500)
-        }
+        let songs = try await SmartMixPlaybackService.songs(
+            for: mix,
+            storageServerID: context.storageServerID
+        )
         try validateFlight(flightID, serverConfigID: context.server.id.uuidString)
         try await apply(songs: songs, order: .shuffled, placement: .replace, repeats: false)
-    }
-
-    private func frequentSongs(serverID: String) async throws -> [Song] {
-        if UserDefaults.standard.bool(forKey: "mixUseDatabase"),
-           await PlayLogService.shared.distinctSongCount(serverId: serverID) >= 50 {
-            let counts = await PlayLogService.shared.topSongs(
-                serverId: serverID,
-                from: .distantPast,
-                to: Date(),
-                limit: 50
-            )
-            if !counts.isEmpty {
-                return try await SubsonicAPIService.shared.getSongsOrdered(ids: counts.map(\.songId))
-            }
-        }
-        return try await SubsonicAPIService.shared.getFrequentSongs(albumCount: 50, limit: 100)
-    }
-
-    private func recentSongs(serverID: String) async throws -> [Song] {
-        if UserDefaults.standard.bool(forKey: "mixUseDatabase"),
-           await PlayLogService.shared.distinctSongCount(serverId: serverID) >= 50 {
-            let ids = await PlayLogService.shared.recentUniqueSongIds(serverId: serverID, limit: 50)
-            if !ids.isEmpty {
-                return try await SubsonicAPIService.shared.getSongsOrdered(ids: ids)
-            }
-        }
-        return try await SubsonicAPIService.shared.getRecentSongs(limit: 50)
     }
 
     private func playDownloads(
@@ -454,35 +393,18 @@ final class ShelvSystemIntentPlaybackService: @unchecked Sendable {
         let records = context.records
         try validateFlight(flightID, serverConfigID: context.server.id.uuidString)
         guard !records.isEmpty else { throw ShortcutPlaybackError.noPlayableContent }
-
-        switch mode {
-        case .all:
-            let songs = records.map { $0.toDownloadedSong().asSong() }
-                .sorted(by: Self.downloadSort)
-            try await apply(
-                songs: Array(songs.prefix(500)),
-                order: .inOrder,
-                placement: .replace,
-                repeats: false
-            )
-        case .shuffled:
-            let selected = records.count > 500
-                ? Array(records.shuffled().prefix(500))
-                : records
-            let songs = selected.map { $0.toDownloadedSong().asSong() }
-                .sorted(by: Self.downloadSort)
-            try await apply(songs: songs, order: .shuffled, placement: .replace, repeats: false)
-        case .newest:
-            let songs = records.sorted { $0.addedAt > $1.addedAt }
-                .prefix(100)
-                .map { $0.toDownloadedSong().asSong() }
-            try await apply(songs: songs, order: .shuffled, placement: .replace, repeats: false)
-        }
+        let selection = DownloadedPlaybackQueueBuilder.selection(from: records, mode: mode)
+        try await apply(
+            songs: selection.songs,
+            order: selection.order,
+            placement: .replace,
+            repeats: false
+        )
     }
 
     private static func downloadSort(_ lhs: Song, _ rhs: Song) -> Bool {
-        let leftArtist = stripArticle(lhs.artist ?? "")
-        let rightArtist = stripArticle(rhs.artist ?? "")
+        let leftArtist = LibrarySortKey.removingLeadingArticle(from: lhs.artist ?? "")
+        let rightArtist = LibrarySortKey.removingLeadingArticle(from: rhs.artist ?? "")
         let artistOrder = leftArtist.localizedStandardCompare(rightArtist)
         if artistOrder != .orderedSame { return artistOrder == .orderedAscending }
 
@@ -505,14 +427,6 @@ final class ShelvSystemIntentPlaybackService: @unchecked Sendable {
             return (lhs.track ?? Int.max) < (rhs.track ?? Int.max)
         }
         return lhs.title.localizedStandardCompare(rhs.title) == .orderedAscending
-    }
-
-    private static func stripArticle(_ value: String) -> String {
-        let lowered = value.lowercased()
-        for prefix in ["the ", "a ", "an "] where lowered.hasPrefix(prefix) {
-            return String(value.dropFirst(prefix.count))
-        }
-        return value
     }
 
     private func playInstantMix(

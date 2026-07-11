@@ -259,7 +259,11 @@ struct LibraryView: View {
             )
             let calculatedAlbumGroups: [(letter: String, items: [Album])]
             if sortOpt == .alphabetical {
-                calculatedAlbumGroups = LibraryGrouping.groupByFirstLetter(sortedAlbums, name: \.name)
+                calculatedAlbumGroups = LibraryGrouping.groupByFirstLetter(
+                    sortedAlbums,
+                    name: \.name,
+                    sortName: \.sortName
+                )
             } else {
                 calculatedAlbumGroups = sortedAlbums.isEmpty ? [] : [(letter: "", items: sortedAlbums)]
             }
@@ -292,7 +296,11 @@ struct LibraryView: View {
             // 3. Künstler im Hintergrund gruppieren
             let calculatedArtistGroups: [(letter: String, items: [Artist])]
             if artistSort == .alphabetical {
-                calculatedArtistGroups = LibraryGrouping.groupByFirstLetter(sortedArtists, name: \.name)
+                calculatedArtistGroups = LibraryGrouping.groupByFirstLetter(
+                    sortedArtists,
+                    name: \.name,
+                    sortName: \.sortName
+                )
             } else {
                 let items = artistDir == .descending
                     ? sortedArtists

@@ -690,3 +690,4 @@
 "shortcut_media_queue_next" = "Next";
 "shortcut_media_queue_last" = "Last";
 "shortcut_media_queue_ready" = "Audio queue ready";
+"shortcut_media_playback_started" = "Playback started in Shelv.";

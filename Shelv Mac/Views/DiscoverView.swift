@@ -164,36 +164,21 @@ struct DiscoverView: View {
     }
 
     private func loadOfflineMix(type: String) {
-        let allSongs = downloadStore.songs.map { $0.asSong() }
-        guard !allSongs.isEmpty else { return }
-
+        guard !downloadStore.songs.isEmpty else { return }
+        let mode: ShortcutDownloadsMode
         switch type {
-        case "offline_play":
-            let sorted = allSongs.sorted {
-                let a = desktopStripArticle($0.artist ?? "")
-                    .localizedStandardCompare(desktopStripArticle($1.artist ?? ""))
-                if a != .orderedSame { return a == .orderedAscending }
-                let b = ($0.album ?? "").localizedStandardCompare($1.album ?? "")
-                if b != .orderedSame { return b == .orderedAscending }
-                let d0 = $0.discNumber ?? 0, d1 = $1.discNumber ?? 0
-                if d0 != d1 { return d0 < d1 }
-                return ($0.track ?? 0) < ($1.track ?? 0)
-            }
-            player.play(songs: Array(sorted.prefix(500)))
-
-        case "offline_shuffle":
-            let sampled = Array(allSongs.shuffled().prefix(500))
-            player.playShuffled(songs: sampled)
-
-        case "offline_newest":
-            let top100 = downloadStore.songs
-                .sorted { $0.addedAt > $1.addedAt }
-                .prefix(100)
-                .map { $0.asSong() }
-            player.playShuffled(songs: Array(top100))
-
-        default:
-            break
+        case "offline_play": mode = .all
+        case "offline_shuffle": mode = .shuffled
+        case "offline_newest": mode = .newest
+        default: return
+        }
+        let selection = DownloadedPlaybackQueueBuilder.selection(
+            from: downloadStore.songs,
+            mode: mode
+        )
+        switch selection.order {
+        case .inOrder: player.play(songs: selection.songs)
+        case .shuffled: player.playShuffled(songs: selection.songs)
         }
     }
 
@@ -998,23 +983,6 @@ private struct OfflineRecapToolbarItem: View {
             RecapToolbarButton()
         }
     }
-}
-
-private func desktopStripArticle(_ title: String) -> String {
-    let lower = title.lowercased()
-    let prefixes: [String] = [
-        "the ", "an ", "a ",
-        "der ", "die ", "das ", "dem ", "den ", "des ",
-        "eine ", "einer ", "einem ", "einen ", "ein ",
-        "les ", "le ", "la ", "l\u{2019}", "l'",
-        "une ", "des ", "un ",
-        "los ", "las ", "el ", "una ", "un ",
-        "gli ", "uno ", "una ", "il ", "lo ",
-        "umas ", "uma ", "uns ", "um ", "os ", "as ",
-        "het ", "een ", "de ",
-    ]
-    for p in prefixes where lower.hasPrefix(p) { return String(title.dropFirst(p.count)) }
-    return title
 }
 
 #Preview {

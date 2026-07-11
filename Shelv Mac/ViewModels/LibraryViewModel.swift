@@ -97,7 +97,7 @@ class LibraryViewModel: ObservableObject {
         switch option {
         case .name:
             natural = artists.sorted { lhs, rhs in
-                compareStrings(lhs.name, rhs.name, lhs.id, rhs.id)
+                compareArtists(lhs, rhs)
             }
         case .mostPlayed:
             var counts: [String: Int] = [:]
@@ -114,23 +114,23 @@ class LibraryViewModel: ObservableObject {
                         ? lhsCount > rhsCount
                         : lhsCount < rhsCount
                 }
-                return compareStrings(lhs.name, rhs.name, lhs.id, rhs.id)
+                return compareArtists(lhs, rhs)
             }
         }
         return natural
     }
 
-    nonisolated private static func compareStrings(_ lhs: String, _ rhs: String, _ lhsId: String, _ rhsId: String) -> Bool {
-        let lhsKey = normalizedSortKey(lhs)
-        let rhsKey = normalizedSortKey(rhs)
+    nonisolated private static func compareArtists(_ lhs: Artist, _ rhs: Artist) -> Bool {
+        let lhsKey = LibrarySortKey.normalized(
+            displayName: lhs.name,
+            explicitSortName: lhs.sortName
+        )
+        let rhsKey = LibrarySortKey.normalized(
+            displayName: rhs.name,
+            explicitSortName: rhs.sortName
+        )
         if lhsKey != rhsKey { return lhsKey < rhsKey }
-        return lhsId < rhsId
-    }
-
-    nonisolated private static func normalizedSortKey(_ value: String) -> String {
-        value
-            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
-            .lowercased()
+        return lhs.id < rhs.id
     }
 
     // MARK: - Favorites

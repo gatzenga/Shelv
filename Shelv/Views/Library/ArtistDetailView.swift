@@ -38,53 +38,19 @@ struct ArtistDetailView: View {
         SortDirection(rawValue: directionRaw) ?? .descending
     }
 
-    private static let sortArticles: [String] = [
-        "the ", "an ", "a ",
-        "der ", "die ", "das ", "dem ", "den ", "des ",
-        "eine ", "einer ", "einem ", "einen ", "ein ",
-        "les ", "le ", "la ", "l\u{2019}", "l'",
-        "une ", "un ",
-        "los ", "las ", "el ", "una ",
-        "gli ", "uno ", "il ", "lo ",
-        "umas ", "uma ", "uns ", "um ", "os ", "as ",
-        "het ", "een ", "de ",
-    ]
-
-    private func sortKey(for name: String) -> String {
-        let lower = name.lowercased()
-        for article in Self.sortArticles {
-            if lower.hasPrefix(article) {
-                return String(name.dropFirst(article.count))
-            }
-        }
-        return name
-    }
-
     private var filteredAlbums: [Album] {
         guard !searchQuery.isEmpty else { return sortedAlbums }
         return sortedAlbums.filter { $0.name.localizedCaseInsensitiveContains(searchQuery) }
     }
 
     private var sortedAlbums: [Album] {
-        guard let albums = detail?.album else { return [] }
-        switch sortOption {
-        case .alphabetical:
-            // Name immer A-Z, unabhängig von direction
-            return albums.sorted {
-                sortKey(for: $0.name).localizedCaseInsensitiveCompare(sortKey(for: $1.name)) == .orderedAscending
-            }
-        case .frequent:
-            let base = albums.sorted { ($0.playCount ?? 0) < ($1.playCount ?? 0) }
-            return direction == .ascending ? base : Array(base.reversed())
-        case .newest:
-            let base = albums.sorted {
-                ($0.created ?? .distantPast) < ($1.created ?? .distantPast)
-            }
-            return direction == .ascending ? base : Array(base.reversed())
-        case .year:
-            let base = albums.sorted { ($0.year ?? 0) < ($1.year ?? 0) }
-            return direction == .ascending ? base : Array(base.reversed())
-        }
+        ArtistAlbumPlaybackOrder.sorted(
+            detail?.album ?? [],
+            preference: ArtistAlbumSortPreference(
+                sortRaw: sortRaw,
+                directionRaw: directionRaw
+            )
+        )
     }
 
     var body: some View {
@@ -576,18 +542,8 @@ struct ArtistDetailView: View {
         if offlineMode.isOffline {
             return albums.compactMap(\.songs).flatMap { $0 }
         }
-        let indexed = Array(albums.enumerated())
-        return await withTaskGroup(of: (Int, [Song]).self) { group in
-            for (i, album) in indexed {
-                group.addTask {
-                    guard let detail = try? await SubsonicAPIService.shared.getAlbum(id: album.id),
-                          let songs = detail.song else { return (i, []) }
-                    return (i, songs)
-                }
-            }
-            var results: [(Int, [Song])] = []
-            for await result in group { results.append(result) }
-            return results.sorted { $0.0 < $1.0 }.flatMap { $0.1 }
+        return await PlaybackContentResolver.artistSongs(from: albums) { albumID in
+            (try? await SubsonicAPIService.shared.getAlbum(id: albumID).song) ?? []
         }
     }
 

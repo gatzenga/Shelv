@@ -134,6 +134,22 @@ nonisolated enum ShelvIntentDiagnostics {
             "Catalog resolved queryLength=\(queryLength, privacy: .public) resultCount=\(resultCount, privacy: .public)"
         )
     }
+
+    static func audioSearchBegan(criteria: String) {
+        logger.notice("Audio search began criteria=\(criteria, privacy: .public)")
+    }
+
+    static func audioSearchCompleted(criteria: String, route: String, resultCount: Int) {
+        logger.notice(
+            "Audio search completed criteria=\(criteria, privacy: .public) route=\(route, privacy: .public) resultCount=\(resultCount, privacy: .public)"
+        )
+    }
+
+    static func audioSearchFailed(criteria: String, error: Error) {
+        logger.error(
+            "Audio search failed criteria=\(criteria, privacy: .public) error=\(String(describing: error), privacy: .private(mask: .hash))"
+        )
+    }
 }
 
 nonisolated enum ShortcutPlaybackError: Error, Equatable, Sendable,

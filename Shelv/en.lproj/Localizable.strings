@@ -684,6 +684,7 @@
 "shortcut_media_queue_next" = "Next";
 "shortcut_media_queue_last" = "Last";
 "shortcut_media_queue_ready" = "Audio queue ready";
+"shortcut_media_playback_started" = "Playback started in Shelv.";
 "siri_shortcuts" = "Siri & Shortcuts";
 "siri_shortcuts_intro" = "Shelv actions are available in Siri, Shortcuts, personal automations, and CarPlay automations. Playback runs without opening the app.";
 "siri_shortcuts_actions" = "Available Actions";

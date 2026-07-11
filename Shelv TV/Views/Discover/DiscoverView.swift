@@ -8,7 +8,6 @@ struct DiscoverView: View {
     }
 
     @ObservedObject var library = LibraryStore.shared
-    @AppStorage("mixUseDatabase") private var mixUseDatabase = false
     @AppStorage("themeColor") private var themeColor = "violet"
     @AppStorage("recapEnabled") private var recapEnabled = false
     @AppStorage(PersonalizationPreferenceKey.showDiscoverInsights) private var showDiscoverInsights = true
@@ -125,32 +124,15 @@ struct DiscoverView: View {
     }
 
     private func play(_ mix: PersonalizationSmartMix) async {
-        let songs: [Song]
+        let shortcutMix: ShortcutSmartMix
         switch mix {
-        case .newest:   songs = (try? await api.getNewestSongs()) ?? []
-        case .random:   songs = (try? await api.getRandomSongs(size: 500)) ?? []
-        case .frequent: songs = await frequentMix()
-        case .recent:   songs = await recentMix()
+        case .newest: shortcutMix = .newest
+        case .random: shortcutMix = .shuffleAll
+        case .frequent: shortcutMix = .frequent
+        case .recent: shortcutMix = .recent
         }
+        let songs = (try? await SmartMixPlaybackService.songs(for: shortcutMix)) ?? []
         if !songs.isEmpty { player.playShuffled(songs: songs) }
-    }
-
-    private func frequentMix() async -> [Song] {
-        if mixUseDatabase, let sid = api.activeServer?.stableId,
-           await PlayLogService.shared.distinctSongCount(serverId: sid) >= 50 {
-            let counts = await PlayLogService.shared.topSongs(serverId: sid, from: .distantPast, to: Date(), limit: 50)
-            if !counts.isEmpty, let songs = try? await api.getSongsOrdered(ids: counts.map(\.songId)) { return songs }
-        }
-        return (try? await api.frequentMixFallbackSongs()) ?? []
-    }
-
-    private func recentMix() async -> [Song] {
-        if mixUseDatabase, let sid = api.activeServer?.stableId,
-           await PlayLogService.shared.distinctSongCount(serverId: sid) >= 50 {
-            let ids = await PlayLogService.shared.recentUniqueSongIds(serverId: sid, limit: 50)
-            if !ids.isEmpty, let songs = try? await api.getSongsOrdered(ids: ids) { return songs }
-        }
-        return (try? await api.getRecentSongs(limit: 50)) ?? []
     }
 
     // MARK: - UI

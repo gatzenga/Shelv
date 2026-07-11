@@ -164,16 +164,10 @@ final class LibraryStore: ObservableObject {
     /// Alle Songs eines Künstlers (über alle Alben, parallel geladen) — für Play/Shuffle.
     func artistSongs(_ artist: Artist) async -> [Song] {
         guard let detail = try? await api.getArtist(id: artist.id) else { return [] }
-        let api = self.api
         let albums = detail.album ?? []
-        var all: [Song] = []
-        await withTaskGroup(of: [Song].self) { group in
-            for album in albums {
-                group.addTask { (try? await api.getAlbum(id: album.id).song) ?? [] }
-            }
-            for await songs in group { all.append(contentsOf: songs) }
+        return await PlaybackContentResolver.artistSongs(from: albums) { [api] albumID in
+            (try? await api.getAlbum(id: albumID).song) ?? []
         }
-        return all
     }
 
     func playlistSongs(_ playlist: Playlist) async -> [Song] {

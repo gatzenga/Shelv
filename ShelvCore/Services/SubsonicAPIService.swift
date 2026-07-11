@@ -198,6 +198,7 @@ nonisolated struct ArtistIndex: Decodable {
 nonisolated struct AlbumDetail: Decodable, Identifiable {
     let id: String
     let name: String
+    let sortName: String?
     let artist: String?
     let artistId: String?
     let coverArt: String?
@@ -211,13 +212,14 @@ nonisolated struct AlbumDetail: Decodable, Identifiable {
     var isStarred: Bool { starred != nil }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, artist, artistId, coverArt, songCount, duration, year, genre, starred, song
+        case id, name, sortName, artist, artistId, coverArt, songCount, duration, year, genre, starred, song
     }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
         name = try c.decode(String.self, forKey: .name)
+        sortName = try c.decodeIfPresent(String.self, forKey: .sortName)
         artist = try c.decodeIfPresent(String.self, forKey: .artist)
         artistId = try c.decodeIfPresent(String.self, forKey: .artistId)
         coverArt = try c.decodeIfPresent(String.self, forKey: .coverArt)
@@ -229,11 +231,12 @@ nonisolated struct AlbumDetail: Decodable, Identifiable {
         song = try c.decodeIfPresent([Song].self, forKey: .song)
     }
 
-    init(id: String, name: String, artist: String? = nil, artistId: String? = nil,
+    init(id: String, name: String, sortName: String? = nil, artist: String? = nil, artistId: String? = nil,
          coverArt: String? = nil, songCount: Int? = nil, duration: Int? = nil,
          year: Int? = nil, genre: String? = nil, starred: Date? = nil, song: [Song]? = nil) {
         self.id = id
         self.name = name
+        self.sortName = sortName
         self.artist = artist
         self.artistId = artistId
         self.coverArt = coverArt
@@ -249,6 +252,7 @@ nonisolated struct AlbumDetail: Decodable, Identifiable {
 nonisolated struct ArtistDetail: Decodable, Identifiable {
     let id: String
     let name: String
+    let sortName: String?
     let albumCount: Int?
     let coverArt: String?
     let album: [Album]?

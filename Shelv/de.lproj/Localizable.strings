@@ -684,6 +684,7 @@
 "shortcut_media_queue_next" = "Als Nächstes";
 "shortcut_media_queue_last" = "Am Ende";
 "shortcut_media_queue_ready" = "Audiowarteschlange bereit";
+"shortcut_media_playback_started" = "Wiedergabe in Shelv gestartet.";
 "siri_shortcuts" = "Siri & Kurzbefehle";
 "siri_shortcuts_intro" = "Shelv-Aktionen stehen in Siri, Kurzbefehlen, persönlichen Automationen und CarPlay-Automationen zur Verfügung. Die Wiedergabe startet, ohne die App zu öffnen.";
 "siri_shortcuts_actions" = "Verfügbare Aktionen";

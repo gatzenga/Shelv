@@ -128,7 +128,9 @@
               "Play a mix in ${applicationName}",
               "Play ${mix} in ${applicationName}",
               "Play ${mix} tracks in ${applicationName}",
-              "Start ${mix} in ${applicationName}"
+              "Start ${mix} in ${applicationName}",
+              "Ask ${applicationName} to play the ${mix} mix",
+              "Play the ${mix} mix in ${applicationName}"
             ]
           }
         },
@@ -139,7 +141,9 @@
               "Einen Mix in ${applicationName} abspielen",
               "${mix} in ${applicationName} abspielen",
               "Titel aus ${mix} in ${applicationName} abspielen",
-              "${mix} in ${applicationName} starten"
+              "${mix} in ${applicationName} starten",
+              "Mit ${applicationName} den Mix ${mix} abspielen",
+              "Den Mix ${mix} in ${applicationName} abspielen"
             ]
           }
         },
@@ -150,7 +154,9 @@
               "在 ${applicationName} 中播放混音",
               "在 ${applicationName} 中播放 ${mix}",
               "在 ${applicationName} 中播放 ${mix} 曲目",
-              "在 ${applicationName} 中启动 ${mix}"
+              "在 ${applicationName} 中启动 ${mix}",
+              "让 ${applicationName} 播放 ${mix} 混音",
+              "在 ${applicationName} 中播放 ${mix} 混音"
             ]
           }
         }

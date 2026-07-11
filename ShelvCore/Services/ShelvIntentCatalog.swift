@@ -133,6 +133,12 @@ final class ShelvIntentCatalog {
 
         let context = try await activeContext()
         let terms = ShelvIntentSearchVocabulary.searchTerms(for: query)
+        let effectiveAllowedKinds = ShelvIntentSearchVocabulary.effectiveAllowedKinds(
+            allowedKinds,
+            for: query,
+            requiresExplicitRadio: requiresExplicitRadio
+        )
+        guard !effectiveAllowedKinds.isEmpty else { return [] }
         let localRecords = await LocalDownloadCatalog.load(
             serverId: context.storageServerID
         ).records
@@ -150,12 +156,12 @@ final class ShelvIntentCatalog {
                     item.reference.kind,
                     for: query,
                     requiresExplicitRadio: requiresExplicitRadio
-                ), allowedKinds.contains(item.reference.kind) else { continue }
+                ), effectiveAllowedKinds.contains(item.reference.kind) else { continue }
                 merge(item, query: query, into: &scored)
             }
         }
 
-        if allowedKinds.contains(.playlist), ShelvIntentSearchVocabulary.allows(
+        if effectiveAllowedKinds.contains(.playlist), ShelvIntentSearchVocabulary.allows(
             .playlist,
             for: query,
             requiresExplicitRadio: requiresExplicitRadio
@@ -181,10 +187,10 @@ final class ShelvIntentCatalog {
         }
 
         if await networkAvailable() {
-            let needsMusicCatalog = !allowedKinds.isDisjoint(with: [.song, .album, .artist])
+            let needsMusicCatalog = !effectiveAllowedKinds.isDisjoint(with: [.song, .album, .artist])
             async let searchResults = needsMusicCatalog ? remoteSearchResults(for: terms) : []
-            async let playlists = allowedKinds.contains(.playlist) ? remotePlaylists() : []
-            async let radios = allowedKinds.contains(.radio) ? remoteRadios() : []
+            async let playlists = effectiveAllowedKinds.contains(.playlist) ? remotePlaylists() : []
+            async let radios = effectiveAllowedKinds.contains(.radio) ? remoteRadios() : []
             let (results, playlistResults, radioResults) = await (
                 searchResults, playlists, radios
             )
@@ -194,21 +200,21 @@ final class ShelvIntentCatalog {
                     .song,
                     for: query,
                     requiresExplicitRadio: requiresExplicitRadio
-                ) && allowedKinds.contains(.song) {
+                ) && effectiveAllowedKinds.contains(.song) {
                     merge(songItem(song, server: context.server), query: query, into: &scored)
                 }
                 for album in result.album ?? [] where ShelvIntentSearchVocabulary.allows(
                     .album,
                     for: query,
                     requiresExplicitRadio: requiresExplicitRadio
-                ) && allowedKinds.contains(.album) {
+                ) && effectiveAllowedKinds.contains(.album) {
                     merge(albumItem(album, server: context.server), query: query, into: &scored)
                 }
                 for artist in result.artist ?? [] where ShelvIntentSearchVocabulary.allows(
                     .artist,
                     for: query,
                     requiresExplicitRadio: requiresExplicitRadio
-                ) && allowedKinds.contains(.artist) {
+                ) && effectiveAllowedKinds.contains(.artist) {
                     merge(artistItem(artist, server: context.server), query: query, into: &scored)
                 }
             }
@@ -217,7 +223,7 @@ final class ShelvIntentCatalog {
                 .playlist,
                 for: query,
                 requiresExplicitRadio: requiresExplicitRadio
-            ) && allowedKinds.contains(.playlist)
+            ) && effectiveAllowedKinds.contains(.playlist)
                 && matches(playlist.name, query: query, terms: terms) {
                 merge(playlistItem(playlist, server: context.server), query: query, into: &scored)
                 await LocalOfflinePlaylistCatalog.updateName(
@@ -230,14 +236,14 @@ final class ShelvIntentCatalog {
                 .radio,
                 for: query,
                 requiresExplicitRadio: requiresExplicitRadio
-            ) && allowedKinds.contains(.radio)
+            ) && effectiveAllowedKinds.contains(.radio)
                 && matches(radio.name, query: query, terms: terms) {
                 merge(radioItem(radio, server: context.server), query: query, into: &scored)
             }
         }
 
         try validate(context)
-        let resolved = scored.values
+        let ranked = scored.values
             .sorted {
                 if $0.score != $1.score { return $0.score > $1.score }
                 let titleOrder = $0.item.title.localizedStandardCompare($1.item.title)
@@ -247,10 +253,42 @@ final class ShelvIntentCatalog {
                 if leftKind != rightKind { return leftKind < rightKind }
                 return $0.item.reference.identifier < $1.item.reference.identifier
             }
+        let primaryMatches = ranked.filter { value in
+            ShelvIntentSearchRanking.isPrimaryMatch(
+                kind: value.item.reference.kind,
+                title: value.item.title,
+                artistName: value.item.artistName,
+                albumTitle: value.item.albumTitle,
+                query: query
+            )
+        }
+        let resolved = (primaryMatches.isEmpty ? ranked : primaryMatches)
             .prefix(limit)
             .map(\.item)
         ShelvIntentDiagnostics.catalogResolved(queryLength: query.count, resultCount: resolved.count)
         return resolved
+    }
+
+    /// Reduces a Siri playback search to one result when the request has one
+    /// objectively best match. Genuine title ties remain available for system
+    /// disambiguation instead of silently choosing the wrong song or album.
+    nonisolated static func deterministicPlaybackMatches(
+        _ items: [ShelvIntentCatalogItem],
+        query: String,
+        ambiguityLimit: Int = 5
+    ) -> [ShelvIntentCatalogItem] {
+        ShelvIntentSearchRanking.deterministicPlaybackMatches(
+            items,
+            query: query,
+            ambiguityLimit: ambiguityLimit
+        ) { item in
+            (
+                item.reference.kind,
+                item.title,
+                item.artistName,
+                item.albumTitle
+            )
+        }
     }
 
     func items(for identifiers: [String]) async throws -> [ShelvIntentCatalogItem] {
@@ -673,13 +711,13 @@ final class ShelvIntentCatalog {
         query: String,
         into values: inout [ShortcutPlayableReference: (item: ShelvIntentCatalogItem, score: Int)]
     ) {
-        let score = relevance(of: item, for: query)
+        guard let score = relevance(of: item, for: query) else { return }
         if let current = values[item.reference], current.score >= score { return }
         values[item.reference] = (item, score)
     }
 
-    private func relevance(of item: ShelvIntentCatalogItem, for query: String) -> Int {
-        ShelvIntentSearchRanking.score(
+    private func relevance(of item: ShelvIntentCatalogItem, for query: String) -> Int? {
+        ShelvIntentSearchRanking.relevantScore(
             kind: item.reference.kind,
             title: item.title,
             artistName: item.artistName,

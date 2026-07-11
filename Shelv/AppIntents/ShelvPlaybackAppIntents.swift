@@ -529,6 +529,9 @@ extension ShelvBackgroundPlaybackIntent {
     static var supportedModes: IntentModes { .background }
 }
 
+// Keep these App Shortcut actions available on iOS 27 and later. The native
+// audio schema powers Siri's catalog search; it does not replace the explicit
+// actions people select in the Shortcuts app.
 struct ShelvShuffleAllIntent: ShelvBackgroundPlaybackIntent {
     static let title: LocalizedStringResource = "shortcut_shuffle_all_title"
     static let description = IntentDescription("shortcut_shuffle_all_description")

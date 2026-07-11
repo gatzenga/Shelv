@@ -257,93 +257,10 @@ struct ShelvAppShortcuts: AppShortcutsProvider {
     static var shortcutTileColor: ShortcutTileColor { .purple }
 
     static var appShortcuts: [AppShortcut] {
-        AppShortcut(
-            intent: ShelvShuffleAllIntent(),
-            phrases: [
-                "Shuffle all in \(.applicationName)",
-                "Shuffle all tracks in \(.applicationName)",
-                "Shuffle all songs in \(.applicationName)",
-                "Shuffle my library in \(.applicationName)",
-                "Ask \(.applicationName) to shuffle music",
-                "Shuffle music with \(.applicationName)",
-            ],
-            shortTitle: "shortcut_shuffle_all_short",
-            systemImageName: "shuffle"
-        )
-
-        AppShortcut(
-            intent: ShelvPlayPlayableIntent(),
-            phrases: [
-                "Play something in \(.applicationName)",
-                "Play \(\.$playable) in \(.applicationName)",
-                "Ask \(.applicationName) to play \(\.$playable)",
-                "Play \(\.$playable) with \(.applicationName)",
-            ],
-            shortTitle: "shortcut_play_short",
-            systemImageName: "play.fill"
-        )
-
-        AppShortcut(
-            intent: ShelvShufflePlayableIntent(),
-            phrases: [
-                "Ask \(.applicationName) to shuffle \(\.$playable)",
-                "Play \(\.$playable) shuffled with \(.applicationName)",
-                "Choose music to shuffle in \(.applicationName)",
-            ],
-            shortTitle: "shortcut_shuffle_playable_short",
-            systemImageName: "shuffle"
-        )
-
-        AppShortcut(
-            intent: ShelvPlayMixIntent(),
-            phrases: [
-                "Play a mix in \(.applicationName)",
-                "Play \(\.$mix) in \(.applicationName)",
-                "Play \(\.$mix) tracks in \(.applicationName)",
-                "Start \(\.$mix) in \(.applicationName)",
-            ],
-            shortTitle: "shortcut_play_mix_short",
-            systemImageName: "sparkles"
-        )
-
-        AppShortcut(
-            intent: ShelvInstantMixIntent(),
-            phrases: [
-                "Ask \(.applicationName) to play an instant mix",
-                "Play an instant mix in \(.applicationName)",
-                "Play instant mix for \(\.$playable) in \(.applicationName)",
-                "Play an instant mix for \(\.$playable) in \(.applicationName)",
-                "Create an instant mix from \(\.$playable) in \(.applicationName)",
-                "Ask \(.applicationName) to play an instant mix for \(\.$playable)",
-            ],
-            shortTitle: "shortcut_instant_mix_short",
-            systemImageName: "wand.and.stars"
-        )
-
-        AppShortcut(
-            intent: ShelvPlayDownloadsIntent(),
-            phrases: [
-                "Play downloads in \(.applicationName)",
-                "Play \(\.$mode) downloads in \(.applicationName)",
-                "Play downloaded music in \(.applicationName)",
-                "Shuffle downloads in \(.applicationName)",
-            ],
-            shortTitle: "shortcut_play_downloads_short",
-            systemImageName: "arrow.down.circle.fill"
-        )
-
-        AppShortcut(
-            intent: ShelvPlayPauseIntent(),
-            phrases: [
-                "Play or pause \(.applicationName)",
-                "Toggle playback in \(.applicationName)",
-                "Toggle \(.applicationName) playback",
-                "Play or pause music in \(.applicationName)",
-            ],
-            shortTitle: "shortcut_play_pause_short",
-            systemImageName: "playpause.fill"
-        )
-
+        // Media actions remain discoverable as configurable actions in the
+        // Shortcuts app. They deliberately have no App Shortcut phrases here:
+        // on iOS 27 the native audio schema is the single natural-language
+        // route, avoiding competing Play/Mix/Entity resolutions in Siri.
         AppShortcut(
             intent: ShelvOpenPlayerIntent(),
             phrases: [
@@ -355,6 +272,17 @@ struct ShelvAppShortcuts: AppShortcutsProvider {
             ],
             shortTitle: "shortcut_now_playing_short",
             systemImageName: "music.note"
+        )
+
+        AppShortcut(
+            intent: ShelvOpenSearchIntent(),
+            phrases: [
+                "Open search in \(.applicationName)",
+                "Search in \(.applicationName)",
+                "Show search in \(.applicationName)",
+            ],
+            shortTitle: "shortcut_search_short",
+            systemImageName: "magnifyingglass"
         )
 
         AppShortcut(

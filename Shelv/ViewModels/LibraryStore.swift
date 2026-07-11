@@ -374,18 +374,8 @@ class LibraryStore: ObservableObject {
         }
         guard let artistDetail = try? await api.getArtist(id: artist.id),
               let albums = artistDetail.album, !albums.isEmpty else { return [] }
-        let indexed = Array(albums.enumerated())
-        return await withTaskGroup(of: (Int, [Song]).self) { group in
-            for (i, album) in indexed {
-                group.addTask {
-                    guard let detail = try? await SubsonicAPIService.shared.getAlbum(id: album.id),
-                          let songs = detail.song else { return (i, []) }
-                    return (i, songs)
-                }
-            }
-            var results: [(Int, [Song])] = []
-            for await result in group { results.append(result) }
-            return results.sorted { $0.0 < $1.0 }.flatMap { $0.1 }
+        return await PlaybackContentResolver.artistSongs(from: albums) { albumID in
+            (try? await SubsonicAPIService.shared.getAlbum(id: albumID).song) ?? []
         }
     }
 

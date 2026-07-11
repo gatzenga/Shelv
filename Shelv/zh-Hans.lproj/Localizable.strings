@@ -684,6 +684,7 @@
 "shortcut_media_queue_next" = "下一首";
 "shortcut_media_queue_last" = "最后";
 "shortcut_media_queue_ready" = "音频队列已就绪";
+"shortcut_media_playback_started" = "已在 Shelv 中开始播放。";
 "siri_shortcuts" = "Siri 与快捷指令";
 "siri_shortcuts_intro" = "Shelv 操作可用于 Siri、快捷指令、个人自动化和 CarPlay 自动化。播放无需打开 App。";
 "siri_shortcuts_actions" = "可用操作";

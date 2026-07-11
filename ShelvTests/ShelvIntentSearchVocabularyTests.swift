@@ -42,6 +42,48 @@ final class ShelvIntentSearchVocabularyTests: XCTestCase {
         XCTAssertFalse(terms.dropFirst().contains { $0.localizedCaseInsensitiveContains("please") })
     }
 
+    func testResolvesSmartMixPhrasesFromNativeAudioSearch() {
+        let fixtures: [(String, ShortcutSmartMix)] = [
+            ("Newest", .newest),
+            ("Please play newest tracks in Shelv", .newest),
+            ("Ask Shelv to play the Latest Music mix", .newest),
+            ("Play frequently played tracks in Shelv", .frequent),
+            ("Play most played in Shelv", .frequent),
+            ("Play recently played tracks in Shelv", .recent),
+            ("Shuffle all tracks in Shelv", .shuffleAll),
+            ("Shuffle my library with Shelv", .shuffleAll),
+            ("Spiele die neueste Musik in Shelv", .newest),
+            ("Spiele häufig gespielte Titel in Shelv", .frequent),
+            ("Spiele zuletzt gespielte Titel in Shelv", .recent),
+            ("Mische alle Titel in Shelv", .shuffleAll),
+            ("在 Shelv 中播放最新音乐", .newest),
+            ("在 Shelv 中播放最近播放", .recent),
+            ("在 Shelv 中随机播放所有歌曲", .shuffleAll),
+        ]
+
+        for (phrase, expected) in fixtures {
+            XCTAssertEqual(
+                ShelvSmartMixIntentVocabulary.smartMix(for: phrase),
+                expected,
+                phrase
+            )
+        }
+    }
+
+    func testSmartMixVocabularyDoesNotStealExplicitCatalogRequests() {
+        let catalogRequests = [
+            "Play the album Newest in Shelv",
+            "Play the artist Recent in Shelv",
+            "Play the playlist Latest in Shelv",
+            "Play the song named Newest Tracks in Shelv",
+            "Play Mercury in Shelv",
+        ]
+
+        for phrase in catalogRequests {
+            XCTAssertNil(ShelvSmartMixIntentVocabulary.smartMix(for: phrase), phrase)
+        }
+    }
+
     func testDeduplicatesFoldedTermsAndRespectsLimit() {
         let terms = ShelvIntentSearchVocabulary.searchTerms(
             for: "Play Ánima by Anima Anima Extra Words",
@@ -152,6 +194,30 @@ final class ShelvIntentSearchVocabularyTests: XCTestCase {
         )
     }
 
+    func testQualifierMediaKindsDoNotReplaceTheRequestedObject() {
+        XCTAssertNil(
+            ShelvIntentSearchVocabulary.explicitKind(
+                in: "Play Time from the album Running on Empty"
+            )
+        )
+        XCTAssertNil(
+            ShelvIntentSearchVocabulary.explicitKind(
+                in: "Play Demons by the artist Imagine Dragons"
+            )
+        )
+        XCTAssertNil(
+            ShelvIntentSearchVocabulary.explicitKind(
+                in: "Spiele Zeit aus dem Album Unendlich"
+            )
+        )
+        XCTAssertEqual(
+            ShelvIntentSearchVocabulary.explicitKind(
+                in: "Play album Songs by artist Imagine Dragons"
+            ),
+            .album
+        )
+    }
+
     func testArtistRequestGrammarOverridesGenericSongKindWords() {
         XCTAssertEqual(
             ShelvIntentSearchVocabulary.explicitKind(in: "Play songs by Radiohead"),
@@ -163,6 +229,14 @@ final class ShelvIntentSearchVocabularyTests: XCTestCase {
         )
         XCTAssertEqual(
             ShelvIntentSearchVocabulary.explicitKind(in: "Spiele Lieder von Silbermond"),
+            .artist
+        )
+        XCTAssertEqual(
+            ShelvIntentSearchVocabulary.explicitKind(in: "Shuffle songs by Imagine Dragons"),
+            .artist
+        )
+        XCTAssertEqual(
+            ShelvIntentSearchVocabulary.explicitKind(in: "Mische die Lieder von Silbermond"),
             .artist
         )
     }
@@ -195,6 +269,35 @@ final class ShelvIntentSearchVocabularyTests: XCTestCase {
         )
         XCTAssertFalse(
             ShelvIntentSearchVocabulary.allows(.artist, for: query, requiresExplicitRadio: true)
+        )
+    }
+
+    func testServerSearchKindsAreNarrowedBeforeFetching() {
+        let allKinds = Set(ShortcutPlayableKind.allCases)
+
+        XCTAssertEqual(
+            ShelvIntentSearchVocabulary.effectiveAllowedKinds(
+                allKinds,
+                for: "Play Pop Radio in Shelv",
+                requiresExplicitRadio: true
+            ),
+            [.radio]
+        )
+        XCTAssertEqual(
+            ShelvIntentSearchVocabulary.effectiveAllowedKinds(
+                allKinds,
+                for: "Play the song Demons by Imagine Dragons in Shelv",
+                requiresExplicitRadio: true
+            ),
+            [.song]
+        )
+        XCTAssertEqual(
+            ShelvIntentSearchVocabulary.effectiveAllowedKinds(
+                allKinds,
+                for: "Play Mercury in Shelv",
+                requiresExplicitRadio: true
+            ),
+            [.song, .album, .artist, .playlist]
         )
     }
 
@@ -289,5 +392,404 @@ final class ShelvIntentSearchVocabularyTests: XCTestCase {
         )
 
         XCTAssertGreaterThan(songScore, artistScore)
+    }
+
+    func testRejectsUnrelatedSongReturnedForExplicitSongRequest() {
+        let query = "Play the song Demons by Imagine Dragons in Shelv"
+
+        XCTAssertNotNil(
+            ShelvIntentSearchRanking.relevantScore(
+                kind: .song,
+                title: "Demons",
+                artistName: "Imagine Dragons",
+                albumTitle: "Night Visions",
+                query: query
+            )
+        )
+        XCTAssertNil(
+            ShelvIntentSearchRanking.relevantScore(
+                kind: .song,
+                title: "No Role Modelz",
+                artistName: "J. Cole",
+                albumTitle: "2014 Forest Hills Drive",
+                query: query
+            )
+        )
+    }
+
+    func testRejectsSameTitleByWrongArtist() {
+        let query = "Play the song Demons by Imagine Dragons in Shelv"
+
+        XCTAssertNil(
+            ShelvIntentSearchRanking.relevantScore(
+                kind: .song,
+                title: "Demons",
+                artistName: "Doja Cat",
+                albumTitle: "Scarlet",
+                query: query
+            )
+        )
+    }
+
+    func testAlbumQualifierMustMatchAlbumField() {
+        let query = "Play song Time from album Running on Empty"
+
+        XCTAssertNotNil(
+            ShelvIntentSearchRanking.relevantScore(
+                kind: .song,
+                title: "Time",
+                artistName: "Jackson Browne",
+                albumTitle: "Running on Empty",
+                query: query
+            )
+        )
+        XCTAssertNil(
+            ShelvIntentSearchRanking.relevantScore(
+                kind: .song,
+                title: "Time",
+                artistName: "Pink Floyd",
+                albumTitle: "The Dark Side of the Moon",
+                query: query
+            )
+        )
+    }
+
+    func testAlbumAndArtistQualifierKindsResolveWithoutAnExplicitSongWord() {
+        XCTAssertNotNil(
+            ShelvIntentSearchRanking.relevantScore(
+                kind: .song,
+                title: "Time",
+                artistName: "Jackson Browne",
+                albumTitle: "Running on Empty",
+                query: "Play Time from the album Running on Empty"
+            )
+        )
+        XCTAssertNotNil(
+            ShelvIntentSearchRanking.relevantScore(
+                kind: .song,
+                title: "Demons",
+                artistName: "Imagine Dragons",
+                albumTitle: "Night Visions",
+                query: "Play Demons by the artist Imagine Dragons"
+            )
+        )
+        XCTAssertNotNil(
+            ShelvIntentSearchRanking.relevantScore(
+                kind: .song,
+                title: "Zeit",
+                artistName: "Silbermond",
+                albumTitle: "Unendlich",
+                query: "Spiele Zeit aus dem Album Unendlich"
+            )
+        )
+    }
+
+    func testUnqualifiedArtistNameRanksArtistAheadOfSongsByArtist() {
+        let query = "Shuffle Imagine Dragons in Shelv"
+        let artistScore = ShelvIntentSearchRanking.relevantScore(
+            kind: .artist,
+            title: "Imagine Dragons",
+            artistName: "Imagine Dragons",
+            albumTitle: nil,
+            query: query
+        )
+        let songScore = ShelvIntentSearchRanking.relevantScore(
+            kind: .song,
+            title: "Demons",
+            artistName: "Imagine Dragons",
+            albumTitle: "Night Visions",
+            query: query
+        )
+
+        XCTAssertNotNil(artistScore)
+        XCTAssertNotNil(songScore)
+        XCTAssertGreaterThan(artistScore ?? 0, songScore ?? 0)
+        XCTAssertTrue(
+            ShelvIntentSearchRanking.isPrimaryMatch(
+                kind: .artist,
+                title: "Imagine Dragons",
+                artistName: "Imagine Dragons",
+                albumTitle: nil,
+                query: query
+            )
+        )
+        XCTAssertFalse(
+            ShelvIntentSearchRanking.isPrimaryMatch(
+                kind: .song,
+                title: "Demons",
+                artistName: "Imagine Dragons",
+                albumTitle: "Night Visions",
+                query: query
+            )
+        )
+    }
+
+    func testAlbumTitleIsPrimaryOnlyForAlbumNotSongsFromAlbum() {
+        let query = "Play Mercury in Shelv"
+
+        XCTAssertTrue(
+            ShelvIntentSearchRanking.isPrimaryMatch(
+                kind: .album,
+                title: "Mercury",
+                artistName: "Imagine Dragons",
+                albumTitle: nil,
+                query: query
+            )
+        )
+        XCTAssertFalse(
+            ShelvIntentSearchRanking.isPrimaryMatch(
+                kind: .song,
+                title: "Bones",
+                artistName: "Imagine Dragons",
+                albumTitle: "Mercury",
+                query: query
+            )
+        )
+    }
+
+    func testTitleBeginningWithFromIsNotMisreadAsArtistQualifier() {
+        XCTAssertNotNil(
+            ShelvIntentSearchRanking.relevantScore(
+                kind: .album,
+                title: "From Mars to Sirius",
+                artistName: "Gojira",
+                albumTitle: nil,
+                query: "Play From Mars to Sirius in Shelv"
+            )
+        )
+    }
+
+    func testAskAppPhraseLeavesOnlyCatalogTerms() {
+        XCTAssertEqual(
+            ShelvIntentSearchVocabulary.contentTokens(
+                in: "Ask Shelv to play the song Demons by Imagine Dragons"
+            ),
+            ["demons", "imagine", "dragons"]
+        )
+    }
+
+    func testPrimaryRequestPreservesWordsInsideRealCatalogNames() {
+        XCTAssertEqual(
+            ShelvIntentSearchVocabulary.primaryRequestTokens(
+                in: "Play All My Loving in Shelv"
+            ),
+            ["all", "my", "loving"]
+        )
+        XCTAssertEqual(
+            ShelvIntentSearchVocabulary.primaryRequestTokens(
+                in: "Play The Beatles in Shelv"
+            ),
+            ["the", "beatles"]
+        )
+        XCTAssertEqual(
+            ShelvIntentSearchVocabulary.primaryRequestTokens(
+                in: "Play Pop Radio in Shelv"
+            ),
+            ["pop"]
+        )
+    }
+
+    func testLongerTitleWithGrammarWordsBeatsShortPartialTitle() {
+        let query = "Play All My Loving in Shelv"
+
+        XCTAssertNotNil(
+            ShelvIntentSearchRanking.relevantScore(
+                kind: .song,
+                title: "All My Loving",
+                artistName: "The Beatles",
+                albumTitle: "With the Beatles",
+                query: query
+            )
+        )
+        XCTAssertNil(
+            ShelvIntentSearchRanking.relevantScore(
+                kind: .song,
+                title: "Loving",
+                artistName: "Other Artist",
+                albumTitle: nil,
+                query: query
+            )
+        )
+    }
+
+    func testByInsideSongTitleUsesFinalByAsArtistQualifier() {
+        XCTAssertNotNil(
+            ShelvIntentSearchRanking.relevantScore(
+                kind: .song,
+                title: "Stand by Me",
+                artistName: "Ben E. King",
+                albumTitle: nil,
+                query: "Play Stand by Me by Ben E. King in Shelv"
+            )
+        )
+    }
+
+    func testFromInsideAlbumTitleIsKeptWhenWholeTitleMatches() {
+        XCTAssertNotNil(
+            ShelvIntentSearchRanking.relevantScore(
+                kind: .album,
+                title: "Songs from the Big Chair",
+                artistName: "Tears for Fears",
+                albumTitle: nil,
+                query: "Play the album Songs from the Big Chair in Shelv"
+            )
+        )
+    }
+
+    func testDownloadVocabularySeparatesModesAndCatalogNames() {
+        XCTAssertEqual(
+            ShelvDownloadsIntentVocabulary.mode(for: "Play downloads in Shelv"),
+            .shuffled
+        )
+        XCTAssertEqual(
+            ShelvDownloadsIntentVocabulary.mode(for: "Play all downloads in Shelv"),
+            .all
+        )
+        XCTAssertEqual(
+            ShelvDownloadsIntentVocabulary.mode(for: "Play newest downloads in Shelv"),
+            .newest
+        )
+        XCTAssertEqual(
+            ShelvDownloadsIntentVocabulary.mode(for: "Spiele heruntergeladene Musik in Shelv"),
+            .shuffled
+        )
+        XCTAssertNil(
+            ShelvDownloadsIntentVocabulary.mode(for: "Play the playlist Downloads in Shelv")
+        )
+    }
+
+    func testInstantMixVocabularyExtractsOnlyTheSeed() {
+        XCTAssertEqual(
+            ShelvInstantMixIntentVocabulary.seedQuery(
+                from: "Play an instant mix for Imagine Dragons in Shelv"
+            ),
+            "imagine dragons"
+        )
+        XCTAssertEqual(
+            ShelvInstantMixIntentVocabulary.seedQuery(
+                from: "Ask Shelv to play an instant mix for Mercury"
+            ),
+            "mercury"
+        )
+        XCTAssertEqual(
+            ShelvInstantMixIntentVocabulary.seedQuery(
+                from: "Spiele einen Instant Mix für Imagine Dragons in Shelv"
+            ),
+            "imagine dragons"
+        )
+        XCTAssertNil(
+            ShelvInstantMixIntentVocabulary.seedQuery(
+                from: "Play the song Instant Mix in Shelv"
+            )
+        )
+    }
+
+    func testDeterministicPlaybackSelectsExactArtistInsteadOfRelatedSongs() {
+        let items = [
+            catalogItem(
+                id: "song",
+                kind: .song,
+                title: "Demons",
+                artist: "Imagine Dragons",
+                album: "Night Visions"
+            ),
+            catalogItem(
+                id: "artist",
+                kind: .artist,
+                title: "Imagine Dragons",
+                artist: "Imagine Dragons"
+            ),
+        ]
+
+        let selected = deterministicPlaybackMatches(
+            items,
+            query: "Play Imagine Dragons in Shelv"
+        )
+
+        XCTAssertEqual(selected.map(\.id), ["artist"])
+    }
+
+    func testDeterministicPlaybackUsesQualifiedSongAndArtist() {
+        let items = [
+            catalogItem(
+                id: "correct",
+                kind: .song,
+                title: "Demons",
+                artist: "Imagine Dragons",
+                album: "Night Visions"
+            ),
+            catalogItem(
+                id: "wrong",
+                kind: .song,
+                title: "Demons",
+                artist: "Doja Cat",
+                album: "Scarlet"
+            ),
+        ]
+
+        let selected = deterministicPlaybackMatches(
+            items,
+            query: "Play the song Demons by Imagine Dragons in Shelv"
+        )
+
+        XCTAssertEqual(selected.map(\.id), ["correct"])
+    }
+
+    func testDeterministicPlaybackKeepsGenuineTitleAmbiguity() {
+        let items = [
+            catalogItem(
+                id: "album",
+                kind: .album,
+                title: "Mercury",
+                artist: "Imagine Dragons"
+            ),
+            catalogItem(
+                id: "song",
+                kind: .song,
+                title: "Mercury",
+                artist: "Imagine Dragons",
+                album: "Mercury"
+            ),
+        ]
+
+        let selected = deterministicPlaybackMatches(
+            items,
+            query: "Play Mercury in Shelv"
+        )
+
+        XCTAssertEqual(Set(selected.map(\.id)), Set(["album", "song"]))
+    }
+
+    private struct IntentCandidate {
+        let id: String
+        let kind: ShortcutPlayableKind
+        let title: String
+        let artist: String?
+        let album: String?
+    }
+
+    private func deterministicPlaybackMatches(
+        _ items: [IntentCandidate],
+        query: String
+    ) -> [IntentCandidate] {
+        ShelvIntentSearchRanking.deterministicPlaybackMatches(items, query: query) { item in
+            (item.kind, item.title, item.artist, item.album)
+        }
+    }
+
+    private func catalogItem(
+        id: String,
+        kind: ShortcutPlayableKind,
+        title: String,
+        artist: String? = nil,
+        album: String? = nil
+    ) -> IntentCandidate {
+        IntentCandidate(
+            id: id,
+            kind: kind,
+            title: title,
+            artist: artist,
+            album: album
+        )
     }
 }
