@@ -34,10 +34,23 @@
 		BC1001342FFE000000000001 /* ShelvCore/Services/PlayLogService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001352FFE000000000001 /* ShelvCore/Services/PlayLogService.swift */; };
 		BC1001362FFE000000000001 /* ShelvCore/Services/RecapSyncLogic.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001372FFE000000000001 /* ShelvCore/Services/RecapSyncLogic.swift */; };
 		BC1001382FFE000000000001 /* ShelvCore/Services/ScrobbleDeliveryCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001392FFE000000000001 /* ShelvCore/Services/ScrobbleDeliveryCoordinator.swift */; };
+		BC10013A2FFE000000000001 /* ShelvCore/Utilities/ShelvIntentSearchVocabulary.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC10013B2FFE000000000001 /* ShelvCore/Utilities/ShelvIntentSearchVocabulary.swift */; };
+		BC10013C2FFE000000000001 /* ShelvCore/Models/ShortcutPlaybackModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC10013D2FFE000000000001 /* ShelvCore/Models/ShortcutPlaybackModels.swift */; };
+		BC10013E2FFE000000000001 /* ShelvCore/Services/PlaybackContentResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC10013F2FFE000000000001 /* ShelvCore/Services/PlaybackContentResolver.swift */; };
 		BC1867E52F91A088006D96E2 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC1867E42F91A088006D96E2 /* GRDB */; };
 		BC51161D2FDC8A850011CDE9 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC51161C2FDC8A850011CDE9 /* GRDB */; };
 		BC7B84A72FDB17F90058CB78 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC7B84A62FDB17F90058CB78 /* GRDB */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		BC20000A2FFE000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = BC9C59302F8E9FB000FF4D25 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = BC9C59372F8E9FB000FF4D25;
+			remoteInfo = Shelv;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		BC1000012FFE000000000001 /* ShelvTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ShelvTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -67,6 +80,10 @@
 		BC1001352FFE000000000001 /* ShelvCore/Services/PlayLogService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/PlayLogService.swift; sourceTree = "<group>"; };
 		BC1001372FFE000000000001 /* ShelvCore/Services/RecapSyncLogic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/RecapSyncLogic.swift; sourceTree = "<group>"; };
 		BC1001392FFE000000000001 /* ShelvCore/Services/ScrobbleDeliveryCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/ScrobbleDeliveryCoordinator.swift; sourceTree = "<group>"; };
+		BC10013B2FFE000000000001 /* ShelvCore/Utilities/ShelvIntentSearchVocabulary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Utilities/ShelvIntentSearchVocabulary.swift; sourceTree = "<group>"; };
+		BC10013D2FFE000000000001 /* ShelvCore/Models/ShortcutPlaybackModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Models/ShortcutPlaybackModels.swift; sourceTree = "<group>"; };
+		BC10013F2FFE000000000001 /* ShelvCore/Services/PlaybackContentResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/PlaybackContentResolver.swift; sourceTree = "<group>"; };
+		BC2000012FFE000000000001 /* ShelvAppIntentsUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ShelvAppIntentsUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC5116112FDC8A690011CDE9 /* Shelv TV.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Shelv TV.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC7B83F52FDB17700058CB78 /* Shelv.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Shelv.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC9C59382F8E9FB000FF4D25 /* Shelv.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Shelv.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -76,6 +93,11 @@
 		BC1000022FFE000000000001 /* ShelvTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = ShelvTests;
+			sourceTree = "<group>";
+		};
+		BC2000022FFE000000000001 /* ShelvAppIntentsUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = ShelvAppIntentsUITests;
 			sourceTree = "<group>";
 		};
 		BC5116122FDC8A690011CDE9 /* Shelv TV */ = {
@@ -106,6 +128,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				BC10000C2FFE000000000001 /* GRDB in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BC2000032FFE000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -148,6 +177,8 @@
 				BC1001232FFE000000000001 /* ShelvCore/Models/RadioStation.swift */,
 				BC1001272FFE000000000001 /* ShelvCore/Models/SubsonicServer.swift */,
 				BC10012D2FFE000000000001 /* ShelvCore/Models/DownloadModels.swift */,
+				BC10013D2FFE000000000001 /* ShelvCore/Models/ShortcutPlaybackModels.swift */,
+				BC10013F2FFE000000000001 /* ShelvCore/Services/PlaybackContentResolver.swift */,
 				BC1001172FFE000000000001 /* ShelvCore/Services/AudioPlayerQueueState.swift */,
 				BC1001182FFE000000000001 /* ShelvCore/Services/TranscodingPolicy.swift */,
 				BC1001192FFE000000000001 /* ShelvCore/Services/NetworkStatus.swift */,
@@ -161,6 +192,7 @@
 				BC10011A2FFE000000000001 /* ShelvCore/Services/URL+QueryParam.swift */,
 				BC1001252FFE000000000001 /* ShelvCore/Services/InstantMixQueueBuilder.swift */,
 				BC10011B2FFE000000000001 /* ShelvCore/Utilities/PathSafe.swift */,
+				BC10013B2FFE000000000001 /* ShelvCore/Utilities/ShelvIntentSearchVocabulary.swift */,
 				BC10012F2FFE000000000001 /* ShelvCore/Services/DownloadDatabase.swift */,
 				BC10011E2FFE000000000001 /* ShelvCore/Services/LibraryDatabase.swift */,
 				BC10011F2FFE000000000001 /* ShelvCore/Services/LibraryRepository.swift */,
@@ -184,6 +216,7 @@
 				BCC0DE0000000000000000C0 /* ShelvCore */,
 				BC1001102FFE000000000001 /* ShelvCore Test Sources */,
 				BC1000022FFE000000000001 /* ShelvTests */,
+				BC2000022FFE000000000001 /* ShelvAppIntentsUITests */,
 				BC5116122FDC8A690011CDE9 /* Shelv TV */,
 				BC7B84A52FDB17F90058CB78 /* Frameworks */,
 				BC9C59392F8E9FB000FF4D25 /* Products */,
@@ -197,6 +230,7 @@
 				BC7B83F52FDB17700058CB78 /* Shelv.app */,
 				BC5116112FDC8A690011CDE9 /* Shelv TV.app */,
 				BC1000012FFE000000000001 /* ShelvTests.xctest */,
+				BC2000012FFE000000000001 /* ShelvAppIntentsUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -226,6 +260,29 @@
 			productName = ShelvTests;
 			productReference = BC1000012FFE000000000001 /* ShelvTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		BC2000062FFE000000000001 /* ShelvAppIntentsUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BC2000092FFE000000000001 /* Build configuration list for PBXNativeTarget "ShelvAppIntentsUITests" */;
+			buildPhases = (
+				BC2000052FFE000000000001 /* Sources */,
+				BC2000032FFE000000000001 /* Frameworks */,
+				BC2000042FFE000000000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				BC20000B2FFE000000000001 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				BC2000022FFE000000000001 /* ShelvAppIntentsUITests */,
+			);
+			name = ShelvAppIntentsUITests;
+			packageProductDependencies = (
+			);
+			productName = ShelvAppIntentsUITests;
+			productReference = BC2000012FFE000000000001 /* ShelvAppIntentsUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 		BC5116102FDC8A690011CDE9 /* Shelv TV */ = {
 			isa = PBXNativeTarget;
@@ -312,6 +369,10 @@
 					BC1000062FFE000000000001 = {
 						CreatedOnToolsVersion = 26.5;
 					};
+					BC2000062FFE000000000001 = {
+						CreatedOnToolsVersion = 27.0;
+						TestTargetID = BC9C59372F8E9FB000FF4D25;
+					};
 					BC5116102FDC8A690011CDE9 = {
 						CreatedOnToolsVersion = 26.5;
 					};
@@ -345,6 +406,7 @@
 				BC9C59372F8E9FB000FF4D25 /* Shelv */,
 				BC7B83F42FDB17700058CB78 /* Shelv Mac */,
 				BC1000062FFE000000000001 /* ShelvTests */,
+				BC2000062FFE000000000001 /* ShelvAppIntentsUITests */,
 				BC5116102FDC8A690011CDE9 /* Shelv TV */,
 			);
 		};
@@ -352,6 +414,13 @@
 
 /* Begin PBXResourcesBuildPhase section */
 		BC1000042FFE000000000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BC2000042FFE000000000001 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -395,6 +464,8 @@
 				BC1001222FFE000000000001 /* ShelvCore/Models/RadioStation.swift in Sources */,
 				BC1001262FFE000000000001 /* ShelvCore/Models/SubsonicServer.swift in Sources */,
 				BC10012C2FFE000000000001 /* ShelvCore/Models/DownloadModels.swift in Sources */,
+				BC10013C2FFE000000000001 /* ShelvCore/Models/ShortcutPlaybackModels.swift in Sources */,
+				BC10013E2FFE000000000001 /* ShelvCore/Services/PlaybackContentResolver.swift in Sources */,
 				BC1001072FFE000000000001 /* ShelvCore/Services/AudioPlayerQueueState.swift in Sources */,
 				BC1001082FFE000000000001 /* ShelvCore/Services/TranscodingPolicy.swift in Sources */,
 				BC1001092FFE000000000001 /* ShelvCore/Services/NetworkStatus.swift in Sources */,
@@ -408,10 +479,18 @@
 				BC10010A2FFE000000000001 /* ShelvCore/Services/URL+QueryParam.swift in Sources */,
 				BC1001242FFE000000000001 /* ShelvCore/Services/InstantMixQueueBuilder.swift in Sources */,
 				BC10010B2FFE000000000001 /* ShelvCore/Utilities/PathSafe.swift in Sources */,
+				BC10013A2FFE000000000001 /* ShelvCore/Utilities/ShelvIntentSearchVocabulary.swift in Sources */,
 				BC10012E2FFE000000000001 /* ShelvCore/Services/DownloadDatabase.swift in Sources */,
 				BC10010E2FFE000000000001 /* ShelvCore/Services/LibraryDatabase.swift in Sources */,
 				BC10010F2FFE000000000001 /* ShelvCore/Services/LibraryRepository.swift in Sources */,
 				BC1001212FFE000000000001 /* ShelvCore/Support/PersonalizationSettings.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BC2000052FFE000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -437,6 +516,14 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		BC20000B2FFE000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = BC9C59372F8E9FB000FF4D25 /* Shelv */;
+			targetProxy = BC20000A2FFE000000000001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		BC1000072FFE000000000001 /* Debug */ = {
@@ -485,6 +572,56 @@
 			};
 			name = Release;
 		};
+		BC2000072FFE000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 7CZP946PWR;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ch.vkugler.ShelvAppIntentsUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Shelv;
+			};
+			name = Debug;
+		};
+		BC2000082FFE000000000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEVELOPMENT_TEAM = 7CZP946PWR;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 27.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ch.vkugler.ShelvAppIntentsUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = auto;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Shelv;
+			};
+			name = Release;
+		};
 		BC5116192FDC8A6A0011CDE9 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -492,7 +629,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "Shelv TV/Shelv TVRelease.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 127;
+				CURRENT_PROJECT_VERSION = 128;
 				DEVELOPMENT_TEAM = 7CZP946PWR;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -504,7 +641,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.4;
+				MARKETING_VERSION = 1.5;
 				PRODUCT_BUNDLE_IDENTIFIER = ch.vkugler.Shelv;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = appletvos;
@@ -526,7 +663,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "Shelv TV/Shelv TVRelease.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 127;
+				CURRENT_PROJECT_VERSION = 128;
 				DEVELOPMENT_TEAM = 7CZP946PWR;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -538,7 +675,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.4;
+				MARKETING_VERSION = 1.5;
 				PRODUCT_BUNDLE_IDENTIFIER = ch.vkugler.Shelv;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = appletvos;
@@ -562,7 +699,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Shelv Mac/Shelv Mac.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 127;
+				CURRENT_PROJECT_VERSION = 128;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 7CZP946PWR;
 				ENABLE_APP_SANDBOX = YES;
@@ -589,7 +726,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.6;
-				MARKETING_VERSION = 1.4;
+				MARKETING_VERSION = 1.5;
 				PRODUCT_BUNDLE_IDENTIFIER = ch.vkugler.Shelv;
 				PRODUCT_NAME = Shelv;
 				REGISTER_APP_GROUPS = YES;
@@ -611,7 +748,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Shelv Mac/Shelv Mac.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 127;
+				CURRENT_PROJECT_VERSION = 128;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 7CZP946PWR;
 				ENABLE_APP_SANDBOX = YES;
@@ -638,7 +775,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.6;
-				MARKETING_VERSION = 1.4;
+				MARKETING_VERSION = 1.5;
 				PRODUCT_BUNDLE_IDENTIFIER = ch.vkugler.Shelv;
 				PRODUCT_NAME = Shelv;
 				REGISTER_APP_GROUPS = YES;
@@ -779,7 +916,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Shelv/Shelv.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 127;
+				CURRENT_PROJECT_VERSION = 128;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 7CZP946PWR;
 				ENABLE_APP_SANDBOX = YES;
@@ -804,7 +941,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.4;
-				MARKETING_VERSION = 1.4;
+				MARKETING_VERSION = 1.5;
 				PRODUCT_BUNDLE_IDENTIFIER = ch.vkugler.Shelv;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -829,7 +966,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Shelv/Shelv.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 127;
+				CURRENT_PROJECT_VERSION = 128;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 7CZP946PWR;
 				ENABLE_APP_SANDBOX = YES;
@@ -854,7 +991,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.4;
-				MARKETING_VERSION = 1.4;
+				MARKETING_VERSION = 1.5;
 				PRODUCT_BUNDLE_IDENTIFIER = ch.vkugler.Shelv;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -880,6 +1017,15 @@
 			buildConfigurations = (
 				BC1000072FFE000000000001 /* Debug */,
 				BC1000082FFE000000000001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		BC2000092FFE000000000001 /* Build configuration list for PBXNativeTarget "ShelvAppIntentsUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BC2000072FFE000000000001 /* Debug */,
+				BC2000082FFE000000000001 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

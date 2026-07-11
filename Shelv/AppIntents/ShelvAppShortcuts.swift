@@ -1,73 +1,20 @@
 import AppIntents
 import Foundation
 
-enum ShelvShortcutDestination: String, AppEnum {
-    case discover
-    case library
-    case search
-    case recap
-    case nowPlaying
-
-    static var typeDisplayRepresentation: TypeDisplayRepresentation {
-        "Shelv Destination"
-    }
-
-    static var caseDisplayRepresentations: [ShelvShortcutDestination: DisplayRepresentation] {
-        [
-            .discover: "Discover",
-            .library: "Library",
-            .search: "Search",
-            .recap: "Recap",
-            .nowPlaying: "Now Playing",
-        ]
-    }
-}
-
-extension Notification.Name {
-    static let shelvShortcutDestinationRequested = Notification.Name("shelvShortcutDestinationRequested")
-}
-
-enum ShelvShortcutHandoff {
-    private static let pendingDestinationKey = "shelv.shortcut.pendingDestination"
-
-    @MainActor
-    static func request(_ destination: ShelvShortcutDestination) {
-        UserDefaults.standard.set(destination.rawValue, forKey: pendingDestinationKey)
-        NotificationCenter.default.post(
-            name: .shelvShortcutDestinationRequested,
-            object: destination.rawValue
-        )
-    }
-
-    @MainActor
-    static func consumePendingDestination() -> ShelvShortcutDestination? {
-        guard let rawValue = UserDefaults.standard.string(forKey: pendingDestinationKey) else {
-            return nil
-        }
-        UserDefaults.standard.removeObject(forKey: pendingDestinationKey)
-        return ShelvShortcutDestination(rawValue: rawValue)
-    }
-}
-
-private enum ShelvPlaybackIntentResult {
-    case noTrack
-    case playing
-    case paused
-    case nextTrack
-    case previousTrack
-}
-
 struct ShelvPlaylistEntity: AppEntity, Identifiable {
     let id: String
     let name: String
     let songCount: Int?
 
-    static let typeDisplayRepresentation: TypeDisplayRepresentation = "Playlist"
+    static let typeDisplayRepresentation: TypeDisplayRepresentation = "shortcut_playlist_type"
     static let defaultQuery = ShelvPlaylistQuery()
 
     var displayRepresentation: DisplayRepresentation {
         if let songCount {
-            DisplayRepresentation(title: "\(name)", subtitle: "\(songCount) tracks")
+            DisplayRepresentation(
+                title: "\(name)",
+                subtitle: "\(String(format: String(localized: "shortcut_track_count_format"), songCount))"
+            )
         } else {
             DisplayRepresentation(title: "\(name)")
         }
@@ -99,8 +46,21 @@ struct ShelvPlaylistQuery: EntityStringQuery {
             _ = ServerStore.shared
         }
         let store = LibraryStore.shared
-        if store.playlists.isEmpty {
+        await store.loadShortcutCaches()
+        let hasCachedPlaylists = !store.playlists.isEmpty
+        let canRefresh: Bool
+        if OfflineModeService.shared.isOffline {
+            canRefresh = false
+        } else {
+            canRefresh = await NetworkStatus.shared.waitUntilNetworkAvailable()
+        }
+        if !hasCachedPlaylists, canRefresh {
             await store.loadPlaylists()
+        } else if hasCachedPlaylists, canRefresh {
+            Task { @MainActor in
+                await store.loadPlaylists()
+                ShelvAppShortcuts.updateAppShortcutParameters()
+            }
         }
         let playlists = store.playlists
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
@@ -112,179 +72,122 @@ struct ShelvPlaylistQuery: EntityStringQuery {
     }
 }
 
-// Parked for a later Shortcuts/Siri pass. These intents stay compiled but hidden
-// until the basic app-opening shortcuts are reliable on device builds.
-private enum ShelvPlaylistIntentResult {
-    case noServer
-    case notFound
-    case empty(String)
-    case playing(String)
-    case shuffled(String)
-}
-
 struct ShelvPlayPauseIntent: AppIntent, AudioPlaybackIntent {
-    static let title: LocalizedStringResource = "Play or Pause in Shelv"
-    static let description = IntentDescription("Toggle playback in Shelv.")
+    static let title: LocalizedStringResource = "shortcut_play_pause_title"
+    static let description = IntentDescription("shortcut_play_pause_description")
     static let openAppWhenRun = false
-    static var isDiscoverable: Bool { false }
+    static let authenticationPolicy: IntentAuthenticationPolicy = .alwaysAllowed
 
-    func perform() async throws -> some IntentResult & ProvidesDialog {
-        let result = await MainActor.run { () -> ShelvPlaybackIntentResult in
-            print("[Shortcuts] Request → Play/Pause")
-            let player = AudioPlayerService.shared
-            guard player.currentSong != nil else { return .noTrack }
-            player.togglePlayPause()
-            return player.isPlaying ? .playing : .paused
-        }
+    @available(iOS 26.0, *)
+    static let supportedModes: IntentModes = .background
 
-        switch result {
-        case .noTrack:
-            return .result(dialog: "No track is loaded in Shelv.")
-        case .playing:
-            return .result(dialog: "Playing in Shelv.")
-        case .paused:
-            return .result(dialog: "Paused Shelv.")
-        case .nextTrack, .previousTrack:
-            return .result(dialog: "Updated playback in Shelv.")
-        }
+    @Dependency private var playback: ShortcutPlaybackCoordinator
+
+    func perform() async throws -> some IntentResult {
+        try await playback.execute(.playPause)
+        return .result()
     }
 }
 
 struct ShelvNextTrackIntent: AppIntent, AudioPlaybackIntent {
-    static let title: LocalizedStringResource = "Next Track in Shelv"
-    static let description = IntentDescription("Skip to the next track in Shelv.")
+    static let title: LocalizedStringResource = "shortcut_next_title"
+    static let description = IntentDescription("shortcut_next_description")
     static let openAppWhenRun = false
-    static var isDiscoverable: Bool { false }
+    static let authenticationPolicy: IntentAuthenticationPolicy = .alwaysAllowed
 
-    func perform() async throws -> some IntentResult & ProvidesDialog {
-        let result = await MainActor.run { () -> ShelvPlaybackIntentResult in
-            print("[Shortcuts] Request → Next Track")
-            let player = AudioPlayerService.shared
-            guard player.currentSong != nil else { return .noTrack }
-            player.next(triggeredByUser: true)
-            return .nextTrack
-        }
+    @available(iOS 26.0, *)
+    static let supportedModes: IntentModes = .background
 
-        switch result {
-        case .noTrack:
-            return .result(dialog: "No track is loaded in Shelv.")
-        case .nextTrack:
-            return .result(dialog: "Skipped to the next track in Shelv.")
-        case .playing, .paused, .previousTrack:
-            return .result(dialog: "Updated playback in Shelv.")
-        }
+    @Dependency private var playback: ShortcutPlaybackCoordinator
+
+    func perform() async throws -> some IntentResult {
+        try await playback.execute(.next)
+        return .result()
     }
 }
 
 struct ShelvPreviousTrackIntent: AppIntent, AudioPlaybackIntent {
-    static let title: LocalizedStringResource = "Previous Track in Shelv"
-    static let description = IntentDescription("Go back to the previous track in Shelv.")
+    static let title: LocalizedStringResource = "shortcut_previous_title"
+    static let description = IntentDescription("shortcut_previous_description")
     static let openAppWhenRun = false
-    static var isDiscoverable: Bool { false }
+    static let authenticationPolicy: IntentAuthenticationPolicy = .alwaysAllowed
 
-    func perform() async throws -> some IntentResult & ProvidesDialog {
-        let result = await MainActor.run { () -> ShelvPlaybackIntentResult in
-            print("[Shortcuts] Request → Previous Track")
-            let player = AudioPlayerService.shared
-            guard player.currentSong != nil else { return .noTrack }
-            player.previous()
-            return .previousTrack
-        }
+    @available(iOS 26.0, *)
+    static let supportedModes: IntentModes = .background
 
-        switch result {
-        case .noTrack:
-            return .result(dialog: "No track is loaded in Shelv.")
-        case .previousTrack:
-            return .result(dialog: "Went to the previous track in Shelv.")
-        case .playing, .paused, .nextTrack:
-            return .result(dialog: "Updated playback in Shelv.")
-        }
+    @Dependency private var playback: ShortcutPlaybackCoordinator
+
+    func perform() async throws -> some IntentResult {
+        try await playback.execute(.previous)
+        return .result()
     }
 }
 
 struct ShelvPlayPlaylistIntent: AppIntent, AudioPlaybackIntent {
-    static let title: LocalizedStringResource = "Play Playlist in Shelv"
-    static let description = IntentDescription("Start playing a selected playlist in Shelv.")
+    static let title: LocalizedStringResource = "shortcut_play_playlist_title"
+    static let description = IntentDescription("shortcut_play_playlist_description")
     static let openAppWhenRun = false
-    static var isDiscoverable: Bool { false }
+    static let authenticationPolicy: IntentAuthenticationPolicy = .alwaysAllowed
 
-    @Parameter(title: "Playlist")
+    @available(iOS 26.0, *)
+    static let supportedModes: IntentModes = .background
+
+    @Parameter(title: "shortcut_playlist_parameter")
     var playlist: ShelvPlaylistEntity
 
+    @Dependency private var playback: ShortcutPlaybackCoordinator
+
     static var parameterSummary: some ParameterSummary {
-        Summary("Play \(\.$playlist)")
+        Summary("shortcut_play_playlist_summary") {
+            \.$playlist
+        }
     }
 
-    func perform() async throws -> some IntentResult & ProvidesDialog {
-        print("[Shortcuts] Request → Play Playlist: \(playlist.name)")
-        let result = await playPlaylist(playlist, shuffled: false)
-        switch result {
-        case .noServer:
-            return .result(dialog: "No active server is configured in Shelv.")
-        case .notFound:
-            return .result(dialog: "Could not find that playlist in Shelv.")
-        case .empty(let name):
-            return .result(dialog: "\(name) has no playable songs.")
-        case .playing(let name):
-            return .result(dialog: "Playing \(name) in Shelv.")
-        case .shuffled(let name):
-            return .result(dialog: "Shuffling \(name) in Shelv.")
+    func perform() async throws -> some IntentResult {
+        guard let server = await MainActor.run(body: { ServerStore.shared.activeServer }) else {
+            throw ShortcutPlaybackError.noActiveServer
         }
+        let reference = ShortcutPlayableReference(
+            serverConfigID: server.id.uuidString,
+            kind: .playlist,
+            contentID: playlist.id
+        )
+        try await playback.execute(.playable(reference, order: .inOrder))
+        return .result()
     }
 }
 
 struct ShelvShufflePlaylistIntent: AppIntent, AudioPlaybackIntent {
-    static let title: LocalizedStringResource = "Shuffle Playlist in Shelv"
-    static let description = IntentDescription("Shuffle a selected playlist in Shelv.")
+    static let title: LocalizedStringResource = "shortcut_shuffle_playlist_title"
+    static let description = IntentDescription("shortcut_shuffle_playlist_description")
     static let openAppWhenRun = false
-    static var isDiscoverable: Bool { false }
+    static let authenticationPolicy: IntentAuthenticationPolicy = .alwaysAllowed
 
-    @Parameter(title: "Playlist")
+    @available(iOS 26.0, *)
+    static let supportedModes: IntentModes = .background
+
+    @Parameter(title: "shortcut_playlist_parameter")
     var playlist: ShelvPlaylistEntity
 
-    static var parameterSummary: some ParameterSummary {
-        Summary("Shuffle \(\.$playlist)")
-    }
+    @Dependency private var playback: ShortcutPlaybackCoordinator
 
-    func perform() async throws -> some IntentResult & ProvidesDialog {
-        print("[Shortcuts] Request → Shuffle Playlist: \(playlist.name)")
-        let result = await playPlaylist(playlist, shuffled: true)
-        switch result {
-        case .noServer:
-            return .result(dialog: "No active server is configured in Shelv.")
-        case .notFound:
-            return .result(dialog: "Could not find that playlist in Shelv.")
-        case .empty(let name):
-            return .result(dialog: "\(name) has no playable songs.")
-        case .playing(let name):
-            return .result(dialog: "Playing \(name) in Shelv.")
-        case .shuffled(let name):
-            return .result(dialog: "Shuffling \(name) in Shelv.")
+    static var parameterSummary: some ParameterSummary {
+        Summary("shortcut_shuffle_playlist_summary") {
+            \.$playlist
         }
     }
-}
 
-@MainActor
-private func playPlaylist(_ entity: ShelvPlaylistEntity, shuffled: Bool) async -> ShelvPlaylistIntentResult {
-    if SubsonicAPIService.shared.activeServer == nil {
-        _ = ServerStore.shared
-    }
-    guard SubsonicAPIService.shared.activeServer != nil else { return .noServer }
-
-    guard let loaded = await LibraryStore.shared.loadPlaylistDetail(id: entity.id) else {
-        return .notFound
-    }
-    let name = loaded.name.isEmpty ? entity.name : loaded.name
-    guard let songs = loaded.songs, !songs.isEmpty else {
-        return .empty(name)
-    }
-
-    if shuffled {
-        AudioPlayerService.shared.playShuffled(songs: songs)
-        return .shuffled(name)
-    } else {
-        AudioPlayerService.shared.play(songs: songs)
-        return .playing(name)
+    func perform() async throws -> some IntentResult {
+        guard let server = await MainActor.run(body: { ServerStore.shared.activeServer }) else {
+            throw ShortcutPlaybackError.noActiveServer
+        }
+        let reference = ShortcutPlayableReference(
+            serverConfigID: server.id.uuidString,
+            kind: .playlist,
+            contentID: playlist.id
+        )
+        try await playback.execute(.playable(reference, order: .shuffled))
+        return .result()
     }
 }
 
@@ -295,9 +198,12 @@ private func requestShortcutDestination(_ destination: ShelvShortcutDestination)
 }
 
 struct ShelvOpenPlayerIntent: AppIntent {
-    static let title: LocalizedStringResource = "Open Shelv Player"
-    static let description = IntentDescription("Open Shelv to the current player.")
+    static let title: LocalizedStringResource = "shortcut_open_player_title"
+    static let description = IntentDescription("shortcut_open_player_description")
     static let openAppWhenRun = true
+
+    @available(iOS 26.0, *)
+    static let supportedModes: IntentModes = .foreground(.immediate)
 
     func perform() async throws -> some IntentResult {
         await requestShortcutDestination(.nowPlaying)
@@ -306,9 +212,12 @@ struct ShelvOpenPlayerIntent: AppIntent {
 }
 
 struct ShelvOpenSearchIntent: AppIntent {
-    static let title: LocalizedStringResource = "Open Shelv Search"
-    static let description = IntentDescription("Open Shelv and focus search.")
+    static let title: LocalizedStringResource = "shortcut_open_search_title"
+    static let description = IntentDescription("shortcut_open_search_description")
     static let openAppWhenRun = true
+
+    @available(iOS 26.0, *)
+    static let supportedModes: IntentModes = .foreground(.immediate)
 
     func perform() async throws -> some IntentResult {
         await requestShortcutDestination(.search)
@@ -317,9 +226,12 @@ struct ShelvOpenSearchIntent: AppIntent {
 }
 
 struct ShelvOpenLibraryIntent: AppIntent {
-    static let title: LocalizedStringResource = "Open Shelv Library"
-    static let description = IntentDescription("Open Shelv to the library.")
+    static let title: LocalizedStringResource = "shortcut_open_library_title"
+    static let description = IntentDescription("shortcut_open_library_description")
     static let openAppWhenRun = true
+
+    @available(iOS 26.0, *)
+    static let supportedModes: IntentModes = .foreground(.immediate)
 
     func perform() async throws -> some IntentResult {
         await requestShortcutDestination(.library)
@@ -328,9 +240,12 @@ struct ShelvOpenLibraryIntent: AppIntent {
 }
 
 struct ShelvOpenRecapIntent: AppIntent {
-    static let title: LocalizedStringResource = "Open Shelv Recap"
-    static let description = IntentDescription("Open Shelv and show Recap.")
+    static let title: LocalizedStringResource = "shortcut_open_recap_title"
+    static let description = IntentDescription("shortcut_open_recap_description")
     static let openAppWhenRun = true
+
+    @available(iOS 26.0, *)
+    static let supportedModes: IntentModes = .foreground(.immediate)
 
     func perform() async throws -> some IntentResult {
         await requestShortcutDestination(.recap)
@@ -342,13 +257,20 @@ struct ShelvAppShortcuts: AppShortcutsProvider {
     static var shortcutTileColor: ShortcutTileColor { .purple }
 
     static var appShortcuts: [AppShortcut] {
+        // Media actions remain discoverable as configurable actions in the
+        // Shortcuts app. They deliberately have no App Shortcut phrases here:
+        // on iOS 27 the native audio schema is the single natural-language
+        // route, avoiding competing Play/Mix/Entity resolutions in Siri.
         AppShortcut(
             intent: ShelvOpenPlayerIntent(),
             phrases: [
                 "Open player in \(.applicationName)",
                 "Open \(.applicationName) player",
+                "Show player in \(.applicationName)",
+                "Open Now Playing in \(.applicationName)",
+                "Show Now Playing in \(.applicationName)",
             ],
-            shortTitle: "Now Playing",
+            shortTitle: "shortcut_now_playing_short",
             systemImageName: "music.note"
         )
 
@@ -356,9 +278,10 @@ struct ShelvAppShortcuts: AppShortcutsProvider {
             intent: ShelvOpenSearchIntent(),
             phrases: [
                 "Open search in \(.applicationName)",
-                "Open \(.applicationName) search",
+                "Search in \(.applicationName)",
+                "Show search in \(.applicationName)",
             ],
-            shortTitle: "Search",
+            shortTitle: "shortcut_search_short",
             systemImageName: "magnifyingglass"
         )
 
@@ -367,8 +290,10 @@ struct ShelvAppShortcuts: AppShortcutsProvider {
             phrases: [
                 "Open library in \(.applicationName)",
                 "Show library in \(.applicationName)",
+                "Open my library in \(.applicationName)",
+                "Show my library in \(.applicationName)",
             ],
-            shortTitle: "Library",
+            shortTitle: "shortcut_library_short",
             systemImageName: "books.vertical.fill"
         )
 
@@ -377,8 +302,10 @@ struct ShelvAppShortcuts: AppShortcutsProvider {
             phrases: [
                 "Open Recap in \(.applicationName)",
                 "Show Recap in \(.applicationName)",
+                "Open my Recap in \(.applicationName)",
+                "Show my Recap in \(.applicationName)",
             ],
-            shortTitle: "Recap",
+            shortTitle: "shortcut_recap_short",
             systemImageName: "calendar.badge.clock"
         )
     }

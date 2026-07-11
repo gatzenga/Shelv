@@ -41,19 +41,13 @@ struct ArtistDetailView: View {
             base = vm.albums
         }
         let filtered = searchQuery.isEmpty ? base : base.filter { $0.name.localizedCaseInsensitiveContains(searchQuery) }
-        switch sortOption {
-        case .name:
-            return LibraryRepository.locallySortedAlbums(filtered, sort: .name, direction: .ascending)
-        case .mostPlayed:
-            let sorted = filtered.sorted { ($0.playCount ?? 0) < ($1.playCount ?? 0) }
-            return direction == .ascending ? sorted : Array(sorted.reversed())
-        case .recentlyAdded:
-            let sorted = filtered.sorted { ($0.created ?? .distantPast) < ($1.created ?? .distantPast) }
-            return direction == .ascending ? sorted : Array(sorted.reversed())
-        case .year:
-            let sorted = filtered.sorted { ($0.year ?? 0) < ($1.year ?? 0) }
-            return direction == .ascending ? sorted : Array(sorted.reversed())
-        }
+        return ArtistAlbumPlaybackOrder.sorted(
+            filtered,
+            preference: ArtistAlbumSortPreference(
+                sortRaw: sortRaw,
+                directionRaw: directionRaw
+            )
+        )
     }
 
     var body: some View {
@@ -437,22 +431,8 @@ class ArtistDetailViewModel: ObservableObject {
                 (songsByAlbum[id] ?? []).sorted { ($0.track ?? 0) < ($1.track ?? 0) }.map { $0.asSong() }
             }
         }
-        do {
-            let indexed = Array(albums.enumerated())
-            return try await withThrowingTaskGroup(of: (Int, [Song]).self) { group in
-                for (i, album) in indexed {
-                    group.addTask {
-                        let s = try await SubsonicAPIService.shared.getAlbum(id: album.id).song ?? []
-                        return (i, s)
-                    }
-                }
-                var results: [(Int, [Song])] = []
-                for try await result in group { results.append(result) }
-                return results.sorted { $0.0 < $1.0 }.flatMap { $0.1 }
-            }
-        } catch {
-            NotificationCenter.default.post(name: .showToast, object: String(localized: "playback_failed"))
-            return []
+        return await PlaybackContentResolver.artistSongs(from: albums) { albumID in
+            (try? await SubsonicAPIService.shared.getAlbum(id: albumID).song) ?? []
         }
     }
 

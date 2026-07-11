@@ -52,6 +52,9 @@ struct ShelvApp: App {
         if d.string(forKey: "transcodingDownloadCodec") == "aac" { d.set("raw", forKey: "transcodingDownloadCodec") }
         PersonalizationSettings.registerDefaults()
         ShelvDefaultSettings.registerDefaults()
+        let shortcutPlaybackCoordinator = ShortcutPlaybackCoordinator.shared
+        AppDependencyManager.shared.add(dependency: shortcutPlaybackCoordinator)
+        ShelvAppShortcuts.updateAppShortcutParameters()
     }
 
     private var preferredScheme: ColorScheme? {
@@ -76,8 +79,6 @@ struct ShelvApp: App {
                 .tint(AppTheme.color(for: themeColorName))
                 .preferredColorScheme(preferredScheme)
                 .task {
-                    ShelvAppShortcuts.updateAppShortcutParameters()
-                    print("[Shortcuts] Parameters updated")
                     await LyricsStore.shared.setup()
                 }
                 .task(id: serverStore.activeServerID) {
@@ -95,6 +96,7 @@ struct ShelvApp: App {
                     // Nach App-Start / Server-Wechsel: auf eine fremde Remote-Queue prüfen.
                     await QueueSyncService.shared.checkForRemoteQueue()
                     await runKeepLibraryOfflineCheck(serverId: server.stableId)
+                    ShelvAppShortcuts.updateAppShortcutParameters()
                 }
                 .task {
                     Task.detached(priority: .utility) {
@@ -126,6 +128,7 @@ struct ShelvApp: App {
                 .onChange(of: scenePhase) { _, phase in
                     updateIdleTimer(phase: phase)
                     guard phase == .active else { return }
+                    ShelvAppShortcuts.updateAppShortcutParameters()
                     // syncNow prüft die Remote-Queue automatisch mit.
                     Task { await CloudKitSyncService.shared.syncNow() }
                     if let active = serverStore.activeServer {

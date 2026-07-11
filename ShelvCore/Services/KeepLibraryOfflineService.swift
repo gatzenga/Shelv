@@ -373,7 +373,11 @@ final class KeepLibraryOfflineService: ObservableObject {
         }
         #elseif os(iOS)
         for marker in markers {
-            DownloadStore.shared.addOfflinePlaylist(marker.id, songIds: marker.songIds)
+            DownloadStore.shared.addOfflinePlaylist(
+                marker.id,
+                name: marker.name,
+                songIds: marker.songIds
+            )
         }
         #endif
     }

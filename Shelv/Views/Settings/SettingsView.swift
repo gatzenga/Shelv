@@ -106,6 +106,11 @@ struct SettingsView: View {
                             Image(systemName: "waveform.path").foregroundStyle(accentColor)
                         }
                     }
+                    NavigationLink(destination: SiriShortcutsSettingsView()) {
+                        Label { Text(String(localized: "siri_shortcuts")) } icon: {
+                            Image(systemName: "mic.badge.plus").foregroundStyle(accentColor)
+                        }
+                    }
                     NavigationLink(destination: DownloadsSettingsView()) {
                         Label { Text(String(localized: "downloads")) } icon: {
                             Image(systemName: "arrow.down.circle").foregroundStyle(accentColor)
