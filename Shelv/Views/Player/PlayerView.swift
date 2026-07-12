@@ -653,15 +653,12 @@ struct PlayerView: View {
     private func radioFullscreenArtwork(size: CGFloat) -> some View {
         ZStack {
             if let url = radioRemoteArtworkURL {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    default:
-                        radioStationFallbackArtwork(size: size)
-                    }
+                RemoteRadioArtworkView(
+                    url: url,
+                    size: size,
+                    cornerRadius: isPad ? 22 : 24
+                ) {
+                    radioStationFallbackArtwork(size: size)
                 }
             } else {
                 radioStationFallbackArtwork(size: size)
@@ -916,6 +913,7 @@ private struct RadioStationPlayerArtworkView: View {
     let cornerRadius: CGFloat
     private let requestSize: Int
     @State private var image: UIImage?
+    @State private var loadedImageKey: String?
     @State private var isLoading: Bool
     @State private var activeLoadKey: String?
 
@@ -932,12 +930,13 @@ private struct RadioStationPlayerArtworkView: View {
             fallbackSizes: ImageCacheService.coverFallbackSizes(preferred: self.requestSize)
         )
         self._image = State(initialValue: cached)
+        self._loadedImageKey = State(initialValue: cached == nil ? nil : key)
         self._isLoading = State(initialValue: cached == nil)
     }
 
     var body: some View {
         ZStack {
-            if let image {
+            if let image, loadedImageKey == "\(coverArtId)_\(requestSize)" {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
@@ -967,9 +966,14 @@ private struct RadioStationPlayerArtworkView: View {
         let key = "\(coverArtId)_\(requestSize)"
         let expectedKey = key
         activeLoadKey = expectedKey
+        if loadedImageKey != expectedKey {
+            image = nil
+            loadedImageKey = nil
+        }
         let fallbackSizes = ImageCacheService.coverFallbackSizes(preferred: requestSize)
         if let cached = ImageCacheService.shared.cachedImage(key: key, fallbackSizes: fallbackSizes) {
             image = cached
+            loadedImageKey = expectedKey
             isLoading = false
         }
 
@@ -978,6 +982,7 @@ private struct RadioStationPlayerArtworkView: View {
             if image == nil, let demoImage = UIImage(named: coverArtId) {
                 ImageCacheService.shared.cache(demoImage, key: key)
                 image = demoImage
+                loadedImageKey = expectedKey
             }
             isLoading = false
             return
@@ -992,14 +997,22 @@ private struct RadioStationPlayerArtworkView: View {
         if let cached = await ImageCacheService.shared.diskOnlyImage(key: key, fallbackSizes: fallbackSizes) {
             guard !Task.isCancelled, activeLoadKey == expectedKey else { return }
             image = cached
+            loadedImageKey = expectedKey
             isLoading = false
         }
-        let loaded = await ImageCacheService.shared.image(url: url, key: key)
-        guard !Task.isCancelled, activeLoadKey == expectedKey else { return }
-        if let loaded {
-            image = loaded
+        var retryDelay: TimeInterval = 2
+        while !Task.isCancelled, activeLoadKey == expectedKey {
+            let loaded = await ImageCacheService.shared.image(url: url, key: key)
+            guard !Task.isCancelled, activeLoadKey == expectedKey else { return }
+            if let loaded {
+                image = loaded
+                loadedImageKey = expectedKey
+                isLoading = false
+                return
+            }
+            try? await Task.sleep(for: .seconds(retryDelay))
+            retryDelay = min(retryDelay * 2, 30)
         }
-        isLoading = false
     }
 }
 
