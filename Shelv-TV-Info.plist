@@ -19,11 +19,6 @@
 			<string>Shells</string>
 		</dict>
 	</array>
-	<key>INSupportedMediaCategories</key>
-	<array>
-		<string>INMediaCategoryMusic</string>
-		<string>INMediaCategoryRadio</string>
-	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSAppTransportSecurity</key>
