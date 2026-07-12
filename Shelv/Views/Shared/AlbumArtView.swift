@@ -10,7 +10,7 @@ struct AlbumArtView: View {
     @State private var uiImage: UIImage?
     @State private var loadedIdentifier: String?
     @State private var loading: Bool
-    @State private var activeLoadIdentifier: String?
+    @State private var loadRequest = ArtworkLoadRequestTracker()
 
     init(
         coverArtId: String?,
@@ -76,7 +76,7 @@ struct AlbumArtView: View {
     @MainActor
     private func load() async {
         guard let id = coverArtId else {
-            activeLoadIdentifier = nil
+            loadRequest.reset()
             uiImage = nil
             loadedIdentifier = nil
             loading = false
@@ -84,7 +84,7 @@ struct AlbumArtView: View {
         }
 
         let expectedLoadIdentifier = loadIdentifier
-        activeLoadIdentifier = expectedLoadIdentifier
+        loadRequest.begin(expectedLoadIdentifier)
         if loadedIdentifier != expectedLoadIdentifier {
             uiImage = nil
             loadedIdentifier = nil
@@ -131,7 +131,7 @@ struct AlbumArtView: View {
             let loaded: UIImage? = await Task.detached(priority: .medium) {
                 UIImage(contentsOfFile: localPath)
             }.value
-            guard !Task.isCancelled, activeLoadIdentifier == expectedLoadIdentifier else { return }
+            guard loadRequest.accepts(expectedLoadIdentifier) else { return }
             if let img = loaded {
                 ImageCacheService.shared.cache(img, key: key)
                 apply(img, for: expectedLoadIdentifier)
@@ -140,7 +140,7 @@ struct AlbumArtView: View {
         }
 
         if let cached = await ImageCacheService.shared.diskOnlyImage(key: key, fallbackSizes: fallbackSizes) {
-            guard !Task.isCancelled, activeLoadIdentifier == expectedLoadIdentifier else { return }
+            guard loadRequest.accepts(expectedLoadIdentifier) else { return }
             apply(cached, for: expectedLoadIdentifier)
         }
 
@@ -155,7 +155,7 @@ struct AlbumArtView: View {
             }
             guard !Task.isCancelled else { return }
             let image = await ImageCacheService.shared.image(url: url, key: key)
-            guard !Task.isCancelled, activeLoadIdentifier == expectedLoadIdentifier else { return }
+            guard loadRequest.accepts(expectedLoadIdentifier) else { return }
             if let image {
                 apply(image, for: expectedLoadIdentifier)
                 return
@@ -165,7 +165,7 @@ struct AlbumArtView: View {
     }
 
     private func apply(_ image: UIImage, for identifier: String) {
-        guard !Task.isCancelled, activeLoadIdentifier == identifier else { return }
+        guard loadRequest.accepts(identifier) else { return }
         uiImage = image
         loadedIdentifier = identifier
         loading = false

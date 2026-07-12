@@ -12,7 +12,7 @@ struct CoverArtView: View {
 
     @State private var image: NSImage?
     @State private var loadedImageKey: String?
-    @State private var activeLoadKey: String?
+    @State private var loadRequest = ArtworkLoadRequestTracker()
 
     init(
         url: URL?,
@@ -84,19 +84,15 @@ struct CoverArtView: View {
 
     private func loadImage() async {
         guard let url else {
-            activeLoadKey = nil
+            loadRequest.reset()
             image = nil
             loadedImageKey = nil
             return
         }
         let key = stableKey
-        guard activeLoadKey != key else { return }
-        activeLoadKey = key
-        defer {
-            if activeLoadKey == key {
-                activeLoadKey = nil
-            }
-        }
+        guard loadRequest.activeIdentifier != key else { return }
+        loadRequest.begin(key)
+        defer { loadRequest.finish(key) }
 
         if let hit = ImageCacheService.shared.cachedImage(url: url) {
             apply(hit, for: key)
@@ -145,7 +141,7 @@ struct CoverArtView: View {
     }
 
     private func isCurrentLoad(_ key: String) -> Bool {
-        !Task.isCancelled && activeLoadKey == key
+        loadRequest.accepts(key)
     }
 
     private func apply(_ loadedImage: NSImage, for key: String) {
