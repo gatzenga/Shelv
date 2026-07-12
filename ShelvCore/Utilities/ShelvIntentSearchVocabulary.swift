@@ -404,8 +404,11 @@ nonisolated enum ShelvSmartMixIntentVocabulary {
             .newest,
             [
                 "newest tracks", "newest songs", "latest tracks", "latest songs",
+                "newest mix", "newest track mix", "newest tracks mix",
+                "mixed newest tracks", "latest track mix",
                 "latest music", "new music",
-                "recently added tracks", "recently added songs", "recently added music",
+                "recently added", "recently added mix", "recently added tracks",
+                "recently added songs", "recently added music",
                 "newly added tracks", "newly added songs", "newly added music",
                 "neueste titel", "neueste lieder", "neueste musik", "neue musik",
                 "kürzlich hinzugefügte titel", "kürzlich hinzugefügte lieder",
@@ -417,7 +420,9 @@ nonisolated enum ShelvSmartMixIntentVocabulary {
         (
             .frequent,
             [
-                "frequently played", "most played", "top tracks", "top songs",
+                "frequently played", "frequently played mix",
+                "most played", "most played mix", "top tracks", "top songs",
+                "popular music", "popular tracks", "popular songs", "popular mix",
                 "häufig gespielt", "häufig gespielte titel", "häufig gespielte lieder",
                 "meist gespielt", "meistgespielte titel", "meistgespielte lieder",
                 "经常播放", "最常播放",
@@ -426,7 +431,8 @@ nonisolated enum ShelvSmartMixIntentVocabulary {
         (
             .recent,
             [
-                "recently played", "recent tracks", "recent songs", "recent music",
+                "recently played", "recently played mix",
+                "recent tracks", "recent songs", "recent music",
                 "kürzlich gespielt", "kürzlich gespielte titel", "kürzlich gespielte lieder",
                 "zuletzt gespielt", "zuletzt gespielte titel", "zuletzt gespielte lieder",
                 "zuletzt gehörte titel",
@@ -446,7 +452,7 @@ nonisolated enum ShelvSmartMixIntentVocabulary {
 
     private static let weakAliases: [(ShortcutSmartMix, Set<String>)] = [
         (.newest, ["newest", "latest", "neueste", "neuste", "最新"]),
-        (.frequent, ["frequent", "häufig", "经常播放"]),
+        (.frequent, ["frequent", "popular", "häufig", "经常播放"]),
         (.recent, ["recent", "kürzlich", "最近"]),
     ]
 
