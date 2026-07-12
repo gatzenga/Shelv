@@ -47,6 +47,7 @@ final class ShelvIntentSearchVocabularyTests: XCTestCase {
             ("Newest", .newest),
             ("Please play newest tracks in Shelv", .newest),
             ("Ask Shelv to play the Latest Music mix", .newest),
+            ("Play recently added music in Shelv", .newest),
             ("Play frequently played tracks in Shelv", .frequent),
             ("Play most played in Shelv", .frequent),
             ("Play recently played tracks in Shelv", .recent),
@@ -677,9 +678,68 @@ final class ShelvIntentSearchVocabularyTests: XCTestCase {
             ),
             "imagine dragons"
         )
+        XCTAssertEqual(
+            ShelvInstantMixIntentVocabulary.seedQuery(
+                from: "Instant Mix für das Album Mercury von Imagine Dragons"
+            ),
+            "mercury von imagine dragons"
+        )
+        XCTAssertEqual(
+            ShelvInstantMixIntentVocabulary.seedQuery(
+                from: "Instant Mix for the album Mercury by Imagine Dragons"
+            ),
+            "mercury by imagine dragons"
+        )
+        XCTAssertEqual(
+            ShelvInstantMixIntentVocabulary.seedQuery(
+                from: "Instantmix für Imagine Dragons"
+            ),
+            "imagine dragons"
+        )
+        XCTAssertEqual(
+            ShelvInstantMixIntentVocabulary.seedQuery(
+                from: "Musik wie Imagine Dragons"
+            ),
+            "imagine dragons"
+        )
+        XCTAssertEqual(
+            ShelvInstantMixIntentVocabulary.seedQuery(
+                from: "Play music like Imagine Dragons in Shelv"
+            ),
+            "imagine dragons"
+        )
+        XCTAssertEqual(
+            ShelvInstantMixIntentVocabulary.seedQuery(
+                from: "Create a station from Imagine Dragons in Shelv"
+            ),
+            "imagine dragons"
+        )
+        XCTAssertEqual(
+            ShelvInstantMixIntentVocabulary.seedQuery(
+                from: "Create an instant mix based on Imagine Dragons in Shelv"
+            ),
+            "imagine dragons"
+        )
+        XCTAssertEqual(
+            ShelvInstantMixIntentVocabulary.seedQuery(
+                from: "Erstelle einen Mix basierend auf Mercury"
+            ),
+            "mercury"
+        )
+        XCTAssertEqual(
+            ShelvInstantMixIntentVocabulary.seedQuery(
+                from: "Start Instant Mix for Demons from Imagine Dragons in Shells"
+            ),
+            "demons from imagine dragons"
+        )
         XCTAssertNil(
             ShelvInstantMixIntentVocabulary.seedQuery(
                 from: "Play the song Instant Mix in Shelv"
+            )
+        )
+        XCTAssertNil(
+            ShelvInstantMixIntentVocabulary.seedQuery(
+                from: "Instant Mix für"
             )
         )
     }
@@ -758,6 +818,87 @@ final class ShelvIntentSearchVocabularyTests: XCTestCase {
         )
 
         XCTAssertEqual(Set(selected.map(\.id)), Set(["album", "song"]))
+    }
+
+    func testUnqualifiedArtistBeatsEponymousAlbum() {
+        let items = [
+            catalogItem(
+                id: "album",
+                kind: .album,
+                title: "Dire Straits",
+                artist: "Dire Straits"
+            ),
+            catalogItem(
+                id: "artist",
+                kind: .artist,
+                title: "Dire Straits",
+                artist: "Dire Straits"
+            ),
+        ]
+
+        let selected = deterministicPlaybackMatches(
+            items,
+            query: "Play Dire Straits in Shelv"
+        )
+
+        XCTAssertEqual(selected.map(\.id), ["artist"])
+    }
+
+    func testExplicitEponymousAlbumRequestKeepsAlbum() {
+        let items = [
+            catalogItem(
+                id: "album",
+                kind: .album,
+                title: "Dire Straits",
+                artist: "Dire Straits"
+            ),
+            catalogItem(
+                id: "artist",
+                kind: .artist,
+                title: "Dire Straits",
+                artist: "Dire Straits"
+            ),
+        ]
+
+        let selected = deterministicPlaybackMatches(
+            items,
+            query: "Play the album Dire Straits in Shelv"
+        )
+
+        XCTAssertEqual(selected.map(\.id), ["album"])
+    }
+
+    func testQualifiedEponymousAlbumRequestKeepsAlbum() {
+        let items = [
+            catalogItem(
+                id: "album",
+                kind: .album,
+                title: "Dire Straits",
+                artist: "Dire Straits"
+            ),
+            catalogItem(
+                id: "artist",
+                kind: .artist,
+                title: "Dire Straits",
+                artist: "Dire Straits"
+            ),
+        ]
+
+        let selected = deterministicPlaybackMatches(
+            items,
+            query: "Play Dire Straits by Dire Straits in Shelv"
+        )
+
+        XCTAssertEqual(selected.map(\.id), ["album"])
+    }
+
+    func testNegatedAlbumCorrectionSelectsArtist() {
+        XCTAssertEqual(
+            ShelvIntentSearchVocabulary.explicitKind(
+                in: "Play Electric Light Orchestra, not the album, the artist"
+            ),
+            .artist
+        )
     }
 
     private struct IntentCandidate {

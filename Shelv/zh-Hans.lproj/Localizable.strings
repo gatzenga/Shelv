@@ -593,7 +593,7 @@
 "shortcut_order_parameter" = "顺序";
 "shortcut_mix_type" = "混音";
 "shortcut_mix_newest" = "最新";
-"shortcut_mix_frequent" = "经常播放";
+"shortcut_mix_frequent" = "播放最多";
 "shortcut_mix_recent" = "最近播放";
 "shortcut_mix_parameter" = "混音";
 "shortcut_shuffle_all" = "随机播放全部";
@@ -669,6 +669,7 @@
 "shortcut_error_no_network" = "Shelv 无法连接服务器。请检查网络后重试。";
 "shortcut_error_not_found" = "Shelv 在活动服务器上找不到该项目。";
 "shortcut_error_no_content" = "此操作没有可播放的音乐。";
+"shortcut_error_instant_mix_unavailable" = "音乐服务器未返回足够的相似曲目来创建即时混音。请检查服务器的相似音乐配置。";
 "shortcut_error_unavailable_offline" = "此项目在该设备上无法离线使用。";
 "shortcut_error_radio_offline" = "电台需要互联网连接。";
 "shortcut_error_playback_failed" = "Shelv 无法开始播放。";

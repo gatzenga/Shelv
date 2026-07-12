@@ -88,7 +88,12 @@ struct ShelvAudioSongQuery: EntityStringQuery {
     }
 
     func entities(matching string: String) async throws -> [ShelvAudioSongEntity] {
-        try await ShelvIntentCatalog.shared.items(matching: string, allowedKinds: [.song])
+        let items = try await ShelvIntentCatalog.shared.items(
+            matching: string,
+            limit: 10,
+            allowedKinds: [.song]
+        )
+        return ShelvIntentCatalog.deterministicPlaybackMatches(items, query: string)
             .map(ShelvAudioSongEntity.init)
     }
 }
@@ -169,7 +174,12 @@ struct ShelvAudioAlbumQuery: EntityStringQuery {
     }
 
     func entities(matching string: String) async throws -> [ShelvAudioAlbumEntity] {
-        try await ShelvIntentCatalog.shared.items(matching: string, allowedKinds: [.album])
+        let items = try await ShelvIntentCatalog.shared.items(
+            matching: string,
+            limit: 10,
+            allowedKinds: [.album]
+        )
+        return ShelvIntentCatalog.deterministicPlaybackMatches(items, query: string)
             .map(ShelvAudioAlbumEntity.init)
     }
 }
@@ -189,7 +199,10 @@ struct ShelvAudioArtistEntity {
         DisplayRepresentation(
             title: "\(name)",
             image: .init(systemName: "music.microphone"),
-            synonyms: ["music by \(name)", "songs by \(name)"]
+            synonyms: [
+                "artist \(name)", "the artist \(name)",
+                "music by \(name)", "songs by \(name)",
+            ]
         )
     }
 
@@ -223,7 +236,12 @@ struct ShelvAudioArtistQuery: EntityStringQuery {
     }
 
     func entities(matching string: String) async throws -> [ShelvAudioArtistEntity] {
-        try await ShelvIntentCatalog.shared.items(matching: string, allowedKinds: [.artist])
+        let items = try await ShelvIntentCatalog.shared.items(
+            matching: string,
+            limit: 10,
+            allowedKinds: [.artist]
+        )
+        return ShelvIntentCatalog.deterministicPlaybackMatches(items, query: string)
             .map(ShelvAudioArtistEntity.init)
     }
 }
@@ -288,7 +306,10 @@ nonisolated private extension ShortcutSmartMix {
 
     var audioEntitySynonyms: [LocalizedStringResource] {
         switch self {
-        case .newest: ["Newest Tracks", "Latest Tracks", "Latest Music", "New Music"]
+        case .newest: [
+            "Newest Tracks", "Latest Tracks", "Latest Music", "New Music",
+            "Recently Added Tracks", "Recently Added Songs", "Recently Added Music",
+        ]
         case .frequent: ["Frequently Played Tracks", "Most Played", "Top Tracks"]
         case .recent: ["Recently Played Tracks", "Recent Tracks", "Recent Music"]
         case .shuffleAll: ["Shuffle All Tracks", "Shuffle All Songs", "Shuffle My Library"]
@@ -436,7 +457,12 @@ struct ShelvAudioPlaylistQuery: EntityStringQuery {
         if let mix = ShelvSmartMixIntentVocabulary.smartMix(for: string) {
             return [ShelvAudioPlaylistEntity(smartMix: mix)]
         }
-        return try await ShelvIntentCatalog.shared.items(matching: string, allowedKinds: [.playlist])
+        let items = try await ShelvIntentCatalog.shared.items(
+            matching: string,
+            limit: 10,
+            allowedKinds: [.playlist]
+        )
+        return ShelvIntentCatalog.deterministicPlaybackMatches(items, query: string)
             .map(ShelvAudioPlaylistEntity.init)
     }
 }
@@ -485,7 +511,12 @@ struct ShelvAudioRadioQuery: EntityStringQuery {
     }
 
     func entities(matching string: String) async throws -> [ShelvAudioRadioEntity] {
-        try await ShelvIntentCatalog.shared.items(matching: string, allowedKinds: [.radio])
+        let items = try await ShelvIntentCatalog.shared.items(
+            matching: string,
+            limit: 10,
+            allowedKinds: [.radio]
+        )
+        return ShelvIntentCatalog.deterministicPlaybackMatches(items, query: string)
             .map(ShelvAudioRadioEntity.init)
     }
 }
@@ -512,6 +543,13 @@ struct ShelvAudioAlgorithmicStationEntity {
                 "Instant Mix for \(title)",
                 "\(title) Instant Mix",
                 "Music like \(title)",
+                "Instant Mix based on \(title)",
+                "Station from \(title)",
+                "Station based on \(title)",
+                "Instant Mix für \(title)",
+                "Instantmix für \(title)",
+                "Musik wie \(title)",
+                "Ähnliche Musik zu \(title)",
             ]
         )
     }
@@ -738,6 +776,9 @@ struct ShelvAudioWarmupResult: TransientAppEntity {
 struct ShelvPlayAudioIntent: AudioPlaybackIntent {
     static let title: LocalizedStringResource = "shortcut_media_play_title"
     static let description = IntentDescription("shortcut_media_play_description")
+    // The configurable legacy actions remain in Shortcuts for compatibility.
+    // The audio schema is the single natural-language route Siri should use.
+    static let isAssistantOnly = true
     static let openAppWhenRun = false
     static let authenticationPolicy: IntentAuthenticationPolicy = .alwaysAllowed
     static let supportedModes: IntentModes = .background
@@ -750,10 +791,6 @@ struct ShelvPlayAudioIntent: AudioPlaybackIntent {
     var warmupAudioQueueResult: ShelvAudioWarmupResult?
     var queueLocation: ShelvAudioQueueLocation?
 
-    private var completionDialog: IntentDialog {
-        IntentDialog(LocalizedStringResource("shortcut_media_playback_started"))
-    }
-
     @MainActor
     func perform() async throws -> some IntentResult {
         if let reference = audioEntity.instantMixReference {
@@ -761,21 +798,21 @@ struct ShelvPlayAudioIntent: AudioPlaybackIntent {
                 throw ShortcutPlaybackError.unsupportedQueueOperation
             }
             try await ShelvSystemIntentPlaybackService.shared.execute(.instantMix(reference))
-            return .result(dialog: completionDialog)
+            return .result()
         }
         if let mix = audioEntity.smartMix {
             guard queueLocation == nil else {
                 throw ShortcutPlaybackError.unsupportedQueueOperation
             }
             try await ShelvSystemIntentPlaybackService.shared.execute(.mix(mix))
-            return .result(dialog: completionDialog)
+            return .result()
         }
         if let mode = audioEntity.downloadsMode {
             guard queueLocation == nil else {
                 throw ShortcutPlaybackError.unsupportedQueueOperation
             }
             try await ShelvSystemIntentPlaybackService.shared.execute(.downloads(mode))
-            return .result(dialog: completionDialog)
+            return .result()
         }
         guard let reference = audioEntity.reference else {
             throw ShortcutPlaybackError.notFound
@@ -791,7 +828,7 @@ struct ShelvPlayAudioIntent: AudioPlaybackIntent {
             placement: placement,
             repeats: playbackAttributes.contains(.repeat)
         )
-        return .result(dialog: completionDialog)
+        return .result()
     }
 }
 
@@ -800,19 +837,20 @@ struct ShelvPlayAudioIntent: AudioPlaybackIntent {
 struct ShelvCreateStationIntent: AudioPlaybackIntent {
     static let title: LocalizedStringResource = "shortcut_media_create_station_title"
     static let description = IntentDescription("shortcut_media_create_station_description")
+    static let isAssistantOnly = true
     static let openAppWhenRun = false
     static let authenticationPolicy: IntentAuthenticationPolicy = .alwaysAllowed
     static let supportedModes: IntentModes = .background
 
     @MainActor
     func perform() async throws -> some IntentResult {
+        // Apple's createStation schema is intentionally based on the current
+        // now-playing item. Named seeds are handled by ShelvInstantMixIntent.
         guard let reference = AudioPlayerService.shared.currentSongReferenceForSystemIntent() else {
             throw ShortcutPlaybackError.noPlayableContent
         }
         try await ShelvSystemIntentPlaybackService.shared.execute(.instantMix(reference))
-        return .result(
-            dialog: IntentDialog(LocalizedStringResource("shortcut_media_playback_started"))
-        )
+        return .result()
     }
 }
 #endif

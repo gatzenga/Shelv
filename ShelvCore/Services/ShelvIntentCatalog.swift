@@ -332,8 +332,7 @@ final class ShelvIntentCatalog {
 
     private func networkAvailable() async -> Bool {
         guard !OfflineModeService.shared.isOffline else { return false }
-        await NetworkStatus.shared.waitUntilReady()
-        return NetworkStatus.shared.hasNetwork
+        return await NetworkStatus.shared.waitUntilNetworkAvailable()
     }
 
     private func remoteSearchResults(for terms: [String]) async -> [SearchResult] {
@@ -341,8 +340,10 @@ final class ShelvIntentCatalog {
         return await withTaskGroup(of: (Int, SearchResult?).self, returning: [SearchResult].self) { group in
             for (index, term) in terms.enumerated() {
                 group.addTask {
-                    let result: SearchResult? = await Self.valueBeforeDeadline {
-                        try? await api.search(query: term)
+                    let result: SearchResult? = await Self.valueBeforeDeadline(
+                        named: "search"
+                    ) {
+                        try await api.search(query: term)
                     }
                     return (index, result)
                 }
@@ -357,28 +358,30 @@ final class ShelvIntentCatalog {
 
     private func remoteStarred() async -> StarredResult? {
         let api = self.api
-        return await Self.valueBeforeDeadline {
-            try? await api.getStarred()
+        return await Self.valueBeforeDeadline(named: "getStarred") {
+            try await api.getStarred()
         }
     }
 
     private func remotePlaylists() async -> [Playlist] {
         let api = self.api
-        return await Self.valueBeforeDeadline {
-            try? await api.getPlaylists()
+        return await Self.valueBeforeDeadline(named: "getPlaylists") {
+            try await api.getPlaylists()
         } ?? []
     }
 
     private func remoteRecentSongs() async -> [Song] {
         let api = self.api
-        return await Self.valueBeforeDeadline {
-            try? await api.getRecentSongs(albumCount: 12, limit: 12)
+        return await Self.valueBeforeDeadline(named: "getRecentSongs") {
+            try await api.getRecentSongs(albumCount: 12, limit: 12)
         } ?? []
     }
 
     private func remoteRadios() async -> [RadioStationDisplayItem] {
         RadioStationStore.shared.publishShortcutCacheIfNeeded()
-        let refreshed: [RadioStationDisplayItem]? = await Self.valueBeforeDeadline {
+        let refreshed: [RadioStationDisplayItem]? = await Self.valueBeforeDeadline(
+            named: "refreshRadios"
+        ) {
             await RadioStationStore.shared.refresh(waitForCloudMetadata: false)
             return await RadioStationStore.shared.items
         }
@@ -387,17 +390,38 @@ final class ShelvIntentCatalog {
 
     private nonisolated static func valueBeforeDeadline<Value: Sendable>(
         _ duration: Duration = .seconds(6),
-        operation: @escaping @Sendable () async -> Value?
+        named operationName: String,
+        operation: @escaping @Sendable () async throws -> Value
     ) async -> Value? {
-        await withTaskGroup(of: Value?.self, returning: Value?.self) { group in
-            group.addTask { await operation() }
+        await withTaskGroup(of: (value: Value?, timedOut: Bool).self, returning: Value?.self) { group in
             group.addTask {
-                try? await Task.sleep(for: duration)
-                return nil
+                do {
+                    return (try await operation(), false)
+                } catch {
+                    if !Task.isCancelled,
+                       ShortcutPlaybackError.remoteFailure(error) != .cancelled {
+                        ShelvIntentDiagnostics.catalogRemoteFailed(
+                            operation: operationName,
+                            error: error
+                        )
+                    }
+                    return (nil, false)
+                }
             }
-            let first = await group.next() ?? nil
+            group.addTask {
+                do {
+                    try await Task.sleep(for: duration)
+                    return (nil, true)
+                } catch {
+                    return (nil, false)
+                }
+            }
+            let first = await group.next() ?? (nil, false)
             group.cancelAll()
-            return first
+            if first.timedOut {
+                ShelvIntentDiagnostics.catalogRemoteTimedOut(operation: operationName)
+            }
+            return first.value
         }
     }
 
@@ -413,12 +437,17 @@ final class ShelvIntentCatalog {
         records: [DownloadRecord],
         mayLoadRemote: Bool
     ) async -> ShelvIntentCatalogItem? {
+        let api = self.api
         switch reference.kind {
         case .song:
             if let record = records.first(where: { $0.songId == reference.contentID }) {
                 return songItem(record.toDownloadedSong().asSong(), server: server)
             }
-            guard mayLoadRemote, let song = try? await api.getSong(id: reference.contentID) else { return nil }
+            guard mayLoadRemote,
+                  let song: Song = await Self.valueBeforeDeadline(named: "resolveSong", operation: {
+                      try await api.getSong(id: reference.contentID)
+                  })
+            else { return nil }
             return songItem(song, server: server)
 
         case .album:
@@ -426,7 +455,11 @@ final class ShelvIntentCatalog {
             if let first = local.first {
                 return albumItem(local, first: first, server: server)
             }
-            guard mayLoadRemote, let album = try? await api.getAlbum(id: reference.contentID) else { return nil }
+            guard mayLoadRemote,
+                  let album: AlbumDetail = await Self.valueBeforeDeadline(named: "resolveAlbum", operation: {
+                      try await api.getAlbum(id: reference.contentID)
+                  })
+            else { return nil }
             return albumItem(album, server: server)
 
         case .artist:
@@ -434,7 +467,11 @@ final class ShelvIntentCatalog {
             if let first = local.first {
                 return artistItem(local, first: first, server: server)
             }
-            guard mayLoadRemote, let artist = try? await api.getArtist(id: reference.contentID) else { return nil }
+            guard mayLoadRemote,
+                  let artist: ArtistDetail = await Self.valueBeforeDeadline(named: "resolveArtist", operation: {
+                      try await api.getArtist(id: reference.contentID)
+                  })
+            else { return nil }
             return artistItem(artist, server: server)
 
         case .playlist:
@@ -447,7 +484,11 @@ final class ShelvIntentCatalog {
                 $0.id == reference.contentID
                     && $0.songIds.contains(where: availableSongIDs.contains)
             })
-            if mayLoadRemote, let playlist = try? await api.getPlaylist(id: reference.contentID) {
+            if mayLoadRemote,
+               let playlist: Playlist = await Self.valueBeforeDeadline(
+                   named: "resolvePlaylist",
+                   operation: { try await api.getPlaylist(id: reference.contentID) }
+               ) {
                 await LocalOfflinePlaylistCatalog.updateName(
                     serverId: server.stableId.isEmpty ? server.id.uuidString : server.stableId,
                     id: playlist.id,

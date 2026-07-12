@@ -593,7 +593,7 @@
 "shortcut_order_parameter" = "Order";
 "shortcut_mix_type" = "Mix";
 "shortcut_mix_newest" = "Newest";
-"shortcut_mix_frequent" = "Frequently Played";
+"shortcut_mix_frequent" = "Most Played";
 "shortcut_mix_recent" = "Recently Played";
 "shortcut_mix_parameter" = "Mix";
 "shortcut_shuffle_all" = "Shuffle All";
@@ -669,6 +669,7 @@
 "shortcut_error_no_network" = "Shelv could not reach the server. Check your connection and try again.";
 "shortcut_error_not_found" = "Shelv could not find that item on the active server.";
 "shortcut_error_no_content" = "There is no playable music for this action.";
+"shortcut_error_instant_mix_unavailable" = "The music server did not return enough related tracks for an Instant Mix. Check the server's similar-music configuration.";
 "shortcut_error_unavailable_offline" = "That item is not available offline on this device.";
 "shortcut_error_radio_offline" = "Radio requires an internet connection.";
 "shortcut_error_playback_failed" = "Shelv could not start playback.";

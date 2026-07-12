@@ -135,6 +135,18 @@ nonisolated enum ShelvIntentDiagnostics {
         )
     }
 
+    static func catalogRemoteFailed(operation: String, error: Error) {
+        logger.error(
+            "Catalog remote request failed operation=\(operation, privacy: .public) error=\(String(describing: error), privacy: .private(mask: .hash))"
+        )
+    }
+
+    static func catalogRemoteTimedOut(operation: String) {
+        logger.error(
+            "Catalog remote request timed out operation=\(operation, privacy: .public)"
+        )
+    }
+
     static func audioSearchBegan(criteria: String) {
         logger.notice("Audio search began criteria=\(criteria, privacy: .public)")
     }
@@ -150,6 +162,18 @@ nonisolated enum ShelvIntentDiagnostics {
             "Audio search failed criteria=\(criteria, privacy: .public) error=\(String(describing: error), privacy: .private(mask: .hash))"
         )
     }
+
+    static func instantMixBuilt(kind: ShortcutPlayableKind, trackCount: Int) {
+        logger.notice(
+            "Instant Mix built kind=\(kind.rawValue, privacy: .public) trackCount=\(trackCount, privacy: .public)"
+        )
+    }
+
+    static func instantMixPlaybackConfirmed(trackCount: Int) {
+        logger.notice(
+            "Instant Mix playback confirmed trackCount=\(trackCount, privacy: .public)"
+        )
+    }
 }
 
 nonisolated enum ShortcutPlaybackError: Error, Equatable, Sendable,
@@ -159,6 +183,7 @@ nonisolated enum ShortcutPlaybackError: Error, Equatable, Sendable,
     case noNetwork
     case notFound
     case noPlayableContent
+    case instantMixUnavailable
     case unavailableOffline
     case radioUnavailableOffline
     case unsupportedQueueOperation
@@ -173,6 +198,7 @@ nonisolated enum ShortcutPlaybackError: Error, Equatable, Sendable,
         case .noNetwork: return "shortcut_error_no_network"
         case .notFound: return "shortcut_error_not_found"
         case .noPlayableContent: return "shortcut_error_no_content"
+        case .instantMixUnavailable: return "shortcut_error_instant_mix_unavailable"
         case .unavailableOffline: return "shortcut_error_unavailable_offline"
         case .radioUnavailableOffline: return "shortcut_error_radio_offline"
         case .unsupportedQueueOperation: return "shortcut_error_unsupported_queue_operation"

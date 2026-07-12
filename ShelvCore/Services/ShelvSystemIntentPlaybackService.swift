@@ -204,8 +204,7 @@ final class ShelvSystemIntentPlaybackService: @unchecked Sendable {
 
     private func networkAvailable() async -> Bool {
         guard !OfflineModeService.shared.isOffline else { return false }
-        await NetworkStatus.shared.waitUntilReady()
-        return NetworkStatus.shared.hasNetwork
+        return await NetworkStatus.shared.waitUntilNetworkAvailable()
     }
 
     private func requireNetwork() async throws {
@@ -438,10 +437,16 @@ final class ShelvSystemIntentPlaybackService: @unchecked Sendable {
         let songs: [Song]
         switch reference.kind {
         case .song:
-            let song = try await SubsonicAPIService.shared.getSong(id: reference.contentID)
+            let song = try await SubsonicAPIService.shared.getSong(
+                id: reference.contentID,
+                retries: 1
+            )
             songs = await InstantMixService.songMix(for: song)
         case .album:
-            let detail = try await SubsonicAPIService.shared.getAlbum(id: reference.contentID)
+            let detail = try await SubsonicAPIService.shared.getAlbum(
+                id: reference.contentID,
+                retries: 1
+            )
             songs = await InstantMixService.albumMix(for: Album(
                 id: detail.id,
                 name: detail.name,
@@ -455,7 +460,10 @@ final class ShelvSystemIntentPlaybackService: @unchecked Sendable {
                 songs: detail.song
             ))
         case .artist:
-            let detail = try await SubsonicAPIService.shared.getArtist(id: reference.contentID)
+            let detail = try await SubsonicAPIService.shared.getArtist(
+                id: reference.contentID,
+                retries: 1
+            )
             songs = await InstantMixService.artistMix(for: Artist(
                 id: detail.id,
                 name: detail.name,
@@ -465,8 +473,17 @@ final class ShelvSystemIntentPlaybackService: @unchecked Sendable {
         case .playlist, .radio:
             throw ShortcutPlaybackError.noPlayableContent
         }
+        ShelvIntentDiagnostics.instantMixBuilt(kind: reference.kind, trackCount: songs.count)
+        guard songs.count > 1 else {
+            throw ShortcutPlaybackError.instantMixUnavailable
+        }
         try validateFlight(flightID, serverConfigID: context.server.id.uuidString)
         try await apply(songs: songs, order: .inOrder, placement: .replace, repeats: false)
+        guard AudioPlayerService.shared.hasNextTrack else {
+            AudioPlayerService.shared.stop()
+            throw ShortcutPlaybackError.instantMixUnavailable
+        }
+        ShelvIntentDiagnostics.instantMixPlaybackConfirmed(trackCount: songs.count)
     }
 
     private func performPlayPause() async throws {

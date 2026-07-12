@@ -28,7 +28,10 @@ nonisolated extension ShortcutSmartMix: AppEnum {
         [
             .newest: DisplayRepresentation(
                 title: "shortcut_mix_newest",
-                synonyms: ["Newest Tracks", "Latest Tracks", "Latest Music", "New Music"]
+                synonyms: [
+                    "Newest Tracks", "Latest Tracks", "Latest Music", "New Music",
+                    "Recently Added Tracks", "Recently Added Songs", "Recently Added Music",
+                ]
             ),
             .frequent: DisplayRepresentation(
                 title: "shortcut_mix_frequent",

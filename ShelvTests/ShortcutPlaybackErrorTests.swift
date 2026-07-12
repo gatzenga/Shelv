@@ -63,4 +63,11 @@ final class ShortcutPlaybackErrorTests: XCTestCase {
         )
     }
 
+    func testInstantMixFailureHasDedicatedLocalizedError() {
+        XCTAssertEqual(
+            ShortcutPlaybackError.instantMixUnavailable.localizedStringResource,
+            "shortcut_error_instant_mix_unavailable"
+        )
+    }
+
 }

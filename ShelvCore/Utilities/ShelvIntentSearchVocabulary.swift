@@ -9,9 +9,10 @@ nonisolated enum ShelvIntentSearchVocabulary {
         "a", "all", "an", "and", "ask", "album", "albums", "artist", "artists", "by",
         "called", "can", "could",
         "for", "from", "in", "library", "me", "music", "my", "of", "on", "play", "please",
-        "radio", "shelv", "shuffle", "shuffled", "song", "songs", "station", "the", "track",
+        "radio", "shelv", "shells", "shuffle", "shuffled", "song", "songs", "station", "the", "track",
         "tracks", "using", "with", "instant", "mix", "named", "siri", "some", "something",
         "start", "titled", "you", "ask shelv to play", "ask shelv to shuffle",
+        "ask shells to play", "ask shells to shuffle",
         // German
         "alle", "album", "alben", "auf", "aus", "bitte", "das", "dem", "den", "der",
         "die", "eine", "einem", "einen", "einer", "für", "gemischt", "in", "künstler", "lied",
@@ -102,6 +103,7 @@ nonisolated enum ShelvIntentSearchVocabulary {
         var tokens = kindDetectionTokens(in: rawQuery)
         let leadingPhrases = [
             "ask shelv to play", "ask shelv to shuffle",
+            "ask shells to play", "ask shells to shuffle",
             "play an instant mix for", "play instant mix for",
             "create an instant mix from", "create instant mix from",
             "spiele einen instant mix für", "spiele instant mix für",
@@ -116,6 +118,7 @@ nonisolated enum ShelvIntentSearchVocabulary {
         ].map { kindDetectionTokens(in: $0) }.sorted { $0.count > $1.count }
         let trailingPhrases = [
             "in shelv", "with shelv", "using shelv", "on shelv",
+            "in shells", "with shells", "using shells", "on shells",
             "mit shelv", "auf shelv", "in shelv",
         ].map { kindDetectionTokens(in: $0) }.sorted { $0.count > $1.count }
 
@@ -188,7 +191,10 @@ nonisolated enum ShelvIntentSearchVocabulary {
         let queryTokens = kindDetectionTokens(in: rawQuery)
         let candidates = kindWords.compactMap { kind, markers -> (ShortcutPlayableKind, Int)? in
             let positions = markers.compactMap { marker -> Int? in
-                markerPosition(marker, in: queryTokens)
+                guard let position = markerPosition(marker, in: queryTokens),
+                      !isNegatedKindMarker(at: position, in: queryTokens)
+                else { return nil }
+                return position
             }
             guard let position = positions.min() else { return nil }
             return (kind, position)
@@ -238,6 +244,13 @@ nonisolated enum ShelvIntentSearchVocabulary {
             if $0.1 != $1.1 { return $0.1 < $1.1 }
             return $0.0.rawValue < $1.0.rawValue
         }?.0
+    }
+
+    private static func isNegatedKindMarker(at position: Int, in tokens: [String]) -> Bool {
+        guard position > 0 else { return false }
+        let negations = Set(["not", "nicht", "kein", "keine", "keinen", "keinem", "keiner"])
+        let start = max(0, position - 2)
+        return tokens[start..<position].contains(where: negations.contains)
     }
 
     static func containsKindMarker(_ kind: ShortcutPlayableKind, in rawQuery: String) -> Bool {
@@ -392,8 +405,13 @@ nonisolated enum ShelvSmartMixIntentVocabulary {
             [
                 "newest tracks", "newest songs", "latest tracks", "latest songs",
                 "latest music", "new music",
+                "recently added tracks", "recently added songs", "recently added music",
+                "newly added tracks", "newly added songs", "newly added music",
                 "neueste titel", "neueste lieder", "neueste musik", "neue musik",
+                "kürzlich hinzugefügte titel", "kürzlich hinzugefügte lieder",
+                "kürzlich hinzugefügte musik", "neu hinzugefügte musik",
                 "最新曲目", "最新歌曲", "最新音乐",
+                "最近添加的曲目", "最近添加的歌曲", "最近添加的音乐",
             ]
         ),
         (
@@ -536,25 +554,48 @@ nonisolated enum ShelvDownloadsIntentVocabulary {
 /// name of a playlist. The returned string contains only the seed catalog name.
 nonisolated enum ShelvInstantMixIntentVocabulary {
     private static let requestMarkers = [
-        "instant mix for", "instant mix from", "instant mix of",
-        "instant mix für", "instant mix aus", "instant mix von",
-        "即时混音", "即时混合",
+        // English. AudioSearch may omit the leading playback verb and provide
+        // only a content query such as "Instant Mix for Mercury".
+        "instant mix based on", "instant mix for", "instant mix from",
+        "instant mix of", "instant mix around", "instantmix for",
+        "instantmix from", "mix based on", "similar music to", "music like",
+        "create a station from", "create station from", "station based on", "station from",
+        // German, including common Siri paraphrases and the compound spelling.
+        "instant mix basierend auf", "instant mix für", "instant mix aus",
+        "instant mix von", "instant mix zu", "instant mix zum", "instant mix zur",
+        "instantmix für", "instantmix aus", "instantmix von", "instantmix zu",
+        "mix basierend auf", "ähnliche musik wie", "ähnliche musik zu", "musik wie",
+        "station basierend auf", "sender basierend auf", "station aus", "sender aus",
+        // Simplified Chinese.
+        "即时混音基于", "即时混合基于", "即时混音", "即时混合",
     ]
 
     static func seedQuery(from rawQuery: String) -> String? {
         let query = rawQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty,
-              requestMarkers.contains(where: {
-                  ShelvIntentSearchVocabulary.containsTokenSequence($0, in: query)
-              })
-        else { return nil }
+        guard !query.isEmpty else { return nil }
 
-        var tokens = ShelvIntentSearchVocabulary.primaryRequestTokens(in: query)
-        while let first = tokens.first, ["instant", "mix"].contains(first) {
-            tokens.removeFirst()
+        let queryTokens = ShelvIntentSearchVocabulary.normalizedTokens(in: query)
+        let markers = requestMarkers
+            .map(ShelvIntentSearchVocabulary.normalizedTokens)
+            .filter { !$0.isEmpty }
+            .sorted { lhs, rhs in
+                if lhs.count != rhs.count { return lhs.count > rhs.count }
+                return lhs.joined(separator: " ") < rhs.joined(separator: " ")
+            }
+
+        for marker in markers where marker.count <= queryTokens.count {
+            let lastStart = queryTokens.count - marker.count
+            for start in 0...lastStart where queryTokens[start..<(start + marker.count)]
+                .elementsEqual(marker) {
+                let seedStart = start + marker.count
+                guard seedStart < queryTokens.count else { return nil }
+                let remainder = queryTokens[seedStart...].joined(separator: " ")
+                let seedTokens = ShelvIntentSearchVocabulary.primaryRequestTokens(in: remainder)
+                guard !seedTokens.isEmpty else { return nil }
+                return seedTokens.joined(separator: " ")
+            }
         }
-        guard !tokens.isEmpty else { return nil }
-        return tokens.joined(separator: " ")
+        return nil
     }
 }
 
@@ -604,7 +645,13 @@ nonisolated enum ShelvIntentSearchRanking {
 
         let ranked = items.enumerated().compactMap {
             index,
-            item -> (score: Int, index: Int, item: Element, title: String)? in
+            item -> (
+                score: Int,
+                index: Int,
+                item: Element,
+                kind: ShortcutPlayableKind,
+                title: String
+            )? in
             let candidate = fields(item)
             guard let score = relevantScore(
                 kind: candidate.kind,
@@ -613,7 +660,7 @@ nonisolated enum ShelvIntentSearchRanking {
                 albumTitle: candidate.albumTitle,
                 query: query
             ) else { return nil }
-            return (score, index, item, candidate.title)
+            return (score, index, item, candidate.kind, candidate.title)
         }.sorted {
             if $0.score != $1.score { return $0.score > $1.score }
             return $0.index < $1.index
@@ -631,6 +678,12 @@ nonisolated enum ShelvIntentSearchRanking {
                 return [exactTitleMatches[0].item]
             }
             if exactTitleMatches.count > 1 {
+                let hasExplicitKind = ShelvIntentSearchVocabulary.explicitKind(in: query) != nil
+                let hasQualifiedRequest = qualifiedRequest(in: query) != nil
+                if !hasExplicitKind, !hasQualifiedRequest,
+                   let artist = exactTitleMatches.first(where: { $0.kind == .artist }) {
+                    return [artist.item]
+                }
                 return exactTitleMatches.prefix(ambiguityLimit).map(\.item)
             }
         }

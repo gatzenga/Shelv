@@ -34,7 +34,10 @@ struct ShelvPlatformPlayableEntity: AppEntity, Identifiable, Hashable, Sendable 
         case .album:
             return ["album \(title)"]
         case .artist:
-            return ["music by \(title)", "songs by \(title)"]
+            return [
+                "artist \(title)", "the artist \(title)",
+                "music by \(title)", "songs by \(title)",
+            ]
         case .playlist:
             return ["\(title) playlist", "playlist \(title)"]
         case .radio:
