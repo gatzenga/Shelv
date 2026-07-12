@@ -1,6 +1,22 @@
 import SwiftUI
+import OSLog
+
+private let discoverViewLogger = Logger(
+    subsystem: Bundle.main.bundleIdentifier ?? "ch.vkugler.Shelv",
+    category: "DiscoverStartup"
+)
 
 struct DiscoverView: View {
+    private enum LoadTrigger: String {
+        case initialTask
+        case offlineExit
+        case serverChange
+        case serverURLChange
+        case serverURLSwitch
+        case manualRefresh
+        case networkRecovered
+    }
+
     @ObservedObject private var vm = DiscoverViewModel.shared
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var serverStore: ServerStore
@@ -18,6 +34,7 @@ struct DiscoverView: View {
     @State private var mixLoading: String?
     @State private var deviceHasNetwork = true
     @State private var showConnectionRecoveryState = false
+    @State private var showDiscoverLoadFailureState = false
     @State private var isCheckingConnection = false
     @State private var isRefreshingDiscover = false
     @State private var isSwitchingServerURL = false
@@ -110,7 +127,12 @@ struct DiscoverView: View {
             }
             .onChange(of: offlineMode.isOffline) { _, isOffline in
                 if !isOffline {
-                    Task { await loadOnlineDiscoverContent(verifyReachabilityFirst: discoverContentIsEmpty) }
+                    Task {
+                        await loadOnlineDiscoverContent(
+                            trigger: .offlineExit,
+                            verifyReachabilityFirst: discoverContentIsEmpty
+                        )
+                    }
                 }
             }
         } else {
@@ -212,6 +234,8 @@ struct DiscoverView: View {
                     discoverLoadingState
                 } else if shouldShowConnectionRecoveryState {
                     connectionRecoveryState
+                } else if showDiscoverLoadFailureState && discoverContentIsEmpty {
+                    discoverLoadFailureState
                 } else {
                     ForEach(Array(visibleDiscoverySections.enumerated()), id: \.element) { index, section in
                         discoveryAlbumSection(section, isFirstVisible: index == 0)
@@ -256,16 +280,17 @@ struct DiscoverView: View {
                 ThemePickerButton()
             }
         }
-        .task { await loadOnlineDiscoverContent(verifyReachabilityFirst: discoverContentIsEmpty) }
+        .task {
+            await loadOnlineDiscoverContent(
+                trigger: .initialTask,
+                verifyReachabilityFirst: discoverContentIsEmpty
+            )
+        }
         .task {
             await updateDeviceNetworkState()
         }
         .onReceive(NotificationCenter.default.publisher(for: .networkStatusChanged)) { _ in
             Task { await handleNetworkStatusChanged() }
-        }
-        .onChange(of: offlineMode.serverErrorBannerVisible) { _, visible in
-            guard visible, discoverContentIsEmpty else { return }
-            presentConnectionRecoveryState()
         }
         .onChange(of: serverStore.activeServerID) { _, _ in
             serverURLSwitchGeneration += 1
@@ -274,12 +299,13 @@ struct DiscoverView: View {
             locallyInitiatedURLSwitchSignature = activeServerURLSignature
             isSwitchingServerURL = false
             isCheckingConnection = false
+            showDiscoverLoadFailureState = false
             offlineMode.clearServerError()
             vm.reset()
             Task {
                 await loadOnlineDiscoverContent(
-                    verifyReachabilityFirst: true,
-                    ignoresVisibleServerError: true
+                    trigger: .serverChange,
+                    verifyReachabilityFirst: true
                 )
             }
         }
@@ -296,6 +322,7 @@ struct DiscoverView: View {
             isSwitchingServerURL = true
             isCheckingConnection = true
             showConnectionRecoveryState = false
+            showDiscoverLoadFailureState = false
             offlineMode.clearServerError()
             vm.reset()
             libraryStore.reset()
@@ -308,8 +335,8 @@ struct DiscoverView: View {
                     }
                 }
                 await loadOnlineDiscoverContent(
-                    verifyReachabilityFirst: true,
-                    ignoresVisibleServerError: true
+                    trigger: .serverURLChange,
+                    verifyReachabilityFirst: true
                 )
                 guard generation == serverURLSwitchGeneration else { return }
                 await RadioStationStore.shared.refresh()
@@ -416,6 +443,7 @@ struct DiscoverView: View {
         isSwitchingServerURL = true
         isCheckingConnection = true
         showConnectionRecoveryState = false
+        showDiscoverLoadFailureState = false
         offlineMode.clearServerError()
         defer {
             if generation == serverURLSwitchGeneration {
@@ -441,8 +469,8 @@ struct DiscoverView: View {
         guard !Task.isCancelled, generation == serverURLSwitchGeneration else { return }
 
         await loadOnlineDiscoverContent(
-            verifyReachabilityFirst: false,
-            ignoresVisibleServerError: true
+            trigger: .serverURLSwitch,
+            verifyReachabilityFirst: false
         )
         guard !Task.isCancelled, generation == serverURLSwitchGeneration else { return }
         await RadioStationStore.shared.refresh()
@@ -456,6 +484,7 @@ struct DiscoverView: View {
         isRefreshingDiscover = true
         defer { isRefreshingDiscover = false }
         showConnectionRecoveryState = false
+        showDiscoverLoadFailureState = false
         isCheckingConnection = true
         defer { isCheckingConnection = false }
         if await offlineMode.beginUserInitiatedServerRefresh() {
@@ -466,7 +495,11 @@ struct DiscoverView: View {
         defer { offlineMode.finishUserInitiatedServerRefresh() }
 
         Task { await CloudKitSyncService.shared.syncNow() }
-        async let discover:  Void = loadOnlineDiscoverContent(verifyReachabilityFirst: false, force: true)
+        async let discover: Void = loadOnlineDiscoverContent(
+            trigger: .manualRefresh,
+            verifyReachabilityFirst: false,
+            force: true
+        )
         async let playlists: Void = libraryStore.loadPlaylists(force: true)
         async let radio:     Void = RadioStationStore.shared.refresh()
         _ = await (discover, playlists, radio)
@@ -474,22 +507,25 @@ struct DiscoverView: View {
 
     @MainActor
     private func loadOnlineDiscoverContent(
+        trigger: LoadTrigger,
         verifyReachabilityFirst: Bool = false,
-        ignoresVisibleServerError: Bool = false,
         force: Bool = false
     ) async {
         let requestSignature = activeServerURLSignature
+        discoverViewLogger.info(
+            "View load started trigger=\(trigger.rawValue, privacy: .public) verify=\(verifyReachabilityFirst) force=\(force) empty=\(discoverContentIsEmpty) banner=\(offlineMode.serverErrorBannerVisible)"
+        )
         showConnectionRecoveryState = false
+        showDiscoverLoadFailureState = false
         await updateDeviceNetworkState()
-        guard !Task.isCancelled, requestSignature == activeServerURLSignature else { return }
-        guard deviceHasNetwork else {
-            let message = SubsonicAPIError.networkError(URLError(.notConnectedToInternet)).localizedDescription
-            offlineMode.notifyServerErrorIfPresentationAllowed(message)
-            presentConnectionRecoveryState()
+        guard !Task.isCancelled, requestSignature == activeServerURLSignature else {
+            discoverViewLogger.info("View load superseded before reachability")
             return
         }
-
-        if !ignoresVisibleServerError, offlineMode.serverErrorBannerVisible && discoverContentIsEmpty {
+        guard deviceHasNetwork else {
+            discoverViewLogger.error("Recovery selected: device network unavailable")
+            let message = SubsonicAPIError.networkError(URLError(.notConnectedToInternet)).localizedDescription
+            offlineMode.notifyServerErrorIfPresentationAllowed(message)
             presentConnectionRecoveryState()
             return
         }
@@ -505,16 +541,19 @@ struct DiscoverView: View {
             isCheckingConnection = true
             let reachability = await offlineMode.beginVisibleServerReachabilityCheck()
             if reachability == .cancelled {
+                discoverViewLogger.info("Reachability cancelled")
                 isCheckingConnection = false
                 return
             }
             if reachability == .unreachable {
+                discoverViewLogger.error("Recovery selected: server ping failed")
                 isCheckingConnection = false
                 await updateDeviceNetworkState()
                 guard !Task.isCancelled, requestSignature == activeServerURLSignature else { return }
                 presentConnectionRecoveryState()
                 return
             }
+            discoverViewLogger.info("Reachability succeeded")
             isCheckingConnection = false
             shouldFinishReachabilityCheck = true
         }
@@ -522,9 +561,15 @@ struct DiscoverView: View {
         let didLoadDiscover = await vm.load(force: force)
 
         await updateDeviceNetworkState()
-        guard !Task.isCancelled, requestSignature == activeServerURLSignature else { return }
-        showConnectionRecoveryState = discoverContentIsEmpty
-            && (!deviceHasNetwork || (!ignoresVisibleServerError && offlineMode.serverErrorBannerVisible) || !didLoadDiscover)
+        guard !Task.isCancelled, requestSignature == activeServerURLSignature else {
+            discoverViewLogger.info("View load superseded after content request")
+            return
+        }
+        showConnectionRecoveryState = discoverContentIsEmpty && !deviceHasNetwork
+        showDiscoverLoadFailureState = discoverContentIsEmpty && deviceHasNetwork && !didLoadDiscover
+        discoverViewLogger.info(
+            "View load resolved success=\(didLoadDiscover) empty=\(discoverContentIsEmpty) recovery=\(showConnectionRecoveryState) contentFailure=\(showDiscoverLoadFailureState)"
+        )
     }
 
     @MainActor
@@ -541,12 +586,18 @@ struct DiscoverView: View {
             presentConnectionRecoveryState()
         }
         guard wasOffline, deviceHasNetwork, !offlineMode.isOffline, discoverContentIsEmpty else { return }
-        await loadOnlineDiscoverContent(verifyReachabilityFirst: true)
+        await loadOnlineDiscoverContent(
+            trigger: .networkRecovered,
+            verifyReachabilityFirst: true
+        )
     }
 
     @MainActor
     private func presentConnectionRecoveryState() {
         guard discoverContentIsEmpty else { return }
+        discoverViewLogger.error(
+            "Recovery presented network=\(deviceHasNetwork) checking=\(isCheckingConnection) banner=\(offlineMode.serverErrorBannerVisible)"
+        )
         isCheckingConnection = false
         vm.stopLoadingForConnectionRecovery()
         showConnectionRecoveryState = true
@@ -579,6 +630,23 @@ struct DiscoverView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.top, 80)
+    }
+
+    @ViewBuilder
+    private var discoverLoadFailureState: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "exclamationmark.arrow.trianglehead.2.clockwise.rotate.90")
+                .font(.system(size: 34))
+                .foregroundStyle(.secondary)
+            Text(String(localized: "error"))
+                .font(.headline)
+            Button(String(localized: "reload")) {
+                Task { await refreshOnlineDiscoverContent() }
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 72)
     }
 
     private func isSmartMixVisible(_ mix: PersonalizationSmartMix) -> Bool {

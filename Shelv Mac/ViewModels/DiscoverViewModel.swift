@@ -1,5 +1,11 @@
 import SwiftUI
 import Combine
+import OSLog
+
+private let discoverModelLogger = Logger(
+    subsystem: Bundle.main.bundleIdentifier ?? "ch.vkugler.Shelv",
+    category: "DiscoverStartup"
+)
 
 @MainActor
 class DiscoverViewModel: ObservableObject {
@@ -17,6 +23,7 @@ class DiscoverViewModel: ObservableObject {
     private static let shelfSize = 20
     private var loadGeneration = 0
     private var hasLoadedDiscoverContent = false
+    private var activeLoadTask: Task<Bool, Never>?
 
     private var hasDiscoverContent: Bool {
         !recentlyAdded.isEmpty || !recentlyPlayed.isEmpty || !frequentlyPlayed.isEmpty || !randomAlbums.isEmpty
@@ -25,20 +32,36 @@ class DiscoverViewModel: ObservableObject {
     @discardableResult
     func load(force: Bool = false) async -> Bool {
         if !force && hasLoadedDiscoverContent {
+            discoverModelLogger.debug("Load reused completed content")
             return true
         }
 
-        guard !isLoading else { return hasLoadedDiscoverContent || hasDiscoverContent }
+        if let activeLoadTask {
+            discoverModelLogger.info("Load joined active request")
+            return await activeLoadTask.value
+        }
+
         loadGeneration += 1
         let generation = loadGeneration
         isLoading = true
         errorMessage = nil
-        defer {
-            if loadGeneration == generation {
-                isLoading = false
-            }
-        }
+        discoverModelLogger.info("Load started generation=\(generation)")
 
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return false }
+            return await self.performLoad(generation: generation)
+        }
+        activeLoadTask = task
+        let didLoad = await task.value
+        if loadGeneration == generation {
+            activeLoadTask = nil
+            isLoading = false
+        }
+        discoverModelLogger.info("Load finished generation=\(generation) success=\(didLoad)")
+        return didLoad
+    }
+
+    private func performLoad(generation: Int) async -> Bool {
         async let newest   = api.getAlbumList(type: .newest,         size: Self.shelfSize)
         async let recent   = api.getAlbumList(type: .recentlyPlayed, size: Self.shelfSize)
         async let frequent = api.getAlbumList(type: .frequent,       size: Self.shelfSize)
@@ -54,15 +77,25 @@ class DiscoverViewModel: ObservableObject {
             frequentlyPlayed = loadedFrequent
             randomAlbums     = loadedRandom
             hasLoadedDiscoverContent = true
+            discoverModelLogger.info(
+                "Shelves loaded newest=\(loadedNewest.count) recent=\(loadedRecent.count) frequent=\(loadedFrequent.count) random=\(loadedRandom.count)"
+            )
             return true
         } catch {
             guard loadGeneration == generation else { return false }
             errorMessage = error.localizedDescription
+            let nsError = error as NSError
+            discoverModelLogger.error(
+                "Shelf load failed generation=\(generation) domain=\(nsError.domain, privacy: .public) code=\(nsError.code) taskCancelled=\(Task.isCancelled)"
+            )
             return false
         }
     }
 
     func reset() {
+        discoverModelLogger.info("Load reset active=\(self.activeLoadTask != nil)")
+        activeLoadTask?.cancel()
+        activeLoadTask = nil
         loadGeneration += 1
         hasLoadedDiscoverContent = false
         recentlyAdded = []
@@ -74,6 +107,9 @@ class DiscoverViewModel: ObservableObject {
     }
 
     func stopLoadingForConnectionRecovery() {
+        discoverModelLogger.info("Load stopped for connection recovery active=\(self.activeLoadTask != nil)")
+        activeLoadTask?.cancel()
+        activeLoadTask = nil
         loadGeneration += 1
         errorMessage = nil
         isLoading = false
