@@ -245,7 +245,7 @@ struct RadioStationArtworkView: View {
     }
 }
 
-private struct RemoteRadioArtworkView<Fallback: View>: View {
+struct RemoteRadioArtworkView<Fallback: View>: View {
     let url: URL
     let size: CGFloat
     let cornerRadius: CGFloat
@@ -288,10 +288,18 @@ private struct RemoteRadioArtworkView<Fallback: View>: View {
             }
             image = nil
             loadedURLString = nil
-            let loaded = await ImageCacheService.shared.image(url: url, key: key)
-            guard !Task.isCancelled, activeLoadURLString == urlString else { return }
-            image = loaded
-            loadedURLString = loaded == nil ? nil : urlString
+            var retryDelay: TimeInterval = 2
+            while !Task.isCancelled, activeLoadURLString == urlString {
+                let loaded = await ImageCacheService.shared.image(url: url, key: key)
+                guard !Task.isCancelled, activeLoadURLString == urlString else { return }
+                if let loaded {
+                    image = loaded
+                    loadedURLString = urlString
+                    return
+                }
+                try? await Task.sleep(for: .seconds(retryDelay))
+                retryDelay = min(retryDelay * 2, 30)
+            }
         }
     }
 

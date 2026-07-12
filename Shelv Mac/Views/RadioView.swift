@@ -284,10 +284,20 @@ struct MacRadioStationArtworkView: View {
 
     var body: some View {
         if let remoteArtworkURL {
-            CoverArtView(url: remoteArtworkURL, size: size, cornerRadius: size > 80 ? 10 : 7)
+            CoverArtView(
+                url: remoteArtworkURL,
+                size: size,
+                cornerRadius: size > 80 ? 10 : 7,
+                retryOnFailure: true
+            )
         } else if let coverArt = item.coverArt,
            let url = SubsonicAPIService.shared.coverArtURL(id: coverArt, size: Int(size * 3)) {
-            CoverArtView(url: url, size: size, cornerRadius: size > 80 ? 10 : 7)
+            CoverArtView(
+                url: url,
+                size: size,
+                cornerRadius: size > 80 ? 10 : 7,
+                retryOnFailure: true
+            )
         } else {
             RoundedRectangle(cornerRadius: size > 80 ? 10 : 7, style: .continuous)
                 .fill(.secondary.opacity(0.14))

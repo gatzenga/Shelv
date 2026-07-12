@@ -7,6 +7,7 @@ struct AlbumArtView: View {
     let isCircle: Bool
 
     @State private var uiImage: UIImage?
+    @State private var loadedIdentifier: String?
     @State private var loading: Bool
     @State private var activeLoadIdentifier: String?
 
@@ -24,9 +25,11 @@ struct AlbumArtView: View {
                 fallbackSizes: ImageCacheService.coverFallbackSizes(preferred: size)
             )
             self._uiImage = State(initialValue: cached)
+            self._loadedIdentifier = State(initialValue: cached == nil ? nil : "\(id)_\(size)")
             self._loading = State(initialValue: cached == nil)
         } else {
             self._uiImage = State(initialValue: nil)
+            self._loadedIdentifier = State(initialValue: nil)
             self._loading = State(initialValue: false)
         }
     }
@@ -35,7 +38,7 @@ struct AlbumArtView: View {
         let content = Color.clear
             .aspectRatio(1, contentMode: .fit)
             .overlay {
-                if let uiImage {
+                if let uiImage, loadedIdentifier == loadIdentifier {
                     Image(uiImage: uiImage)
                         .resizable()
                         .scaledToFill()
@@ -57,7 +60,7 @@ struct AlbumArtView: View {
             await load()
         }
         .onReceive(NotificationCenter.default.publisher(for: .artworkIndexReady)) { _ in
-            guard uiImage == nil else { return }
+            guard uiImage == nil || loadedIdentifier != loadIdentifier else { return }
             Task { await load() }
         }
     }
@@ -67,30 +70,38 @@ struct AlbumArtView: View {
         guard let id = coverArtId else {
             activeLoadIdentifier = nil
             uiImage = nil
+            loadedIdentifier = nil
             loading = false
             return
         }
 
         let expectedLoadIdentifier = loadIdentifier
         activeLoadIdentifier = expectedLoadIdentifier
+        if loadedIdentifier != expectedLoadIdentifier {
+            uiImage = nil
+            loadedIdentifier = nil
+        }
+        loading = uiImage == nil
         let key = "\(id)_\(size)"
         let fallbackSizes = ImageCacheService.coverFallbackSizes(preferred: size)
 
         if let cached = ImageCacheService.shared.cachedImage(key: key) {
-            uiImage = cached; loading = false; return
+            apply(cached, for: expectedLoadIdentifier)
+            return
         }
         if let cached = ImageCacheService.shared.cachedImage(key: key, fallbackSizes: fallbackSizes) {
-            uiImage = cached
-            loading = false
+            apply(cached, for: expectedLoadIdentifier)
         }
 
         #if DEBUG
         // Demo-Cover liegen als Asset-Imagesets im Bundle (Präfix `demo_`), nicht im Netz.
         if id.hasPrefix("demo_") {
-            if let cached = ImageCacheService.shared.cachedImage(key: key, fallbackSizes: fallbackSizes) { uiImage = cached }
+            if let cached = ImageCacheService.shared.cachedImage(key: key, fallbackSizes: fallbackSizes) {
+                apply(cached, for: expectedLoadIdentifier)
+            }
             else if let img = UIImage(named: id) {
                 ImageCacheService.shared.cache(img, key: key)
-                uiImage = img
+                apply(img, for: expectedLoadIdentifier)
             }
             loading = false
             return
@@ -98,10 +109,14 @@ struct AlbumArtView: View {
         #endif
 
         guard let url = SubsonicAPIService.shared.coverArtURL(for: id, size: size)
-        else { uiImage = nil; loading = false; return }
+        else {
+            uiImage = nil
+            loadedIdentifier = nil
+            loading = false
+            return
+        }
 
-        // Stale-while-revalidate: altes Bild bleibt sichtbar während neues lädt.
-        // Spinner nur wenn noch kein Bild vorhanden ist.
+        // Ein Bild einer anderen Cover-ID bleibt nie sichtbar.
         if uiImage == nil { loading = true }
 
         if let localPath = LocalArtworkIndex.shared.localPath(for: id) {
@@ -111,14 +126,14 @@ struct AlbumArtView: View {
             guard !Task.isCancelled, activeLoadIdentifier == expectedLoadIdentifier else { return }
             if let img = loaded {
                 ImageCacheService.shared.cache(img, key: key)
-                uiImage = img; loading = false; return
+                apply(img, for: expectedLoadIdentifier)
+                return
             }
         }
 
         if let cached = await ImageCacheService.shared.diskOnlyImage(key: key, fallbackSizes: fallbackSizes) {
             guard !Task.isCancelled, activeLoadIdentifier == expectedLoadIdentifier else { return }
-            uiImage = cached
-            loading = false
+            apply(cached, for: expectedLoadIdentifier)
         }
 
         if UserDefaults.standard.bool(forKey: "offlineModeEnabled") {
@@ -133,8 +148,18 @@ struct AlbumArtView: View {
             guard !Task.isCancelled else { return }
             let image = await ImageCacheService.shared.image(url: url, key: key)
             guard !Task.isCancelled, activeLoadIdentifier == expectedLoadIdentifier else { return }
-            if let image { uiImage = image; loading = false; return }
+            if let image {
+                apply(image, for: expectedLoadIdentifier)
+                return
+            }
         }
+        loading = false
+    }
+
+    private func apply(_ image: UIImage, for identifier: String) {
+        guard !Task.isCancelled, activeLoadIdentifier == identifier else { return }
+        uiImage = image
+        loadedIdentifier = identifier
         loading = false
     }
 

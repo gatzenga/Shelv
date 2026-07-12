@@ -9,25 +9,36 @@ struct CoverArtView: View {
     var size: CGFloat = 240
     var cornerRadius: CGFloat = 10
     var isCircle: Bool = false
+    var retryOnFailure: Bool = false
 
     @State private var image: UIImage?
+    @State private var loadedImageKey: String?
     @State private var activeLoadKey: String?
 
-    init(url: URL?, size: CGFloat = 240, cornerRadius: CGFloat = 10, isCircle: Bool = false) {
+    init(
+        url: URL?,
+        size: CGFloat = 240,
+        cornerRadius: CGFloat = 10,
+        isCircle: Bool = false,
+        retryOnFailure: Bool = false
+    ) {
         self.url = url
         self.size = size
         self.cornerRadius = cornerRadius
         self.isCircle = isCircle
+        self.retryOnFailure = retryOnFailure
         if let url, let cached = ImageCacheService.shared.cachedImage(url: url) {
             self._image = State(initialValue: cached)
+            self._loadedImageKey = State(initialValue: ImageCacheService.stableCacheKey(for: url))
         } else {
             self._image = State(initialValue: nil)
+            self._loadedImageKey = State(initialValue: nil)
         }
     }
 
     var body: some View {
         let content = Group {
-            if let img = image {
+            if let img = image, loadedImageKey == stableKey {
                 Image(uiImage: img)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
@@ -59,12 +70,17 @@ struct CoverArtView: View {
     }
 
     private func triggerLoad() {
-        guard image == nil, url != nil else { return }
+        guard !retryOnFailure, image == nil, url != nil else { return }
         Task { await loadImage() }
     }
 
     private func loadImage() async {
-        guard let url else { image = nil; return }
+        guard let url else {
+            activeLoadKey = nil
+            image = nil
+            loadedImageKey = nil
+            return
+        }
         let key = stableKey
         guard activeLoadKey != key else { return }
         activeLoadKey = key
@@ -75,7 +91,7 @@ struct CoverArtView: View {
         }
 
         if let hit = ImageCacheService.shared.cachedImage(url: url) {
-            if stableKey == key { image = hit }
+            apply(hit, for: key)
             return
         }
 
@@ -86,19 +102,38 @@ struct CoverArtView: View {
         if let artId, artId.hasPrefix("demo_") {
             if let img = UIImage(named: artId) {
                 ImageCacheService.shared.cache(img, url: url)
-                if stableKey == key { image = img }
+                apply(img, for: key)
             }
             return
         }
         #endif
 
         if let img = await ImageCacheService.shared.diskOnlyImage(url: url) {
-            if stableKey == key { image = img }
+            guard isCurrentLoad(key) else { return }
+            apply(img, for: key)
         }
 
-        if let img = await ImageCacheService.shared.image(url: url) {
-            if stableKey == key { image = img }
+        var retryDelay: TimeInterval = 2
+        while isCurrentLoad(key) {
+            if let img = await ImageCacheService.shared.image(url: url) {
+                guard isCurrentLoad(key) else { return }
+                apply(img, for: key)
+                return
+            }
+            guard retryOnFailure, isCurrentLoad(key) else { return }
+            try? await Task.sleep(for: .seconds(retryDelay))
+            retryDelay = min(retryDelay * 2, 30)
         }
+    }
+
+    private func isCurrentLoad(_ key: String) -> Bool {
+        !Task.isCancelled && activeLoadKey == key
+    }
+
+    private func apply(_ loadedImage: UIImage, for key: String) {
+        guard isCurrentLoad(key) else { return }
+        image = loadedImage
+        loadedImageKey = key
     }
 }
 

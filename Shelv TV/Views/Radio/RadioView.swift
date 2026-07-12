@@ -243,10 +243,10 @@ struct TVRadioStationArtworkView: View {
 
     var body: some View {
         if let remoteArtworkURL {
-            CoverArtView(url: remoteArtworkURL, size: size, cornerRadius: 8)
+            CoverArtView(url: remoteArtworkURL, size: size, cornerRadius: 8, retryOnFailure: true)
         } else if let coverArt = item.coverArt,
            let url = SubsonicAPIService.shared.coverArtURL(for: coverArt, size: Int(size * 2)) {
-            CoverArtView(url: url, size: size, cornerRadius: 8)
+            CoverArtView(url: url, size: size, cornerRadius: 8, retryOnFailure: true)
         } else {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(.secondary.opacity(0.14))
