@@ -46,7 +46,9 @@ class ServerStore: ObservableObject {
             seen.insert(server.id.uuidString)
             UserDefaults.standard.set(Array(seen), forKey: seenKey)
         }
-        activeServerID = server.id
+        if activeServerID != server.id {
+            activeServerID = server.id
+        }
         UserDefaults.standard.set(server.id.uuidString, forKey: activeKey)
         applyToAPIService(server: server)
         Task { await ScrobbleService.shared.flushPendingScrobbles() }
