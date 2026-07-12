@@ -518,7 +518,12 @@ struct DiscoverView: View {
 
         if verifyReachabilityFirst && discoverContentIsEmpty {
             isCheckingConnection = true
-            if await offlineMode.beginVisibleServerReachabilityCheck() {
+            let reachability = await offlineMode.beginVisibleServerReachabilityCheck()
+            if reachability == .cancelled {
+                isCheckingConnection = false
+                return
+            }
+            if reachability == .unreachable {
                 isCheckingConnection = false
                 await updateDeviceNetworkState()
                 guard !Task.isCancelled, requestSignature == activeServerURLSignature else { return }
