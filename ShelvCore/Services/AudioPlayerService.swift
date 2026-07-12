@@ -2864,8 +2864,21 @@ class AudioPlayerService: ObservableObject {
             .sink { [weak self] metadata in
                 guard let self, self.isRadioPlayback, let station = self.currentRadioStation else { return }
                 self.currentRadioMetadata = metadata
-                self.artworkReloadToken = UUID()
                 self.nowPlaying.updateRadio(station: station, metadata: metadata, isPlaying: self.isPlaying)
+            }
+            .store(in: &engineSubscriptions)
+
+        radioMetadata.$refreshToken
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] token in
+                guard let self, self.isRadioPlayback, let station = self.currentRadioStation else { return }
+                self.artworkReloadToken = token
+                self.nowPlaying.updateRadio(
+                    station: station,
+                    metadata: self.currentRadioMetadata,
+                    isPlaying: self.isPlaying
+                )
             }
             .store(in: &engineSubscriptions)
 

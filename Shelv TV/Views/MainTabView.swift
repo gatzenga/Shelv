@@ -412,7 +412,12 @@ private struct TVIdleNowPlayingView: View {
     @ViewBuilder
     private var artwork: some View {
         if let station = player.currentRadioStation {
-            TVRadioStationArtworkView(item: station, size: 560, metadata: player.currentRadioMetadata)
+            TVRadioStationArtworkView(
+                item: station,
+                size: 560,
+                metadata: player.currentRadioMetadata,
+                reloadToken: player.artworkReloadToken
+            )
                 .shadow(color: .black.opacity(0.45), radius: 30, y: 16)
         } else {
             CoverArtView(url: player.currentSong?.coverURL(900), size: 560, cornerRadius: 28)

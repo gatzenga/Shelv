@@ -52,4 +52,64 @@ final class RadioNowPlayingMetadataTests: XCTestCase {
         XCTAssertNil(RadioNowPlayingMetadata(artist: "Künstler unbekannt").displayArtist)
         XCTAssertEqual(RadioNowPlayingMetadata(artist: "Actual Artist").displayArtist, "Actual Artist")
     }
+
+    func testEmptyRefreshPreservesLastValidTrackAndArtwork() {
+        let current = RadioNowPlayingMetadata(
+            stationName: "Station",
+            title: "Current Song",
+            artist: "Current Artist",
+            artworkURL: "https://radio.example.com/current.jpg"
+        )
+        let emptyRefresh = RadioNowPlayingMetadata(
+            stationName: "Renamed Station",
+            artworkURL: "https://radio.example.com/station.jpg",
+            isLive: true
+        )
+
+        let resolved = RadioNowPlayingMetadata.resolving(current: current, incoming: emptyRefresh)
+
+        XCTAssertEqual(resolved.stationName, "Renamed Station")
+        XCTAssertEqual(resolved.title, "Current Song")
+        XCTAssertEqual(resolved.artist, "Current Artist")
+        XCTAssertEqual(resolved.artworkURL, "https://radio.example.com/current.jpg")
+        XCTAssertTrue(resolved.isLive)
+    }
+
+    func testValidRefreshReplacesPreviousTrackAsOnePackage() {
+        let current = RadioNowPlayingMetadata(
+            title: "Old Song",
+            artist: "Old Artist",
+            artworkURL: "https://radio.example.com/old.jpg"
+        )
+        let incoming = RadioNowPlayingMetadata(
+            title: "New Song",
+            artist: "New Artist",
+            artworkURL: "https://radio.example.com/new.jpg"
+        )
+
+        XCTAssertEqual(
+            RadioNowPlayingMetadata.resolving(current: current, incoming: incoming),
+            incoming
+        )
+    }
+
+    func testEmptyRefreshIsUsedWhenNoValidTrackExistsYet() {
+        let current = RadioNowPlayingMetadata(
+            stationName: "Station",
+            artworkURL: "https://radio.example.com/old-station.jpg"
+        )
+        let incoming = RadioNowPlayingMetadata(
+            stationName: "Station",
+            artworkURL: "https://radio.example.com/current-station.jpg"
+        )
+
+        XCTAssertEqual(
+            RadioNowPlayingMetadata.resolving(current: current, incoming: incoming),
+            incoming
+        )
+    }
+
+    func testAzuraCastUsesFixedThreeSecondPollingInterval() {
+        XCTAssertEqual(RadioMetadataPollingPolicy.azuraCastInterval, .seconds(3))
+    }
 }

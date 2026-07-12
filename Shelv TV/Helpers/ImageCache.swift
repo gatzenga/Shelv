@@ -9,7 +9,7 @@ struct CoverArtView: View {
     var size: CGFloat = 240
     var cornerRadius: CGFloat = 10
     var isCircle: Bool = false
-    var retryOnFailure: Bool = false
+    var reloadToken: UUID?
 
     @State private var image: UIImage?
     @State private var loadedImageKey: String?
@@ -20,13 +20,13 @@ struct CoverArtView: View {
         size: CGFloat = 240,
         cornerRadius: CGFloat = 10,
         isCircle: Bool = false,
-        retryOnFailure: Bool = false
+        reloadToken: UUID? = nil
     ) {
         self.url = url
         self.size = size
         self.cornerRadius = cornerRadius
         self.isCircle = isCircle
-        self.retryOnFailure = retryOnFailure
+        self.reloadToken = reloadToken
         if let url, let cached = ImageCacheService.shared.cachedImage(url: url) {
             self._image = State(initialValue: cached)
             self._loadedImageKey = State(initialValue: ImageCacheService.stableCacheKey(for: url))
@@ -61,7 +61,7 @@ struct CoverArtView: View {
             }
         }
         .onAppear { triggerLoad() }
-        .task(id: stableKey) { await loadImage() }
+        .task(id: loadIdentifier) { await loadImage() }
     }
 
     private var stableKey: String {
@@ -69,8 +69,12 @@ struct CoverArtView: View {
         return ImageCacheService.stableCacheKey(for: url)
     }
 
+    private var loadIdentifier: String {
+        "\(stableKey)|\(reloadToken?.uuidString ?? "static")"
+    }
+
     private func triggerLoad() {
-        guard !retryOnFailure, image == nil, url != nil else { return }
+        guard image == nil, url != nil else { return }
         Task { await loadImage() }
     }
 
@@ -113,16 +117,9 @@ struct CoverArtView: View {
             apply(img, for: key)
         }
 
-        var retryDelay: TimeInterval = 2
-        while isCurrentLoad(key) {
-            if let img = await ImageCacheService.shared.image(url: url) {
-                guard isCurrentLoad(key) else { return }
-                apply(img, for: key)
-                return
-            }
-            guard retryOnFailure, isCurrentLoad(key) else { return }
-            try? await Task.sleep(for: .seconds(retryDelay))
-            retryDelay = min(retryDelay * 2, 30)
+        if let img = await ImageCacheService.shared.image(url: url) {
+            guard isCurrentLoad(key) else { return }
+            apply(img, for: key)
         }
     }
 

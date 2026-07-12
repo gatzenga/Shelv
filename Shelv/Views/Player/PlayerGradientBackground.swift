@@ -109,7 +109,7 @@ struct PlayerGradientBackground: View {
             endPoint: .bottom
         )
         .ignoresSafeArea()
-        .task(id: backgroundIdentifier) {
+        .task(id: backgroundLoadIdentifier) {
             await updateBackground()
         }
     }
@@ -126,6 +126,11 @@ struct PlayerGradientBackground: View {
 
     private var backgroundIdentifier: String {
         PlayerBackgroundPaletteStore.identifier(for: player)
+    }
+
+    private var backgroundLoadIdentifier: String {
+        guard player.isRadioPlayback else { return backgroundIdentifier }
+        return "\(backgroundIdentifier)|\(player.artworkReloadToken.uuidString)"
     }
 
     private func updateBackground() async {

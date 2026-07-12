@@ -56,7 +56,7 @@ struct TVPlayerGradientBackground: View {
                     .ignoresSafeArea()
             }
         }
-        .task(id: backgroundIdentifier) {
+        .task(id: backgroundLoadIdentifier) {
             await updateBackground()
         }
         .onChange(of: colorScheme) { _, _ in
@@ -81,6 +81,11 @@ struct TVPlayerGradientBackground: View {
             return "radio-station-\(station.id)"
         }
         return player.currentSong?.coverArt ?? "song-none"
+    }
+
+    private var backgroundLoadIdentifier: String {
+        guard player.isRadioPlayback else { return backgroundIdentifier }
+        return "\(backgroundIdentifier)|\(player.artworkReloadToken.uuidString)"
     }
 
     private func updateBackground() async {

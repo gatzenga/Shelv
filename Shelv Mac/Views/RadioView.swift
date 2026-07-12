@@ -281,6 +281,7 @@ struct MacRadioStationArtworkView: View {
     let item: RadioStationDisplayItem
     let size: CGFloat
     var metadata: RadioNowPlayingMetadata?
+    var reloadToken: UUID? = nil
 
     var body: some View {
         if let remoteArtworkURL {
@@ -288,7 +289,7 @@ struct MacRadioStationArtworkView: View {
                 url: remoteArtworkURL,
                 size: size,
                 cornerRadius: size > 80 ? 10 : 7,
-                retryOnFailure: true
+                reloadToken: reloadToken
             )
         } else if let coverArt = item.coverArt,
            let url = SubsonicAPIService.shared.coverArtURL(id: coverArt, size: Int(size * 3)) {
@@ -296,7 +297,7 @@ struct MacRadioStationArtworkView: View {
                 url: url,
                 size: size,
                 cornerRadius: size > 80 ? 10 : 7,
-                retryOnFailure: true
+                reloadToken: reloadToken
             )
         } else {
             RoundedRectangle(cornerRadius: size > 80 ? 10 : 7, style: .continuous)

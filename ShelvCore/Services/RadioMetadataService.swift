@@ -9,6 +9,7 @@ final class RadioMetadataService: ObservableObject {
     @Published private(set) var currentMetadata: RadioNowPlayingMetadata?
     @Published private(set) var isConnecting = false
     @Published private(set) var isOnline = false
+    @Published private(set) var refreshToken = UUID()
 
     private var pollingTask: Task<Void, Never>?
     private var generation = 0
@@ -64,22 +65,21 @@ final class RadioMetadataService: ObservableObject {
         }
 
         pollingTask = Task { [weak self] in
-            var failureCount = 0
+            let clock = ContinuousClock()
             while !Task.isCancelled {
                 guard let self, self.generation == gen else { return }
-                let succeeded = await self.fetchAzuraCastNowPlaying(
+                let cycleStart = clock.now
+                _ = await self.fetchAzuraCastNowPlaying(
                     apiURL: trimmed,
                     fallbackStationName: fallbackStationName,
                     generation: gen
                 )
                 guard !Task.isCancelled, self.generation == gen else { return }
-                if succeeded {
-                    failureCount = 0
-                    try? await Task.sleep(for: .seconds(3))
-                } else {
-                    failureCount += 1
-                    let delay = min(pow(2.0, Double(failureCount - 1)) * 0.5, 5)
-                    try? await Task.sleep(for: .seconds(delay))
+                await self.publishRefresh(generation: gen)
+                let elapsed = cycleStart.duration(to: clock.now)
+                let remaining = RadioMetadataPollingPolicy.azuraCastInterval - elapsed
+                if remaining > .zero {
+                    try? await Task.sleep(for: remaining)
                 }
             }
         }
@@ -111,6 +111,7 @@ final class RadioMetadataService: ObservableObject {
                     generation: gen
                 )
                 guard !Task.isCancelled, self.generation == gen else { return }
+                await self.publishRefresh(generation: gen)
                 try? await Task.sleep(for: .seconds(30))
             }
         }
@@ -149,15 +150,12 @@ final class RadioMetadataService: ObservableObject {
             )
             await MainActor.run {
                 guard self.generation == generation else { return }
-                if title != nil || artist != nil || self.currentMetadata == nil {
-                    self.currentMetadata = metadata
-                } else if var current = self.currentMetadata {
-                    current.stationName = metadata.stationName
-                    current.isLive = metadata.isLive
-                    if current.artworkURL == nil {
-                        current.artworkURL = metadata.artworkURL
-                    }
-                    self.currentMetadata = current
+                let resolvedMetadata = RadioNowPlayingMetadata.resolving(
+                    current: self.currentMetadata,
+                    incoming: metadata
+                )
+                if self.currentMetadata != resolvedMetadata {
+                    self.currentMetadata = resolvedMetadata
                 }
                 self.isConnecting = false
                 self.isOnline = response.isOnline ?? true
@@ -171,6 +169,13 @@ final class RadioMetadataService: ObservableObject {
                     && self.currentMetadata?.displayArtist == nil
             }
             return false
+        }
+    }
+
+    private func publishRefresh(generation: Int) async {
+        await MainActor.run {
+            guard self.generation == generation else { return }
+            self.refreshToken = UUID()
         }
     }
 

@@ -5,17 +5,25 @@ struct AlbumArtView: View {
     let size: Int
     let cornerRadius: CGFloat
     let isCircle: Bool
+    let reloadToken: UUID?
 
     @State private var uiImage: UIImage?
     @State private var loadedIdentifier: String?
     @State private var loading: Bool
     @State private var activeLoadIdentifier: String?
 
-    init(coverArtId: String?, size: Int = 300, cornerRadius: CGFloat = 12, isCircle: Bool = false) {
+    init(
+        coverArtId: String?,
+        size: Int = 300,
+        cornerRadius: CGFloat = 12,
+        isCircle: Bool = false,
+        reloadToken: UUID? = nil
+    ) {
         self.coverArtId = coverArtId
         self.size = size
         self.cornerRadius = cornerRadius
         self.isCircle = isCircle
+        self.reloadToken = reloadToken
 
         // Synchroner Memory-Check beim Init: exakte Größe bevorzugt, andere gecachte
         // Größen als sofortiger Stale-Fallback gegen ProgressView-Flashes.
@@ -56,7 +64,7 @@ struct AlbumArtView: View {
                 content.cornerRadius(cornerRadius)
             }
         }
-        .task(id: loadIdentifier) {
+        .task(id: taskIdentifier) {
             await load()
         }
         .onReceive(NotificationCenter.default.publisher(for: .artworkIndexReady)) { _ in
@@ -174,6 +182,10 @@ struct AlbumArtView: View {
 
     private var loadIdentifier: String {
         "\(coverArtId ?? "none")_\(size)"
+    }
+
+    private var taskIdentifier: String {
+        "\(loadIdentifier)|\(reloadToken?.uuidString ?? "static")"
     }
 
 }

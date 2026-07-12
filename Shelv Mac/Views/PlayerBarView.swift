@@ -218,7 +218,12 @@ struct PlayerBarView: View {
                 HStack(spacing: 14) {
                     Group {
                         if let station = player.currentRadioStation {
-                            MacRadioStationArtworkView(item: station, size: 62, metadata: player.currentRadioMetadata)
+                            MacRadioStationArtworkView(
+                                item: station,
+                                size: 62,
+                                metadata: player.currentRadioMetadata,
+                                reloadToken: player.artworkReloadToken
+                            )
                         } else if let song = player.currentSong, let coverID = song.coverArt,
                            let url = SubsonicAPIService.shared.coverArtURL(id: coverID, size: 120) {
                             CoverArtView(url: url, size: 62, cornerRadius: 8)
