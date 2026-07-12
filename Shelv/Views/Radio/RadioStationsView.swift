@@ -265,7 +265,7 @@ struct RemoteRadioArtworkView<Fallback: View>: View {
 
     @State private var image: UIImage?
     @State private var loadedURLString: String?
-    @State private var activeLoadURLString: String?
+    @State private var loadRequest = ArtworkLoadRequestTracker()
 
     init(
         url: URL,
@@ -297,23 +297,36 @@ struct RemoteRadioArtworkView<Fallback: View>: View {
         }
         .frame(width: size, height: size)
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-        .task(id: "\(urlString)|\(reloadToken?.uuidString ?? "static")") {
-            let key = Self.cacheKey(for: url)
-            activeLoadURLString = urlString
-            if let cached = ImageCacheService.shared.cachedImage(key: key) {
-                image = cached
-                loadedURLString = urlString
-                return
-            }
-            image = nil
-            loadedURLString = nil
-            let loaded = await ImageCacheService.shared.image(url: url, key: key)
-            guard !Task.isCancelled, activeLoadURLString == urlString else { return }
-            if let loaded {
-                image = loaded
-                loadedURLString = urlString
-            }
+        .task(id: urlString) { await loadImage() }
+        .onChange(of: reloadToken) { _, _ in triggerLoad() }
+    }
+
+    private func triggerLoad() {
+        guard loadedURLString != url.absoluteString else { return }
+        Task { await loadImage() }
+    }
+
+    private func loadImage() async {
+        let urlString = url.absoluteString
+        guard let attempt = loadRequest.beginIfIdle(urlString) else { return }
+        defer { loadRequest.finish(urlString, attempt: attempt) }
+
+        let key = Self.cacheKey(for: url)
+        if let cached = ImageCacheService.shared.cachedImage(key: key) {
+            apply(cached, urlString: urlString, attempt: attempt)
+            return
         }
+
+        image = nil
+        loadedURLString = nil
+        guard let loaded = await ImageCacheService.shared.image(url: url, key: key) else { return }
+        apply(loaded, urlString: urlString, attempt: attempt)
+    }
+
+    private func apply(_ loaded: UIImage, urlString: String, attempt: UUID) {
+        guard loadRequest.accepts(urlString, attempt: attempt) else { return }
+        image = loaded
+        loadedURLString = urlString
     }
 
     private static func cacheKey(for url: URL) -> String {

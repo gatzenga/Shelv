@@ -66,9 +66,9 @@ final class RadioMetadataService: ObservableObject {
 
         pollingTask = Task { [weak self] in
             let clock = ContinuousClock()
+            var nextCycle = clock.now
             while !Task.isCancelled {
                 guard let self, self.generation == gen else { return }
-                let cycleStart = clock.now
                 _ = await self.fetchAzuraCastNowPlaying(
                     apiURL: trimmed,
                     fallbackStationName: fallbackStationName,
@@ -76,8 +76,10 @@ final class RadioMetadataService: ObservableObject {
                 )
                 guard !Task.isCancelled, self.generation == gen else { return }
                 await self.publishRefresh(generation: gen)
-                let elapsed = cycleStart.duration(to: clock.now)
-                let remaining = RadioMetadataPollingPolicy.azuraCastInterval - elapsed
+                repeat {
+                    nextCycle = nextCycle.advanced(by: RadioMetadataPollingPolicy.azuraCastInterval)
+                } while nextCycle <= clock.now
+                let remaining = clock.now.duration(to: nextCycle)
                 if remaining > .zero {
                     try? await Task.sleep(for: remaining)
                 }

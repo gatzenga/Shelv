@@ -720,13 +720,34 @@ class AudioPlayerService: ObservableObject {
     }
 
     func playRadioStation(_ item: RadioStationDisplayItem) {
-        playRadioStation(item, resetReconnectAttempts: true)
+        let resolvedItem = RadioStationStore.shared.items.first(where: { $0.id == item.id }) ?? item
+        playRadioStation(resolvedItem, resetReconnectAttempts: true)
         #if os(iOS) || os(tvOS)
         SiriMediaAppSelectionService.shared.prepareRadioDonation(
-            station: item,
+            station: resolvedItem,
             generation: playbackGeneration
         )
         #endif
+    }
+
+    /// A cold-started platform may initially publish a cached station before its
+    /// synchronized AzuraCast configuration arrives. Adopt that configuration for
+    /// an already running station instead of leaving the player on ICY forever.
+    func adoptResolvedRadioConfiguration(_ item: RadioStationDisplayItem) {
+        guard isRadioPlayback,
+              let current = currentRadioStation,
+              current.id == item.id,
+              item.metadata.useAzuraCastAPI,
+              !item.metadata.azuraCastAPIURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              current != item
+        else { return }
+
+        let pollingSourceChanged = !RadioMetadataPollingPolicy.usesSameSource(current, item)
+        currentRadioStation = item
+        nowPlaying.updateRadio(station: item, metadata: currentRadioMetadata, isPlaying: isPlaying)
+        if pollingSourceChanged {
+            radioMetadata.startPolling(station: item)
+        }
     }
 
     func playRadioStationAndWait(_ item: RadioStationDisplayItem) async -> PlaybackStartOutcome {

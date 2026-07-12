@@ -284,14 +284,25 @@ struct MacRadioStationArtworkView: View {
     var reloadToken: UUID? = nil
 
     var body: some View {
-        if let remoteArtworkURL {
-            CoverArtView(
-                url: remoteArtworkURL,
-                size: size,
-                cornerRadius: size > 80 ? 10 : 7,
-                reloadToken: reloadToken
-            )
-        } else if let coverArt = item.coverArt,
+        ZStack {
+            fallbackArtwork
+            if let remoteArtworkURL {
+                CoverArtView(
+                    url: remoteArtworkURL,
+                    size: size,
+                    cornerRadius: size > 80 ? 10 : 7,
+                    reloadToken: reloadToken,
+                    showsPlaceholder: false
+                )
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: size > 80 ? 10 : 7, style: .continuous))
+    }
+
+    @ViewBuilder
+    private var fallbackArtwork: some View {
+        if let coverArt = item.coverArt,
            let url = SubsonicAPIService.shared.coverArtURL(id: coverArt, size: Int(size * 3)) {
             CoverArtView(
                 url: url,
