@@ -423,8 +423,14 @@ final class RadioStationStore: ObservableObject {
     }
 
     private func radioRootDirectoryURL() -> URL {
-        FileManager.default
+        #if os(tvOS)
+        let baseDirectory = FileManager.default
+            .urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        #else
+        let baseDirectory = FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        #endif
+        return baseDirectory
             .appendingPathComponent("Shelv", isDirectory: true)
             .appendingPathComponent("Radio", isDirectory: true)
     }
