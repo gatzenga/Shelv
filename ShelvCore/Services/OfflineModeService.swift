@@ -6,6 +6,12 @@ import Combine
 final class OfflineModeService: ObservableObject {
     static let shared = OfflineModeService()
 
+    enum VisibleServerReachabilityResult {
+        case reachable
+        case unreachable
+        case cancelled
+    }
+
     @AppStorage("offlineModeEnabled") private var storedOffline: Bool = false
     @AppStorage("enableDownloads") private var storedDownloadsEnabled: Bool = true
 
@@ -124,17 +130,18 @@ final class OfflineModeService: ObservableObject {
     /// passiven Tab-Request nachzuholen.
     @discardableResult
     func beginUserInitiatedServerRefresh(presentsServerError: Bool = true) async -> Bool {
-        await beginServerReachabilityCheck(
+        let result = await beginServerReachabilityCheck(
             label: "refresh",
             markOfflinePresentation: true,
             presentsServerError: presentsServerError
         )
+        return result != .reachable
     }
 
     /// Sichtbare Leerseiten dürfen vor dem teuren Content-Load kurz pingen, damit
     /// "Server unreachable" nicht erst nach mehreren parallelen Discover-Requests erscheint.
     @discardableResult
-    func beginVisibleServerReachabilityCheck() async -> Bool {
+    func beginVisibleServerReachabilityCheck() async -> VisibleServerReachabilityResult {
         await beginServerReachabilityCheck(
             label: "load",
             markOfflinePresentation: false,
@@ -147,15 +154,15 @@ final class OfflineModeService: ObservableObject {
         label: String,
         markOfflinePresentation: Bool,
         presentsServerError: Bool
-    ) async -> Bool {
-        guard !isOffline else { return false }
-        guard let requestSignature = activeServerRequestSignature else { return false }
+    ) async -> VisibleServerReachabilityResult {
+        guard !isOffline else { return .reachable }
+        guard let requestSignature = activeServerRequestSignature else { return .reachable }
         await NetworkStatus.shared.waitUntilReady()
         ConnectivityDebugLog.log("\(label) check started: server=\(activeServerDebugLabel), network=\(NetworkStatus.shared.isOnWifi ? "wifi" : "cellular/other")")
         guard NetworkStatus.shared.hasNetwork else {
             guard requestSignature == activeServerRequestSignature else {
                 ConnectivityDebugLog.log("\(label) ignored: active server changed")
-                return true
+                return .cancelled
             }
             let message = SubsonicAPIError.networkError(URLError(.notConnectedToInternet)).localizedDescription
             ConnectivityDebugLog.log("\(label) failed: no network")
@@ -165,7 +172,7 @@ final class OfflineModeService: ObservableObject {
             if presentsServerError {
                 notifyServerError(message, bypassCooldown: true)
             }
-            return true
+            return .unreachable
         }
 
         if presentsServerError {
@@ -175,30 +182,30 @@ final class OfflineModeService: ObservableObject {
             try await SubsonicAPIService.shared.ping()
             guard requestSignature == activeServerRequestSignature else {
                 ConnectivityDebugLog.log("\(label) ignored: active server changed")
-                return true
+                return .cancelled
             }
             ConnectivityDebugLog.log("\(label) ok: ping")
             if presentsServerError {
                 allowUserInitiatedServerErrorPresentation()
             }
-            return false
+            return .reachable
         } catch {
             if isCancellation(error) {
                 ConnectivityDebugLog.log("\(label) cancelled")
-                return true
+                return .cancelled
             }
             if shouldLogRefreshFailure(error) {
                 ConnectivityDebugLog.log("\(label) failed: \(describeServerError(error))")
             }
             guard requestSignature == activeServerRequestSignature else {
                 ConnectivityDebugLog.log("\(label) ignored: active server changed")
-                return true
+                return .cancelled
             }
             if presentsServerError {
                 notifyServerError(error.localizedDescription, bypassCooldown: true)
                 presentationPolicy.clearUserInitiatedServerErrorPresentation()
             }
-            return true
+            return .unreachable
         }
     }
 
