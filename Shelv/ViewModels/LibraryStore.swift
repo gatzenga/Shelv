@@ -63,6 +63,14 @@ class LibraryStore: ObservableObject {
         return try? JSONDecoder().decode(type, from: data)
     }
 
+    nonisolated static func cachedPlaylistNamesForSystemIntent(serverID: UUID) -> [String: String] {
+        let playlists = readFromDisk([Playlist].self, name: "playlists", serverID: serverID) ?? []
+        return Dictionary(
+            playlists.map { ($0.id, $0.name) },
+            uniquingKeysWith: { first, _ in first }
+        )
+    }
+
     private var activeServerID: UUID? { api.activeServer?.id }
 
     private var activeServerSignature: String? {
@@ -366,18 +374,8 @@ class LibraryStore: ObservableObject {
         }
         guard let artistDetail = try? await api.getArtist(id: artist.id),
               let albums = artistDetail.album, !albums.isEmpty else { return [] }
-        let indexed = Array(albums.enumerated())
-        return await withTaskGroup(of: (Int, [Song]).self) { group in
-            for (i, album) in indexed {
-                group.addTask {
-                    guard let detail = try? await SubsonicAPIService.shared.getAlbum(id: album.id),
-                          let songs = detail.song else { return (i, []) }
-                    return (i, songs)
-                }
-            }
-            var results: [(Int, [Song])] = []
-            for await result in group { results.append(result) }
-            return results.sorted { $0.0 < $1.0 }.flatMap { $0.1 }
+        return await PlaybackContentResolver.artistSongs(from: albums) { albumID in
+            (try? await SubsonicAPIService.shared.getAlbum(id: albumID).song) ?? []
         }
     }
 
@@ -527,17 +525,35 @@ class LibraryStore: ObservableObject {
         isLoadingPlaylists = false
     }
 
+    /// Publishes only persisted data needed by a cold Shortcuts picker. Unlike
+    /// the normal loaders this never waits for Navidrome.
+    func loadShortcutCaches() async {
+        guard let serverID = activeServerID else { return }
+        async let cachedPlaylists: [Playlist]? = Task.detached(priority: .userInitiated) {
+            Self.readFromDisk([Playlist].self, name: "playlists", serverID: serverID)
+        }.value
+        async let cachedStarred: StarredResult? = Task.detached(priority: .userInitiated) {
+            guard let songs = Self.readFromDisk([Song].self, name: "starred_songs", serverID: serverID),
+                  let albums = Self.readFromDisk([Album].self, name: "starred_albums", serverID: serverID),
+                  let artists = Self.readFromDisk([Artist].self, name: "starred_artists", serverID: serverID)
+            else { return nil }
+            return StarredResult(artist: artists, album: albums, song: songs)
+        }.value
+
+        let (savedPlaylists, savedStarred) = await (cachedPlaylists, cachedStarred)
+        if playlists.isEmpty, let savedPlaylists, !savedPlaylists.isEmpty {
+            playlists = savedPlaylists
+        }
+        if let savedStarred {
+            if starredSongs.isEmpty { starredSongs = savedStarred.song ?? [] }
+            if starredAlbums.isEmpty { starredAlbums = savedStarred.album ?? [] }
+            if starredArtists.isEmpty { starredArtists = savedStarred.artist ?? [] }
+        }
+    }
+
     func loadPlaylistDetail(id: String) async -> Playlist? {
         if OfflineModeService.shared.isOffline {
-            guard let serverID = activeServerID else { return nil }
-            var playlist = await Task.detached(priority: .userInitiated) {
-                Self.readFromDisk(Playlist.self, name: "playlist_\(id)", serverID: serverID)
-            }.value
-            let songs = await Task.detached(priority: .userInitiated) {
-                Self.readFromDisk([Song].self, name: "playlist_songs_\(id)", serverID: serverID)
-            }.value
-            playlist?.songs = songs
-            return playlist
+            return await loadCachedPlaylistDetail(id: id)
         }
         do {
             let result = try await api.getPlaylist(id: id)
@@ -564,6 +580,21 @@ class LibraryStore: ObservableObject {
             if !(error is CancellationError) { errorMessage = error.localizedDescription }
             return nil
         }
+    }
+
+    /// Reads the last saved playlist detail without attempting a network request.
+    /// This is also used when the device is physically offline but the explicit
+    /// Offline Mode toggle has not yet been enabled.
+    func loadCachedPlaylistDetail(id: String) async -> Playlist? {
+        guard let serverID = activeServerID else { return nil }
+        var playlist = await Task.detached(priority: .userInitiated) {
+            Self.readFromDisk(Playlist.self, name: "playlist_\(id)", serverID: serverID)
+        }.value
+        let songs = await Task.detached(priority: .userInitiated) {
+            Self.readFromDisk([Song].self, name: "playlist_songs_\(id)", serverID: serverID)
+        }.value
+        playlist?.songs = songs
+        return playlist
     }
 
     func createPlaylist(name: String, songIds: [String] = []) async {

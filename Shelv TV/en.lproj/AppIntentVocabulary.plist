@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>IntentPhrases</key>
+	<array>
+		<dict>
+			<key>IntentExamples</key>
+			<array>
+				<string>Play Imagine Dragons in Shelv.</string>
+				<string>Play Demons by Imagine Dragons in Shelv.</string>
+				<string>Shuffle Dire Straits in Shelv.</string>
+				<string>Play newest tracks in Shelv.</string>
+				<string>Play the newest track mix in Shelv.</string>
+				<string>Play newest in Shelv.</string>
+				<string>Play newest tracks in Shelf.</string>
+				<string>Play the mixed newest tracks in Shelf.</string>
+				<string>Play recently added in Shelf.</string>
+				<string>Play the recently added mix in Shelf.</string>
+				<string>Play most played in Shelf.</string>
+				<string>Play the most played mix in Shelf.</string>
+				<string>Play frequently played in Shelf.</string>
+				<string>Play the frequently played mix in Shelf.</string>
+				<string>Play recently played in Shelf.</string>
+				<string>Play the recently played mix in Shelf.</string>
+				<string>Play popular music in Shelv.</string>
+				<string>Play the popular mix in Shelv.</string>
+				<string>Start a radio station in Shelv.</string>
+			</array>
+			<key>IntentName</key>
+			<string>INPlayMediaIntent</string>
+		</dict>
+	</array>
+</dict>
+</plist>

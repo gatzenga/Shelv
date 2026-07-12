@@ -23,6 +23,7 @@ struct MainTabView: View {
     @State private var showIdleNowPlaying = false
     @State private var nowPlayingSidePanel: TVNowPlayingPanel?
     @State private var nowPlayingRootVisible = false
+    @State private var recapNavigationRequest = 0
     @State private var idleNowPlayingTask: Task<Void, Never>?
 
     private var serverErrorAlertTitle: String {
@@ -30,6 +31,28 @@ struct MainTabView: View {
             return String(localized: "you_are_offline")
         }
         return String(localized: "server_unreachable")
+    }
+
+    private var pendingQueueAlertPresented: Binding<Bool> {
+        Binding(
+            get: { queueSync.pendingRemote != nil },
+            set: { isPresented in
+                if !isPresented {
+                    queueSync.dismissPending()
+                }
+            }
+        )
+    }
+
+    private var serverErrorAlertPresented: Binding<Bool> {
+        Binding(
+            get: { offlineMode.serverErrorBannerVisible },
+            set: { isPresented in
+                if !isPresented {
+                    offlineMode.dismissBanner()
+                }
+            }
+        )
     }
 
     private static var initialSelection: String {
@@ -124,10 +147,7 @@ struct MainTabView: View {
         }
         // Fremde Queue von einem anderen Gerät — auf tvOS als nativer Alert (zuverlässig
         // fokussierbar, im Gegensatz zu einem Custom-Top-Banner). Nie automatisch.
-        .alert(String(localized: "queue_available_title"), isPresented: Binding(
-            get: { queueSync.pendingRemote != nil },
-            set: { if !$0 { queueSync.dismissPending() } }
-        )) {
+        .alert(String(localized: "queue_available_title"), isPresented: pendingQueueAlertPresented) {
             Button(String(localized: "queue_take_over")) { queueSync.acceptPending() }
             Button(String(localized: "cancel"), role: .cancel) { queueSync.dismissPending() }
         } message: {
@@ -136,10 +156,7 @@ struct MainTabView: View {
         .task(id: queueSync.pendingRemote?.signature) {
             await dismissPendingQueueAfterDelay()
         }
-        .alert(serverErrorAlertTitle, isPresented: Binding(
-            get: { offlineMode.serverErrorBannerVisible },
-            set: { if !$0 { offlineMode.dismissBanner() } }
-        )) {
+        .alert(serverErrorAlertTitle, isPresented: serverErrorAlertPresented) {
             Button(String(localized: "ok"), role: .cancel) {
                 offlineMode.dismissBanner()
             }
@@ -148,6 +165,19 @@ struct MainTabView: View {
         }
         .onAppear {
             scheduleIdleNowPlayingIfNeeded()
+            if let destination = ShelvShortcutHandoff.consumePendingDestination() {
+                handleShortcutDestination(destination)
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .shelvShortcutDestinationRequested)) { note in
+            let pendingDestination = ShelvShortcutHandoff.consumePendingDestination()
+            guard let rawValue = note.object as? String,
+                  let destination = ShelvShortcutDestination(rawValue: rawValue)
+            else {
+                if let pendingDestination { handleShortcutDestination(pendingDestination) }
+                return
+            }
+            handleShortcutDestination(destination)
         }
         .onDisappear {
             idleNowPlayingTask?.cancel()
@@ -164,7 +194,7 @@ struct MainTabView: View {
             }
 
             Tab(String(localized: "discover"), systemImage: "sparkles", value: Self.discoverTab) {
-                DiscoverView()
+                DiscoverView(recapNavigationRequest: recapNavigationRequest)
             }
 
             Tab(String(localized: "library"), systemImage: "square.stack", value: "library") {
@@ -196,6 +226,23 @@ struct MainTabView: View {
     private func syncVisibleTabsIfAllowed() {
         guard selection != "settings" else { return }
         syncVisibleTabs()
+    }
+
+    private func handleShortcutDestination(_ destination: ShelvShortcutDestination) {
+        dismissIdleNowPlaying()
+        switch destination {
+        case .discover:
+            selection = Self.discoverTab
+        case .library:
+            selection = "library"
+        case .search:
+            selection = "search"
+        case .recap:
+            selection = Self.discoverTab
+            recapNavigationRequest &+= 1
+        case .nowPlaying:
+            selection = Self.nowPlayingTab
+        }
     }
 
     private func syncVisibleTabs() {

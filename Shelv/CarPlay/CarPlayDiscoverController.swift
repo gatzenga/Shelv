@@ -467,27 +467,21 @@ final class CarPlayDiscoverController {
                 guard let self else { return }
                 let allDownloads = DownloadStore.shared.songs
                 guard !allDownloads.isEmpty else { return }
-
+                let mode: ShortcutDownloadsMode
                 switch type {
-                case "play":
-                    let sorted = allDownloads.map { $0.asSong() }.sorted {
-                        let a = stripArticle($0.artist ?? "").localizedStandardCompare(stripArticle($1.artist ?? ""))
-                        if a != .orderedSame { return a == .orderedAscending }
-                        let b = ($0.album ?? "").localizedStandardCompare($1.album ?? "")
-                        if b != .orderedSame { return b == .orderedAscending }
-                        let d0 = $0.discNumber ?? 0, d1 = $1.discNumber ?? 0
-                        if d0 != d1 { return d0 < d1 }
-                        return ($0.track ?? 0) < ($1.track ?? 0)
-                    }
-                    AudioPlayerService.shared.play(songs: Array(sorted.prefix(500)))
-
-                case "shuffle":
-                    let sampled = Array(allDownloads.shuffled().prefix(500)).map { $0.asSong() }
-                    AudioPlayerService.shared.playShuffled(songs: sampled)
-
-                default: // newest
-                    let top100 = allDownloads.sorted { $0.addedAt > $1.addedAt }.prefix(100).map { $0.asSong() }
-                    AudioPlayerService.shared.playShuffled(songs: Array(top100))
+                case "play": mode = .all
+                case "shuffle": mode = .shuffled
+                default: mode = .newest
+                }
+                let selection = DownloadedPlaybackQueueBuilder.selection(
+                    from: allDownloads,
+                    mode: mode
+                )
+                switch selection.order {
+                case .inOrder:
+                    AudioPlayerService.shared.play(songs: selection.songs)
+                case .shuffled:
+                    AudioPlayerService.shared.playShuffled(songs: selection.songs)
                 }
 
                 CarPlayNavigation.presentNowPlaying(on: self.interfaceController)
@@ -508,52 +502,6 @@ final class CarPlayDiscoverController {
         return item
     }
 
-    private func frequentMixSongs() async throws -> [Song] {
-        // Toggle aktiv UND genug DB-Daten (≥ 50 einzigartige Songs) → DB, sonst serverseitig.
-        if UserDefaults.standard.bool(forKey: "mixUseDatabase"),
-           let serverId = SubsonicAPIService.shared.activeServer?.stableId,
-           await PlayLogService.shared.distinctSongCount(serverId: serverId) >= 50 {
-            let counts = await PlayLogService.shared.topSongs(
-                serverId: serverId,
-                from: .distantPast,
-                to: Date(),
-                limit: 50
-            )
-            if !counts.isEmpty {
-                return try await SubsonicAPIService.shared.getSongsOrdered(ids: counts.map(\.songId))
-            }
-        }
-        let allFrequent = try await SubsonicAPIService.shared.getAlbumList(type: "frequent", size: 500)
-        let sorted = allFrequent.sorted { ($0.playCount ?? 0) > ($1.playCount ?? 0) }
-        let maxPC = sorted.first?.playCount ?? 0
-        let threshold = max(maxPC / 50, 1)
-        var filtered = sorted.filter { ($0.playCount ?? 0) >= threshold }
-        if filtered.count < 30 { filtered = Array(sorted.prefix(30)) }
-        if filtered.count > 80 { filtered = Array(sorted.prefix(80)) }
-        let songs = try await withThrowingTaskGroup(of: [Song].self) { group in
-            for album in filtered {
-                group.addTask { (try? await SubsonicAPIService.shared.getAlbum(id: album.id))?.song ?? [] }
-            }
-            var all: [Song] = []
-            for try await albumSongs in group { all.append(contentsOf: albumSongs) }
-            return all
-        }
-        return Array(songs.sorted { ($0.playCount ?? 0) > ($1.playCount ?? 0) }.prefix(50))
-    }
-
-    private func recentMixSongs() async throws -> [Song] {
-        // Toggle aktiv UND genug DB-Daten → DB, sonst serverseitig (album-basiert).
-        if UserDefaults.standard.bool(forKey: "mixUseDatabase"),
-           let serverId = SubsonicAPIService.shared.activeServer?.stableId,
-           await PlayLogService.shared.distinctSongCount(serverId: serverId) >= 50 {
-            let ids = await PlayLogService.shared.recentUniqueSongIds(serverId: serverId, limit: 50)
-            if !ids.isEmpty {
-                return try await SubsonicAPIService.shared.getSongsOrdered(ids: ids)
-            }
-        }
-        return try await SubsonicAPIService.shared.getRecentSongs(limit: 50)
-    }
-
     private func makeMixItem(_ title: String, type: String, icon: String? = nil) -> CPListItem {
         let item = CPListItem(text: title, detailText: nil)
         if let icon { item.setImage(cpListIcon(icon)) }
@@ -562,13 +510,14 @@ final class CarPlayDiscoverController {
             Task { [weak self] in
                 do {
                     guard let self else { return }
-                    let songs: [Song]
+                    let mix: ShortcutSmartMix
                     switch type {
-                    case "newest":   songs = try await SubsonicAPIService.shared.getNewestSongs()
-                    case "frequent": songs = try await self.frequentMixSongs()
-                    case "random":   songs = try await SubsonicAPIService.shared.getRandomSongs(size: 500)
-                    default:         songs = try await self.recentMixSongs()
+                    case "newest": mix = .newest
+                    case "frequent": mix = .frequent
+                    case "random": mix = .shuffleAll
+                    default: mix = .recent
                     }
+                    let songs = try await SmartMixPlaybackService.songs(for: mix)
                     guard !songs.isEmpty else {
                         await MainActor.run { self.presentMixError(title: title, message: String(localized: "no_tracks_found")) }
                         return

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>IntentPhrases</key>
+	<array>
+		<dict>
+			<key>IntentExamples</key>
+			<array>
+				<string>在 Shelv 中播放 Imagine Dragons。</string>
+				<string>在 Shelv 中播放 Imagine Dragons 的 Demons。</string>
+				<string>在 Shelv 中随机播放 Dire Straits。</string>
+				<string>在 Shelv 中播放最新歌曲。</string>
+				<string>在 Shelv 中播放最新歌曲混合。</string>
+				<string>在 Shelv 中播放热门音乐。</string>
+				<string>在 Shelv 中播放热门歌曲混合。</string>
+				<string>在 Shelv 中播放广播电台。</string>
+			</array>
+			<key>IntentName</key>
+			<string>INPlayMediaIntent</string>
+		</dict>
+	</array>
+</dict>
+</plist>

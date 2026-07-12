@@ -26,6 +26,7 @@ final class DownloadStore: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var artistCoverByName: [String: String] = [:]
     private var pendingReload = false
+    private var reloadWaiters: [CheckedContinuation<Void, Never>] = []
     private var protectedPlaylistIds: Set<String> = []
     private var pendingInserts: [DownloadRecord] = []
     private var flushTask: Task<Void, Never>?
@@ -79,7 +80,10 @@ final class DownloadStore: ObservableObject {
     }
 
     func setActiveServer(_ serverId: String) async {
-        guard self.serverId != serverId else { return }
+        guard self.serverId != serverId else {
+            await waitForReloadIfNeeded()
+            return
+        }
         self.serverId = serverId
         let saved = UserDefaults.standard.stringArray(forKey: "shelv_offline_playlists_\(serverId)") ?? []
         offlinePlaylistIds = Set(saved)
@@ -88,12 +92,18 @@ final class DownloadStore: ObservableObject {
         await reload()
     }
 
-    func addOfflinePlaylist(_ id: String, songIds: [String]) {
+    func addOfflinePlaylist(_ id: String, name: String? = nil, songIds: [String]) {
         offlinePlaylistIds.insert(id)
         playlistSongIds[id] = songIds
         protectedPlaylistIds.insert(id)
         UserDefaults.standard.set(Array(offlinePlaylistIds), forKey: "shelv_offline_playlists_\(serverId)")
         UserDefaults.standard.set(playlistSongIds, forKey: "shelv_offline_playlist_songs_\(serverId)")
+        if let name = name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
+            let key = "shelv_offline_playlist_names_\(serverId)"
+            var names = UserDefaults.standard.dictionary(forKey: key) as? [String: String] ?? [:]
+            names[id] = name
+            UserDefaults.standard.set(names, forKey: key)
+        }
     }
 
     func syncPlaylistSongIds(_ id: String, songIds: [String]) {
@@ -108,6 +118,10 @@ final class DownloadStore: ObservableObject {
         protectedPlaylistIds.remove(id)
         UserDefaults.standard.set(Array(offlinePlaylistIds), forKey: "shelv_offline_playlists_\(serverId)")
         UserDefaults.standard.set(playlistSongIds, forKey: "shelv_offline_playlist_songs_\(serverId)")
+        let namesKey = "shelv_offline_playlist_names_\(serverId)"
+        var names = UserDefaults.standard.dictionary(forKey: namesKey) as? [String: String] ?? [:]
+        names.removeValue(forKey: id)
+        UserDefaults.standard.set(names, forKey: namesKey)
     }
 
     func downloadedCount(for playlistId: String) -> Int {
@@ -127,7 +141,13 @@ final class DownloadStore: ObservableObject {
             DownloadStatusCache.shared.rebuild(albumIds: [])
             return
         }
-        guard !isLoading else { pendingReload = true; return }
+        guard !isLoading else {
+            pendingReload = true
+            await withCheckedContinuation { continuation in
+                reloadWaiters.append(continuation)
+            }
+            return
+        }
         isLoading = true
         pendingReload = false
         let sid = serverId
@@ -270,6 +290,16 @@ final class DownloadStore: ObservableObject {
         if pendingReload {
             pendingReload = false
             await reload()
+        }
+        let waiters = reloadWaiters
+        reloadWaiters.removeAll()
+        waiters.forEach { $0.resume() }
+    }
+
+    private func waitForReloadIfNeeded() async {
+        guard isLoading else { return }
+        await withCheckedContinuation { continuation in
+            reloadWaiters.append(continuation)
         }
     }
 
@@ -545,6 +575,7 @@ final class DownloadStore: ObservableObject {
         playlistSongIds = [:]
         UserDefaults.standard.removeObject(forKey: "shelv_offline_playlists_\(serverId)")
         UserDefaults.standard.removeObject(forKey: "shelv_offline_playlist_songs_\(serverId)")
+        UserDefaults.standard.removeObject(forKey: "shelv_offline_playlist_names_\(serverId)")
         clearLocalDownloadState()
         Task {
             await DownloadService.shared.deleteAll()

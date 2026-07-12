@@ -26,6 +26,7 @@ nonisolated enum LibrarySortKey {
         "uma ", "um ", "os ", "as ", "o ", "a ",
     ]
 
+    /// The normalized value used for comparison and persistence.
     static func normalized(displayName: String, explicitSortName: String? = nil) -> String {
         if let explicit = trimmedNonEmpty(explicitSortName) {
             return normalize(explicit)
@@ -33,12 +34,15 @@ nonisolated enum LibrarySortKey {
         return normalize(removingLeadingArticle(from: displayName))
     }
 
+    /// The section title for the same key that controls alphabetical order.
     static func sectionLetter(displayName: String, explicitSortName: String? = nil) -> String {
         let key = normalized(displayName: displayName, explicitSortName: explicitSortName)
         guard let first = key.first, first.isLetter else { return "#" }
         return String(String(first).uppercased().prefix(1))
     }
 
+    /// A display-preserving article fallback for ordering strings that do not
+    /// have an OpenSubsonic sort-name field, such as a song's artist label.
     static func removingLeadingArticle(from value: String) -> String {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         let lowered = trimmed.lowercased()

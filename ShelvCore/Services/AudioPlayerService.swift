@@ -20,6 +20,47 @@ struct PlaybackTrackingStart {
     let serverConfigId: String
 }
 
+nonisolated enum PlaybackStartFailure: Error, Equatable, Sendable {
+    case noActiveServer
+    case emptyQueue
+    case audioSessionUnavailable
+    case unavailableOffline
+    case streamURLUnavailable
+    case streamPreparationFailed
+    case engineFailed
+    case timedOut
+    case serverChanged
+    case superseded
+    case cancelled
+}
+
+nonisolated struct PlaybackStartReceipt: Equatable, Sendable {
+    enum Kind: Equatable, Sendable {
+        case song
+        case radio
+    }
+
+    let kind: Kind
+    let contentID: String
+    let serverConfigID: String?
+}
+
+nonisolated enum PlaybackStartOutcome: Equatable, Sendable {
+    case started(PlaybackStartReceipt)
+    case failed(PlaybackStartFailure)
+}
+
+private nonisolated enum PendingPlaybackStartState: Equatable, Sendable {
+    case pending
+    case engineLoaded(PlaybackStartReceipt)
+    case failed(PlaybackStartFailure)
+}
+
+private struct PreparedPlaybackStart {
+    let generation: Int
+    let song: Song
+}
+
 class AudioPlayerService: ObservableObject {
     static let shared = AudioPlayerService()
 
@@ -97,6 +138,7 @@ class AudioPlayerService: ObservableObject {
     /// Server als „aktuell" melden.
     private var currentPlaybackServerConfigId: String?
     private var currentPlaybackServerId: String?
+    private var trackingSessionSongId: String?
     private var currentStreamURL: URL?
     private var streamTimeOffset: Double = 0
     private var pendingNowPlayingElapsedStartTime: Double?
@@ -209,6 +251,8 @@ class AudioPlayerService: ObservableObject {
     private var streamCacheWindowTask: Task<Void, Never>?
     private var isEngineLoaded = false
     private var playbackGeneration: Int = 0
+    private var pendingPlaybackStarts: [Int: PendingPlaybackStartState] = [:]
+    private var playbackStartTasks: [Int: Task<Void, Never>] = [:]
     private var networkMonitor = NWPathMonitor()
     private let networkMonitorQueue = DispatchQueue(label: "shelv.network", qos: .utility)
     #if os(iOS)
@@ -544,6 +588,7 @@ class AudioPlayerService: ObservableObject {
         navidromeNowPlayingTask = nil
         currentPlaybackServerConfigId = nil
         currentPlaybackServerId = nil
+        trackingSessionSongId = nil
         cancelAllManagedStreamCaches()
         isEngineLoaded = false
         engine.stop()
@@ -562,8 +607,10 @@ class AudioPlayerService: ObservableObject {
         saveState()
     }
 
-    func play(songs: [Song], startIndex: Int = 0) {
-        guard songs.indices.contains(startIndex) else { return }
+    @discardableResult
+    func play(songs: [Song], startIndex: Int = 0) -> Bool {
+        guard songs.indices.contains(startIndex) else { return false }
+        guard rejectUnavailableSelectionIfNeeded(songs[startIndex]) == nil else { return false }
         prepareForSongPlayback()
         isShuffled = false
         queue = songs
@@ -575,11 +622,22 @@ class AudioPlayerService: ObservableObject {
         truthUserQueue = []
         infinityPendingSongIds.removeAll()
         resumeTime = 0
-        startPlayback(song: songs[startIndex], seekTo: 0)
+        let generation = startPlayback(song: songs[startIndex], seekTo: 0)
+        #if os(iOS) || os(tvOS)
+        SiriMediaAppSelectionService.shared.prepareMusicDonation(
+            songs: songs,
+            startIndex: startIndex,
+            shuffled: false,
+            generation: generation
+        )
+        #endif
         saveState()
+        return true
     }
 
-    func playSong(_ song: Song) {
+    @discardableResult
+    func playSong(_ song: Song) -> Bool {
+        guard rejectUnavailableSelectionIfNeeded(song) == nil else { return false }
         prepareForSongPlayback()
         isShuffled = false
         queue = [song]
@@ -591,12 +649,119 @@ class AudioPlayerService: ObservableObject {
         truthUserQueue = []
         infinityPendingSongIds.removeAll()
         resumeTime = 0
-        startPlayback(song: song, seekTo: 0)
+        let generation = startPlayback(song: song, seekTo: 0)
+        #if os(iOS) || os(tvOS)
+        SiriMediaAppSelectionService.shared.prepareMusicDonation(
+            songs: [song],
+            startIndex: 0,
+            shuffled: false,
+            generation: generation
+        )
+        #endif
         saveState()
+        return true
+    }
+
+    /// Starts the normal queue path and only reports success after AVFoundation
+    /// confirms that the selected item is actually playing.
+    func playAndWait(songs: [Song], startIndex: Int = 0) async -> PlaybackStartOutcome {
+        guard songs.indices.contains(startIndex) else { return .failed(.emptyQueue) }
+        if let failure = playbackAvailabilityFailure(for: songs[startIndex]) {
+            return .failed(failure)
+        }
+        guard play(songs: songs, startIndex: startIndex) else {
+            return .failed(playbackAvailabilityFailure(for: songs[startIndex]) ?? .streamURLUnavailable)
+        }
+        let generation = playbackGeneration
+        let song = songs[startIndex]
+        return await waitForPlaybackStart(
+            generation: generation,
+            expectedContentID: song.id,
+            expectedServerConfigID: SubsonicAPIService.shared.activeServer?.id.uuidString,
+            kind: .song
+        )
+    }
+
+    func playSongAndWait(_ song: Song) async -> PlaybackStartOutcome {
+        if let failure = playbackAvailabilityFailure(for: song) {
+            return .failed(failure)
+        }
+        guard playSong(song) else {
+            return .failed(playbackAvailabilityFailure(for: song) ?? .streamURLUnavailable)
+        }
+        let generation = playbackGeneration
+        return await waitForPlaybackStart(
+            generation: generation,
+            expectedContentID: song.id,
+            expectedServerConfigID: SubsonicAPIService.shared.activeServer?.id.uuidString,
+            kind: .song
+        )
+    }
+
+    private func playbackAvailabilityFailure(for song: Song) -> PlaybackStartFailure? {
+        guard SubsonicAPIService.shared.activeServer != nil else { return .noActiveServer }
+        guard resolveURL(for: song) != nil else {
+            return OfflineModeService.shared.isOffline ? .unavailableOffline : .streamURLUnavailable
+        }
+        return nil
+    }
+
+    @discardableResult
+    private func rejectUnavailableSelectionIfNeeded(_ song: Song) -> PlaybackStartFailure? {
+        guard let failure = playbackAvailabilityFailure(for: song) else { return nil }
+        if failure == .unavailableOffline {
+            #if os(iOS)
+            NotificationCenter.default.post(name: .offlinePlaybackBlocked, object: nil)
+            #elseif os(macOS)
+            NotificationCenter.default.post(name: .showToast, object: String(localized: "not_available_offline"))
+            #endif
+        }
+        return failure
     }
 
     func playRadioStation(_ item: RadioStationDisplayItem) {
         playRadioStation(item, resetReconnectAttempts: true)
+        #if os(iOS) || os(tvOS)
+        SiriMediaAppSelectionService.shared.prepareRadioDonation(
+            station: item,
+            generation: playbackGeneration
+        )
+        #endif
+    }
+
+    func playRadioStationAndWait(_ item: RadioStationDisplayItem) async -> PlaybackStartOutcome {
+        await startRadioStationAndWait(item)
+    }
+
+    func currentSongReferenceForSystemIntent() -> ShortcutPlayableReference? {
+        guard let song = currentSong,
+              let serverConfigID = currentPlaybackServerConfigId
+                ?? SubsonicAPIService.shared.activeServer?.id.uuidString
+        else { return nil }
+        return ShortcutPlayableReference(
+            serverConfigID: serverConfigID,
+            kind: .song,
+            contentID: song.id
+        )
+    }
+
+    /// A system intent reports success only after the stream has produced
+    /// playable audio. Merely handing a URL to the engine would acknowledge
+    /// dead stations and DNS failures as successful Siri requests.
+    func startRadioStationForSystemIntent(_ item: RadioStationDisplayItem) async -> PlaybackStartOutcome {
+        await startRadioStationAndWait(item)
+    }
+
+    private func startRadioStationAndWait(_ item: RadioStationDisplayItem) async -> PlaybackStartOutcome {
+        guard URL(string: item.streamURL) != nil else { return .failed(.streamURLUnavailable) }
+        playRadioStation(item)
+        let generation = playbackGeneration
+        return await waitForPlaybackStart(
+            generation: generation,
+            expectedContentID: item.id,
+            expectedServerConfigID: SubsonicAPIService.shared.activeServer?.id.uuidString,
+            kind: .radio
+        )
     }
 
     func playNextRadioStation(in orderedStations: [RadioStationDisplayItem]? = nil) {
@@ -608,9 +773,17 @@ class AudioPlayerService: ObservableObject {
     }
 
     private func playAdjacentRadioStation(in orderedStations: [RadioStationDisplayItem]?, offset: Int) {
-        guard isRadioPlayback else { return }
+        guard let station = adjacentRadioStation(in: orderedStations, offset: offset) else { return }
+        playRadioStation(station)
+    }
+
+    private func adjacentRadioStation(
+        in orderedStations: [RadioStationDisplayItem]? = nil,
+        offset: Int
+    ) -> RadioStationDisplayItem? {
+        guard isRadioPlayback else { return nil }
         let stations = orderedStations ?? RadioStationStore.shared.items
-        guard stations.count > 1 else { return }
+        guard stations.count > 1 else { return nil }
 
         let currentID = currentRadioStation?.id
         let currentIndex = currentID.flatMap { id in stations.firstIndex { $0.id == id } }
@@ -620,11 +793,12 @@ class AudioPlayerService: ObservableObject {
         } else {
             targetIndex = offset >= 0 ? 0 : stations.count - 1
         }
-        playRadioStation(stations[targetIndex])
+        return stations[targetIndex]
     }
 
     private func playRadioStation(_ item: RadioStationDisplayItem, resetReconnectAttempts: Bool) {
         guard let url = URL(string: item.streamURL) else { return }
+        let expectedServerConfigID = SubsonicAPIService.shared.activeServer?.id.uuidString
         navidromeNowPlayingTask?.cancel()
         currentPlaybackServerConfigId = nil
         currentPlaybackServerId = nil
@@ -635,16 +809,31 @@ class AudioPlayerService: ObservableObject {
         }
         playbackGeneration += 1
         let gen = playbackGeneration
+        registerPlaybackStart(generation: gen)
+        networkResumeSong = nil
+        networkResumeTime = 0
+        teardownPlayer()
+        isPlaying = false
+        isBuffering = false
+        MPNowPlayingInfoCenter.default().playbackState = .paused
         #if os(tvOS)
         resumeWatchdog?.cancel()
         #endif
 
-        Task { @MainActor [weak self] in
+        let startTask = Task { @MainActor [weak self] in
             guard let self else { return }
             #if os(iOS) || os(tvOS)
-            await self.activateSessionAsync()
+            guard await self.activateSessionAsync() else {
+                self.markPlaybackStart(generation: gen, state: .failed(.audioSessionUnavailable))
+                return
+            }
             guard self.playbackGeneration == gen else { return }
             #endif
+            if let expectedServerConfigID,
+               SubsonicAPIService.shared.activeServer?.id.uuidString != expectedServerConfigID {
+                self.markPlaybackStart(generation: gen, state: .failed(.serverChanged))
+                return
+            }
 
             let isSameRadioStation = self.playbackMode == .radio
                 && self.currentRadioStation?.id == item.id
@@ -691,8 +880,17 @@ class AudioPlayerService: ObservableObject {
             self.engine.play(url: url)
             self.engine.trustedDuration = 0
             self.isEngineLoaded = true
+            self.markPlaybackStart(
+                generation: gen,
+                state: .engineLoaded(PlaybackStartReceipt(
+                    kind: .radio,
+                    contentID: item.id,
+                    serverConfigID: expectedServerConfigID
+                ))
+            )
             self.radioMetadata.startPolling(station: item)
         }
+        playbackStartTasks[gen] = startTask
     }
 
     private func prepareForSongPlayback() {
@@ -976,22 +1174,23 @@ class AudioPlayerService: ObservableObject {
 
     @MainActor
     private func playCachedStreamIfAvailable(song: Song, songId: String, seekTo: Double, generation: Int) async -> Bool {
+        guard !Task.isCancelled else { return true }
         guard let local = await StreamCacheService.shared.localURL(for: songId) else { return false }
-        guard playbackGeneration == generation else { return true }
+        guard !Task.isCancelled, playbackGeneration == generation else { return true }
 
         StreamCacheLog.register(songId: songId, title: song.title)
         StreamCacheLog.log(songId: songId, message: "Using cached file")
 
         let asset = AVURLAsset(url: local, options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])
         let cmTime = try? await asset.load(.duration)
-        guard playbackGeneration == generation else { return true }
+        guard !Task.isCancelled, playbackGeneration == generation else { return true }
 
         let precise = cmTime.flatMap { $0.isValid && !$0.isIndefinite ? CMTimeGetSeconds($0) : nil }
         let resolvedDuration = (precise ?? 0) > 0 ? precise! : Double(song.duration ?? 0)
 
         currentStreamURL = local
         let cachedFormat = await StreamCacheService.shared.cachedFormat(for: songId)
-        guard playbackGeneration == generation else { return true }
+        guard !Task.isCancelled, playbackGeneration == generation else { return true }
         if let cachedFormat {
             actualStreamFormat = cachedFormat
         }
@@ -1074,12 +1273,166 @@ class AudioPlayerService: ObservableObject {
         }
     }
 
+    private func registerPlaybackStart(generation: Int) {
+        for (oldGeneration, task) in playbackStartTasks where oldGeneration < generation {
+            task.cancel()
+        }
+        playbackStartTasks = playbackStartTasks.filter { $0.key >= generation - 3 }
+        pendingPlaybackStarts = pendingPlaybackStarts.filter { $0.key >= generation - 3 }
+        pendingPlaybackStarts[generation] = .pending
+    }
+
+    private func markPlaybackStart(
+        generation: Int,
+        state: PendingPlaybackStartState
+    ) {
+        guard playbackGeneration == generation,
+              let currentState = pendingPlaybackStarts[generation]
+        else { return }
+        if case .failed = currentState { return }
+        pendingPlaybackStarts[generation] = state
+        #if os(iOS) || os(tvOS)
+        switch state {
+        case .engineLoaded:
+            SiriMediaAppSelectionService.shared.playbackDidStart(generation: generation)
+        case .failed:
+            SiriMediaAppSelectionService.shared.playbackDidFail(generation: generation)
+        case .pending:
+            break
+        }
+        #endif
+    }
+
+    private func cancelPlaybackStart(
+        generation: Int,
+        failure: PlaybackStartFailure
+    ) {
+        guard playbackGeneration == generation else {
+            playbackStartTasks.removeValue(forKey: generation)?.cancel()
+            pendingPlaybackStarts.removeValue(forKey: generation)
+            return
+        }
+
+        pendingPlaybackStarts[generation] = .failed(failure)
+        #if os(iOS) || os(tvOS)
+        SiriMediaAppSelectionService.shared.playbackDidFail(generation: generation)
+        #endif
+        playbackStartTasks.removeValue(forKey: generation)?.cancel()
+        playbackGeneration += 1
+        cancelRadioReconnect()
+        cancelRemoteStreamStallWatchdog()
+        if isRadioPlayback {
+            radioMetadata.stopPolling()
+            radioMetadataIsConnecting = false
+            radioMetadataIsOnline = false
+            if let station = currentRadioStation {
+                nowPlaying.updateRadio(
+                    station: station,
+                    metadata: currentRadioMetadata,
+                    isPlaying: false
+                )
+            }
+        }
+        navidromeNowPlayingTask?.cancel()
+        navidromeNowPlayingTask = nil
+        networkResumeSong = nil
+        networkResumeTime = 0
+        pendingNowPlayingElapsedStartTime = nil
+        if let songID = currentSong?.id,
+           managedStreamCacheSongIds.remove(songID) != nil {
+            Task { await StreamCacheService.shared.cancel(songId: songID) }
+        }
+        engine.stop()
+        isEngineLoaded = false
+        isPlaying = false
+        isBuffering = false
+        nowPlaying.updatePlaybackRate(0, currentTime: currentTime)
+        MPNowPlayingInfoCenter.default().playbackState = .paused
+    }
+
+    private func waitForPlaybackStart(
+        generation: Int,
+        expectedContentID: String,
+        expectedServerConfigID: String?,
+        kind: PlaybackStartReceipt.Kind,
+        timeout: Duration = .seconds(20)
+    ) async -> PlaybackStartOutcome {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: timeout)
+
+        while clock.now < deadline {
+            if Task.isCancelled {
+                cancelPlaybackStart(generation: generation, failure: .cancelled)
+                return .failed(.cancelled)
+            }
+            guard playbackGeneration == generation else {
+                playbackStartTasks.removeValue(forKey: generation)?.cancel()
+                pendingPlaybackStarts.removeValue(forKey: generation)
+                return .failed(.superseded)
+            }
+            if let expectedServerConfigID,
+               SubsonicAPIService.shared.activeServer?.id.uuidString != expectedServerConfigID {
+                cancelPlaybackStart(generation: generation, failure: .serverChanged)
+                return .failed(.serverChanged)
+            }
+
+            switch pendingPlaybackStarts[generation] ?? .pending {
+            case .pending:
+                break
+            case .failed(let failure):
+                cancelPlaybackStart(generation: generation, failure: failure)
+                pendingPlaybackStarts.removeValue(forKey: generation)
+                return .failed(failure)
+            case .engineLoaded(let receipt):
+                let contentStillMatches: Bool
+                switch kind {
+                case .song:
+                    contentStillMatches = playbackMode == .songs && currentSong?.id == expectedContentID
+                case .radio:
+                    contentStillMatches = isRadioPlayback && currentRadioStation?.id == expectedContentID
+                }
+                guard contentStillMatches else {
+                    cancelPlaybackStart(generation: generation, failure: .superseded)
+                    pendingPlaybackStarts.removeValue(forKey: generation)
+                    return .failed(.superseded)
+                }
+                if !isPlaying {
+                    cancelPlaybackStart(generation: generation, failure: .cancelled)
+                    pendingPlaybackStarts.removeValue(forKey: generation)
+                    return .failed(.cancelled)
+                }
+                if isEngineLoaded, engine.isActuallyPlaying {
+                    playbackStartTasks.removeValue(forKey: generation)
+                    pendingPlaybackStarts.removeValue(forKey: generation)
+                    return .started(receipt)
+                }
+            }
+
+            do {
+                try await Task.sleep(for: .milliseconds(100))
+            } catch {
+                cancelPlaybackStart(generation: generation, failure: .cancelled)
+                return .failed(.cancelled)
+            }
+        }
+
+        cancelPlaybackStart(generation: generation, failure: .timedOut)
+        return .failed(.timedOut)
+    }
+
+    @discardableResult
     private func startPlayback(
         song: Song,
         seekTo: Double = 0,
         startsNewTrackingSession: Bool = true
-    ) {
+    ) -> Int {
         cancelRemoteStreamStallWatchdog()
+        networkResumeSong = nil
+        networkResumeTime = 0
+        engine.stop()
+        isEngineLoaded = false
+        isPlaying = false
+        isBuffering = false
         prepareForSongPlayback()
         stopFastSeeking()
         let activeServer = SubsonicAPIService.shared.activeServer
@@ -1099,33 +1452,59 @@ class AudioPlayerService: ObservableObject {
         #endif
         playbackGeneration += 1
         let gen = playbackGeneration
+        registerPlaybackStart(generation: gen)
+        currentSong = song
+        if startsNewTrackingSession,
+           let expectedServerConfigId,
+           let expectedServerId {
+            currentPlaybackServerConfigId = expectedServerConfigId
+            currentPlaybackServerId = expectedServerId
+            trackingSessionSongId = song.id
+            playbackStartedPublisher.send(
+                PlaybackTrackingStart(
+                    song: song,
+                    serverId: expectedServerId,
+                    serverConfigId: expectedServerConfigId
+                )
+            )
+        }
         #if os(tvOS)
         resumeWatchdog?.cancel()
         #endif
-        Task { @MainActor [weak self] in
+        let startTask = Task { @MainActor [weak self] in
             guard let self else { return }
             #if os(iOS) || os(tvOS)
-            await self.activateSessionAsync()
+            guard await self.activateSessionAsync() else {
+                self.markPlaybackStart(generation: gen, state: .failed(.audioSessionUnavailable))
+                return
+            }
             guard self.playbackGeneration == gen else { return }
             #endif
-            self.networkResumeSong = nil
             self.isEngineLoaded = false
             await NetworkStatus.shared.waitUntilReady()
 
-            guard self.playbackGeneration == gen,
-                  let expectedServerConfigId,
-                  SubsonicAPIService.shared.activeServer?.id.uuidString == expectedServerConfigId
-            else { return }
+            guard !Task.isCancelled, self.playbackGeneration == gen else { return }
+            guard let expectedServerConfigId else {
+                self.markPlaybackStart(generation: gen, state: .failed(.noActiveServer))
+                return
+            }
+            guard SubsonicAPIService.shared.activeServer?.id.uuidString == expectedServerConfigId else {
+                self.markPlaybackStart(generation: gen, state: .failed(.serverChanged))
+                return
+            }
 
             guard let url = self.resolveURL(for: song) else {
                 self.pendingNowPlayingElapsedStartTime = nil
                 if OfflineModeService.shared.isOffline {
+                    self.markPlaybackStart(generation: gen, state: .failed(.unavailableOffline))
                     #if os(iOS)
                     NotificationCenter.default.post(name: .offlinePlaybackBlocked, object: nil)
                     #elseif os(macOS)
                     NotificationCenter.default.post(name: .showToast, object: String(localized: "not_available_offline"))
                     #endif
                     // tvOS: kein Offline-Modus (keine Downloads) — Pfad unerreichbar.
+                } else {
+                    self.markPlaybackStart(generation: gen, state: .failed(.streamURLUnavailable))
                 }
                 return
             }
@@ -1153,15 +1532,6 @@ class AudioPlayerService: ObservableObject {
             self.timePublisher.send((time: playbackStartTime, duration: self.duration))
 
             self.isPlaying = true
-            if startsNewTrackingSession, let expectedServerId {
-                self.playbackStartedPublisher.send(
-                    PlaybackTrackingStart(
-                        song: song,
-                        serverId: expectedServerId,
-                        serverConfigId: expectedServerConfigId
-                    )
-                )
-            }
             if song.coverArt != self.lastArtworkCoverArt {
                 self.artworkReloadToken = UUID()
                 self.lastArtworkCoverArt = song.coverArt
@@ -1175,9 +1545,20 @@ class AudioPlayerService: ObservableObject {
 
             if !url.isFileURL && !NetworkStatus.shared.hasNetwork {
                 if await self.playCachedStreamIfAvailable(song: song, songId: song.id, seekTo: seekTo, generation: gen) {
+                    if self.playbackGeneration == gen, self.isEngineLoaded {
+                        self.markPlaybackStart(
+                            generation: gen,
+                            state: .engineLoaded(PlaybackStartReceipt(
+                                kind: .song,
+                                contentID: song.id,
+                                serverConfigID: expectedServerConfigId
+                            ))
+                        )
+                    }
                     return
                 }
                 self.stopUnavailableRemotePlayback(song: song, generation: gen)
+                self.markPlaybackStart(generation: gen, state: .failed(.unavailableOffline))
                 return
             }
 
@@ -1192,6 +1573,16 @@ class AudioPlayerService: ObservableObject {
                 )
                 self.managedStreamCacheSongIds.insert(songId)
                 if await self.playCachedStreamIfAvailable(song: song, songId: songId, seekTo: seekTo, generation: gen) {
+                    if self.playbackGeneration == gen, self.isEngineLoaded {
+                        self.markPlaybackStart(
+                            generation: gen,
+                            state: .engineLoaded(PlaybackStartReceipt(
+                                kind: .song,
+                                contentID: song.id,
+                                serverConfigID: expectedServerConfigId
+                            ))
+                        )
+                    }
                     return
                 }
                 #if os(iOS)
@@ -1207,12 +1598,27 @@ class AudioPlayerService: ObservableObject {
                     bitrate: fmt.bitrate,
                     songTitle: song.title
                 )
-                guard self.playbackGeneration == gen else { return }
+                guard !Task.isCancelled, self.playbackGeneration == gen else { return }
+                guard SubsonicAPIService.shared.activeServer?.id.uuidString == expectedServerConfigId else {
+                    self.markPlaybackStart(generation: gen, state: .failed(.serverChanged))
+                    return
+                }
                 if didCache,
                    await self.playCachedStreamIfAvailable(song: song, songId: songId, seekTo: seekTo, generation: gen) {
+                    if self.playbackGeneration == gen, self.isEngineLoaded {
+                        self.markPlaybackStart(
+                            generation: gen,
+                            state: .engineLoaded(PlaybackStartReceipt(
+                                kind: .song,
+                                contentID: song.id,
+                                serverConfigID: expectedServerConfigId
+                            ))
+                        )
+                    }
                     return
                 }
                 self.stopUnavailableRemotePlayback(song: song, generation: gen)
+                self.markPlaybackStart(generation: gen, state: .failed(.streamPreparationFailed))
                 return
             } else if !url.isFileURL, self.streamPreCacheEnabled {
                 // Original-Remote-Stream mit Pre-Cache → erst vollständig laden, dann lokal abspielen
@@ -1221,6 +1627,16 @@ class AudioPlayerService: ObservableObject {
                 let suffix = song.suffix?.lowercased() ?? "audio"
                 self.managedStreamCacheSongIds.insert(songId)
                 if await self.playCachedStreamIfAvailable(song: song, songId: songId, seekTo: seekTo, generation: gen) {
+                    if self.playbackGeneration == gen, self.isEngineLoaded {
+                        self.markPlaybackStart(
+                            generation: gen,
+                            state: .engineLoaded(PlaybackStartReceipt(
+                                kind: .song,
+                                contentID: song.id,
+                                serverConfigID: expectedServerConfigId
+                            ))
+                        )
+                    }
                     return
                 }
                 let didCache = await StreamCacheService.shared.prefetchAndWait(
@@ -1230,12 +1646,27 @@ class AudioPlayerService: ObservableObject {
                     bitrate: 0,
                     songTitle: song.title
                 )
-                guard self.playbackGeneration == gen else { return }
+                guard !Task.isCancelled, self.playbackGeneration == gen else { return }
+                guard SubsonicAPIService.shared.activeServer?.id.uuidString == expectedServerConfigId else {
+                    self.markPlaybackStart(generation: gen, state: .failed(.serverChanged))
+                    return
+                }
                 if didCache,
                    await self.playCachedStreamIfAvailable(song: song, songId: songId, seekTo: seekTo, generation: gen) {
+                    if self.playbackGeneration == gen, self.isEngineLoaded {
+                        self.markPlaybackStart(
+                            generation: gen,
+                            state: .engineLoaded(PlaybackStartReceipt(
+                                kind: .song,
+                                contentID: song.id,
+                                serverConfigID: expectedServerConfigId
+                            ))
+                        )
+                    }
                     return
                 }
                 self.stopUnavailableRemotePlayback(song: song, generation: gen)
+                self.markPlaybackStart(generation: gen, state: .failed(.streamPreparationFailed))
                 return
             } else {
                 // Raw-Stream oder lokale Datei → wie bisher
@@ -1244,8 +1675,18 @@ class AudioPlayerService: ObservableObject {
                 self.engine.trustedDuration = Double(song.duration ?? 0)
                 if seekTo > 0 { self.engine.seek(to: seekTo) }
                 self.isEngineLoaded = true
+                self.markPlaybackStart(
+                    generation: gen,
+                    state: .engineLoaded(PlaybackStartReceipt(
+                        kind: .song,
+                        contentID: song.id,
+                        serverConfigID: expectedServerConfigId
+                    ))
+                )
             }
         }
+        playbackStartTasks[gen] = startTask
+        return gen
     }
 
     /// Erneuert die ephemere Serveranzeige nach App-Aktivierung, Reconnect oder
@@ -1293,6 +1734,7 @@ class AudioPlayerService: ObservableObject {
         navidromeNowPlayingTask = nil
         currentPlaybackServerConfigId = nil
         currentPlaybackServerId = nil
+        trackingSessionSongId = nil
         cancelAllManagedStreamCaches()
         cancelRadioReconnect()
         cancelRemoteStreamStallWatchdog()
@@ -1427,6 +1869,37 @@ class AudioPlayerService: ObservableObject {
         isPlaying ? pause() : resume()
     }
 
+    /// Transport variant for App Intents. Pausing is immediate; resuming uses a
+    /// fresh load so the caller only succeeds after AVFoundation confirms audible
+    /// playback. Restored queues create their tracking session on this first play.
+    func togglePlayPauseAndWait() async -> PlaybackStartOutcome {
+        if isPlaying {
+            guard let receipt = currentPlaybackReceipt() else { return .failed(.emptyQueue) }
+            pause()
+            return .started(receipt)
+        }
+
+        if let station = currentRadioStation, isRadioPlayback {
+            return await playRadioStationAndWait(station)
+        }
+        guard let song = currentSong else { return .failed(.emptyQueue) }
+        let seekPosition = max(currentTime, resumeTime)
+        let activeServerConfigID = SubsonicAPIService.shared.activeServer?.id.uuidString
+        let needsTrackingSession = trackingSessionSongId != song.id
+            || currentPlaybackServerConfigId != activeServerConfigID
+        let generation = startPlayback(
+            song: song,
+            seekTo: seekPosition,
+            startsNewTrackingSession: needsTrackingSession
+        )
+        return await waitForPlaybackStart(
+            generation: generation,
+            expectedContentID: song.id,
+            expectedServerConfigID: SubsonicAPIService.shared.activeServer?.id.uuidString,
+            kind: .song
+        )
+    }
+
     func setSleepTimer(minutes: Int) {
         setSleepTimer(duration: TimeInterval(minutes) * 60)
     }
@@ -1518,24 +1991,66 @@ class AudioPlayerService: ObservableObject {
         clearSavedState()
     }
 
-    func playShuffled(songs: [Song]) {
-        guard !songs.isEmpty else { return }
-        prepareForSongPlayback()
+    @discardableResult
+    func playShuffled(songs: [Song]) -> Bool {
+        guard !songs.isEmpty else { return false }
         let shuffled = songs.shuffled()
+        switch beginShuffledPlayback(shuffled, original: songs) {
+        case .success:
+            return true
+        case .failure:
+            return false
+        }
+    }
+
+    private func beginShuffledPlayback(
+        _ shuffled: [Song],
+        original: [Song]
+    ) -> Result<PreparedPlaybackStart, PlaybackStartFailure> {
+        guard let first = shuffled.first else { return .failure(.emptyQueue) }
+        if let failure = rejectUnavailableSelectionIfNeeded(first) {
+            return .failure(failure)
+        }
+        prepareForSongPlayback()
 
         playNextQueue = []
         userQueue = []
         queue = shuffled
         currentIndex = 0
         isShuffled = true
-        truthAlbumQueue = songs
+        truthAlbumQueue = original
         truthPlayNextQueue = []
         truthUserQueue = []
         infinityPendingSongIds.removeAll()
 
         resumeTime = 0
-        startPlayback(song: shuffled[0])
+        let generation = startPlayback(song: first)
+        #if os(iOS) || os(tvOS)
+        SiriMediaAppSelectionService.shared.prepareMusicDonation(
+            songs: original,
+            startIndex: original.firstIndex(where: { $0.id == first.id }) ?? 0,
+            shuffled: true,
+            generation: generation
+        )
+        #endif
         saveState()
+        return .success(PreparedPlaybackStart(generation: generation, song: first))
+    }
+
+    func playShuffledAndWait(songs: [Song]) async -> PlaybackStartOutcome {
+        guard !songs.isEmpty else { return .failed(.emptyQueue) }
+        let prepared = beginShuffledPlayback(songs.shuffled(), original: songs)
+        switch prepared {
+        case .failure(let failure):
+            return .failed(failure)
+        case .success(let ticket):
+            return await waitForPlaybackStart(
+                generation: ticket.generation,
+                expectedContentID: ticket.song.id,
+                expectedServerConfigID: SubsonicAPIService.shared.activeServer?.id.uuidString,
+                kind: .song
+            )
+        }
     }
 
     func toggleShuffle() {
@@ -1611,22 +2126,92 @@ class AudioPlayerService: ObservableObject {
             return
         }
         var state = queueState
+        var remainingAttempts = max(
+            state.queue.count + state.playNextQueue.count + state.userQueue.count + 1,
+            1
+        )
+
+        while remainingAttempts > 0 {
+            let action = state.advance(
+                repeatMode: repeatMode,
+                isShuffled: isShuffled,
+                triggeredByUser: triggeredByUser
+            )
+            switch action {
+            case .play(let song):
+                if playbackAvailabilityFailure(for: song) == nil {
+                    applyQueueState(state)
+                    startPlayback(song: song)
+                    saveState()
+                    return
+                }
+                if triggeredByUser {
+                    _ = rejectUnavailableSelectionIfNeeded(song)
+                    return
+                }
+                // Natural track end: silently skip offline-unavailable entries.
+                remainingAttempts -= 1
+                continue
+            case .clearPlayback:
+                applyQueueState(state)
+                clearPlaybackState()
+                saveState()
+                return
+            case .none:
+                if !triggeredByUser {
+                    clearPlaybackState()
+                    saveState()
+                }
+                return
+            }
+        }
+
+        // Repeat-all with no locally playable entry must not loop forever or
+        // leave the completed previous item advertised as playing.
+        clearPlaybackState()
+        saveState()
+    }
+
+    func nextAndWait() async -> PlaybackStartOutcome {
+        if isRadioPlayback {
+            guard let station = adjacentRadioStation(offset: 1) else { return .failed(.emptyQueue) }
+            playRadioStation(station)
+            return await waitForPlaybackStart(
+                generation: playbackGeneration,
+                expectedContentID: station.id,
+                expectedServerConfigID: SubsonicAPIService.shared.activeServer?.id.uuidString,
+                kind: .radio
+            )
+        }
+
+        var state = queueState
         let action = state.advance(
             repeatMode: repeatMode,
             isShuffled: isShuffled,
-            triggeredByUser: triggeredByUser
+            triggeredByUser: true
         )
-        applyQueueState(state)
-
         switch action {
         case .play(let song):
-            startPlayback(song: song)
+            if let failure = rejectUnavailableSelectionIfNeeded(song) {
+                return .failed(failure)
+            }
+            applyQueueState(state)
+            let generation = startPlayback(song: song)
+            saveState()
+            return await waitForPlaybackStart(
+                generation: generation,
+                expectedContentID: song.id,
+                expectedServerConfigID: SubsonicAPIService.shared.activeServer?.id.uuidString,
+                kind: .song
+            )
         case .clearPlayback:
+            applyQueueState(state)
             clearPlaybackState()
+            saveState()
+            return .failed(.emptyQueue)
         case .none:
-            return
+            return .failed(.emptyQueue)
         }
-        saveState()
     }
 
     func previous() {
@@ -1641,9 +2226,59 @@ class AudioPlayerService: ObservableObject {
         }
         var state = queueState
         guard let song = state.previous() else { return }
+        guard rejectUnavailableSelectionIfNeeded(song) == nil else { return }
         applyQueueState(state)
         startPlayback(song: song)
         saveState()
+    }
+
+    func previousAndWait() async -> PlaybackStartOutcome {
+        if isRadioPlayback {
+            guard let station = adjacentRadioStation(offset: -1) else { return .failed(.emptyQueue) }
+            playRadioStation(station)
+            return await waitForPlaybackStart(
+                generation: playbackGeneration,
+                expectedContentID: station.id,
+                expectedServerConfigID: SubsonicAPIService.shared.activeServer?.id.uuidString,
+                kind: .radio
+            )
+        }
+        if !isRadioPlayback, currentTime > 3 {
+            guard let receipt = currentPlaybackReceipt() else { return .failed(.emptyQueue) }
+            previous()
+            return .started(receipt)
+        }
+        var state = queueState
+        guard let song = state.previous() else { return .failed(.emptyQueue) }
+        if let failure = rejectUnavailableSelectionIfNeeded(song) {
+            return .failed(failure)
+        }
+        applyQueueState(state)
+        let generation = startPlayback(song: song)
+        saveState()
+        return await waitForPlaybackStart(
+            generation: generation,
+            expectedContentID: song.id,
+            expectedServerConfigID: SubsonicAPIService.shared.activeServer?.id.uuidString,
+            kind: .song
+        )
+    }
+
+    private func currentPlaybackReceipt() -> PlaybackStartReceipt? {
+        let serverConfigID = SubsonicAPIService.shared.activeServer?.id.uuidString
+        if isRadioPlayback, let station = currentRadioStation {
+            return PlaybackStartReceipt(
+                kind: .radio,
+                contentID: station.id,
+                serverConfigID: serverConfigID
+            )
+        }
+        guard let song = currentSong else { return nil }
+        return PlaybackStartReceipt(
+            kind: .song,
+            contentID: song.id,
+            serverConfigID: serverConfigID
+        )
     }
 
     func seek(to seconds: Double) {
@@ -1711,6 +2346,7 @@ class AudioPlayerService: ObservableObject {
     func playFromQueue(index: Int) {
         var state = queueState
         guard let song = state.playFromQueue(index: index) else { return }
+        guard rejectUnavailableSelectionIfNeeded(song) == nil else { return }
         applyQueueState(state)
         startPlayback(song: song)
         saveState()
@@ -1719,6 +2355,7 @@ class AudioPlayerService: ObservableObject {
     func jumpToPlayNext(at index: Int) {
         var state = queueState
         guard let song = state.jumpToPlayNext(at: index) else { return }
+        guard rejectUnavailableSelectionIfNeeded(song) == nil else { return }
         applyQueueState(state)
         startPlayback(song: song)
         saveState()
@@ -1727,6 +2364,7 @@ class AudioPlayerService: ObservableObject {
     func jumpToQueueTrack(at queueIndex: Int) {
         var state = queueState
         guard let song = state.jumpToQueueTrack(at: queueIndex) else { return }
+        guard rejectUnavailableSelectionIfNeeded(song) == nil else { return }
         applyQueueState(state)
         startPlayback(song: song)
         saveState()
@@ -1735,6 +2373,7 @@ class AudioPlayerService: ObservableObject {
     func jumpToUserQueue(at index: Int) {
         var state = queueState
         guard let song = state.jumpToUserQueue(at: index) else { return }
+        guard rejectUnavailableSelectionIfNeeded(song) == nil else { return }
         applyQueueState(state)
         startPlayback(song: song)
         saveState()
@@ -2110,6 +2749,7 @@ class AudioPlayerService: ObservableObject {
                 MPNowPlayingInfoCenter.default().playbackState = .playing
                 if let serverId = self.currentPlaybackServerId,
                    let serverConfigId = self.currentPlaybackServerConfigId {
+                    self.trackingSessionSongId = song.id
                     self.playbackStartedPublisher.send(
                         PlaybackTrackingStart(
                             song: song,
@@ -2191,6 +2831,10 @@ class AudioPlayerService: ObservableObject {
         engine.onPlaybackFailed = { [weak self] in
             guard let self else { return }
             self.isEngineLoaded = false
+            self.markPlaybackStart(
+                generation: self.playbackGeneration,
+                state: .failed(.engineFailed)
+            )
             guard self.isPlaying else { return }
             if self.isRadioPlayback {
                 self.isBuffering = true

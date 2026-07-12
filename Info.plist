@@ -4,8 +4,23 @@
 <dict>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>INAlternativeAppNames</key>
+	<array>
+		<dict>
+			<key>INAlternativeAppName</key>
+			<string>Shells</string>
+			<key>INAlternativeAppNamePronunciationHint</key>
+			<string>shells</string>
+		</dict>
+	</array>
+	<key>INIntentsSupported</key>
+	<array>
+		<string>INPlayMediaIntent</string>
+	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Shelv uses your local network to connect to your Navidrome server.</string>
+	<key>NSSiriUsageDescription</key>
+	<string>Use Siri to play music from your Shelv library.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>

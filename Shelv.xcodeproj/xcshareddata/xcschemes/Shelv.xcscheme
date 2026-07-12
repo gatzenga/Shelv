@@ -35,6 +35,20 @@
                ReferencedContainer = "container:Shelv.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "NO"
+            buildForProfiling = "NO"
+            buildForArchiving = "NO"
+            buildForAnalyzing = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "BC2000062FFE000000000001"
+               BuildableName = "ShelvAppIntentsUITests.xctest"
+               BlueprintName = "ShelvAppIntentsUITests"
+               ReferencedContainer = "container:Shelv.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction
@@ -52,6 +66,16 @@
                BlueprintIdentifier = "BC1000062FFE000000000001"
                BuildableName = "ShelvTests.xctest"
                BlueprintName = "ShelvTests"
+               ReferencedContainer = "container:Shelv.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "BC2000062FFE000000000001"
+               BuildableName = "ShelvAppIntentsUITests.xctest"
+               BlueprintName = "ShelvAppIntentsUITests"
                ReferencedContainer = "container:Shelv.xcodeproj">
             </BuildableReference>
          </TestableReference>

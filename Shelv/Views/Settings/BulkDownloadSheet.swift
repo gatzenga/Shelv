@@ -83,7 +83,11 @@ struct BulkDownloadSheet: View {
                         for marker in plan.playlistMarkers {
                             let allCovered = marker.songIds.allSatisfy { downloadStore.isDownloaded(songId: $0) || plannedIds.contains($0) }
                             if allCovered {
-                                downloadStore.addOfflinePlaylist(marker.id, songIds: marker.songIds)
+                                downloadStore.addOfflinePlaylist(
+                                    marker.id,
+                                    name: marker.name,
+                                    songIds: marker.songIds
+                                )
                             }
                         }
                         dismiss()
