@@ -33,6 +33,28 @@ struct MainTabView: View {
         return String(localized: "server_unreachable")
     }
 
+    private var pendingQueueAlertPresented: Binding<Bool> {
+        Binding(
+            get: { queueSync.pendingRemote != nil },
+            set: { isPresented in
+                if !isPresented {
+                    queueSync.dismissPending()
+                }
+            }
+        )
+    }
+
+    private var serverErrorAlertPresented: Binding<Bool> {
+        Binding(
+            get: { offlineMode.serverErrorBannerVisible },
+            set: { isPresented in
+                if !isPresented {
+                    offlineMode.dismissBanner()
+                }
+            }
+        )
+    }
+
     private static var initialSelection: String {
         #if DEBUG
         if DemoContent.isLargeLibraryFixtureEnabled {
@@ -125,10 +147,7 @@ struct MainTabView: View {
         }
         // Fremde Queue von einem anderen Gerät — auf tvOS als nativer Alert (zuverlässig
         // fokussierbar, im Gegensatz zu einem Custom-Top-Banner). Nie automatisch.
-        .alert(String(localized: "queue_available_title"), isPresented: Binding(
-            get: { queueSync.pendingRemote != nil },
-            set: { if !$0 { queueSync.dismissPending() } }
-        )) {
+        .alert(String(localized: "queue_available_title"), isPresented: pendingQueueAlertPresented) {
             Button(String(localized: "queue_take_over")) { queueSync.acceptPending() }
             Button(String(localized: "cancel"), role: .cancel) { queueSync.dismissPending() }
         } message: {
@@ -137,10 +156,7 @@ struct MainTabView: View {
         .task(id: queueSync.pendingRemote?.signature) {
             await dismissPendingQueueAfterDelay()
         }
-        .alert(serverErrorAlertTitle, isPresented: Binding(
-            get: { offlineMode.serverErrorBannerVisible },
-            set: { if !$0 { offlineMode.dismissBanner() } }
-        )) {
+        .alert(serverErrorAlertTitle, isPresented: serverErrorAlertPresented) {
             Button(String(localized: "ok"), role: .cancel) {
                 offlineMode.dismissBanner()
             }
