@@ -438,6 +438,7 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
+				BC5A00052FFF000000000001 /* Shelv TV Siri Shared */,
 				BC9C593A2F8E9FB000FF4D25 /* Shelv */,
 				BCC0DE0000000000000000C0 /* ShelvCore */,
 			);

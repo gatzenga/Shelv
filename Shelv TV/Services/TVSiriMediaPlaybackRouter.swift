@@ -39,10 +39,10 @@ enum TVSiriMediaPlaybackRouter {
         subsystem: "ch.vkugler.Shelv",
         category: "TVSiriMedia"
     )
-    private static var lastForegroundRequest: (request: ShelvTVSiriRequest, date: Date)?
+    private static var lastForegroundRequest: (request: ShelvSiriMediaRequest, date: Date)?
 
     static func handleForeground(_ intent: INPlayMediaIntent) async {
-        let request = ShelvTVSiriRequest(intent: intent)
+        let request = ShelvSiriMediaRequest(intent: intent)
         if let previous = lastForegroundRequest,
            previous.request == request,
            Date().timeIntervalSince(previous.date) < 2 {
@@ -53,11 +53,11 @@ enum TVSiriMediaPlaybackRouter {
     }
 
     static func handle(_ intent: INPlayMediaIntent) async -> INPlayMediaIntentResponseCode {
-        await handle(ShelvTVSiriRequest(intent: intent))
+        await handle(ShelvSiriMediaRequest(intent: intent))
     }
 
     private static func handle(
-        _ request: ShelvTVSiriRequest
+        _ request: ShelvSiriMediaRequest
     ) async -> INPlayMediaIntentResponseCode {
         do {
             try await perform(request)
@@ -79,7 +79,7 @@ enum TVSiriMediaPlaybackRouter {
         }
     }
 
-    private static func perform(_ request: ShelvTVSiriRequest) async throws {
+    private static func perform(_ request: ShelvSiriMediaRequest) async throws {
         let query = request.query.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if query.isEmpty {

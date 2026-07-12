@@ -1,4 +1,4 @@
-#if os(tvOS)
+#if os(iOS) || os(tvOS)
 import Intents
 import OSLog
 

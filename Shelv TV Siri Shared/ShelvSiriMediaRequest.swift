@@ -3,9 +3,9 @@ import Intents
 
 #if os(iOS) || os(tvOS) || os(watchOS)
 /// A compact, process-safe representation of Siri's media request. The Siri
-/// extension embeds this payload in the resolved media item so the tvOS app can
-/// execute exactly the request Siri resolved after the foreground hand-off.
-struct ShelvTVSiriRequest: Codable, Hashable, Sendable {
+/// extension embeds this payload in the resolved media item so the receiving
+/// app can execute exactly the request Siri resolved after the hand-off.
+struct ShelvSiriMediaRequest: Codable, Hashable, Sendable {
     static let identifierPrefix = "shelv-tv-siri-v1:"
 
     let mediaTypeRawValue: Int

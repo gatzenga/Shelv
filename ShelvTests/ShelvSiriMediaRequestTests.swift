@@ -2,7 +2,7 @@
 import Intents
 import XCTest
 
-final class ShelvTVSiriRequestTests: XCTestCase {
+final class ShelvSiriMediaRequestTests: XCTestCase {
     func testSongRequestPreservesTitleArtistAndPlaybackOptions() throws {
         let search = INMediaSearch(
             mediaType: .song,
@@ -27,7 +27,7 @@ final class ShelvTVSiriRequestTests: XCTestCase {
             mediaSearch: search
         )
 
-        let request = ShelvTVSiriRequest(intent: intent)
+        let request = ShelvSiriMediaRequest(intent: intent)
 
         XCTAssertEqual(request.mediaType, .song)
         XCTAssertEqual(request.query, "Demons by Imagine Dragons")
@@ -48,7 +48,7 @@ final class ShelvTVSiriRequestTests: XCTestCase {
             reference: .unknown,
             mediaIdentifier: nil
         )
-        let original = ShelvTVSiriRequest(intent: INPlayMediaIntent(
+        let original = ShelvSiriMediaRequest(intent: INPlayMediaIntent(
             mediaItems: nil,
             mediaContainer: nil,
             playShuffled: false,
@@ -60,7 +60,7 @@ final class ShelvTVSiriRequestTests: XCTestCase {
         ))
 
         let identifier = try XCTUnwrap(original.identifier)
-        XCTAssertEqual(ShelvTVSiriRequest(identifier: identifier), original)
+        XCTAssertEqual(ShelvSiriMediaRequest(identifier: identifier), original)
         XCTAssertEqual(original.query, "On Every Street by Dire Straits")
     }
 
@@ -77,7 +77,7 @@ final class ShelvTVSiriRequestTests: XCTestCase {
             reference: .unknown,
             mediaIdentifier: nil
         )
-        let request = ShelvTVSiriRequest(intent: INPlayMediaIntent(
+        let request = ShelvSiriMediaRequest(intent: INPlayMediaIntent(
             mediaItems: nil,
             mediaContainer: nil,
             playShuffled: false,
@@ -90,6 +90,63 @@ final class ShelvTVSiriRequestTests: XCTestCase {
 
         XCTAssertTrue(request.query.isEmpty)
         XCTAssertTrue(request.isActionableWithoutQuery)
+    }
+
+    func testArtistRequestDoesNotTurnSelfTitledAlbumIntoTheQuery() {
+        let search = INMediaSearch(
+            mediaType: .artist,
+            sortOrder: .unknown,
+            mediaName: "Dire Straits",
+            artistName: "Dire Straits",
+            albumName: "Dire Straits",
+            genreNames: nil,
+            moodNames: nil,
+            releaseDate: nil,
+            reference: .unknown,
+            mediaIdentifier: nil
+        )
+        let request = ShelvSiriMediaRequest(intent: INPlayMediaIntent(
+            mediaItems: nil,
+            mediaContainer: nil,
+            playShuffled: true,
+            playbackRepeatMode: .none,
+            resumePlayback: nil,
+            playbackQueueLocation: .now,
+            playbackSpeed: nil,
+            mediaSearch: search
+        ))
+
+        XCTAssertEqual(request.mediaType, .artist)
+        XCTAssertEqual(request.query, "Dire Straits")
+        XCTAssertTrue(request.playShuffled)
+    }
+
+    func testStationRequestPreservesSeedAndArtist() {
+        let search = INMediaSearch(
+            mediaType: .musicStation,
+            sortOrder: .unknown,
+            mediaName: "Sultans of Swing",
+            artistName: "Dire Straits",
+            albumName: nil,
+            genreNames: nil,
+            moodNames: nil,
+            releaseDate: nil,
+            reference: .unknown,
+            mediaIdentifier: nil
+        )
+        let request = ShelvSiriMediaRequest(intent: INPlayMediaIntent(
+            mediaItems: nil,
+            mediaContainer: nil,
+            playShuffled: false,
+            playbackRepeatMode: .none,
+            resumePlayback: nil,
+            playbackQueueLocation: .now,
+            playbackSpeed: nil,
+            mediaSearch: search
+        ))
+
+        XCTAssertEqual(request.mediaType, .musicStation)
+        XCTAssertEqual(request.query, "Sultans of Swing by Dire Straits")
     }
 }
 #endif

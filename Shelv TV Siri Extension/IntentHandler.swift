@@ -14,7 +14,7 @@ final class PlayMediaIntentHandler: NSObject, INPlayMediaIntentHandling {
         for intent: INPlayMediaIntent,
         with completion: @escaping ([INPlayMediaMediaItemResolutionResult]) -> Void
     ) {
-        let request = ShelvTVSiriRequest(intent: intent)
+        let request = ShelvSiriMediaRequest(intent: intent)
         guard !request.query.isEmpty || request.isActionableWithoutQuery,
               let identifier = request.identifier
         else {

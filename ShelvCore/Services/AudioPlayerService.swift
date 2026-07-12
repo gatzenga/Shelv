@@ -623,7 +623,7 @@ class AudioPlayerService: ObservableObject {
         infinityPendingSongIds.removeAll()
         resumeTime = 0
         let generation = startPlayback(song: songs[startIndex], seekTo: 0)
-        #if os(tvOS)
+        #if os(iOS) || os(tvOS)
         SiriMediaAppSelectionService.shared.prepareMusicDonation(
             songs: songs,
             startIndex: startIndex,
@@ -650,7 +650,7 @@ class AudioPlayerService: ObservableObject {
         infinityPendingSongIds.removeAll()
         resumeTime = 0
         let generation = startPlayback(song: song, seekTo: 0)
-        #if os(tvOS)
+        #if os(iOS) || os(tvOS)
         SiriMediaAppSelectionService.shared.prepareMusicDonation(
             songs: [song],
             startIndex: 0,
@@ -721,7 +721,7 @@ class AudioPlayerService: ObservableObject {
 
     func playRadioStation(_ item: RadioStationDisplayItem) {
         playRadioStation(item, resetReconnectAttempts: true)
-        #if os(tvOS)
+        #if os(iOS) || os(tvOS)
         SiriMediaAppSelectionService.shared.prepareRadioDonation(
             station: item,
             generation: playbackGeneration
@@ -1291,7 +1291,7 @@ class AudioPlayerService: ObservableObject {
         else { return }
         if case .failed = currentState { return }
         pendingPlaybackStarts[generation] = state
-        #if os(tvOS)
+        #if os(iOS) || os(tvOS)
         switch state {
         case .engineLoaded:
             SiriMediaAppSelectionService.shared.playbackDidStart(generation: generation)
@@ -1314,7 +1314,7 @@ class AudioPlayerService: ObservableObject {
         }
 
         pendingPlaybackStarts[generation] = .failed(failure)
-        #if os(tvOS)
+        #if os(iOS) || os(tvOS)
         SiriMediaAppSelectionService.shared.playbackDidFail(generation: generation)
         #endif
         playbackStartTasks.removeValue(forKey: generation)?.cancel()
@@ -2025,7 +2025,7 @@ class AudioPlayerService: ObservableObject {
 
         resumeTime = 0
         let generation = startPlayback(song: first)
-        #if os(tvOS)
+        #if os(iOS) || os(tvOS)
         SiriMediaAppSelectionService.shared.prepareMusicDonation(
             songs: original,
             startIndex: original.firstIndex(where: { $0.id == first.id }) ?? 0,

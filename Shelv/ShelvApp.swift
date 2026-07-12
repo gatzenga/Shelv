@@ -1,4 +1,5 @@
 import AppIntents
+import Intents
 import SwiftUI
 
 let appLang: String = Locale.preferredLanguages.first?.hasPrefix("de") == true ? "de" : "en"
@@ -21,6 +22,11 @@ final class BackgroundDownloadHandler {
 }
 
 final class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication, handlerFor intent: INIntent) -> Any? {
+        guard intent is INPlayMediaIntent else { return nil }
+        return ShelvSiriMediaIntentHandler.shared
+    }
+
     func application(_ application: UIApplication,
                      handleEventsForBackgroundURLSession identifier: String,
                      completionHandler: @escaping () -> Void) {
@@ -55,6 +61,7 @@ struct ShelvApp: App {
         let shortcutPlaybackCoordinator = ShortcutPlaybackCoordinator.shared
         AppDependencyManager.shared.add(dependency: shortcutPlaybackCoordinator)
         ShelvAppShortcuts.updateAppShortcutParameters()
+        SiriMediaAppSelectionService.shared.updateUserContext(numberOfLibraryItems: 0)
     }
 
     private var preferredScheme: ColorScheme? {
@@ -93,6 +100,15 @@ struct ShelvApp: App {
                     await DownloadStore.shared.setActiveServer(server.stableId)
                     PinnedPlaylistStore.shared.setActiveServer(server.stableId)
                     await LibraryStore.shared.loadStarred()
+                    let library = LibraryStore.shared
+                    let estimatedAlbumCount = library.artists.reduce(0) {
+                        $0 + max(0, $1.albumCount ?? 0)
+                    }
+                    SiriMediaAppSelectionService.shared.updateUserContext(
+                        numberOfLibraryItems: estimatedAlbumCount
+                            + library.artists.count
+                            + library.starredSongs.count
+                    )
                     // Nach App-Start / Server-Wechsel: auf eine fremde Remote-Queue prüfen.
                     await QueueSyncService.shared.checkForRemoteQueue()
                     await runKeepLibraryOfflineCheck(serverId: server.stableId)
