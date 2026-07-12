@@ -44,7 +44,7 @@ final class PlayerEngine: ObservableObject {
 
     init() {
         let p = AVQueuePlayer()
-        p.allowsExternalPlayback = false
+        p.allowsExternalPlayback = true
         p.automaticallyWaitsToMinimizeStalling = false
         player = p
         timeControlObservation = p.observe(\.timeControlStatus, options: [.initial, .new]) { [weak self] player, _ in
