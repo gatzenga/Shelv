@@ -10,7 +10,7 @@ final class RadioMetadataService: ObservableObject {
     @Published private(set) var isConnecting = false
     @Published private(set) var isOnline = false
 
-    private var timer: AnyCancellable?
+    private var pollingTask: Task<Void, Never>?
     private var generation = 0
     private var activeAPIURL: String?
     private var activeStreamURL: String?
@@ -27,8 +27,8 @@ final class RadioMetadataService: ObservableObject {
     }
 
     func stopPolling() {
-        timer?.cancel()
-        timer = nil
+        pollingTask?.cancel()
+        pollingTask = nil
         activeAPIURL = nil
         activeStreamURL = nil
         generation += 1
@@ -46,94 +46,131 @@ final class RadioMetadataService: ObservableObject {
         }
         let trimmedStreamURL = streamURL.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        if activeAPIURL == trimmed,
-           activeStreamURL == trimmedStreamURL,
-           timer != nil {
-            return
-        }
-
+        let preservesCurrentMetadata = activeAPIURL == trimmed
+            && activeStreamURL == trimmedStreamURL
+            && currentMetadata != nil
         stopPolling()
         activeAPIURL = trimmed
         activeStreamURL = trimmedStreamURL
         let gen = generation
         DispatchQueue.main.async {
-            self.currentMetadata = RadioNowPlayingMetadata(stationName: fallbackStationName)
+            if !preservesCurrentMetadata {
+                self.currentMetadata = RadioNowPlayingMetadata(stationName: fallbackStationName)
+            }
             self.isConnecting = true
-            self.isOnline = false
+            if !preservesCurrentMetadata {
+                self.isOnline = false
+            }
         }
 
-        Task { await self.fetchAzuraCastNowPlaying(apiURL: trimmed, fallbackStationName: fallbackStationName, generation: gen) }
-        timer = Timer.publish(every: 5, on: .main, in: .common)
-            .autoconnect()
-            .sink { [weak self] _ in
-                guard let self else { return }
-                let gen = self.generation
-                Task { await self.fetchAzuraCastNowPlaying(apiURL: trimmed, fallbackStationName: fallbackStationName, generation: gen) }
+        pollingTask = Task { [weak self] in
+            var failureCount = 0
+            while !Task.isCancelled {
+                guard let self, self.generation == gen else { return }
+                let succeeded = await self.fetchAzuraCastNowPlaying(
+                    apiURL: trimmed,
+                    fallbackStationName: fallbackStationName,
+                    generation: gen
+                )
+                guard !Task.isCancelled, self.generation == gen else { return }
+                if succeeded {
+                    failureCount = 0
+                    try? await Task.sleep(for: .seconds(3))
+                } else {
+                    failureCount += 1
+                    let delay = min(pow(2.0, Double(failureCount - 1)) * 0.5, 5)
+                    try? await Task.sleep(for: .seconds(delay))
+                }
             }
+        }
     }
 
     private func startICYPolling(streamURL: String, fallbackStationName: String) {
         let trimmed = streamURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        if activeAPIURL == nil,
-           activeStreamURL == trimmed,
-           timer != nil {
-            return
-        }
-
+        let preservesCurrentMetadata = activeAPIURL == nil
+            && activeStreamURL == trimmed
+            && currentMetadata != nil
         stopPolling()
         activeAPIURL = nil
         activeStreamURL = trimmed
         let gen = generation
         DispatchQueue.main.async {
-            self.currentMetadata = RadioNowPlayingMetadata(stationName: fallbackStationName)
+            if !preservesCurrentMetadata {
+                self.currentMetadata = RadioNowPlayingMetadata(stationName: fallbackStationName)
+            }
             self.isConnecting = false
             self.isOnline = true
         }
 
-        Task { await self.fetchICYMetadata(streamURL: trimmed, fallbackStationName: fallbackStationName, generation: gen) }
-        timer = Timer.publish(every: 30, on: .main, in: .common)
-            .autoconnect()
-            .sink { [weak self] _ in
-                guard let self else { return }
-                let gen = self.generation
-                Task { await self.fetchICYMetadata(streamURL: trimmed, fallbackStationName: fallbackStationName, generation: gen) }
+        pollingTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self, self.generation == gen else { return }
+                await self.fetchICYMetadata(
+                    streamURL: trimmed,
+                    fallbackStationName: fallbackStationName,
+                    generation: gen
+                )
+                guard !Task.isCancelled, self.generation == gen else { return }
+                try? await Task.sleep(for: .seconds(30))
             }
+        }
     }
 
-    private func fetchAzuraCastNowPlaying(apiURL: String, fallbackStationName: String, generation: Int) async {
-        guard let url = URL(string: apiURL) else { return }
+    private func fetchAzuraCastNowPlaying(
+        apiURL: String,
+        fallbackStationName: String,
+        generation: Int
+    ) async -> Bool {
+        guard let url = URL(string: apiURL) else { return false }
         do {
             var request = URLRequest(url: url)
             request.cachePolicy = .reloadIgnoringLocalCacheData
-            let (data, _) = try await URLSession.shared.data(for: request)
+            request.timeoutInterval = 8
+            request.setValue("application/json", forHTTPHeaderField: "Accept")
+            let (data, urlResponse) = try await URLSession.shared.data(for: request)
+            guard let httpResponse = urlResponse as? HTTPURLResponse,
+                  (200..<300).contains(httpResponse.statusCode)
+            else { return false }
             let response = try Self.decoder.decode(AzuraCastNowPlayingResponse.self, from: data)
-            guard self.generation == generation else { return }
+            guard !Task.isCancelled, self.generation == generation else { return false }
 
             let stationArtworkURL = stationArtURL(apiURL: url, shortcode: response.station.shortcode)
             let artURL = response.nowPlaying?.song?.art?.nilIfEmpty ?? stationArtworkURL
+            let title = response.nowPlaying?.song?.title?.nilIfEmpty
+            let artist = response.nowPlaying?.song?.artist?.nilIfEmpty
+            let album = response.nowPlaying?.song?.album?.nilIfEmpty
             let metadata = RadioNowPlayingMetadata(
-                stationName: response.station.name.isEmpty ? fallbackStationName : response.station.name,
-                title: response.nowPlaying?.song?.title.nilIfEmpty,
-                artist: response.nowPlaying?.song?.artist.nilIfEmpty,
-                album: response.nowPlaying?.song?.album?.nilIfEmpty,
+                stationName: response.station.name.nilIfEmpty ?? fallbackStationName,
+                title: title,
+                artist: artist,
+                album: album,
                 artworkURL: artURL,
                 isLive: response.live?.isLive ?? false
             )
             await MainActor.run {
-                self.currentMetadata = metadata
+                guard self.generation == generation else { return }
+                if title != nil || artist != nil || self.currentMetadata == nil {
+                    self.currentMetadata = metadata
+                } else if var current = self.currentMetadata {
+                    current.stationName = metadata.stationName
+                    current.isLive = metadata.isLive
+                    if current.artworkURL == nil {
+                        current.artworkURL = metadata.artworkURL
+                    }
+                    self.currentMetadata = current
+                }
                 self.isConnecting = false
                 self.isOnline = response.isOnline ?? true
             }
+            return true
         } catch {
-            guard self.generation == generation else { return }
-            if let streamURL = activeStreamURL, !streamURL.isEmpty {
-                await fetchICYMetadata(streamURL: streamURL, fallbackStationName: fallbackStationName, generation: generation)
-                return
-            }
+            guard !Task.isCancelled, self.generation == generation else { return false }
             await MainActor.run {
-                self.isConnecting = false
-                self.isOnline = false
+                guard self.generation == generation else { return }
+                self.isConnecting = self.currentMetadata?.displayTitle == nil
+                    && self.currentMetadata?.displayArtist == nil
             }
+            return false
         }
     }
 
@@ -154,14 +191,9 @@ final class RadioMetadataService: ObservableObject {
                 )
             } else if let current = self.currentMetadata,
                       current.displayTitle != nil || current.displayArtist != nil {
-                self.currentMetadata = RadioNowPlayingMetadata(
-                    stationName: resolvedStationName,
-                    title: current.title,
-                    artist: current.artist,
-                    album: nil,
-                    artworkURL: nil,
-                    isLive: false
-                )
+                var preserved = current
+                preserved.stationName = resolvedStationName
+                self.currentMetadata = preserved
             } else {
                 self.currentMetadata = RadioNowPlayingMetadata(stationName: resolvedStationName)
             }
@@ -207,8 +239,8 @@ private struct AzuraCastNowPlayingResponse: Decodable {
     }
 
     struct SongInfo: Decodable {
-        let title: String
-        let artist: String
+        let title: String?
+        let artist: String?
         let art: String?
         let album: String?
     }
