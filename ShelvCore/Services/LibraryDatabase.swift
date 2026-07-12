@@ -42,7 +42,7 @@ private struct LibraryAlbumRecord: Codable, FetchableRecord, PersistableRecord {
     var name: String
     /// Normalized effective key used by SQLite ordering.
     var sortName: String
-    /// Raw OpenSubsonic sort name for model round-tripping and matching section grouping.
+    /// Raw OpenSubsonic sort name for round-tripping into the model.
     var metadataSortName: String?
     var artist: String?
     var artistId: String?
@@ -109,7 +109,7 @@ private struct LibraryArtistRecord: Codable, FetchableRecord, PersistableRecord 
     var name: String
     /// Normalized effective key used by SQLite ordering.
     var sortName: String
-    /// Raw OpenSubsonic sort name for model round-tripping and matching section grouping.
+    /// Raw OpenSubsonic sort name for round-tripping into the model.
     var metadataSortName: String?
     var albumCount: Int?
     var coverArt: String?

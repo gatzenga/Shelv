@@ -3,7 +3,7 @@ import GRDB
 
 // MARK: - Records
 
-struct DownloadRecord: Codable, FetchableRecord, PersistableRecord, Sendable {
+struct DownloadRecord: Codable, FetchableRecord, PersistableRecord {
     var songId: String
     var serverId: String
     var albumId: String
@@ -84,11 +84,6 @@ struct MissingStrikeRecord: Codable, FetchableRecord, PersistableRecord {
     static let databaseTableName = "missing_song_strikes"
 }
 
-nonisolated struct DownloadedPlaylistMarker: Sendable {
-    let id: String
-    let name: String
-}
-
 // MARK: - DownloadDatabase
 
 actor DownloadDatabase {
@@ -114,10 +109,6 @@ actor DownloadDatabase {
     }
 
     func setup() {
-        // The actor serializes setup calls. Once the pool exists, reopening it is
-        // unnecessary and can introduce GRDB queue churn during cold App Intent
-        // launches where several stores initialize at the same time.
-        guard pool == nil else { return }
         let url = databaseURL
         let dir = url.deletingLastPathComponent()
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -384,25 +375,6 @@ actor DownloadDatabase {
         safeWrite { db in try record.insert(db, onConflict: .replace) }
     }
 
-    func repairFilePath(
-        songId: String,
-        serverId: String,
-        expectedPath: String,
-        expectedAddedAt: Double,
-        replacementPath: String
-    ) {
-        safeWrite { db in
-            try db.execute(
-                sql: """
-                UPDATE downloads
-                SET filePath = ?
-                WHERE songId = ? AND serverId = ? AND filePath = ? AND addedAt = ?
-                """,
-                arguments: [replacementPath, songId, serverId, expectedPath, expectedAddedAt]
-            )
-        }
-    }
-
     func setFavorite(songId: String, serverId: String, isFavorite: Bool) {
         safeWrite { db in
             try db.execute(
@@ -441,23 +413,6 @@ actor DownloadDatabase {
             try db.execute(
                 sql: "DELETE FROM missing_song_strikes WHERE songId = ? AND serverId = ?",
                 arguments: [songId, serverId]
-            )
-        }
-    }
-
-    func deleteIfFilePathMatches(
-        songId: String,
-        serverId: String,
-        expectedPath: String,
-        expectedAddedAt: Double
-    ) {
-        safeWrite { db in
-            try db.execute(
-                sql: """
-                DELETE FROM downloads
-                WHERE songId = ? AND serverId = ? AND filePath = ? AND addedAt = ?
-                """,
-                arguments: [songId, serverId, expectedPath, expectedAddedAt]
             )
         }
     }
@@ -660,27 +615,6 @@ actor DownloadDatabase {
             )
         }) ?? []
         return Set(ids)
-    }
-
-    func loadDownloadedPlaylistMarkers(serverId: String) -> [DownloadedPlaylistMarker] {
-        guard let pool else { return [] }
-        return (try? pool.read { db in
-            try Row.fetchAll(
-                db,
-                sql: """
-                SELECT playlist_id, playlist_name
-                FROM downloaded_playlists
-                WHERE server_id = ?
-                ORDER BY playlist_name COLLATE NOCASE ASC
-                """,
-                arguments: [serverId]
-            ).map {
-                DownloadedPlaylistMarker(
-                    id: $0["playlist_id"],
-                    name: $0["playlist_name"]
-                )
-            }
-        }) ?? []
     }
 
     func adoptLegacyPlaylistMarkers(serverId: String, playlistIds: Set<String>) {

@@ -33,54 +33,6 @@ final class DownloadDatabaseTests: XCTestCase {
         XCTAssertEqual(playlistIdsAfterMarker, ["playlist-a"])
     }
 
-    func testPlaylistMarkersWithSameIDStayScopedToTheirServer() async throws {
-        let database = await makeDatabase()
-        await database.markPlaylistDownloaded(
-            id: "shared-playlist",
-            name: "Server A Road Trip",
-            serverId: "server-a"
-        )
-        await database.markPlaylistDownloaded(
-            id: "shared-playlist",
-            name: "Server B Commute",
-            serverId: "server-b"
-        )
-
-        let serverA = await database.loadDownloadedPlaylistMarkers(serverId: "server-a")
-        let serverB = await database.loadDownloadedPlaylistMarkers(serverId: "server-b")
-        XCTAssertEqual(serverA.map(\.name), ["Server A Road Trip"])
-        XCTAssertEqual(serverB.map(\.name), ["Server B Commute"])
-
-        await database.unmarkPlaylistDownloaded(id: "shared-playlist", serverId: "server-a")
-        let remainingA = await database.loadDownloadedPlaylistIds(serverId: "server-a")
-        let remainingB = await database.loadDownloadedPlaylistIds(serverId: "server-b")
-        XCTAssertTrue(remainingA.isEmpty)
-        XCTAssertEqual(remainingB, ["shared-playlist"])
-    }
-
-    func testLegacyMarkerCanBeAdoptedByEveryMatchingServer() async throws {
-        let database = await makeDatabase()
-        await database.markPlaylistDownloaded(
-            id: "shared-playlist",
-            name: "Legacy Name",
-            serverId: ""
-        )
-
-        await database.adoptLegacyPlaylistMarkers(
-            serverId: "server-a",
-            playlistIds: ["shared-playlist"]
-        )
-        await database.adoptLegacyPlaylistMarkers(
-            serverId: "server-b",
-            playlistIds: ["shared-playlist"]
-        )
-
-        let serverA = await database.loadDownloadedPlaylistMarkers(serverId: "server-a")
-        let serverB = await database.loadDownloadedPlaylistMarkers(serverId: "server-b")
-        XCTAssertEqual(serverA.map(\.name), ["Legacy Name"])
-        XCTAssertEqual(serverB.map(\.name), ["Legacy Name"])
-    }
-
     func testDeletingSongRemovesTheGlobalDownloadEvenWhenAPlaylistIsMarkedOffline() async throws {
         let database = await makeDatabase()
         let serverId = "server-a"
@@ -131,102 +83,55 @@ final class DownloadDatabaseTests: XCTestCase {
         XCTAssertEqual(serverBCounts, ["album-a": 1])
     }
 
-    func testPathRepairOnlyUpdatesTheSnapshotItWasBasedOn() async throws {
+    func testPlaylistMarkersWithSameIDStayScopedToTheirServer() async throws {
         let database = await makeDatabase()
-        let original = record(
-            songId: "song-1",
-            serverId: "server-a",
-            albumId: "album-a",
-            filePath: "/old/song.mp3"
-        )
-        await database.upsert(original)
 
-        await database.repairFilePath(
-            songId: original.songId,
-            serverId: original.serverId,
-            expectedPath: "/different/snapshot.mp3",
-            expectedAddedAt: original.addedAt,
-            replacementPath: "/healed/song.mp3"
-        )
-        let unchanged = await database.record(songId: original.songId, serverId: original.serverId)
-        XCTAssertEqual(unchanged?.filePath, "/old/song.mp3")
+        await database.markPlaylistDownloaded(id: "shared-playlist", name: "Road", serverId: "server-a")
+        await database.markPlaylistDownloaded(id: "shared-playlist", name: "Focus", serverId: "server-b")
 
-        await database.repairFilePath(
-            songId: original.songId,
-            serverId: original.serverId,
-            expectedPath: "/old/song.mp3",
-            expectedAddedAt: original.addedAt,
-            replacementPath: "/healed/song.mp3"
-        )
-        let repaired = await database.record(songId: original.songId, serverId: original.serverId)
-        XCTAssertEqual(repaired?.filePath, "/healed/song.mp3")
+        let serverA = await database.loadDownloadedPlaylistIds(serverId: "server-a")
+        let serverB = await database.loadDownloadedPlaylistIds(serverId: "server-b")
+
+        XCTAssertEqual(serverA, ["shared-playlist"])
+        XCTAssertEqual(serverB, ["shared-playlist"])
+
+        await database.unmarkPlaylistDownloaded(id: "shared-playlist", serverId: "server-a")
+        let remainingA = await database.loadDownloadedPlaylistIds(serverId: "server-a")
+        let remainingB = await database.loadDownloadedPlaylistIds(serverId: "server-b")
+        XCTAssertTrue(remainingA.isEmpty)
+        XCTAssertEqual(remainingB, ["shared-playlist"])
     }
 
-    func testConditionalDeletePreservesAConcurrentRedownload() async throws {
+    func testLegacyMarkerCanBeAdoptedByEveryMatchingServer() async throws {
         let database = await makeDatabase()
-        var fresh = record(
-            songId: "song-1",
+        await database.markPlaylistDownloaded(id: "shared-playlist", name: "Legacy", serverId: "")
+
+        await database.adoptLegacyPlaylistMarkers(
             serverId: "server-a",
-            albumId: "album-a",
-            filePath: "/old/song.mp3"
+            playlistIds: ["shared-playlist"]
         )
-        await database.upsert(fresh)
-
-        fresh.filePath = "/fresh/song.mp3"
-        await database.upsert(fresh)
-        await database.deleteIfFilePathMatches(
-            songId: fresh.songId,
-            serverId: fresh.serverId,
-            expectedPath: "/old/song.mp3",
-            expectedAddedAt: 1_700_000_000
+        await database.adoptLegacyPlaylistMarkers(
+            serverId: "server-b",
+            playlistIds: ["shared-playlist"]
         )
 
-        let surviving = await database.record(songId: fresh.songId, serverId: fresh.serverId)
-        XCTAssertEqual(surviving?.filePath, "/fresh/song.mp3")
+        let serverA = await database.loadDownloadedPlaylistIds(serverId: "server-a")
+        let serverB = await database.loadDownloadedPlaylistIds(serverId: "server-b")
+        XCTAssertEqual(serverA, ["shared-playlist"])
+        XCTAssertEqual(serverB, ["shared-playlist"])
     }
 
-    func testConditionalDeletePreservesSamePathRedownloadWithNewRevision() async throws {
+    func testDownloadedRecordsSortByDiscBeforeTrack() async throws {
         let database = await makeDatabase()
-        let path = "/canonical/song.mp3"
-        var record = record(
-            songId: "song-1",
-            serverId: "server-a",
-            albumId: "album-a",
-            filePath: path
-        )
-        let staleAddedAt = record.addedAt
-        await database.upsert(record)
+        var discTwo = record(songId: "disc-2-track-1", serverId: "server-a", albumId: "album-a")
+        discTwo.disc = 2
+        discTwo.track = 1
+        var discOne = record(songId: "disc-1-track-2", serverId: "server-a", albumId: "album-a")
+        discOne.disc = 1
+        discOne.track = 2
 
-        record.addedAt += 1
-        await database.upsert(record)
-        await database.deleteIfFilePathMatches(
-            songId: record.songId,
-            serverId: record.serverId,
-            expectedPath: path,
-            expectedAddedAt: staleAddedAt
-        )
-
-        let surviving = await database.record(songId: record.songId, serverId: record.serverId)
-        XCTAssertEqual(surviving?.filePath, path)
-        XCTAssertEqual(surviving?.addedAt, staleAddedAt + 1)
-    }
-
-    func testAllRecordsSortsDiscBeforeTrack() async throws {
-        let database = await makeDatabase()
-        await database.upsert(record(
-            songId: "disc-2-track-1",
-            serverId: "server-a",
-            albumId: "album-a",
-            track: 1,
-            disc: 2
-        ))
-        await database.upsert(record(
-            songId: "disc-1-track-2",
-            serverId: "server-a",
-            albumId: "album-a",
-            track: 2,
-            disc: 1
-        ))
+        await database.upsert(discTwo)
+        await database.upsert(discOne)
 
         let records = await database.allRecords(serverId: "server-a")
         XCTAssertEqual(records.map(\.songId), ["disc-1-track-2", "disc-2-track-1"])
@@ -245,10 +150,7 @@ final class DownloadDatabaseTests: XCTestCase {
                         artistId: String? = "artist-a",
                         title: String = "Song",
                         albumTitle: String = "Album",
-                        artistName: String = "Artist",
-                        track: Int? = 1,
-                        disc: Int? = 1,
-                        filePath: String? = nil) -> DownloadRecord {
+                        artistName: String = "Artist") -> DownloadRecord {
         DownloadRecord(
             songId: songId,
             serverId: serverId,
@@ -257,8 +159,8 @@ final class DownloadDatabaseTests: XCTestCase {
             title: title,
             albumTitle: albumTitle,
             artistName: artistName,
-            track: track,
-            disc: disc,
+            track: 1,
+            disc: 1,
             duration: 180,
             year: 2026,
             genre: "Rock",
@@ -270,7 +172,7 @@ final class DownloadDatabaseTests: XCTestCase {
             albumArtistName: artistName,
             albumCoverArtId: "album-cover-a",
             isFavorite: false,
-            filePath: filePath ?? tempDir.appendingPathComponent("\(songId).mp3").path,
+            filePath: tempDir.appendingPathComponent("\(songId).mp3").path,
             fileExtension: "mp3",
             contentType: "audio/mpeg",
             bitRate: 192,

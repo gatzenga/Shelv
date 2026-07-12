@@ -44,13 +44,23 @@ struct ArtistDetailView: View {
     }
 
     private var sortedAlbums: [Album] {
-        ArtistAlbumPlaybackOrder.sorted(
-            detail?.album ?? [],
-            preference: ArtistAlbumSortPreference(
-                sortRaw: sortRaw,
-                directionRaw: directionRaw
-            )
-        )
+        guard let albums = detail?.album else { return [] }
+        switch sortOption {
+        case .alphabetical:
+            // Name immer A-Z, unabhängig von direction
+            return LibraryRepository.locallySortedAlbums(albums, sort: .name, direction: .ascending)
+        case .frequent:
+            let base = albums.sorted { ($0.playCount ?? 0) < ($1.playCount ?? 0) }
+            return direction == .ascending ? base : Array(base.reversed())
+        case .newest:
+            let base = albums.sorted {
+                ($0.created ?? .distantPast) < ($1.created ?? .distantPast)
+            }
+            return direction == .ascending ? base : Array(base.reversed())
+        case .year:
+            let base = albums.sorted { ($0.year ?? 0) < ($1.year ?? 0) }
+            return direction == .ascending ? base : Array(base.reversed())
+        }
     }
 
     var body: some View {
@@ -542,8 +552,18 @@ struct ArtistDetailView: View {
         if offlineMode.isOffline {
             return albums.compactMap(\.songs).flatMap { $0 }
         }
-        return await PlaybackContentResolver.artistSongs(from: albums) { albumID in
-            (try? await SubsonicAPIService.shared.getAlbum(id: albumID).song) ?? []
+        let indexed = Array(albums.enumerated())
+        return await withTaskGroup(of: (Int, [Song]).self) { group in
+            for (i, album) in indexed {
+                group.addTask {
+                    guard let detail = try? await SubsonicAPIService.shared.getAlbum(id: album.id),
+                          let songs = detail.song else { return (i, []) }
+                    return (i, songs)
+                }
+            }
+            var results: [(Int, [Song])] = []
+            for await result in group { results.append(result) }
+            return results.sorted { $0.0 < $1.0 }.flatMap { $0.1 }
         }
     }
 

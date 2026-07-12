@@ -221,7 +221,7 @@ struct PlaylistsView: View {
             Task {
                 if let loaded = await libraryStore.loadPlaylistDetail(id: playlist.id),
                    let songs = loaded.songs, !songs.isEmpty {
-                    _ = await MainActor.run { player.play(songs: songs, startIndex: 0) }
+                    await MainActor.run { player.play(songs: songs, startIndex: 0) }
                 }
             }
         } label: { Label(String(localized: "play"), systemImage: "play.fill") }
@@ -230,7 +230,7 @@ struct PlaylistsView: View {
             Task {
                 if let loaded = await libraryStore.loadPlaylistDetail(id: playlist.id),
                    let songs = loaded.songs, !songs.isEmpty {
-                    _ = await MainActor.run { player.playShuffled(songs: songs) }
+                    await MainActor.run { player.playShuffled(songs: songs) }
                 }
             }
         } label: { Label(String(localized: "shuffle"), systemImage: "shuffle") }
@@ -282,11 +282,7 @@ struct PlaylistsView: View {
                         if let songs = loaded?.songs, !songs.isEmpty {
                             let missing = songs.filter { !downloadStore.isDownloaded(songId: $0.id) }
                             if !missing.isEmpty { downloadStore.enqueueSongs(missing) }
-                            downloadStore.addOfflinePlaylist(
-                                playlist.id,
-                                name: playlist.name,
-                                songIds: songs.map(\.id)
-                            )
+                            downloadStore.addOfflinePlaylist(playlist.id, songIds: songs.map(\.id))
                             currentToast = ShelveToast(message: String(localized: "download_started"))
                         }
                     }
@@ -331,11 +327,7 @@ struct PlaylistsView: View {
                 if let songs = loaded?.songs, !songs.isEmpty {
                     let missing = songs.filter { !downloadStore.isDownloaded(songId: $0.id) }
                     if !missing.isEmpty { downloadStore.enqueueSongs(missing) }
-                    downloadStore.addOfflinePlaylist(
-                        playlist.id,
-                        name: playlist.name,
-                        songIds: songs.map(\.id)
-                    )
+                    downloadStore.addOfflinePlaylist(playlist.id, songIds: songs.map(\.id))
                     currentToast = ShelveToast(message: String(localized: "download_started"))
                 }
             }

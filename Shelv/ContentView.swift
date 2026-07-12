@@ -110,13 +110,10 @@ struct ContentView: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: .shelvShortcutDestinationRequested)) { note in
                 guard serverStore.activeServer != nil else { return }
-                let pendingDestination = ShelvShortcutHandoff.consumePendingDestination()
                 guard let rawValue = note.object as? String,
                       let destination = ShelvShortcutDestination(rawValue: rawValue)
                 else {
-                    if let pendingDestination {
-                        handleShortcutDestination(pendingDestination)
-                    }
+                    handlePendingShortcutDestination()
                     return
                 }
                 handleShortcutDestination(destination)

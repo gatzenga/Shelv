@@ -11,6 +11,7 @@ struct DiscoverView: View {
     private let player = AudioPlayerService.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage("recapEnabled") private var recapEnabled = false
+    @AppStorage("mixUseDatabase") private var mixUseDatabase = false
     @AppStorage(PersonalizationPreferenceKey.showRadio) private var showRadio = true
     @AppStorage(PersonalizationPreferenceKey.showDiscoverInsights) private var showDiscoverInsights = true
     @AppStorage(PersonalizationPreferenceKey.showDiscoverAirPlay) private var showDiscoverAirPlay = false
@@ -727,38 +728,102 @@ struct DiscoverView: View {
     }
 
     private func loadOfflineMix(type: String) {
-        guard !downloadStore.songs.isEmpty else { return }
-        let mode: ShortcutDownloadsMode
+        let allSongs = downloadStore.songs.map { $0.asSong() }
+        guard !allSongs.isEmpty else { return }
+
         switch type {
-        case "offline_play": mode = .all
-        case "offline_shuffle": mode = .shuffled
-        case "offline_newest": mode = .newest
-        default: return
-        }
-        let selection = DownloadedPlaybackQueueBuilder.selection(
-            from: downloadStore.songs,
-            mode: mode
-        )
-        switch selection.order {
-        case .inOrder: player.play(songs: selection.songs)
-        case .shuffled: player.playShuffled(songs: selection.songs)
+        case "offline_play":
+            let sorted = allSongs.sorted {
+                let a = stripArticle($0.artist ?? "")
+                    .localizedStandardCompare(stripArticle($1.artist ?? ""))
+                if a != .orderedSame { return a == .orderedAscending }
+                let b = ($0.album ?? "").localizedStandardCompare($1.album ?? "")
+                if b != .orderedSame { return b == .orderedAscending }
+                let d0 = $0.discNumber ?? 0, d1 = $1.discNumber ?? 0
+                if d0 != d1 { return d0 < d1 }
+                return ($0.track ?? 0) < ($1.track ?? 0)
+            }
+            player.play(songs: Array(sorted.prefix(500)))
+
+        case "offline_shuffle":
+            let sampled = Array(allSongs.shuffled().prefix(500))
+            player.playShuffled(songs: sampled)
+
+        case "offline_newest":
+            let top100 = downloadStore.songs
+                .sorted { $0.addedAt > $1.addedAt }
+                .prefix(100)
+                .map { $0.asSong() }
+            player.playShuffled(songs: Array(top100))
+
+        default:
+            break
         }
     }
 
     private func loadMix(type: String) async {
         do {
-            let mix: ShortcutSmartMix
+            let songs: [Song]
             switch type {
-            case "newest": mix = .newest
-            case "frequent": mix = .frequent
-            case "random": mix = .shuffleAll
-            default: mix = .recent
+            case "newest":   songs = try await SubsonicAPIService.shared.getNewestSongs()
+            case "frequent": songs = try await frequentMixSongs()
+            case "random":   songs = try await SubsonicAPIService.shared.getRandomSongs(size: 500)
+            default:
+                songs = try await recentMixSongs()
             }
-            let songs = try await SmartMixPlaybackService.songs(for: mix)
             player.playShuffled(songs: songs)
         } catch {
             errorMessage = error.localizedDescription
             showError = true
         }
+    }
+
+    private func frequentMixSongs() async throws -> [Song] {
+        // Toggle aktiv UND genug DB-Daten (≥ 50 einzigartige Songs) → lokale Play-Log-DB.
+        // Sonst serverseitig (Navidrome-Frequenzdaten, wie Insights).
+        if mixUseDatabase,
+           let serverId = SubsonicAPIService.shared.activeServer?.stableId,
+           await PlayLogService.shared.distinctSongCount(serverId: serverId) >= 50 {
+            let counts = await PlayLogService.shared.topSongs(
+                serverId: serverId, from: .distantPast, to: Date(), limit: 50)
+            if !counts.isEmpty {
+                return try await SubsonicAPIService.shared.getSongsOrdered(ids: counts.map(\.songId))
+            }
+        }
+        return try await frequentFallbackSongs()
+    }
+
+    /// Server-Methode (wie Insights): Top-500-Alben, dynamischer Schwellenwert, Top 50 Songs nach Playcount.
+    private func frequentFallbackSongs() async throws -> [Song] {
+        let allFrequent = try await SubsonicAPIService.shared.getAlbumList(type: "frequent", size: 500)
+        let sorted = allFrequent.sorted { ($0.playCount ?? 0) > ($1.playCount ?? 0) }
+        let maxPC = sorted.first?.playCount ?? 0
+        let threshold = max(maxPC / 50, 1)
+        var filtered = sorted.filter { ($0.playCount ?? 0) >= threshold }
+        if filtered.count < 30 { filtered = Array(sorted.prefix(30)) }
+        if filtered.count > 80 { filtered = Array(sorted.prefix(80)) }
+        let songs = try await withThrowingTaskGroup(of: [Song].self) { group in
+            for album in filtered {
+                group.addTask { (try? await SubsonicAPIService.shared.getAlbum(id: album.id))?.song ?? [] }
+            }
+            var all: [Song] = []
+            for try await albumSongs in group { all.append(contentsOf: albumSongs) }
+            return all
+        }
+        return Array(songs.sorted { ($0.playCount ?? 0) > ($1.playCount ?? 0) }.prefix(50))
+    }
+
+    private func recentMixSongs() async throws -> [Song] {
+        // Toggle aktiv UND genug DB-Daten → echte zuletzt gehörte Songs aus der DB.
+        // Sonst serverseitig (album-basiert über getRecentSongs).
+        if mixUseDatabase,
+           let serverId = SubsonicAPIService.shared.activeServer?.stableId,
+           await PlayLogService.shared.distinctSongCount(serverId: serverId) >= 50 {
+            let ids = await PlayLogService.shared.recentUniqueSongIds(serverId: serverId, limit: 50)
+            if !ids.isEmpty {
+                return try await SubsonicAPIService.shared.getSongsOrdered(ids: ids)
+            }
+        }
+        return try await SubsonicAPIService.shared.getRecentSongs(limit: 50)
     }
 }

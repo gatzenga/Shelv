@@ -1,13 +1,7 @@
 import Foundation
-import OSLog
-#if compiler(>=6.4) && canImport(AppIntents) && canImport(MediaIntents) && !os(tvOS) && !os(watchOS)
-import AppIntents
-import MediaIntents
-#endif
 
 nonisolated enum InstantMixService {
     static let targetCount = 50
-    private static let logger = Logger(subsystem: "ch.vkugler.Shelv", category: "InstantMix")
     private static let artistSeedLock = NSLock()
     nonisolated(unsafe) private static var lastArtistSeedIds: [String: String] = [:]
 
@@ -25,20 +19,13 @@ nonisolated enum InstantMixService {
     @MainActor
     static func playAlbumMix(for album: Album, player: AudioPlayerService) {
         guard isEnabled else { return }
-        let serverConfigID = SubsonicAPIService.shared.activeServer?.id.uuidString
         Task {
             let songs = await albumMix(for: album)
             guard !songs.isEmpty else {
                 NotificationCenter.default.post(name: .instantMixUnavailable, object: nil)
                 return
             }
-            guard case .started = await player.playAndWait(songs: songs, startIndex: 0) else { return }
-            await donateSuccessfulMix(
-                kind: .album,
-                contentID: album.id,
-                title: album.name,
-                serverConfigID: serverConfigID
-            )
+            player.play(songs: songs, startIndex: 0)
         }
     }
 
@@ -50,20 +37,13 @@ nonisolated enum InstantMixService {
     @MainActor
     static func playArtistMix(for artist: Artist, player: AudioPlayerService) {
         guard isEnabled else { return }
-        let serverConfigID = SubsonicAPIService.shared.activeServer?.id.uuidString
         Task {
             let songs = await artistMix(for: artist)
             guard !songs.isEmpty else {
                 NotificationCenter.default.post(name: .instantMixUnavailable, object: nil)
                 return
             }
-            guard case .started = await player.playAndWait(songs: songs, startIndex: 0) else { return }
-            await donateSuccessfulMix(
-                kind: .artist,
-                contentID: artist.id,
-                title: artist.name,
-                serverConfigID: serverConfigID
-            )
+            player.play(songs: songs, startIndex: 0)
         }
     }
 
@@ -75,20 +55,13 @@ nonisolated enum InstantMixService {
     @MainActor
     static func playSongMix(for song: Song, player: AudioPlayerService) {
         guard isEnabled else { return }
-        let serverConfigID = SubsonicAPIService.shared.activeServer?.id.uuidString
         Task {
             let songs = await songMix(for: song)
             guard !songs.isEmpty else {
                 NotificationCenter.default.post(name: .instantMixUnavailable, object: nil)
                 return
             }
-            guard case .started = await player.playAndWait(songs: songs, startIndex: 0) else { return }
-            await donateSuccessfulMix(
-                kind: .song,
-                contentID: song.id,
-                title: song.title,
-                serverConfigID: serverConfigID
-            )
+            player.play(songs: songs, startIndex: 0)
         }
     }
 
@@ -96,9 +69,7 @@ nonisolated enum InstantMixService {
         guard !UserDefaults.standard.bool(forKey: "offlineModeEnabled") else { return [] }
 
         let api = SubsonicAPIService.shared
-        let detail = await fetch(endpoint: "getAlbum") {
-            try await api.getAlbum(id: album.id, retries: 1)
-        }
+        let detail = try? await api.getAlbum(id: album.id, retries: 1)
         let albumSongs = detail?.song ?? album.songs ?? []
         let seedSong = albumSongs.randomElement()
 
@@ -113,23 +84,29 @@ nonisolated enum InstantMixService {
         var seen = Set<String>()
 
         for artistId in artistIds {
-            push(await fetch(endpoint: "getSimilarSongs2") {
-                try await api.getSimilarSongs2(id: artistId, count: targetCount, retries: 1)
-            }, into: &songs, seen: &seen)
+            push(
+                try? await api.getSimilarSongs2(id: artistId, count: targetCount, retries: 1),
+                into: &songs,
+                seen: &seen
+            )
             if songs.count >= targetCount { return songs }
         }
 
         if let genre {
-            push(await fetch(endpoint: "getRandomSongs") {
-                try await api.getRandomSongs(size: targetCount * 2, genre: genre, retries: 1)
-            }, into: &songs, seen: &seen)
+            push(
+                try? await api.getRandomSongs(size: targetCount * 2, genre: genre, retries: 1),
+                into: &songs,
+                seen: &seen
+            )
             if songs.count >= targetCount { return songs }
         }
 
         if let artistName {
-            push(await fetch(endpoint: "getTopSongs") {
-                try await api.getTopSongs(artistName: artistName, count: targetCount, retries: 1)
-            }, into: &songs, seen: &seen)
+            push(
+                try? await api.getTopSongs(artistName: artistName, count: targetCount, retries: 1),
+                into: &songs,
+                seen: &seen
+            )
         }
 
         return meaningfulMix(songs)
@@ -145,9 +122,7 @@ nonisolated enum InstantMixService {
             push([seedSong], into: &songs, seen: &seen)
         }
 
-        push(await fetch(endpoint: "getSimilarSongs2") {
-            try await api.getSimilarSongs2(id: artist.id, count: targetCount, retries: 1)
-        },
+        push(try? await api.getSimilarSongs2(id: artist.id, count: targetCount, retries: 1),
              into: &songs,
              seen: &seen)
         return meaningfulMix(songs)
@@ -169,29 +144,37 @@ nonisolated enum InstantMixService {
             seen.insert(source.id)
         }
 
-        push(await fetch(endpoint: "getSimilarSongs") {
-            try await api.getSimilarSongs(id: source.id, count: targetCount, retries: 1)
-        }, into: &songs, seen: &seen)
+        push(
+            try? await api.getSimilarSongs(id: source.id, count: targetCount, retries: 1),
+            into: &songs,
+            seen: &seen
+        )
         if songs.count >= targetCount { return songs }
 
         if let artistId = source.artistId {
-            push(await fetch(endpoint: "getSimilarSongs2") {
-                try await api.getSimilarSongs2(id: artistId, count: targetCount, retries: 1)
-            }, into: &songs, seen: &seen)
+            push(
+                try? await api.getSimilarSongs2(id: artistId, count: targetCount, retries: 1),
+                into: &songs,
+                seen: &seen
+            )
             if songs.count >= targetCount { return songs }
         }
 
         if let genre = source.genre {
-            push(await fetch(endpoint: "getRandomSongs") {
-                try await api.getRandomSongs(size: targetCount * 2, genre: genre, retries: 1)
-            }, into: &songs, seen: &seen)
+            push(
+                try? await api.getRandomSongs(size: targetCount * 2, genre: genre, retries: 1),
+                into: &songs,
+                seen: &seen
+            )
             if songs.count >= targetCount { return songs }
         }
 
         if let artistName = source.artist {
-            push(await fetch(endpoint: "getTopSongs") {
-                try await api.getTopSongs(artistName: artistName, count: targetCount, retries: 1)
-            }, into: &songs, seen: &seen)
+            push(
+                try? await api.getTopSongs(artistName: artistName, count: targetCount, retries: 1),
+                into: &songs,
+                seen: &seen
+            )
         }
 
         return songs
@@ -199,18 +182,13 @@ nonisolated enum InstantMixService {
 
     private static func randomSeedSong(for artist: Artist, api: SubsonicAPIService) async -> Song? {
         let previousId = artistSeedLock.withLock { lastArtistSeedIds[artist.id] }
-        let detail = await fetch(endpoint: "getArtist") {
-            try await api.getArtist(id: artist.id, retries: 1)
-        }
+        let detail = try? await api.getArtist(id: artist.id, retries: 1)
 
         if let albums = detail?.album, !albums.isEmpty {
             var repeatedFallback: Song?
 
             for album in albums.shuffled() {
-                let albumDetail = await fetch(endpoint: "getAlbum") {
-                    try await api.getAlbum(id: album.id, retries: 1)
-                }
-                guard let albumDetail else { continue }
+                guard let albumDetail = try? await api.getAlbum(id: album.id, retries: 1) else { continue }
                 let candidates = InstantMixQueueBuilder.artistSeedCandidates(from: albumDetail.song ?? [], for: artist)
                 if let seed = InstantMixQueueBuilder.randomSeed(from: candidates, avoiding: previousId) {
                     guard seed.id == previousId else {
@@ -227,9 +205,9 @@ nonisolated enum InstantMixService {
             }
         }
 
-        let topSongs = await fetch(endpoint: "getTopSongs") {
-            try await api.getTopSongs(artistName: artist.name, count: targetCount, retries: 1)
-        } ?? []
+        let topSongs = (
+            try? await api.getTopSongs(artistName: artist.name, count: targetCount, retries: 1)
+        ) ?? []
         let candidates = InstantMixQueueBuilder.artistSeedCandidates(from: topSongs, for: artist)
         guard let seed = InstantMixQueueBuilder.randomSeed(from: candidates, avoiding: previousId) else { return nil }
         rememberArtistSeed(seed.id, for: artist.id)
@@ -255,63 +233,6 @@ nonisolated enum InstantMixService {
     }
 
     private static func meaningfulMix(_ songs: [Song]) -> [Song] {
-        guard songs.count > 1 else {
-            logger.notice("Instant Mix unavailable relatedTrackCount=\(max(0, songs.count - 1), privacy: .public)")
-            return []
-        }
-        return songs
-    }
-
-    /// UI entry points call this only after AVFoundation confirms playback.
-    /// System intents use the non-playing mix builders and are donated by the
-    /// system automatically, so Siri interactions never create duplicate data.
-    private static func donateSuccessfulMix(
-        kind: ShortcutPlayableKind,
-        contentID: String,
-        title: String,
-        serverConfigID: String?
-    ) async {
-        #if compiler(>=6.4) && canImport(AppIntents) && canImport(MediaIntents) && !os(tvOS) && !os(watchOS)
-        guard #available(iOS 27.0, macOS 27.0, *),
-              let serverConfigID,
-              [.song, .album, .artist].contains(kind)
-        else { return }
-        let reference = ShortcutPlayableReference(
-            serverConfigID: serverConfigID,
-            kind: kind,
-            contentID: contentID
-        )
-        let station = ShelvAudioAlgorithmicStationEntity(reference: reference, title: title)
-        do {
-            let intent = ShelvPlayAudioIntent()
-            intent.audioEntity = .algorithmicStation(station)
-            intent.playbackAttributes = []
-            intent.warmupAudioQueueResult = nil
-            intent.queueLocation = nil
-            try await intent.donate()
-        } catch {
-            logger.error(
-                "Instant Mix donation failed kind=\(kind.rawValue, privacy: .public) error=\(String(describing: error), privacy: .private(mask: .hash))"
-            )
-        }
-        #endif
-    }
-
-    private static func fetch<Value: Sendable>(
-        endpoint: String,
-        operation: @escaping @Sendable () async throws -> Value
-    ) async -> Value? {
-        guard !Task.isCancelled else { return nil }
-        do {
-            return try await operation()
-        } catch {
-            guard !Task.isCancelled,
-                  ShortcutPlaybackError.remoteFailure(error) != .cancelled
-            else { return nil }
-            logger.error(
-                "Instant Mix endpoint failed endpoint=\(endpoint, privacy: .public) error=\(String(describing: error), privacy: .private(mask: .hash))"
-            )
-            return nil
-        }
+        songs.count > 1 ? songs : []
     }
 }

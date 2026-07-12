@@ -33,11 +33,7 @@ extension AudioPlayerService {
         // allowAirPlay and allowBluetoothHFP are only valid with input-capable
         // categories such as playAndRecord and make setCategory fail with
         // paramErr (-50) on a physical iPhone.
-        try AVAudioSession.sharedInstance().setCategory(
-            .playback,
-            mode: .default,
-            policy: .longFormAudio
-        )
+        try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
         try AVAudioSession.sharedInstance().setActive(true)
     }
 

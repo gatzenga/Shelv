@@ -330,17 +330,7 @@ struct RecapView: View {
               let songs = loaded.songs, !songs.isEmpty else { return }
         let missing = songs.filter { !downloadStore.isDownloaded(songId: $0.id) }
         if !missing.isEmpty { downloadStore.enqueueSongs(missing) }
-        let type = RecapPeriod.PeriodType(rawValue: entry.periodType) ?? .week
-        let period = RecapPeriod(
-            type: type,
-            start: Date(timeIntervalSince1970: entry.periodStart),
-            end: Date(timeIntervalSince1970: entry.periodEnd)
-        )
-        downloadStore.addOfflinePlaylist(
-            entry.playlistId,
-            name: period.playlistName,
-            songIds: songs.map(\.id)
-        )
+        downloadStore.addOfflinePlaylist(entry.playlistId, songIds: songs.map(\.id))
         await MainActor.run {
             currentToast = ShelveToast(message: String(localized: "download_started"))
         }

@@ -1,13 +1,8 @@
 import SwiftUI
 
 struct DiscoverView: View {
-    let recapNavigationRequest: Int
-
-    init(recapNavigationRequest: Int = 0) {
-        self.recapNavigationRequest = recapNavigationRequest
-    }
-
     @ObservedObject var library = LibraryStore.shared
+    @AppStorage("mixUseDatabase") private var mixUseDatabase = false
     @AppStorage("themeColor") private var themeColor = "violet"
     @AppStorage("recapEnabled") private var recapEnabled = false
     @AppStorage(PersonalizationPreferenceKey.showDiscoverInsights) private var showDiscoverInsights = true
@@ -44,8 +39,6 @@ struct DiscoverView: View {
     @State private var recent: [Album] = []
     @State private var frequent: [Album] = []
     @State private var random: [Album] = []
-    @State private var showRequestedRecap = false
-    @State private var handledRecapNavigationRequest = 0
 
     var body: some View {
         NavigationStack {
@@ -92,22 +85,7 @@ struct DiscoverView: View {
                 .padding(.vertical, 50)
             }
             .task(id: library.reloadID) { await load() }
-            .navigationDestination(isPresented: $showRequestedRecap) {
-                RecapView()
-            }
-            .onChange(of: recapNavigationRequest) { _, _ in
-                handleRecapNavigationRequest()
-            }
-            .onAppear {
-                handleRecapNavigationRequest()
-            }
         }
-    }
-
-    private func handleRecapNavigationRequest() {
-        guard recapNavigationRequest != handledRecapNavigationRequest else { return }
-        handledRecapNavigationRequest = recapNavigationRequest
-        showRequestedRecap = true
     }
 
     // MARK: - Daten
@@ -124,15 +102,32 @@ struct DiscoverView: View {
     }
 
     private func play(_ mix: PersonalizationSmartMix) async {
-        let shortcutMix: ShortcutSmartMix
+        let songs: [Song]
         switch mix {
-        case .newest: shortcutMix = .newest
-        case .random: shortcutMix = .shuffleAll
-        case .frequent: shortcutMix = .frequent
-        case .recent: shortcutMix = .recent
+        case .newest:   songs = (try? await api.getNewestSongs()) ?? []
+        case .random:   songs = (try? await api.getRandomSongs(size: 500)) ?? []
+        case .frequent: songs = await frequentMix()
+        case .recent:   songs = await recentMix()
         }
-        let songs = (try? await SmartMixPlaybackService.songs(for: shortcutMix)) ?? []
         if !songs.isEmpty { player.playShuffled(songs: songs) }
+    }
+
+    private func frequentMix() async -> [Song] {
+        if mixUseDatabase, let sid = api.activeServer?.stableId,
+           await PlayLogService.shared.distinctSongCount(serverId: sid) >= 50 {
+            let counts = await PlayLogService.shared.topSongs(serverId: sid, from: .distantPast, to: Date(), limit: 50)
+            if !counts.isEmpty, let songs = try? await api.getSongsOrdered(ids: counts.map(\.songId)) { return songs }
+        }
+        return (try? await api.frequentMixFallbackSongs()) ?? []
+    }
+
+    private func recentMix() async -> [Song] {
+        if mixUseDatabase, let sid = api.activeServer?.stableId,
+           await PlayLogService.shared.distinctSongCount(serverId: sid) >= 50 {
+            let ids = await PlayLogService.shared.recentUniqueSongIds(serverId: sid, limit: 50)
+            if !ids.isEmpty, let songs = try? await api.getSongsOrdered(ids: ids) { return songs }
+        }
+        return (try? await api.getRecentSongs(limit: 50)) ?? []
     }
 
     // MARK: - UI

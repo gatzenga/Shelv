@@ -19,7 +19,7 @@ struct ArtistContextMenuModifier: ViewModifier {
                     do {
                         let songs = try await fetchSongs()
                         guard !songs.isEmpty else { return }
-                        _ = await MainActor.run { AudioPlayerService.shared.play(songs: songs) }
+                        await MainActor.run { AudioPlayerService.shared.play(songs: songs) }
                     } catch {
                         NotificationCenter.default.post(name: .showToast, object: String(localized: "playback_failed"))
                     }
@@ -30,7 +30,7 @@ struct ArtistContextMenuModifier: ViewModifier {
                     do {
                         let songs = try await fetchSongs()
                         guard !songs.isEmpty else { return }
-                        _ = await MainActor.run { AudioPlayerService.shared.playShuffled(songs: songs) }
+                        await MainActor.run { AudioPlayerService.shared.playShuffled(songs: songs) }
                     } catch {
                         NotificationCenter.default.post(name: .showToast, object: String(localized: "playback_failed"))
                     }

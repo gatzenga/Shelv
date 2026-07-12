@@ -1,5 +1,4 @@
 import AppIntents
-import Intents
 import SwiftUI
 
 let appLang: String = Locale.preferredLanguages.first?.hasPrefix("de") == true ? "de" : "en"
@@ -22,11 +21,6 @@ final class BackgroundDownloadHandler {
 }
 
 final class AppDelegate: NSObject, UIApplicationDelegate {
-    func application(_ application: UIApplication, handlerFor intent: INIntent) -> Any? {
-        guard intent is INPlayMediaIntent else { return nil }
-        return ShelvSiriMediaIntentHandler.shared
-    }
-
     func application(_ application: UIApplication,
                      handleEventsForBackgroundURLSession identifier: String,
                      completionHandler: @escaping () -> Void) {
@@ -58,10 +52,6 @@ struct ShelvApp: App {
         if d.string(forKey: "transcodingDownloadCodec") == "aac" { d.set("raw", forKey: "transcodingDownloadCodec") }
         PersonalizationSettings.registerDefaults()
         ShelvDefaultSettings.registerDefaults()
-        let shortcutPlaybackCoordinator = ShortcutPlaybackCoordinator.shared
-        AppDependencyManager.shared.add(dependency: shortcutPlaybackCoordinator)
-        ShelvAppShortcuts.updateAppShortcutParameters()
-        SiriMediaAppSelectionService.shared.updateUserContext(numberOfLibraryItems: 0)
     }
 
     private var preferredScheme: ColorScheme? {
@@ -86,6 +76,8 @@ struct ShelvApp: App {
                 .tint(AppTheme.color(for: themeColorName))
                 .preferredColorScheme(preferredScheme)
                 .task {
+                    ShelvAppShortcuts.updateAppShortcutParameters()
+                    print("[Shortcuts] Parameters updated")
                     await LyricsStore.shared.setup()
                 }
                 .task(id: serverStore.activeServerID) {
@@ -100,19 +92,9 @@ struct ShelvApp: App {
                     await DownloadStore.shared.setActiveServer(server.stableId)
                     PinnedPlaylistStore.shared.setActiveServer(server.stableId)
                     await LibraryStore.shared.loadStarred()
-                    let library = LibraryStore.shared
-                    let estimatedAlbumCount = library.artists.reduce(0) {
-                        $0 + max(0, $1.albumCount ?? 0)
-                    }
-                    SiriMediaAppSelectionService.shared.updateUserContext(
-                        numberOfLibraryItems: estimatedAlbumCount
-                            + library.artists.count
-                            + library.starredSongs.count
-                    )
                     // Nach App-Start / Server-Wechsel: auf eine fremde Remote-Queue prüfen.
                     await QueueSyncService.shared.checkForRemoteQueue()
                     await runKeepLibraryOfflineCheck(serverId: server.stableId)
-                    ShelvAppShortcuts.updateAppShortcutParameters()
                 }
                 .task {
                     Task.detached(priority: .utility) {
@@ -144,7 +126,6 @@ struct ShelvApp: App {
                 .onChange(of: scenePhase) { _, phase in
                     updateIdleTimer(phase: phase)
                     guard phase == .active else { return }
-                    ShelvAppShortcuts.updateAppShortcutParameters()
                     // syncNow prüft die Remote-Queue automatisch mit.
                     Task { await CloudKitSyncService.shared.syncNow() }
                     if let active = serverStore.activeServer {

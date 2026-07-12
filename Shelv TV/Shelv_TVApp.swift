@@ -1,9 +1,7 @@
-import Intents
 import SwiftUI
 
 @main
 struct Shelv_TVApp: App {
-    @UIApplicationDelegateAdaptor(TVAppDelegate.self) private var appDelegate
     @StateObject private var serverStore = ServerStore.shared
     private let _playTracker = PlayTracker.shared
     @Environment(\.scenePhase) private var scenePhase
@@ -13,7 +11,6 @@ struct Shelv_TVApp: App {
     init() {
         PersonalizationSettings.registerDefaults()
         ShelvDefaultSettings.registerDefaults()
-        SiriMediaAppSelectionService.shared.updateUserContext(numberOfLibraryItems: 0)
     }
 
     private var preferredScheme: ColorScheme? {
@@ -32,14 +29,6 @@ struct Shelv_TVApp: App {
                 .environmentObject(RecapStore.shared)
                 .environmentObject(CloudKitSyncService.shared.status)
                 .preferredColorScheme(preferredScheme)
-                .onContinueUserActivity("INPlayMediaIntent") { userActivity in
-                    guard let intent = userActivity.interaction?.intent as? INPlayMediaIntent else {
-                        return
-                    }
-                    Task { @MainActor in
-                        await TVSiriMediaPlaybackRouter.handleForeground(intent)
-                    }
-                }
                 // Pro aktivem Server: Tracking-DB + Recap-Registry (NUR laden, nie generieren) + Pins.
                 .task(id: serverStore.activeServerID) {
                     guard let server = serverStore.activeServer else { return }
@@ -54,15 +43,6 @@ struct Shelv_TVApp: App {
                     // und der Künstler-Link im Player kann den Künstler per Name auflösen.
                     await LibraryStore.shared.loadStarred()
                     await LibraryStore.shared.loadArtists()
-                    let library = LibraryStore.shared
-                    let estimatedAlbumCount = library.artists.reduce(0) {
-                        $0 + max(0, $1.albumCount ?? 0)
-                    }
-                    SiriMediaAppSelectionService.shared.updateUserContext(
-                        numberOfLibraryItems: estimatedAlbumCount
-                            + library.artists.count
-                            + library.favoriteSongs.count
-                    )
                     await QueueSyncService.shared.checkForRemoteQueue()
                 }
                 // Einmaliges App-Setup: Tracking starten, remoteUserId-Backfill, iCloud-Sync.

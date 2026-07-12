@@ -391,11 +391,7 @@ struct PlaylistDetailView: View {
                     haptic()
                     let missing = songs.filter { !downloadStore.isDownloaded(songId: $0.id) }
                     if !missing.isEmpty { downloadStore.enqueueSongs(missing) }
-                    downloadStore.addOfflinePlaylist(
-                        playlist.id,
-                        name: playlist.name,
-                        songIds: songs.map(\.id)
-                    )
+                    downloadStore.addOfflinePlaylist(playlist.id, songIds: songs.map(\.id))
                     currentToast = ShelveToast(message: String(localized: "download_started"))
                 } label: {
                     HStack(spacing: 6) {

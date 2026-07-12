@@ -22,13 +22,16 @@ struct ArtistDetailView: View {
     private var dir: SortDirection { SortDirection(rawValue: dirRaw) ?? .descending }
 
     private var displayAlbums: [Album] {
-        ArtistAlbumPlaybackOrder.sorted(
-            albums,
-            preference: ArtistAlbumSortPreference(
-                sortRaw: sortRaw,
-                directionRaw: dirRaw
-            )
-        )
+        var result = albums
+        switch sort {
+        case .alphabetical:
+            result = LibraryRepository.locallySortedAlbums(result, sort: .name, direction: .ascending)
+        case .newest:       result.sort { ($0.created ?? .distantPast) < ($1.created ?? .distantPast) }
+        case .year:         result.sort { ($0.year ?? 0) < ($1.year ?? 0) }
+        case .frequent:     result.sort { ($0.playCount ?? 0) < ($1.playCount ?? 0) }
+        }
+        if dir == .descending { result.reverse() }
+        return result
     }
 
     var body: some View {
