@@ -1,9 +1,6 @@
 import SwiftUI
 
 struct RadioView: View {
-    let isActive: Bool
-
-    @EnvironmentObject private var serverStore: ServerStore
     @ObservedObject private var store = RadioStationStore.shared
     @ObservedObject private var player = AudioPlayerService.shared
     @AppStorage("radioSortDirectionTV") private var dirRaw = "ascending"
@@ -12,16 +9,8 @@ struct RadioView: View {
     @State private var showCreate = false
     @State private var editingItem: RadioStationDisplayItem?
     @State private var deleteItem: RadioStationDisplayItem?
-    @State private var preparedServerScopeID: String?
 
     private var dir: SortDirection { SortDirection(rawValue: dirRaw) ?? .ascending }
-    private var activeServerScopeID: String? {
-        guard let server = serverStore.activeServer else { return nil }
-        return server.stableId.isEmpty ? server.id.uuidString : server.stableId
-    }
-    private var isPrepared: Bool {
-        preparedServerScopeID != nil && preparedServerScopeID == activeServerScopeID
-    }
     private var displayItems: [RadioStationDisplayItem] {
         dir == .descending ? Array(store.items.reversed()) : store.items
     }
@@ -53,7 +42,7 @@ struct RadioView: View {
             .focusSection()
 
             Group {
-                if !isPrepared {
+                if displayItems.isEmpty && store.isLoading {
                     ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if displayItems.isEmpty, let message = store.errorMessage {
                     ContentUnavailableView(
@@ -73,12 +62,7 @@ struct RadioView: View {
             }
             .focusSection()
         }
-        .task(id: "\(isActive)|\(activeServerScopeID ?? "none")") {
-            guard isActive, let serverScopeID = activeServerScopeID else { return }
-            await store.refresh()
-            guard isActive, activeServerScopeID == serverScopeID else { return }
-            preparedServerScopeID = serverScopeID
-        }
+        .task { await store.refresh() }
         .sheet(isPresented: $showCreate) {
             TVRadioStationEditSheet(item: nil)
         }
