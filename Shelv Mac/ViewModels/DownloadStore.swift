@@ -146,8 +146,12 @@ final class DownloadStore: ObservableObject {
         }
         let records = healResult.records
         let total = await DownloadDatabase.shared.totalBytes(serverId: sid)
-        let playlistIds = await DownloadDatabase.shared.loadDownloadedPlaylistIds()
         let savedSongIds = UserDefaults.standard.dictionary(forKey: "shelv_mac_playlist_song_ids_\(sid)") as? [String: [String]] ?? [:]
+        await DownloadDatabase.shared.adoptLegacyPlaylistMarkers(
+            serverId: sid,
+            playlistIds: Set(savedSongIds.keys)
+        )
+        let playlistIds = await DownloadDatabase.shared.loadDownloadedPlaylistIds(serverId: sid)
         let mappedSongs = records.map { $0.toDownloadedSong() }
 
         var newSongById: [String: DownloadedSong] = [:]
@@ -531,7 +535,14 @@ final class DownloadStore: ObservableObject {
             current[id] = songIds
             UserDefaults.standard.set(current, forKey: key)
         }
-        Task { await DownloadDatabase.shared.markPlaylistDownloaded(id: id, name: name) }
+        let sid = serverId
+        Task {
+            await DownloadDatabase.shared.markPlaylistDownloaded(
+                id: id,
+                name: name,
+                serverId: sid
+            )
+        }
     }
 
     func syncPlaylistSongIds(_ id: String, songIds: [String]) {
@@ -551,7 +562,8 @@ final class DownloadStore: ObservableObject {
         var current = UserDefaults.standard.dictionary(forKey: key) as? [String: [String]] ?? [:]
         current.removeValue(forKey: id)
         UserDefaults.standard.set(current, forKey: key)
-        Task { await DownloadDatabase.shared.unmarkPlaylistDownloaded(id: id) }
+        let sid = serverId
+        Task { await DownloadDatabase.shared.unmarkPlaylistDownloaded(id: id, serverId: sid) }
     }
 
     // MARK: - Stats

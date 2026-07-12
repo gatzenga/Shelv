@@ -703,7 +703,7 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         return indices.flatMap { $0.artist ?? [] }
     }
 
-    func getAlbum(id: String) async throws -> AlbumDetail {
+    func getAlbum(id: String, retries: Int = 0) async throws -> AlbumDetail {
         #if DEBUG
         if isDemoActive {
             guard let d = DemoContent.albumDetail(id: id) else { throw SubsonicAPIError.apiError(0, "Album not found") }
@@ -712,14 +712,14 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         #endif
         let data = try await fetchData(path: "getAlbum", extra: [
             URLQueryItem(name: "id", value: id)
-        ])
+        ], retries: retries)
         let body = try decoder.decode(Envelope<AlbumBody>.self, from: data).response
         try check(status: body.status, error: body.error)
         guard let album = body.album else { throw SubsonicAPIError.apiError(0, "Album not found") }
         return album
     }
 
-    func getArtist(id: String) async throws -> ArtistDetail {
+    func getArtist(id: String, retries: Int = 0) async throws -> ArtistDetail {
         #if DEBUG
         if isDemoActive {
             guard let d = DemoContent.artistDetail(id: id) else { throw SubsonicAPIError.apiError(0, "Artist not found") }
@@ -728,7 +728,7 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         #endif
         let data = try await fetchData(path: "getArtist", extra: [
             URLQueryItem(name: "id", value: id)
-        ])
+        ], retries: retries)
         let body = try decoder.decode(Envelope<ArtistBody>.self, from: data).response
         try check(status: body.status, error: body.error)
         guard let artist = body.artist else { throw SubsonicAPIError.apiError(0, "Artist not found") }
@@ -748,10 +748,10 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         return body.artistInfo2 ?? ArtistInfo(biography: nil)
     }
 
-    func getSong(id: String) async throws -> Song {
+    func getSong(id: String, retries: Int = 0) async throws -> Song {
         let data = try await fetchData(path: "getSong", extra: [
             URLQueryItem(name: "id", value: id)
-        ])
+        ], retries: retries)
         let body = try decoder.decode(Envelope<SongBody>.self, from: data).response
         try check(status: body.status, error: body.error)
         guard let song = body.song else { throw SubsonicAPIError.apiError(0, "Song not found") }
@@ -805,10 +805,14 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         return Array(allSongs.sorted { ($0.playCount ?? 0) > ($1.playCount ?? 0) }.prefix(limit))
     }
 
-    func getRandomSongs(size: Int = 500, genre: String? = nil) async throws -> [Song] {
+    func getRandomSongs(
+        size: Int = 500,
+        genre: String? = nil,
+        retries: Int = 0
+    ) async throws -> [Song] {
         var extra = [URLQueryItem(name: "size", value: "\(size)")]
         if let g = genre { extra.append(URLQueryItem(name: "genre", value: g)) }
-        let data = try await fetchData(path: "getRandomSongs", extra: extra)
+        let data = try await fetchData(path: "getRandomSongs", extra: extra, retries: retries)
         let body = try decoder.decode(Envelope<RandomSongsBody>.self, from: data).response
         try check(status: body.status, error: body.error)
         return body.randomSongs?.song ?? []
@@ -933,33 +937,37 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
     }
 
     /// Ähnliche Songs zu einer Song-ID.
-    func getSimilarSongs(id: String, count: Int = 50) async throws -> [Song] {
+    func getSimilarSongs(id: String, count: Int = 50, retries: Int = 0) async throws -> [Song] {
         let data = try await fetchData(path: "getSimilarSongs", extra: [
             URLQueryItem(name: "id", value: id),
             URLQueryItem(name: "count", value: "\(count)")
-        ])
+        ], retries: retries)
         let body = try decoder.decode(Envelope<SimilarSongsBody>.self, from: data).response
         try check(status: body.status, error: body.error)
         return body.similarSongs?.song ?? []
     }
 
     /// Ähnliche Songs über die ID3/OpenSubsonic-Variante, typischerweise für Artist-IDs.
-    func getSimilarSongs2(id: String, count: Int = 50) async throws -> [Song] {
+    func getSimilarSongs2(id: String, count: Int = 50, retries: Int = 0) async throws -> [Song] {
         let data = try await fetchData(path: "getSimilarSongs2", extra: [
             URLQueryItem(name: "id", value: id),
             URLQueryItem(name: "count", value: "\(count)")
-        ])
+        ], retries: retries)
         let body = try decoder.decode(Envelope<SimilarSongs2Body>.self, from: data).response
         try check(status: body.status, error: body.error)
         return body.similarSongs2?.song ?? []
     }
 
     /// Top-Songs eines Künstlers (macOS-Künstlerseite).
-    func getTopSongs(artistName: String, count: Int = 50) async throws -> [Song] {
+    func getTopSongs(
+        artistName: String,
+        count: Int = 50,
+        retries: Int = 0
+    ) async throws -> [Song] {
         let data = try await fetchData(path: "getTopSongs", extra: [
             URLQueryItem(name: "artist", value: artistName),
             URLQueryItem(name: "count", value: "\(count)")
-        ])
+        ], retries: retries)
         let body = try decoder.decode(Envelope<TopSongsBody>.self, from: data).response
         try check(status: body.status, error: body.error)
         return body.topSongs?.song ?? []

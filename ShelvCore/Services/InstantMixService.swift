@@ -69,12 +69,12 @@ nonisolated enum InstantMixService {
         guard !UserDefaults.standard.bool(forKey: "offlineModeEnabled") else { return [] }
 
         let api = SubsonicAPIService.shared
-        let detail = try? await api.getAlbum(id: album.id)
+        let detail = try? await api.getAlbum(id: album.id, retries: 1)
         let albumSongs = detail?.song ?? album.songs ?? []
         let seedSong = albumSongs.randomElement()
 
         if let seedSong {
-            return await moreLikeThisQueue(for: seedSong, startingWith: seedSong)
+            return meaningfulMix(await moreLikeThisQueue(for: seedSong, startingWith: seedSong))
         }
 
         let artistIds = unique([album.artistId, detail?.artistId])
@@ -84,20 +84,32 @@ nonisolated enum InstantMixService {
         var seen = Set<String>()
 
         for artistId in artistIds {
-            push(try? await api.getSimilarSongs2(id: artistId, count: targetCount), into: &songs, seen: &seen)
+            push(
+                try? await api.getSimilarSongs2(id: artistId, count: targetCount, retries: 1),
+                into: &songs,
+                seen: &seen
+            )
             if songs.count >= targetCount { return songs }
         }
 
         if let genre {
-            push(try? await api.getRandomSongs(size: targetCount * 2, genre: genre), into: &songs, seen: &seen)
+            push(
+                try? await api.getRandomSongs(size: targetCount * 2, genre: genre, retries: 1),
+                into: &songs,
+                seen: &seen
+            )
             if songs.count >= targetCount { return songs }
         }
 
         if let artistName {
-            push(try? await api.getTopSongs(artistName: artistName, count: targetCount), into: &songs, seen: &seen)
+            push(
+                try? await api.getTopSongs(artistName: artistName, count: targetCount, retries: 1),
+                into: &songs,
+                seen: &seen
+            )
         }
 
-        return songs
+        return meaningfulMix(songs)
     }
 
     static func artistMix(for artist: Artist) async -> [Song] {
@@ -110,15 +122,15 @@ nonisolated enum InstantMixService {
             push([seedSong], into: &songs, seen: &seen)
         }
 
-        push(try? await api.getSimilarSongs2(id: artist.id, count: targetCount),
+        push(try? await api.getSimilarSongs2(id: artist.id, count: targetCount, retries: 1),
              into: &songs,
              seen: &seen)
-        return songs
+        return meaningfulMix(songs)
     }
 
     static func songMix(for song: Song) async -> [Song] {
         guard !UserDefaults.standard.bool(forKey: "offlineModeEnabled") else { return [] }
-        return await moreLikeThisQueue(for: song, startingWith: song)
+        return meaningfulMix(await moreLikeThisQueue(for: song, startingWith: song))
     }
 
     private static func moreLikeThisQueue(for source: Song, startingWith seed: Song?) async -> [Song] {
@@ -132,21 +144,37 @@ nonisolated enum InstantMixService {
             seen.insert(source.id)
         }
 
-        push(try? await api.getSimilarSongs(id: source.id, count: targetCount), into: &songs, seen: &seen)
+        push(
+            try? await api.getSimilarSongs(id: source.id, count: targetCount, retries: 1),
+            into: &songs,
+            seen: &seen
+        )
         if songs.count >= targetCount { return songs }
 
         if let artistId = source.artistId {
-            push(try? await api.getSimilarSongs2(id: artistId, count: targetCount), into: &songs, seen: &seen)
+            push(
+                try? await api.getSimilarSongs2(id: artistId, count: targetCount, retries: 1),
+                into: &songs,
+                seen: &seen
+            )
             if songs.count >= targetCount { return songs }
         }
 
         if let genre = source.genre {
-            push(try? await api.getRandomSongs(size: targetCount * 2, genre: genre), into: &songs, seen: &seen)
+            push(
+                try? await api.getRandomSongs(size: targetCount * 2, genre: genre, retries: 1),
+                into: &songs,
+                seen: &seen
+            )
             if songs.count >= targetCount { return songs }
         }
 
         if let artistName = source.artist {
-            push(try? await api.getTopSongs(artistName: artistName, count: targetCount), into: &songs, seen: &seen)
+            push(
+                try? await api.getTopSongs(artistName: artistName, count: targetCount, retries: 1),
+                into: &songs,
+                seen: &seen
+            )
         }
 
         return songs
@@ -154,13 +182,13 @@ nonisolated enum InstantMixService {
 
     private static func randomSeedSong(for artist: Artist, api: SubsonicAPIService) async -> Song? {
         let previousId = artistSeedLock.withLock { lastArtistSeedIds[artist.id] }
-        let detail = try? await api.getArtist(id: artist.id)
+        let detail = try? await api.getArtist(id: artist.id, retries: 1)
 
         if let albums = detail?.album, !albums.isEmpty {
             var repeatedFallback: Song?
 
             for album in albums.shuffled() {
-                guard let albumDetail = try? await api.getAlbum(id: album.id) else { continue }
+                guard let albumDetail = try? await api.getAlbum(id: album.id, retries: 1) else { continue }
                 let candidates = InstantMixQueueBuilder.artistSeedCandidates(from: albumDetail.song ?? [], for: artist)
                 if let seed = InstantMixQueueBuilder.randomSeed(from: candidates, avoiding: previousId) {
                     guard seed.id == previousId else {
@@ -177,7 +205,9 @@ nonisolated enum InstantMixService {
             }
         }
 
-        let topSongs = (try? await api.getTopSongs(artistName: artist.name, count: targetCount)) ?? []
+        let topSongs = (
+            try? await api.getTopSongs(artistName: artist.name, count: targetCount, retries: 1)
+        ) ?? []
         let candidates = InstantMixQueueBuilder.artistSeedCandidates(from: topSongs, for: artist)
         guard let seed = InstantMixQueueBuilder.randomSeed(from: candidates, avoiding: previousId) else { return nil }
         rememberArtistSeed(seed.id, for: artist.id)
@@ -200,5 +230,9 @@ nonisolated enum InstantMixService {
 
     private static func push(_ incoming: [Song]?, into songs: inout [Song], seen: inout Set<String>) {
         InstantMixQueueBuilder.append(incoming, into: &songs, seen: &seen, limit: targetCount)
+    }
+
+    private static func meaningfulMix(_ songs: [Song]) -> [Song] {
+        songs.count > 1 ? songs : []
     }
 }
