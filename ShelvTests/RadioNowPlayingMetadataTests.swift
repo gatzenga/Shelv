@@ -112,4 +112,42 @@ final class RadioNowPlayingMetadataTests: XCTestCase {
     func testAzuraCastUsesFixedThreeSecondPollingInterval() {
         XCTAssertEqual(RadioMetadataPollingPolicy.azuraCastInterval, .seconds(3))
     }
+
+    func testPollingSourceChangesWhenAzuraCastConfigurationArrivesAfterColdStart() {
+        let station = RadioStation(
+            id: "station-1",
+            name: "Station",
+            streamURL: "https://radio.example.com/stream"
+        )
+        let coldStart = RadioStationDisplayItem(
+            station: station,
+            metadata: RadioStationMetadata(serverId: "server", station: station)
+        )
+        var azuraMetadata = coldStart.metadata
+        azuraMetadata.useAzuraCastAPI = true
+        azuraMetadata.azuraCastAPIURL = "https://radio.example.com/api/nowplaying/station"
+        let resolved = RadioStationDisplayItem(station: station, metadata: azuraMetadata)
+
+        XCTAssertFalse(RadioMetadataPollingPolicy.usesSameSource(coldStart, resolved))
+    }
+
+    func testPollingSourceStaysEqualForUnrelatedDisplayConfigurationChanges() {
+        let station = RadioStation(
+            id: "station-1",
+            name: "Station",
+            streamURL: "https://radio.example.com/stream"
+        )
+        var firstMetadata = RadioStationMetadata(serverId: "server", station: station)
+        firstMetadata.useAzuraCastAPI = true
+        firstMetadata.azuraCastAPIURL = "https://radio.example.com/api/nowplaying/station"
+        var secondMetadata = firstMetadata
+        secondMetadata.showSongCover = false
+
+        XCTAssertTrue(
+            RadioMetadataPollingPolicy.usesSameSource(
+                RadioStationDisplayItem(station: station, metadata: firstMetadata),
+                RadioStationDisplayItem(station: station, metadata: secondMetadata)
+            )
+        )
+    }
 }

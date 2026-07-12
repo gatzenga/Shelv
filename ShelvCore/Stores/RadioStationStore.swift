@@ -293,6 +293,10 @@ final class RadioStationStore: ObservableObject {
 
     private func setItems(_ newItems: [RadioStationDisplayItem]) {
         items = newItems
+        if let currentID = AudioPlayerService.shared.currentRadioStation?.id,
+           let resolved = newItems.first(where: { $0.id == currentID }) {
+            AudioPlayerService.shared.adoptResolvedRadioConfiguration(resolved)
+        }
         AudioPlayerService.shared.updateRemoteCommandAvailability()
         prewarmStationCovers(for: newItems)
     }

@@ -256,4 +256,20 @@ nonisolated struct RadioNowPlayingMetadata: Codable, Hashable, Sendable {
 
 nonisolated enum RadioMetadataPollingPolicy {
     static let azuraCastInterval: Duration = .seconds(3)
+
+    static func usesSameSource(
+        _ lhs: RadioStationDisplayItem,
+        _ rhs: RadioStationDisplayItem
+    ) -> Bool {
+        sourceIdentifier(for: lhs) == sourceIdentifier(for: rhs)
+    }
+
+    private static func sourceIdentifier(for item: RadioStationDisplayItem) -> String {
+        let streamURL = item.streamURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let apiURL = item.metadata.azuraCastAPIURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        if item.metadata.useAzuraCastAPI, !apiURL.isEmpty {
+            return "azura|\(apiURL)|\(streamURL)"
+        }
+        return "icy|\(streamURL)"
+    }
 }

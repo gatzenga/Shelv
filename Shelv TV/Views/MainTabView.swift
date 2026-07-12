@@ -179,7 +179,7 @@ struct MainTabView: View {
 
             if visibleShowRadio {
                 Tab(String(localized: "radio"), systemImage: "dot.radiowaves.left.and.right", value: "radio") {
-                    RadioView()
+                    RadioView(isActive: selection == "radio")
                 }
             }
 

@@ -121,17 +121,22 @@ actor ImageCacheService {
     }
 
     nonisolated private static func downloadImage(from url: URL) async -> (Data, UIImage)? {
-        for attempt in 1...3 {
+        let isRadioArtwork = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?
+            .contains(where: { $0.name == RadioNowPlayingMetadata.artworkRevisionQueryItemName }) == true
+        let maximumAttempts = isRadioArtwork ? 1 : 3
+        let timeout: TimeInterval = isRadioArtwork ? 8 : 12
+        for attempt in 1...maximumAttempts {
             if Task.isCancelled { return nil }
             var request = URLRequest(url: url)
             request.cachePolicy = .reloadIgnoringLocalCacheData
-            request.timeoutInterval = 12
+            request.timeoutInterval = timeout
             if let (data, response) = try? await URLSession.shared.data(for: request),
                isSuccessfulImageResponse(response),
                let image = UIImage(data: data) {
                 return (data, image)
             }
-            if attempt < 3 {
+            if attempt < maximumAttempts {
                 try? await Task.sleep(for: .milliseconds(350))
             }
         }

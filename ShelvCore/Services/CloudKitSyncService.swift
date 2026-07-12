@@ -1486,7 +1486,9 @@ actor CloudKitSyncService {
 
     func fetchRadioMetadata(recordNames: [String]) async -> [RadioStationMetadata] {
         guard canSyncRadioStations else { return [] }
-        guard await status.accountAvailable else { return [] }
+        if !(await status.accountAvailable) {
+            guard await refreshAccountAvailability(action: "Radio metadata fetch") else { return [] }
+        }
         guard !recordNames.isEmpty else { return [] }
 
         do {

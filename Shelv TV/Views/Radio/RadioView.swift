@@ -1,6 +1,9 @@
 import SwiftUI
 
 struct RadioView: View {
+    let isActive: Bool
+
+    @EnvironmentObject private var serverStore: ServerStore
     @ObservedObject private var store = RadioStationStore.shared
     @ObservedObject private var player = AudioPlayerService.shared
     @AppStorage("radioSortDirectionTV") private var dirRaw = "ascending"
@@ -9,8 +12,16 @@ struct RadioView: View {
     @State private var showCreate = false
     @State private var editingItem: RadioStationDisplayItem?
     @State private var deleteItem: RadioStationDisplayItem?
+    @State private var preparedServerScopeID: String?
 
     private var dir: SortDirection { SortDirection(rawValue: dirRaw) ?? .ascending }
+    private var activeServerScopeID: String? {
+        guard let server = serverStore.activeServer else { return nil }
+        return server.stableId.isEmpty ? server.id.uuidString : server.stableId
+    }
+    private var isPrepared: Bool {
+        preparedServerScopeID != nil && preparedServerScopeID == activeServerScopeID
+    }
     private var displayItems: [RadioStationDisplayItem] {
         dir == .descending ? Array(store.items.reversed()) : store.items
     }
@@ -42,7 +53,7 @@ struct RadioView: View {
             .focusSection()
 
             Group {
-                if displayItems.isEmpty && store.isLoading {
+                if !isPrepared {
                     ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if displayItems.isEmpty, let message = store.errorMessage {
                     ContentUnavailableView(
@@ -62,7 +73,12 @@ struct RadioView: View {
             }
             .focusSection()
         }
-        .task { await store.refresh() }
+        .task(id: "\(isActive)|\(activeServerScopeID ?? "none")") {
+            guard isActive, let serverScopeID = activeServerScopeID else { return }
+            await store.refresh()
+            guard isActive, activeServerScopeID == serverScopeID else { return }
+            preparedServerScopeID = serverScopeID
+        }
         .sheet(isPresented: $showCreate) {
             TVRadioStationEditSheet(item: nil)
         }
@@ -243,9 +259,25 @@ struct TVRadioStationArtworkView: View {
     var reloadToken: UUID? = nil
 
     var body: some View {
-        if let remoteArtworkURL {
-            CoverArtView(url: remoteArtworkURL, size: size, cornerRadius: 8, reloadToken: reloadToken)
-        } else if let coverArt = item.coverArt,
+        ZStack {
+            fallbackArtwork
+            if let remoteArtworkURL {
+                CoverArtView(
+                    url: remoteArtworkURL,
+                    size: size,
+                    cornerRadius: 8,
+                    reloadToken: reloadToken,
+                    showsPlaceholder: false
+                )
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    @ViewBuilder
+    private var fallbackArtwork: some View {
+        if let coverArt = item.coverArt,
            let url = SubsonicAPIService.shared.coverArtURL(for: coverArt, size: Int(size * 2)) {
             CoverArtView(url: url, size: size, cornerRadius: 8, reloadToken: reloadToken)
         } else {

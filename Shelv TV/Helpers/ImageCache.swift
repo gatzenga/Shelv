@@ -10,6 +10,7 @@ struct CoverArtView: View {
     var cornerRadius: CGFloat = 10
     var isCircle: Bool = false
     var reloadToken: UUID?
+    var showsPlaceholder: Bool = true
 
     @State private var image: UIImage?
     @State private var loadedImageKey: String?
@@ -20,13 +21,15 @@ struct CoverArtView: View {
         size: CGFloat = 240,
         cornerRadius: CGFloat = 10,
         isCircle: Bool = false,
-        reloadToken: UUID? = nil
+        reloadToken: UUID? = nil,
+        showsPlaceholder: Bool = true
     ) {
         self.url = url
         self.size = size
         self.cornerRadius = cornerRadius
         self.isCircle = isCircle
         self.reloadToken = reloadToken
+        self.showsPlaceholder = showsPlaceholder
         if let url, let cached = ImageCacheService.shared.cachedImage(url: url) {
             self._image = State(initialValue: cached)
             self._loadedImageKey = State(initialValue: ImageCacheService.stableCacheKey(for: url))
@@ -43,11 +46,15 @@ struct CoverArtView: View {
                     .resizable()
                     .aspectRatio(contentMode: .fill)
             } else {
-                ZStack {
+                if showsPlaceholder {
+                    ZStack {
                     Color.gray.opacity(0.25)
                     Image(systemName: isCircle ? "person.fill" : "music.note")
                         .font(.system(size: size * 0.3))
                         .foregroundStyle(.secondary)
+                    }
+                } else {
+                    Color.clear
                 }
             }
         }
@@ -61,7 +68,8 @@ struct CoverArtView: View {
             }
         }
         .onAppear { triggerLoad() }
-        .task(id: loadIdentifier) { await loadImage() }
+        .task(id: stableKey) { await loadImage() }
+        .onChange(of: reloadToken) { _, _ in triggerLoad() }
     }
 
     private var stableKey: String {
@@ -69,12 +77,8 @@ struct CoverArtView: View {
         return ImageCacheService.stableCacheKey(for: url)
     }
 
-    private var loadIdentifier: String {
-        "\(stableKey)|\(reloadToken?.uuidString ?? "static")"
-    }
-
     private func triggerLoad() {
-        guard image == nil, url != nil else { return }
+        guard url != nil, loadedImageKey != stableKey else { return }
         Task { await loadImage() }
     }
 
@@ -86,12 +90,11 @@ struct CoverArtView: View {
             return
         }
         let key = stableKey
-        guard loadRequest.activeIdentifier != key else { return }
-        loadRequest.begin(key)
-        defer { loadRequest.finish(key) }
+        guard let attempt = loadRequest.beginIfIdle(key) else { return }
+        defer { loadRequest.finish(key, attempt: attempt) }
 
         if let hit = ImageCacheService.shared.cachedImage(url: url) {
-            apply(hit, for: key)
+            apply(hit, for: key, attempt: attempt)
             return
         }
 
@@ -102,29 +105,29 @@ struct CoverArtView: View {
         if let artId, artId.hasPrefix("demo_") {
             if let img = UIImage(named: artId) {
                 ImageCacheService.shared.cache(img, url: url)
-                apply(img, for: key)
+                apply(img, for: key, attempt: attempt)
             }
             return
         }
         #endif
 
         if let img = await ImageCacheService.shared.diskOnlyImage(url: url) {
-            guard isCurrentLoad(key) else { return }
-            apply(img, for: key)
+            guard isCurrentLoad(key, attempt: attempt) else { return }
+            apply(img, for: key, attempt: attempt)
         }
 
         if let img = await ImageCacheService.shared.image(url: url) {
-            guard isCurrentLoad(key) else { return }
-            apply(img, for: key)
+            guard isCurrentLoad(key, attempt: attempt) else { return }
+            apply(img, for: key, attempt: attempt)
         }
     }
 
-    private func isCurrentLoad(_ key: String) -> Bool {
-        loadRequest.accepts(key)
+    private func isCurrentLoad(_ key: String, attempt: UUID) -> Bool {
+        loadRequest.accepts(key, attempt: attempt)
     }
 
-    private func apply(_ loadedImage: UIImage, for key: String) {
-        guard isCurrentLoad(key) else { return }
+    private func apply(_ loadedImage: UIImage, for key: String, attempt: UUID) {
+        guard isCurrentLoad(key, attempt: attempt) else { return }
         image = loadedImage
         loadedImageKey = key
     }
@@ -321,11 +324,17 @@ actor ImageCacheService {
     }
 
     private static func fetchWithRetry(url: URL, diskURL: URL) async -> UIImage? {
-        for attempt in 0..<3 {
+        let isRadioArtwork = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?
+            .contains(where: { $0.name == RadioNowPlayingMetadata.artworkRevisionQueryItemName }) == true
+        let maximumAttempts = isRadioArtwork ? 1 : 3
+        for attempt in 0..<maximumAttempts {
             if attempt > 0 {
                 try? await Task.sleep(nanoseconds: UInt64(500_000_000) * UInt64(attempt))
             }
-            guard let (data, response) = try? await session.data(from: url),
+            var request = URLRequest(url: url)
+            if isRadioArtwork { request.timeoutInterval = 8 }
+            guard let (data, response) = try? await session.data(for: request),
                   (response as? HTTPURLResponse)?.statusCode == 200,
                   let img = UIImage(data: data) else { continue }
             try? data.write(to: diskURL, options: .atomic)
