@@ -98,7 +98,12 @@ struct NowPlayingView: View {
     private var playerColumn: some View {
         VStack(spacing: 26) {
             if let station = player.currentRadioStation {
-                TVRadioStationArtworkView(item: station, size: panel == nil ? 380 : 300, metadata: player.currentRadioMetadata)
+                TVRadioStationArtworkView(
+                    item: station,
+                    size: panel == nil ? 380 : 300,
+                    metadata: player.currentRadioMetadata,
+                    reloadToken: player.artworkReloadToken
+                )
                     .shadow(color: .black.opacity(0.4), radius: 24, y: 12)
                     .animation(.easeInOut(duration: 0.25), value: panel)
             } else {

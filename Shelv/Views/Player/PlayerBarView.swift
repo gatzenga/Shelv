@@ -29,7 +29,12 @@ struct PlayerBarView: View {
     var body: some View {
         HStack(spacing: hStackSpacing) {
             if let station = player.currentRadioStation {
-                RadioStationArtworkView(item: station, size: coverSize, metadata: player.currentRadioMetadata)
+                RadioStationArtworkView(
+                    item: station,
+                    size: coverSize,
+                    metadata: player.currentRadioMetadata,
+                    reloadToken: player.artworkReloadToken
+                )
                     .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
             } else {
                 AlbumArtView(coverArtId: player.currentSong?.coverArt, size: 100, cornerRadius: coverCorner)

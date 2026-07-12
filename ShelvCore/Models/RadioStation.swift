@@ -208,6 +208,24 @@ nonisolated struct RadioNowPlayingMetadata: Codable, Hashable, Sendable {
         return digest.prefix(12).map { String(format: "%02x", $0) }.joined()
     }
 
+    static func resolving(
+        current: RadioNowPlayingMetadata?,
+        incoming: RadioNowPlayingMetadata
+    ) -> RadioNowPlayingMetadata {
+        guard incoming.displayTitle == nil,
+              incoming.displayArtist == nil,
+              var current,
+              current.displayTitle != nil || current.displayArtist != nil
+        else { return incoming }
+
+        current.stationName = incoming.stationName
+        current.isLive = incoming.isLive
+        if current.artworkURL == nil {
+            current.artworkURL = incoming.artworkURL
+        }
+        return current
+    }
+
     private var artworkRevisionSeed: String {
         [
             normalizedArtworkPart(artworkURL),
@@ -234,4 +252,8 @@ nonisolated struct RadioNowPlayingMetadata: Codable, Hashable, Sendable {
             .lowercased()
         return placeholders.contains(normalized) ? nil : trimmed
     }
+}
+
+nonisolated enum RadioMetadataPollingPolicy {
+    static let azuraCastInterval: Duration = .seconds(3)
 }

@@ -240,13 +240,14 @@ struct TVRadioStationArtworkView: View {
     let item: RadioStationDisplayItem
     let size: CGFloat
     var metadata: RadioNowPlayingMetadata?
+    var reloadToken: UUID? = nil
 
     var body: some View {
         if let remoteArtworkURL {
-            CoverArtView(url: remoteArtworkURL, size: size, cornerRadius: 8, retryOnFailure: true)
+            CoverArtView(url: remoteArtworkURL, size: size, cornerRadius: 8, reloadToken: reloadToken)
         } else if let coverArt = item.coverArt,
            let url = SubsonicAPIService.shared.coverArtURL(for: coverArt, size: Int(size * 2)) {
-            CoverArtView(url: url, size: size, cornerRadius: 8, retryOnFailure: true)
+            CoverArtView(url: url, size: size, cornerRadius: 8, reloadToken: reloadToken)
         } else {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .fill(.secondary.opacity(0.14))

@@ -604,7 +604,12 @@ private struct NativeMiniPlayerAccessory: View {
                             .frame(width: 32, height: 32)
                             .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                     } else if let station = player.currentRadioStation {
-                        RadioStationArtworkView(item: station, size: 32, metadata: player.currentRadioMetadata)
+                        RadioStationArtworkView(
+                            item: station,
+                            size: 32,
+                            metadata: player.currentRadioMetadata,
+                            reloadToken: player.artworkReloadToken
+                        )
                     }
 
                     VStack(alignment: .leading, spacing: 1) {

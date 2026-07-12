@@ -297,7 +297,12 @@ struct PlayerView: View {
 
                     ZStack(alignment: .bottom) {
                         if let station = player.currentRadioStation {
-                            RadioStationArtworkView(item: station, size: visibleArt, metadata: player.currentRadioMetadata)
+                            RadioStationArtworkView(
+                                item: station,
+                                size: visibleArt,
+                                metadata: player.currentRadioMetadata,
+                                reloadToken: player.artworkReloadToken
+                            )
                         } else {
                             AlbumArtView(coverArtId: player.currentSong?.coverArt, size: 600, cornerRadius: isPad ? 22 : 20)
                                 .frame(width: visibleArt, height: visibleArt)
@@ -656,7 +661,8 @@ struct PlayerView: View {
                 RemoteRadioArtworkView(
                     url: url,
                     size: size,
-                    cornerRadius: isPad ? 22 : 24
+                    cornerRadius: isPad ? 22 : 24,
+                    reloadToken: player.artworkReloadToken
                 ) {
                     radioStationFallbackArtwork(size: size)
                 }
@@ -674,7 +680,8 @@ struct PlayerView: View {
             RadioStationPlayerArtworkView(
                 coverArtId: coverArt,
                 displaySize: size,
-                cornerRadius: isPad ? 22 : 24
+                cornerRadius: isPad ? 22 : 24,
+                reloadToken: player.artworkReloadToken
             )
         } else {
             radioPlaceholderArtwork
@@ -911,16 +918,18 @@ private struct RadioStationPlayerArtworkView: View {
     let coverArtId: String
     let displaySize: CGFloat
     let cornerRadius: CGFloat
+    let reloadToken: UUID?
     private let requestSize: Int
     @State private var image: UIImage?
     @State private var loadedImageKey: String?
     @State private var isLoading: Bool
     @State private var activeLoadKey: String?
 
-    init(coverArtId: String, displaySize: CGFloat, cornerRadius: CGFloat) {
+    init(coverArtId: String, displaySize: CGFloat, cornerRadius: CGFloat, reloadToken: UUID? = nil) {
         self.coverArtId = coverArtId
         self.displaySize = displaySize
         self.cornerRadius = cornerRadius
+        self.reloadToken = reloadToken
         let scale = UIScreen.main.scale
         let pixelSize = Int((displaySize * scale).rounded(.up))
         self.requestSize = min(1200, max(600, pixelSize))
@@ -956,7 +965,7 @@ private struct RadioStationPlayerArtworkView: View {
         }
         .frame(width: displaySize, height: displaySize)
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-        .task(id: "\(coverArtId)_\(requestSize)") {
+        .task(id: "\(coverArtId)_\(requestSize)|\(reloadToken?.uuidString ?? "static")") {
             await load()
         }
     }
@@ -1000,19 +1009,13 @@ private struct RadioStationPlayerArtworkView: View {
             loadedImageKey = expectedKey
             isLoading = false
         }
-        var retryDelay: TimeInterval = 2
-        while !Task.isCancelled, activeLoadKey == expectedKey {
-            let loaded = await ImageCacheService.shared.image(url: url, key: key)
-            guard !Task.isCancelled, activeLoadKey == expectedKey else { return }
-            if let loaded {
-                image = loaded
-                loadedImageKey = expectedKey
-                isLoading = false
-                return
-            }
-            try? await Task.sleep(for: .seconds(retryDelay))
-            retryDelay = min(retryDelay * 2, 30)
+        let loaded = await ImageCacheService.shared.image(url: url, key: key)
+        guard !Task.isCancelled, activeLoadKey == expectedKey else { return }
+        if let loaded {
+            image = loaded
+            loadedImageKey = expectedKey
         }
+        isLoading = false
     }
 }
 

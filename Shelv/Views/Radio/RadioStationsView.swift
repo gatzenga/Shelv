@@ -206,12 +206,18 @@ struct RadioStationArtworkView: View {
     let item: RadioStationDisplayItem
     let size: CGFloat
     var metadata: RadioNowPlayingMetadata?
+    var reloadToken: UUID? = nil
 
     var body: some View {
         let cornerRadius: CGFloat = size > 80 ? 10 : 7
         ZStack {
             if let remoteArtworkURL {
-                RemoteRadioArtworkView(url: remoteArtworkURL, size: size, cornerRadius: cornerRadius) {
+                RemoteRadioArtworkView(
+                    url: remoteArtworkURL,
+                    size: size,
+                    cornerRadius: cornerRadius,
+                    reloadToken: reloadToken
+                ) {
                     fallbackArtwork(cornerRadius: cornerRadius)
                 }
             } else {
@@ -232,7 +238,12 @@ struct RadioStationArtworkView: View {
     @ViewBuilder
     private func fallbackArtwork(cornerRadius: CGFloat) -> some View {
         if let coverArt = item.coverArt {
-            AlbumArtView(coverArtId: coverArt, size: Int(size * 3), cornerRadius: cornerRadius)
+            AlbumArtView(
+                coverArtId: coverArt,
+                size: Int(size * 3),
+                cornerRadius: cornerRadius,
+                reloadToken: reloadToken
+            )
         } else {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .fill(.secondary.opacity(0.14))
@@ -249,16 +260,24 @@ struct RemoteRadioArtworkView<Fallback: View>: View {
     let url: URL
     let size: CGFloat
     let cornerRadius: CGFloat
+    let reloadToken: UUID?
     @ViewBuilder var fallback: () -> Fallback
 
     @State private var image: UIImage?
     @State private var loadedURLString: String?
     @State private var activeLoadURLString: String?
 
-    init(url: URL, size: CGFloat, cornerRadius: CGFloat, @ViewBuilder fallback: @escaping () -> Fallback) {
+    init(
+        url: URL,
+        size: CGFloat,
+        cornerRadius: CGFloat,
+        reloadToken: UUID? = nil,
+        @ViewBuilder fallback: @escaping () -> Fallback
+    ) {
         self.url = url
         self.size = size
         self.cornerRadius = cornerRadius
+        self.reloadToken = reloadToken
         self.fallback = fallback
         let cachedImage = ImageCacheService.shared.cachedImage(key: Self.cacheKey(for: url))
         self._image = State(initialValue: cachedImage)
@@ -278,7 +297,7 @@ struct RemoteRadioArtworkView<Fallback: View>: View {
         }
         .frame(width: size, height: size)
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-        .task(id: urlString) {
+        .task(id: "\(urlString)|\(reloadToken?.uuidString ?? "static")") {
             let key = Self.cacheKey(for: url)
             activeLoadURLString = urlString
             if let cached = ImageCacheService.shared.cachedImage(key: key) {
@@ -288,17 +307,11 @@ struct RemoteRadioArtworkView<Fallback: View>: View {
             }
             image = nil
             loadedURLString = nil
-            var retryDelay: TimeInterval = 2
-            while !Task.isCancelled, activeLoadURLString == urlString {
-                let loaded = await ImageCacheService.shared.image(url: url, key: key)
-                guard !Task.isCancelled, activeLoadURLString == urlString else { return }
-                if let loaded {
-                    image = loaded
-                    loadedURLString = urlString
-                    return
-                }
-                try? await Task.sleep(for: .seconds(retryDelay))
-                retryDelay = min(retryDelay * 2, 30)
+            let loaded = await ImageCacheService.shared.image(url: url, key: key)
+            guard !Task.isCancelled, activeLoadURLString == urlString else { return }
+            if let loaded {
+                image = loaded
+                loadedURLString = urlString
             }
         }
     }

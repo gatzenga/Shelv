@@ -8,7 +8,7 @@ struct CoverArtView: View {
     var size: CGFloat = 180
     var cornerRadius: CGFloat = 8
     var isCircle: Bool = false
-    var retryOnFailure: Bool = false
+    var reloadToken: UUID?
 
     @State private var image: NSImage?
     @State private var loadedImageKey: String?
@@ -19,13 +19,13 @@ struct CoverArtView: View {
         size: CGFloat = 180,
         cornerRadius: CGFloat = 8,
         isCircle: Bool = false,
-        retryOnFailure: Bool = false
+        reloadToken: UUID? = nil
     ) {
         self.url = url
         self.size = size
         self.cornerRadius = cornerRadius
         self.isCircle = isCircle
-        self.retryOnFailure = retryOnFailure
+        self.reloadToken = reloadToken
         if let url, let cached = ImageCacheService.shared.cachedImage(url: url) {
             self._image = State(initialValue: cached)
             self._loadedImageKey = State(initialValue: ImageCacheService.stableCacheKey(for: url))
@@ -62,9 +62,9 @@ struct CoverArtView: View {
         // onAppear: zuverlässiger Fallback für LazyVGrid auf macOS,
         // das .task manchmal erst bei Hover triggert.
         .onAppear { triggerLoad() }
-        // task(id: stableKey): lädt neu wenn sich das Cover ändert,
-        // aber NICHT bei jedem Auth-Token-Wechsel in der URL.
-        .task(id: stableKey) { await loadImage() }
+        // Lädt bei einem neuen Cover oder einem gezielten Radio-Refresh neu,
+        // aber nicht bei jedem Auth-Token-Wechsel in der URL.
+        .task(id: loadIdentifier) { await loadImage() }
     }
 
     // Stabiler Schlüssel aus Cover-ID + Grösse + Host — ohne rotierende Auth-Tokens.
@@ -73,8 +73,12 @@ struct CoverArtView: View {
         return ImageCacheService.stableCacheKey(for: url)
     }
 
+    private var loadIdentifier: String {
+        "\(stableKey)|\(reloadToken?.uuidString ?? "static")"
+    }
+
     private func triggerLoad() {
-        guard !retryOnFailure, image == nil, url != nil else { return }
+        guard image == nil, url != nil else { return }
         Task { await loadImage() }
     }
 
@@ -134,16 +138,9 @@ struct CoverArtView: View {
             if UserDefaults.standard.bool(forKey: "offlineModeEnabled") { return }
         }
 
-        var retryDelay: TimeInterval = 2
-        while isCurrentLoad(key) {
-            if let img = await ImageCacheService.shared.image(url: url) {
-                guard isCurrentLoad(key) else { return }
-                apply(img, for: key)
-                return
-            }
-            guard retryOnFailure, isCurrentLoad(key) else { return }
-            try? await Task.sleep(for: .seconds(retryDelay))
-            retryDelay = min(retryDelay * 2, 30)
+        if let img = await ImageCacheService.shared.image(url: url) {
+            guard isCurrentLoad(key) else { return }
+            apply(img, for: key)
         }
     }
 
