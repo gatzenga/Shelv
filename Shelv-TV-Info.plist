@@ -2,6 +2,28 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CFBundleSpokenName</key>
+	<string>Shelf</string>
+	<key>INAlternativeAppNames</key>
+	<array>
+		<dict>
+			<key>INAlternativeAppName</key>
+			<string>Shelf</string>
+			<key>INAlternativeAppNamePronunciationHint</key>
+			<string>Shelf</string>
+		</dict>
+		<dict>
+			<key>INAlternativeAppName</key>
+			<string>Shells</string>
+			<key>INAlternativeAppNamePronunciationHint</key>
+			<string>Shells</string>
+		</dict>
+	</array>
+	<key>INSupportedMediaCategories</key>
+	<array>
+		<string>INMediaCategoryMusic</string>
+		<string>INMediaCategoryRadio</string>
+	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSAppTransportSecurity</key>
@@ -11,6 +33,8 @@
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Shelv uses your local network to connect to your Navidrome server.</string>
+	<key>NSSiriUsageDescription</key>
+	<string>Shelv uses Siri to find and play music from your media server.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>

@@ -434,6 +434,7 @@ struct ShelvPlatformOpenRecapIntent: ShelvPlatformNavigationIntent {
     static let destination = ShelvShortcutDestination.recap
 }
 
+#if os(macOS)
 struct ShelvPlatformAppShortcuts: AppShortcutsProvider {
     static var shortcutTileColor: ShortcutTileColor { .purple }
 
@@ -579,4 +580,5 @@ struct ShelvPlatformAppShortcuts: AppShortcutsProvider {
         )
     }
 }
+#endif
 #endif

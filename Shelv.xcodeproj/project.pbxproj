@@ -39,6 +39,7 @@
 		BC10013E2FFE000000000001 /* ShelvCore/Services/PlaybackContentResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC10013F2FFE000000000001 /* ShelvCore/Services/PlaybackContentResolver.swift */; };
 		BC1867E52F91A088006D96E2 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC1867E42F91A088006D96E2 /* GRDB */; };
 		BC51161D2FDC8A850011CDE9 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC51161C2FDC8A850011CDE9 /* GRDB */; };
+		BC5A00012FFF000000000001 /* Shelv TV Siri Extension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = BC5A00032FFF000000000001 /* Shelv TV Siri Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		BC7B84A72FDB17F90058CB78 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC7B84A62FDB17F90058CB78 /* GRDB */; };
 /* End PBXBuildFile section */
 
@@ -50,7 +51,28 @@
 			remoteGlobalIDString = BC9C59372F8E9FB000FF4D25;
 			remoteInfo = Shelv;
 		};
+		BC5A00162FFF000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = BC9C59302F8E9FB000FF4D25 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = BC5A00102FFF000000000001;
+			remoteInfo = "Shelv TV Siri Extension";
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		BC5A00142FFF000000000001 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				BC5A00012FFF000000000001 /* Shelv TV Siri Extension.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		BC1000012FFE000000000001 /* ShelvTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ShelvTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -85,9 +107,27 @@
 		BC10013F2FFE000000000001 /* ShelvCore/Services/PlaybackContentResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/PlaybackContentResolver.swift; sourceTree = "<group>"; };
 		BC2000012FFE000000000001 /* ShelvAppIntentsUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ShelvAppIntentsUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC5116112FDC8A690011CDE9 /* Shelv TV.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Shelv TV.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		BC5A00032FFF000000000001 /* Shelv TV Siri Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Shelv TV Siri Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC7B83F52FDB17700058CB78 /* Shelv.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Shelv.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC9C59382F8E9FB000FF4D25 /* Shelv.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Shelv.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		BC5A00172FFF000000000001 /* Exceptions for "Shelv TV Siri Extension" folder in "Shelv TV Siri Extension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = BC5A00102FFF000000000001 /* Shelv TV Siri Extension */;
+		};
+		BC5A00182FFF000000000001 /* Exceptions for "Shelv TV" folder in "Shelv TV" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				AppShortcuts.xcstrings,
+			);
+			target = BC5116102FDC8A690011CDE9 /* Shelv TV */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		BC1000022FFE000000000001 /* ShelvTests */ = {
@@ -102,7 +142,23 @@
 		};
 		BC5116122FDC8A690011CDE9 /* Shelv TV */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				BC5A00182FFF000000000001 /* Exceptions for "Shelv TV" folder in "Shelv TV" target */,
+			);
 			path = "Shelv TV";
+			sourceTree = "<group>";
+		};
+		BC5A00042FFF000000000001 /* Shelv TV Siri Extension */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				BC5A00172FFF000000000001 /* Exceptions for "Shelv TV Siri Extension" folder in "Shelv TV Siri Extension" target */,
+			);
+			path = "Shelv TV Siri Extension";
+			sourceTree = "<group>";
+		};
+		BC5A00052FFF000000000001 /* Shelv TV Siri Shared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "Shelv TV Siri Shared";
 			sourceTree = "<group>";
 		};
 		BC7B83F62FDB17700058CB78 /* Shelv Mac */ = {
@@ -143,6 +199,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				BC51161D2FDC8A850011CDE9 /* GRDB in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BC5A00062FFF000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -218,6 +281,8 @@
 				BC1000022FFE000000000001 /* ShelvTests */,
 				BC2000022FFE000000000001 /* ShelvAppIntentsUITests */,
 				BC5116122FDC8A690011CDE9 /* Shelv TV */,
+				BC5A00042FFF000000000001 /* Shelv TV Siri Extension */,
+				BC5A00052FFF000000000001 /* Shelv TV Siri Shared */,
 				BC7B84A52FDB17F90058CB78 /* Frameworks */,
 				BC9C59392F8E9FB000FF4D25 /* Products */,
 			);
@@ -229,6 +294,7 @@
 				BC9C59382F8E9FB000FF4D25 /* Shelv.app */,
 				BC7B83F52FDB17700058CB78 /* Shelv.app */,
 				BC5116112FDC8A690011CDE9 /* Shelv TV.app */,
+				BC5A00032FFF000000000001 /* Shelv TV Siri Extension.appex */,
 				BC1000012FFE000000000001 /* ShelvTests.xctest */,
 				BC2000012FFE000000000001 /* ShelvAppIntentsUITests.xctest */,
 			);
@@ -252,6 +318,7 @@
 			);
 			fileSystemSynchronizedGroups = (
 				BC1000022FFE000000000001 /* ShelvTests */,
+				BC5A00052FFF000000000001 /* Shelv TV Siri Shared */,
 			);
 			name = ShelvTests;
 			packageProductDependencies = (
@@ -291,13 +358,16 @@
 				BC51160D2FDC8A690011CDE9 /* Sources */,
 				BC51160E2FDC8A690011CDE9 /* Frameworks */,
 				BC51160F2FDC8A690011CDE9 /* Resources */,
+				BC5A00142FFF000000000001 /* Embed App Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				BC5A00152FFF000000000001 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				BC5116122FDC8A690011CDE9 /* Shelv TV */,
+				BC5A00052FFF000000000001 /* Shelv TV Siri Shared */,
 				BCC0DE0000000000000000C0 /* ShelvCore */,
 			);
 			name = "Shelv TV";
@@ -307,6 +377,29 @@
 			productName = "Shelv TV";
 			productReference = BC5116112FDC8A690011CDE9 /* Shelv TV.app */;
 			productType = "com.apple.product-type.application";
+		};
+		BC5A00102FFF000000000001 /* Shelv TV Siri Extension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BC5A00112FFF000000000001 /* Build configuration list for PBXNativeTarget "Shelv TV Siri Extension" */;
+			buildPhases = (
+				BC5A00072FFF000000000001 /* Sources */,
+				BC5A00062FFF000000000001 /* Frameworks */,
+				BC5A00082FFF000000000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				BC5A00042FFF000000000001 /* Shelv TV Siri Extension */,
+				BC5A00052FFF000000000001 /* Shelv TV Siri Shared */,
+			);
+			name = "Shelv TV Siri Extension";
+			packageProductDependencies = (
+			);
+			productName = "Shelv TV Siri Extension";
+			productReference = BC5A00032FFF000000000001 /* Shelv TV Siri Extension.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 		BC7B83F42FDB17700058CB78 /* Shelv Mac */ = {
 			isa = PBXNativeTarget;
@@ -376,6 +469,9 @@
 					BC5116102FDC8A690011CDE9 = {
 						CreatedOnToolsVersion = 26.5;
 					};
+					BC5A00102FFF000000000001 = {
+						CreatedOnToolsVersion = 27.0;
+					};
 					BC7B83F42FDB17700058CB78 = {
 						CreatedOnToolsVersion = 26.5;
 					};
@@ -408,6 +504,7 @@
 				BC1000062FFE000000000001 /* ShelvTests */,
 				BC2000062FFE000000000001 /* ShelvAppIntentsUITests */,
 				BC5116102FDC8A690011CDE9 /* Shelv TV */,
+				BC5A00102FFF000000000001 /* Shelv TV Siri Extension */,
 			);
 		};
 /* End PBXProject section */
@@ -428,6 +525,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		BC51160F2FDC8A690011CDE9 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BC5A00082FFF000000000001 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -501,6 +605,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		BC5A00072FFF000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		BC7B83F12FDB17700058CB78 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -522,6 +633,11 @@
 			isa = PBXTargetDependency;
 			target = BC9C59372F8E9FB000FF4D25 /* Shelv */;
 			targetProxy = BC20000A2FFE000000000001 /* PBXContainerItemProxy */;
+		};
+		BC5A00152FFF000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = BC5A00102FFF000000000001 /* Shelv TV Siri Extension */;
+			targetProxy = BC5A00162FFF000000000001 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -629,7 +745,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "Shelv TV/Shelv TVRelease.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 129;
+				CURRENT_PROJECT_VERSION = 130;
 				DEVELOPMENT_TEAM = 7CZP946PWR;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -663,7 +779,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = "Shelv TV/Shelv TVRelease.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 129;
+				CURRENT_PROJECT_VERSION = 130;
 				DEVELOPMENT_TEAM = 7CZP946PWR;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -691,6 +807,64 @@
 			};
 			name = Release;
 		};
+		BC5A00122FFF000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 130;
+				DEVELOPMENT_TEAM = 7CZP946PWR;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Shelv TV Siri Extension/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.5;
+				PRODUCT_BUNDLE_IDENTIFIER = ch.vkugler.Shelv.Siri;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = 18.6;
+			};
+			name = Debug;
+		};
+		BC5A00132FFF000000000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 130;
+				DEVELOPMENT_TEAM = 7CZP946PWR;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Shelv TV Siri Extension/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.5;
+				PRODUCT_BUNDLE_IDENTIFIER = ch.vkugler.Shelv.Siri;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = appletvos;
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 3;
+				TVOS_DEPLOYMENT_TARGET = 18.6;
+			};
+			name = Release;
+		};
 		BC7B83FD2FDB17700058CB78 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -699,7 +873,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Shelv Mac/Shelv Mac.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 129;
+				CURRENT_PROJECT_VERSION = 130;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 7CZP946PWR;
 				ENABLE_APP_SANDBOX = YES;
@@ -748,7 +922,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Shelv Mac/Shelv Mac.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 129;
+				CURRENT_PROJECT_VERSION = 130;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 7CZP946PWR;
 				ENABLE_APP_SANDBOX = YES;
@@ -916,7 +1090,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Shelv/Shelv.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 129;
+				CURRENT_PROJECT_VERSION = 130;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 7CZP946PWR;
 				ENABLE_APP_SANDBOX = YES;
@@ -966,7 +1140,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Shelv/Shelv.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 129;
+				CURRENT_PROJECT_VERSION = 130;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 7CZP946PWR;
 				ENABLE_APP_SANDBOX = YES;
@@ -1035,6 +1209,15 @@
 			buildConfigurations = (
 				BC5116192FDC8A6A0011CDE9 /* Debug */,
 				BC51161A2FDC8A6A0011CDE9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		BC5A00112FFF000000000001 /* Build configuration list for PBXNativeTarget "Shelv TV Siri Extension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BC5A00122FFF000000000001 /* Debug */,
+				BC5A00132FFF000000000001 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

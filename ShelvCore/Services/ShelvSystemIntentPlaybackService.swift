@@ -57,6 +57,11 @@ final class ShelvSystemIntentPlaybackService: @unchecked Sendable {
     }
 
     private func execute(_ request: Request) async throws {
+        #if os(tvOS)
+        SiriMediaAppSelectionService.shared.beginSystemIntent()
+        defer { SiriMediaAppSelectionService.shared.endSystemIntent() }
+        #endif
+
         nextFlightID &+= 1
         let flightID = nextFlightID
         flight?.task.cancel()

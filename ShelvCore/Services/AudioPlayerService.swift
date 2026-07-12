@@ -622,7 +622,15 @@ class AudioPlayerService: ObservableObject {
         truthUserQueue = []
         infinityPendingSongIds.removeAll()
         resumeTime = 0
-        startPlayback(song: songs[startIndex], seekTo: 0)
+        let generation = startPlayback(song: songs[startIndex], seekTo: 0)
+        #if os(tvOS)
+        SiriMediaAppSelectionService.shared.prepareMusicDonation(
+            songs: songs,
+            startIndex: startIndex,
+            shuffled: false,
+            generation: generation
+        )
+        #endif
         saveState()
         return true
     }
@@ -641,7 +649,15 @@ class AudioPlayerService: ObservableObject {
         truthUserQueue = []
         infinityPendingSongIds.removeAll()
         resumeTime = 0
-        startPlayback(song: song, seekTo: 0)
+        let generation = startPlayback(song: song, seekTo: 0)
+        #if os(tvOS)
+        SiriMediaAppSelectionService.shared.prepareMusicDonation(
+            songs: [song],
+            startIndex: 0,
+            shuffled: false,
+            generation: generation
+        )
+        #endif
         saveState()
         return true
     }
@@ -705,6 +721,12 @@ class AudioPlayerService: ObservableObject {
 
     func playRadioStation(_ item: RadioStationDisplayItem) {
         playRadioStation(item, resetReconnectAttempts: true)
+        #if os(tvOS)
+        SiriMediaAppSelectionService.shared.prepareRadioDonation(
+            station: item,
+            generation: playbackGeneration
+        )
+        #endif
     }
 
     func playRadioStationAndWait(_ item: RadioStationDisplayItem) async -> PlaybackStartOutcome {
@@ -1269,6 +1291,16 @@ class AudioPlayerService: ObservableObject {
         else { return }
         if case .failed = currentState { return }
         pendingPlaybackStarts[generation] = state
+        #if os(tvOS)
+        switch state {
+        case .engineLoaded:
+            SiriMediaAppSelectionService.shared.playbackDidStart(generation: generation)
+        case .failed:
+            SiriMediaAppSelectionService.shared.playbackDidFail(generation: generation)
+        case .pending:
+            break
+        }
+        #endif
     }
 
     private func cancelPlaybackStart(
@@ -1282,6 +1314,9 @@ class AudioPlayerService: ObservableObject {
         }
 
         pendingPlaybackStarts[generation] = .failed(failure)
+        #if os(tvOS)
+        SiriMediaAppSelectionService.shared.playbackDidFail(generation: generation)
+        #endif
         playbackStartTasks.removeValue(forKey: generation)?.cancel()
         playbackGeneration += 1
         cancelRadioReconnect()
@@ -1990,6 +2025,14 @@ class AudioPlayerService: ObservableObject {
 
         resumeTime = 0
         let generation = startPlayback(song: first)
+        #if os(tvOS)
+        SiriMediaAppSelectionService.shared.prepareMusicDonation(
+            songs: original,
+            startIndex: original.firstIndex(where: { $0.id == first.id }) ?? 0,
+            shuffled: true,
+            generation: generation
+        )
+        #endif
         saveState()
         return .success(PreparedPlaybackStart(generation: generation, song: first))
     }
