@@ -546,6 +546,9 @@
 "recap_about_server_playlists" = "Recap erstellt Playlists auf deinem Navidrome-Server.";
 "recap_about_icloud_recommended" = "Wenn du Recap auf mehreren Geräten nutzt, solltest du iCloud Sync dringend aktivieren. Sonst kann jedes Gerät eine eigene Playlist für denselben Zeitraum erstellen.";
 "recap_about_icloud_benefits" = "Mit iCloud Sync führt Shelv die Play-History deiner Geräte zusammen, hält Recap-Playlists konsistent und verhindert doppelte Server-Playlists.";
+"tvos_recap_about_display" = "Auf Apple TV zeigt Recap die über iCloud synchronisierten Recap-Playlists an.";
+"tvos_recap_about_manage" = "Erstelle und verwalte deine Recaps auf dem iPhone oder Mac. Dafür muss iCloud Sync aktiviert sein.";
+"tvos_recap_about_history" = "Deine Wiedergaben auf Apple TV fließen über iCloud in deine gemeinsame Hörhistorie ein.";
 "sync_status" = "Status";
 "sync_status_syncing" = "Synchronisiert";
 "sync_status_pending_format" = "%d ausstehend";

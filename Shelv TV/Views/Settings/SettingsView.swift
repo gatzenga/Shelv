@@ -5,6 +5,7 @@ struct SettingsView: View {
     @AppStorage("appAppearance") private var appAppearance = "system"
     @AppStorage("themeColor") private var themeColor = "violet"
     @AppStorage("recapEnabled") private var recapEnabled = false
+    @State private var showRecapAbout = false
 
     private var isGerman: Bool { Locale.preferredLanguages.first?.hasPrefix("de") == true }
     private var appearanceOptions: [TVSettingsChoiceOption<String>] {
@@ -51,14 +52,8 @@ struct SettingsView: View {
 
                 Section {
                     Toggle(String(localized: "recaps"), isOn: $recapEnabled)
-                        .onChange(of: recapEnabled) { _, enabled in
-                            guard enabled, let server = serverStore.activeServer else { return }
-                            Task { await RecapStore.shared.setup(serverId: server.stableId) }
-                        }
                     if recapEnabled {
-                        NavigationLink(String(localized: "about")) {
-                            TVRecapAboutView()
-                        }
+                        Button(String(localized: "about")) { showRecapAbout = true }
                     }
                     NavigationLink(String(localized: "ui_customizations")) { TVUICustomizationsSettingsView() }
                     NavigationLink(String(localized: "playback")) { PlaybackSettingsView() }
@@ -83,23 +78,35 @@ struct SettingsView: View {
                 }
             }
         }
+        .fullScreenCover(isPresented: $showRecapAbout) {
+            TVRecapAboutView()
+        }
     }
 }
 
 private struct TVRecapAboutView: View {
-    var body: some View {
-        Form {
-            Text(String(localized: "recap"))
-                .font(.largeTitle).bold()
-                .listRowBackground(Color.clear)
+    @Environment(\.dismiss) private var dismiss
 
-            Section(String(localized: "about")) {
-                Text(String(localized: "recap_about_server_playlists"))
-                Text(String(localized: "recap_about_icloud_recommended"))
-                Text(String(localized: "recap_about_icloud_benefits"))
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 28) {
+                    Text(String(localized: "tvos_recap_about_display"))
+                    Text(String(localized: "tvos_recap_about_manage"))
+                    Text(String(localized: "tvos_recap_about_history"))
+                }
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: 900, alignment: .leading)
+                .padding(60)
+            }
+            .navigationTitle(String(localized: "recap"))
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(String(localized: "done")) { dismiss() }
+                }
             }
         }
-        .navigationTitle(String(localized: "recap"))
     }
 }
 
