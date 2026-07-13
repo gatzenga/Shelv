@@ -72,6 +72,10 @@ struct SettingsView: View {
                         }
                     }
                     .tint(accentColor)
+                    .onChange(of: recapEnabled) { _, enabled in
+                        guard enabled, let server = serverStore.activeServer else { return }
+                        Task { await RecapStore.shared.setup(serverId: server.stableId) }
+                    }
 
                     if recapEnabled {
                         Button {

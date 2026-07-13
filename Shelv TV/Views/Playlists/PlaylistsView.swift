@@ -7,6 +7,7 @@ struct PlaylistsView: View {
     @AppStorage("playlistSortOption") private var sortRaw = "alphabetical"
     @AppStorage("playlistSortDirection") private var dirRaw = "ascending"
     @AppStorage("playlistViewIsGrid") private var isGrid = true
+    @AppStorage("recapEnabled") private var recapEnabled = false
 
     @State private var showCreate = false
     @State private var path = NavigationPath()
@@ -16,7 +17,9 @@ struct PlaylistsView: View {
 
     /// Recap-Playlists raus, dann sortiert; angepinnte immer oben (nach pinRank).
     private var displayPlaylists: [Playlist] {
-        var base = store.playlists.filter { !recap.recapPlaylistIds.contains($0.id) }
+        var base = recapEnabled
+            ? store.playlists.filter { !recap.recapPlaylistIds.contains($0.id) }
+            : store.playlists
         switch sort {
         case .alphabetical: base.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         case .lastModified: base.sort { ($0.changed ?? .distantPast) < ($1.changed ?? .distantPast) }

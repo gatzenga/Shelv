@@ -356,10 +356,13 @@ private struct AddToPlaylistDialogModifier: ViewModifier {
     let songIds: [String]
     @ObservedObject private var store = LibraryStore.shared
     @ObservedObject private var recap = RecapStore.shared
+    @AppStorage("recapEnabled") private var recapEnabled = false
     @State private var showCreate = false
 
     private var playlists: [Playlist] {
-        store.playlists.filter { !recap.recapPlaylistIds.contains($0.id) }
+        recapEnabled
+            ? store.playlists.filter { !recap.recapPlaylistIds.contains($0.id) }
+            : store.playlists
     }
 
     func body(content: Content) -> some View {

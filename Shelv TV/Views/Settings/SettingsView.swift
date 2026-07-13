@@ -51,6 +51,10 @@ struct SettingsView: View {
 
                 Section {
                     Toggle(String(localized: "recaps"), isOn: $recapEnabled)
+                        .onChange(of: recapEnabled) { _, enabled in
+                            guard enabled, let server = serverStore.activeServer else { return }
+                            Task { await RecapStore.shared.setup(serverId: server.stableId) }
+                        }
                     if recapEnabled {
                         NavigationLink(String(localized: "about")) {
                             TVRecapAboutView()

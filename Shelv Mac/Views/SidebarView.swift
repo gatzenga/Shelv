@@ -14,6 +14,7 @@ struct SidebarView: View {
     @AppStorage(PersonalizationPreferenceKey.showPlaylistsTab) private var showPlaylistsInSidebar = true
     @AppStorage(PersonalizationPreferenceKey.showRadio) private var showRadio = true
     @AppStorage("enableDownloads") private var enableDownloads = true
+    @AppStorage("recapEnabled") private var recapEnabled = false
     @AppStorage("downloadsOnlyFilter") private var showDownloadsOnly: Bool = false
     @AppStorage("playlistSortOption") private var sortOptionRaw: String = PlaylistSortOption.alphabetical.rawValue
     private var sortOption: PlaylistSortOption { PlaylistSortOption(rawValue: sortOptionRaw) ?? .alphabetical }
@@ -24,7 +25,8 @@ struct SidebarView: View {
     @State private var newPlaylistName = ""
 
     private var nonRecapPlaylists: [Playlist] {
-        libraryStore.playlists.filter { !recapStore.recapPlaylistIds.contains($0.id) }
+        guard recapEnabled else { return libraryStore.playlists }
+        return libraryStore.playlists.filter { !recapStore.recapPlaylistIds.contains($0.id) }
     }
 
     private var visiblePlaylists: [Playlist] {
@@ -121,32 +123,37 @@ struct SidebarView: View {
                 .padding(.horizontal, 10)
                 .padding(.bottom, 4)
 
-                if libraryStore.isLoadingPlaylists && visiblePlaylists.isEmpty {
-                    ProgressView()
-                        .scaleEffect(0.8)
-                        .padding(.horizontal, 10)
-                } else if visiblePlaylists.isEmpty {
-                    Text(String(localized: "no_playlists"))
-                        .font(.callout)
-                        .foregroundStyle(.tertiary)
-                        .padding(.horizontal, 10)
-                } else {
-                    ForEach(visiblePlaylists) { playlist in
-                        PlaylistSidebarRow(
-                            playlist: playlist,
-                            isSelected: selectedPlaylist?.id == playlist.id,
-                            themeColor: themeColor,
-                            isPinned: pinStore.isPinned(playlist.id)
-                        ) {
-                            selectedPlaylist = playlist
-                            selection = nil
-                            appState.navigationPath = NavigationPath()
+                ScrollView(.vertical) {
+                    LazyVStack(alignment: .leading, spacing: 2) {
+                        if libraryStore.isLoadingPlaylists && visiblePlaylists.isEmpty {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                                .padding(.horizontal, 10)
+                        } else if visiblePlaylists.isEmpty {
+                            Text(String(localized: "no_playlists"))
+                                .font(.callout)
+                                .foregroundStyle(.tertiary)
+                                .padding(.horizontal, 10)
+                        } else {
+                            ForEach(visiblePlaylists) { playlist in
+                                PlaylistSidebarRow(
+                                    playlist: playlist,
+                                    isSelected: selectedPlaylist?.id == playlist.id,
+                                    themeColor: themeColor,
+                                    isPinned: pinStore.isPinned(playlist.id)
+                                ) {
+                                    selectedPlaylist = playlist
+                                    selection = nil
+                                    appState.navigationPath = NavigationPath()
+                                }
+                            }
                         }
                     }
                 }
+                .frame(maxHeight: .infinity)
+            } else {
+                Spacer()
             }
-
-            Spacer()
 
             if enableDownloads {
                 Divider()

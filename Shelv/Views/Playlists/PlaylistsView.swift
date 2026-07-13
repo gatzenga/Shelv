@@ -9,6 +9,7 @@ struct PlaylistsView: View {
     private let player = AudioPlayerService.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage("enableDownloads") private var enableDownloads = true
+    @AppStorage("recapEnabled") private var recapEnabled = false
     @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
     @AppStorage("playlistSortOption") private var sortOptionRaw: String = PlaylistSortOption.alphabetical.rawValue
     private var sortOption: PlaylistSortOption { PlaylistSortOption(rawValue: sortOptionRaw) ?? .alphabetical }
@@ -17,7 +18,9 @@ struct PlaylistsView: View {
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
     private var visiblePlaylists: [Playlist] {
-        var noRecap = libraryStore.playlists.filter { !recapStore.recapPlaylistIds.contains($0.id) }
+        var noRecap = recapEnabled
+            ? libraryStore.playlists.filter { !recapStore.recapPlaylistIds.contains($0.id) }
+            : libraryStore.playlists
         if offlineMode.isOffline {
             noRecap = noRecap.filter { downloadStore.offlinePlaylistIds.contains($0.id) }
         }
