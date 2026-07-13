@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct AddToPlaylistPanel: View {
+    @AppStorage("recapEnabled") private var recapEnabled = false
     let songIds: [String]
     @ObservedObject var libraryStore = LibraryViewModel.shared
     @StateObject private var recapStore = RecapStore.shared
@@ -10,7 +11,9 @@ struct AddToPlaylistPanel: View {
     @State private var newPlaylistName = ""
 
     private var nonRecapPlaylists: [Playlist] {
-        libraryStore.playlists.filter { !recapStore.recapPlaylistIds.contains($0.id) }
+        recapEnabled
+            ? libraryStore.playlists.filter { !recapStore.recapPlaylistIds.contains($0.id) }
+            : libraryStore.playlists
     }
 
     var body: some View {

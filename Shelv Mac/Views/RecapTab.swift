@@ -36,6 +36,10 @@ struct RecapTab: View {
         Form {
             Section {
                 Toggle(String(localized: "enable_recap"), isOn: $recapEnabled)
+                    .onChange(of: recapEnabled) { _, enabled in
+                        guard enabled, let server = appState.serverStore.activeServer else { return }
+                        Task { await recapStore.setup(serverId: server.stableId) }
+                    }
 
                 if recapEnabled {
                     Button {

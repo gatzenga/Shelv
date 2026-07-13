@@ -97,7 +97,9 @@ final class CarPlayPlaylistsController {
             buildOfflineList()
             return
         }
-        let recapIds = RecapStore.shared.recapPlaylistIds
+        let recapIds = UserDefaults.standard.bool(forKey: "recapEnabled")
+            ? RecapStore.shared.recapPlaylistIds
+            : []
         let playlists = LibraryStore.shared.playlists.filter { !recapIds.contains($0.id) }
         if playlists.isEmpty {
             let empty = CPListItem(text: String(localized: "no_playlists"), detailText: nil)
@@ -109,7 +111,9 @@ final class CarPlayPlaylistsController {
 
     private func buildOfflineList() {
         let offlineIds = DownloadStore.shared.offlinePlaylistIds
-        let recapIds = RecapStore.shared.recapPlaylistIds
+        let recapIds = UserDefaults.standard.bool(forKey: "recapEnabled")
+            ? RecapStore.shared.recapPlaylistIds
+            : []
         let hasDownloads = !DownloadStore.shared.songs.isEmpty
         // Falls lokale Daten extern oder während einer Migration verschwinden, keine
         // Offline-Playlist anbieten, die nicht mehr abgespielt werden kann.

@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct AddToPlaylistSheet: View {
+    @AppStorage("recapEnabled") private var recapEnabled = false
     let songIds: [String]
     @ObservedObject var libraryStore = LibraryStore.shared
     @EnvironmentObject var recapStore: RecapStore
@@ -15,7 +16,9 @@ struct AddToPlaylistSheet: View {
     @FocusState private var nameFieldFocused: Bool
 
     private var visiblePlaylists: [Playlist] {
-        libraryStore.playlists.filter { !recapStore.recapPlaylistIds.contains($0.id) }
+        recapEnabled
+            ? libraryStore.playlists.filter { !recapStore.recapPlaylistIds.contains($0.id) }
+            : libraryStore.playlists
     }
 
     var body: some View {
