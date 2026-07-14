@@ -484,12 +484,13 @@ struct PlayerView: View {
                         .buttonStyle(.plain)
                     }
                     ToolbarItem(placement: .topBarTrailing) {
-                        AirPlayButton(tintColor: .label, activeTintColor: UIColor(accentColor))
+                        AirPlayButton(tintColor: .white, activeTintColor: UIColor(accentColor))
                             .frame(width: 34, height: 34)
                     }
                 }
                 .navigationDestination(isPresented: $showLyricsSheet) {
                     LyricsSheetView()
+                        .environment(\.colorScheme, colorScheme)
                         .toolbarBackground(.visible, for: .navigationBar)
                 }
                 .onChange(of: player.currentSong?.id) { _, _ in
@@ -499,11 +500,6 @@ struct PlayerView: View {
                 }
                 .task(id: playerBackgroundIdentifier) {
                     await updatePlayerBackground()
-                }
-                .onChange(of: colorScheme) { _, _ in
-                    guard let raw = rawPrimary else { return }
-                    playerBgPrimary = adaptedColor(raw, asSecondary: false)
-                    playerBgSecondary = adaptedColor(rawSecondary ?? raw, asSecondary: true)
                 }
                 .onReceive(player.timePublisher) { update in
                     guard !isDragging, !player.isSeeking else { return }
@@ -523,6 +519,7 @@ struct PlayerView: View {
                 }
                 .sheet(isPresented: $showQueue) {
                     QueueView()
+                        .environment(\.colorScheme, colorScheme)
                         .presentationSizing(.page)
                         .presentationCornerRadius(24)
                         .presentationDragIndicator(.visible)
@@ -530,6 +527,7 @@ struct PlayerView: View {
                 }
                 .sheet(item: $songInfoSong) { song in
                     SongInfoSheetView(song: song)
+                        .environment(\.colorScheme, colorScheme)
                         .presentationSizing(.page)
                         .presentationCornerRadius(24)
                         .presentationDragIndicator(.visible)
@@ -539,11 +537,13 @@ struct PlayerView: View {
                     if let song = player.currentSong {
                         AddToPlaylistSheet(songIds: [song.id])
                             .environmentObject(libraryStore)
+                            .environment(\.colorScheme, colorScheme)
                             .tint(accentColor)
                     }
                 }
                 .sheet(isPresented: $showSleepTimer) {
                     SleepTimerPanel()
+                        .environment(\.colorScheme, colorScheme)
                         .presentationSizing(.page)
                         .presentationCornerRadius(24)
                         .presentationDragIndicator(.visible)
@@ -554,6 +554,7 @@ struct PlayerView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .ignoresSafeArea(.keyboard)
+        .environment(\.colorScheme, .dark)
     }
     }
 
@@ -732,7 +733,7 @@ struct PlayerView: View {
 
     private var radioPlaceholderArtwork: some View {
         ZStack {
-            Color.gray.opacity(colorScheme == .dark ? 0.2 : 0.1)
+            Color.gray.opacity(0.2)
             Image(systemName: "music.note.house")
                 .font(.system(size: 80))
                 .foregroundStyle(.gray.opacity(0.5))
@@ -881,7 +882,7 @@ struct PlayerView: View {
     }
 
     private func adaptedColor(_ uiColor: UIColor, asSecondary: Bool) -> Color {
-        PlayerBackgroundPaletteStore.adaptedColor(uiColor, asSecondary: asSecondary, colorScheme: colorScheme)
+        PlayerBackgroundPaletteStore.adaptedColor(uiColor, asSecondary: asSecondary, colorScheme: .dark)
     }
 
     private func resolveArtist(_ artistName: String) {
