@@ -65,6 +65,8 @@ and accent color visually consistent:
   background.
 - Text, progress elements, and inactive controls stay light instead of changing
   to black with the rest of the app.
+- The native navigation bar uses a dark toolbar appearance so its glass and
+  controls blend with the player background in both app modes.
 - Native Lyrics uses the same dark presentation. The standard Lyrics view still
   follows the app's Light or Dark Mode setting.
 
