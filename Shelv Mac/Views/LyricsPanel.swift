@@ -53,9 +53,12 @@ private struct NativeLyricLineRow: View {
     let line: LyricLine
     let isActive: Bool
     let distance: Int
+    let isUserScrolling: Bool
     let onTap: () -> Void
 
     private var opacity: Double {
+        if isUserScrolling { return isActive ? 1.0 : 0.58 }
+
         switch distance {
         case 0:
             return 1.0
@@ -69,6 +72,8 @@ private struct NativeLyricLineRow: View {
     }
 
     private var blurRadius: CGFloat {
+        if isUserScrolling { return 0 }
+
         switch distance {
         case 0:
             return 0
@@ -86,7 +91,7 @@ private struct NativeLyricLineRow: View {
             Text(line.text)
                 .font(.system(size: 22, weight: .bold))
                 .lineSpacing(4)
-                .foregroundStyle(Color.primary.opacity(opacity))
+                .foregroundStyle((isActive ? Color.white : Color.primary).opacity(opacity))
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .blur(radius: blurRadius)
@@ -425,6 +430,7 @@ struct LyricsPanel: View {
                             line: line,
                             isActive: isActive,
                             distance: distance,
+                            isUserScrolling: isUserScrolling,
                             onTap: {
                                 let seconds = Double(line.timeMs) / 1000.0
                                 player.seek(to: seconds)
