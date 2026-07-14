@@ -19,6 +19,11 @@
 "mix_failed" = "Mix failed";
 "ok" = "OK";
 "songs" = "Songs";
+"track_collection_count_one_format" = "%d track";
+"track_collection_count_other_format" = "%d tracks";
+"track_collection_duration_minutes_format" = "%d min";
+"track_collection_duration_hours_format" = "%d hr";
+"track_collection_duration_hours_minutes_format" = "%d hr %d min";
 "downloads" = "Downloads";
 "library" = "Library";
 "albums" = "Albums";

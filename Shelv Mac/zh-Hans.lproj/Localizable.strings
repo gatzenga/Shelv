@@ -411,6 +411,11 @@
 "name_updated_format" = "「%@」已更新";
 "name_recreated_format" = "「%@」已重建";
 "count_tracks_format" = "%d 首曲目";
+"track_collection_count_one_format" = "%d 首歌曲";
+"track_collection_count_other_format" = "%d 首歌曲";
+"track_collection_duration_minutes_format" = "%d分钟";
+"track_collection_duration_hours_format" = "%d小时";
+"track_collection_duration_hours_minutes_format" = "%d小时%d分钟";
 "albums_count_format" = "专辑（%d）";
 "count_albums_format" = "%d 张专辑";
 "artists_count_format" = "艺术家（%d）";

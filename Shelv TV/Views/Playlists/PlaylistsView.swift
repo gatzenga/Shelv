@@ -212,10 +212,6 @@ struct PlaylistDetailView: View {
                 if let comment = current.comment, !comment.isEmpty {
                     Text(comment).font(.callout).foregroundStyle(.secondary).lineLimit(2)
                 }
-                if let count = current.songCount {
-                    Text("\(count) \(String(localized: "songs"))")
-                        .font(.body).foregroundStyle(.secondary)
-                }
             }
             VStack(spacing: 12) {
                 actionButton(String(localized: "play"), "play.fill") { player.play(songs: songs, startIndex: 0) }
@@ -255,19 +251,30 @@ struct PlaylistDetailView: View {
     }
 
     private var trackList: some View {
-        ScrollView {
-            LazyVStack(spacing: 4) {
-                ForEach(Array(songs.enumerated()), id: \.element.id) { index, song in
-                    DetailSongRow(song: song, number: index, showArtwork: true,
-                                  rank: index + 1, rankAccent: isRecap,
-                                  playCount: isRecap ? (recapCounts[song.id] ?? 0) : nil) {
-                        player.play(songs: songs, startIndex: index)
+        VStack(spacing: 0) {
+            ScrollView {
+                LazyVStack(spacing: 4) {
+                    ForEach(Array(songs.enumerated()), id: \.element.id) { index, song in
+                        DetailSongRow(song: song, number: index, showArtwork: true,
+                                      rank: index + 1, rankAccent: isRecap,
+                                      playCount: isRecap ? (recapCounts[song.id] ?? 0) : nil) {
+                            player.play(songs: songs, startIndex: index)
+                        }
                     }
                 }
+                .padding(.vertical, 30)
             }
-            .padding(.vertical, 30)
+            .scrollIndicators(.hidden)
+
+            if !songs.isEmpty {
+                TrackCollectionSummaryView(
+                    songs: songs,
+                    preferredDuration: current.duration
+                )
+                .padding(.horizontal, 24)
+                .padding(.bottom, 14)
+            }
         }
-        .scrollIndicators(.hidden)
     }
 }
 

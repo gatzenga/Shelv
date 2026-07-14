@@ -168,6 +168,17 @@ struct PlaylistDetailView: View {
                 onMove: moveSongs,
                 onDelete: deleteSongs
             )
+
+            if !isLoading, searchQuery.isEmpty, !isEditMode, !songs.isEmpty {
+                Section {
+                    TrackCollectionSummaryView(songs: songs)
+                        .listRowInsets(EdgeInsets(top: 8, leading: 28, bottom: 16, trailing: 28))
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        .moveDisabled(true)
+                        .deleteDisabled(true)
+                }
+            }
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
@@ -289,17 +300,6 @@ struct PlaylistDetailView: View {
                         }
                     }
 
-                    HStack(spacing: 10) {
-                        Text(String(format: String(localized: "count_tracks_format"), songs.count))
-                        if let dur = playlist.duration, dur > 0 {
-                            Text("·")
-                            Text(formatDuration(dur))
-                        }
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 2)
-
                     Spacer(minLength: 12)
 
                     ViewThatFits(in: .horizontal) {
@@ -413,9 +413,4 @@ struct PlaylistDetailView: View {
         isSyncingOrder = false
     }
 
-    private func formatDuration(_ seconds: Int) -> String {
-        let m = seconds / 60
-        let s = seconds % 60
-        return "\(m):\(String(format: "%02d", s)) min"
-    }
 }

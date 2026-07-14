@@ -132,25 +132,36 @@ struct AlbumDetailView: View {
     // MARK: - Rechte Spalte (Trackliste)
 
     private var trackList: some View {
-        ScrollView {
-            LazyVStack(spacing: 4) {
-                if hasMultipleDiscs {
-                    ForEach(discNumbers, id: \.self) { disc in
-                        HStack {
-                            Text("Disc \(disc)").font(.headline).foregroundStyle(.secondary)
-                            Spacer()
+        VStack(spacing: 0) {
+            ScrollView {
+                LazyVStack(spacing: 4) {
+                    if hasMultipleDiscs {
+                        ForEach(discNumbers, id: \.self) { disc in
+                            HStack {
+                                Text("Disc \(disc)").font(.headline).foregroundStyle(.secondary)
+                                Spacer()
+                            }
+                            .padding(.horizontal, 24)
+                            .padding(.top, 16)
+                            ForEach(songs.filter { ($0.discNumber ?? 1) == disc }) { detailRow($0) }
                         }
-                        .padding(.horizontal, 24)
-                        .padding(.top, 16)
-                        ForEach(songs.filter { ($0.discNumber ?? 1) == disc }) { detailRow($0) }
+                    } else {
+                        ForEach(songs) { detailRow($0) }
                     }
-                } else {
-                    ForEach(songs) { detailRow($0) }
                 }
+                .padding(.vertical, 30)
             }
-            .padding(.vertical, 30)
+            .scrollIndicators(.hidden)
+
+            if !songs.isEmpty {
+                TrackCollectionSummaryView(
+                    songs: songs,
+                    preferredDuration: album.duration
+                )
+                .padding(.horizontal, 24)
+                .padding(.bottom, 14)
+            }
         }
-        .scrollIndicators(.hidden)
     }
 
     private func detailRow(_ song: Song) -> some View {
