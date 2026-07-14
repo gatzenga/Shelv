@@ -11,6 +11,13 @@ private final class TVPlayerPaletteResult: NSObject {
     }
 }
 
+private struct TVPlayerPalettePixelSample {
+    let red: CGFloat
+    let green: CGFloat
+    let blue: CGFloat
+    let brightness: CGFloat
+}
+
 struct TVPlayerGradientBackground: View {
     enum Style {
         case standard
@@ -199,6 +206,7 @@ private extension UIImage {
         let totalBuckets = 14
         let side = 32
         let totalPixels = side * side
+        let minimumTonalBrightnessDifference: CGFloat = 0.10
         let neutralFallback = UIColor(white: 0.28, alpha: 1)
         let size = CGSize(width: side, height: side)
         let renderer = UIGraphicsImageRenderer(size: size)
@@ -221,6 +229,7 @@ private extension UIImage {
         var gSum = [CGFloat](repeating: 0, count: totalBuckets)
         var bSum = [CGFloat](repeating: 0, count: totalBuckets)
         var counts = [Int](repeating: 0, count: totalBuckets)
+        var chromaticSamples = [[TVPlayerPalettePixelSample]](repeating: [], count: 12)
 
         for index in stride(from: 0, to: pixels.count, by: 4) {
             let r = CGFloat(pixels[index]) / 255
@@ -248,11 +257,52 @@ private extension UIImage {
             gSum[bucket] += g
             bSum[bucket] += b
             counts[bucket] += 1
+
+            if bucket < 12 {
+                chromaticSamples[bucket].append(TVPlayerPalettePixelSample(
+                    red: r,
+                    green: g,
+                    blue: b,
+                    brightness: v
+                ))
+            }
         }
 
         func bucketColor(at index: Int) -> UIColor {
             let count = CGFloat(counts[index])
             return UIColor(red: rSum[index] / count, green: gSum[index] / count, blue: bSum[index] / count, alpha: 1)
+        }
+
+        func averageColor(of samples: ArraySlice<TVPlayerPalettePixelSample>) -> UIColor {
+            let count = CGFloat(samples.count)
+            let red = samples.reduce(CGFloat.zero) { $0 + $1.red } / count
+            let green = samples.reduce(CGFloat.zero) { $0 + $1.green } / count
+            let blue = samples.reduce(CGFloat.zero) { $0 + $1.blue } / count
+            return UIColor(red: red, green: green, blue: blue, alpha: 1)
+        }
+
+        func brightness(of color: UIColor) -> CGFloat {
+            var hue: CGFloat = 0
+            var saturation: CGFloat = 0
+            var brightness: CGFloat = 0
+            var alpha: CGFloat = 0
+            color.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha)
+            return brightness
+        }
+
+        func tonalPalette(from index: Int, minimumCount: Int) -> (UIColor, UIColor)? {
+            let samples = chromaticSamples[index].sorted { $0.brightness < $1.brightness }
+            let midpoint = samples.count / 2
+            guard midpoint >= minimumCount,
+                  samples.count - midpoint >= minimumCount
+            else { return nil }
+
+            let darker = averageColor(of: samples[..<midpoint])
+            let lighter = averageColor(of: samples[midpoint...])
+            guard brightness(of: lighter) - brightness(of: darker) >= minimumTonalBrightnessDifference else {
+                return nil
+            }
+            return (lighter, darker)
         }
 
         let chromaticSorted = (0..<12)
@@ -280,8 +330,13 @@ private extension UIImage {
                 }
                 return lhsDistance < rhsDistance
             }
-        let secondary = secondaryIndex.map { bucketColor(at: $0) }
 
-        return (primary, secondary)
+        if let secondaryIndex {
+            return (primary, bucketColor(at: secondaryIndex))
+        }
+        if let tonalColors = tonalPalette(from: primaryIndex, minimumCount: minSecondaryCount) {
+            return tonalColors
+        }
+        return (primary, nil)
     }
 }

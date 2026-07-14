@@ -45,15 +45,20 @@ is only one 30° bucket away may still become the secondary color when it occurs
 often enough. The size rule decides whether a color is significant; the hue
 distance only decides which significant color is the best secondary.
 
-If no second chromatic bucket reaches the minimum size, no separate secondary
-color is extracted. The rendered gradient then derives a slightly darker,
-slightly less saturated second tone from the primary color.
+If no second chromatic bucket reaches the minimum size, the algorithm makes one
+additional attempt within the primary hue bucket. It sorts that bucket's
+original pixels by HSV brightness, splits them into the darker and lighter
+halves, and averages each half separately. Both halves must still contain at
+least `max(3, primaryCount / 10)` pixels. The two actual cover colors are used
+only when their averaged brightness values differ by at least 10 percentage
+points; the lighter average becomes the primary and the darker average becomes
+the secondary.
 
-Because the buckets group pixels by hue rather than brightness, light and dark
-versions of the same hue usually land in the same bucket and are averaged. They
-still produce a tonal gradient derived from that primary. If the blue shades
-fall into neighboring hue buckets and both are large enough, they can instead
-be extracted as distinct primary and secondary colors.
+This brightness split is only a fallback. It cannot replace a qualifying
+secondary hue and therefore does not change existing multi-color gradients. If
+the split is too small, no separate secondary color is extracted and the
+rendered gradient continues to derive a slightly darker, slightly less
+saturated second tone from the original primary color.
 
 ### Examples
 
@@ -66,6 +71,9 @@ be extracted as distinct primary and secondary colors.
 - If cyan and orange both qualify, orange is selected because its hue is farther
   from the primary blue. If two qualifying buckets are equally far away, the
   larger bucket wins.
+- If no other hue qualifies but one blue bucket contains clearly separated
+  light and dark shades, those halves create a blue-to-blue gradient when their
+  averaged brightness differs by at least 10 percentage points.
 
 ## 3. Final player appearance
 
@@ -76,9 +84,9 @@ and accent color visually consistent:
 - Displayed background brightness is limited to approximately 26–72%.
 - Saturation is increased and capped at 90%.
 - The secondary color is slightly darker and receives a small additional
-  saturation reduction. If no separate secondary hue qualifies, this creates a
-  subtle tonal gradient from the primary color instead of a completely flat
-  background.
+  saturation reduction. If neither a secondary hue nor the same-hue brightness
+  split qualifies, this creates a subtle tonal gradient from the primary color
+  instead of a completely flat background.
 - Text, progress elements, and inactive controls stay light instead of changing
   to black with the rest of the app.
 - The native navigation bar uses a dark toolbar appearance so its glass and
