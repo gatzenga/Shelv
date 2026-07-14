@@ -1,8 +1,8 @@
 # Player Background Palette
 
 The player derives its background from the current cover. The goal is to keep
-the cover's dominant colors while preventing black backgrounds, white text, or
-small colored details from controlling the gradient.
+the cover's dominant colors while preventing black areas, white areas, or small
+colored details from controlling the gradient.
 
 ## 1. Color analysis
 
@@ -29,27 +29,43 @@ neutral gray with 28% brightness.
 
 ## 2. Primary and secondary color
 
-The hue bucket with the most pixels becomes the primary color.
+The hue bucket with the most pixels becomes the primary color. Selecting a
+secondary color then happens in two separate steps:
 
-A secondary bucket is eligible when it contains at least 10% as many pixels as
-the primary bucket. The 10% threshold is relative to the primary color, not to
-the entire cover.
+1. **Minimum size:** A bucket is eligible when its pixel count is at least
+   `max(3, primaryCount / 10)`. In normal-sized buckets this is approximately
+   10% of the primary bucket, not 10% of the entire cover. The minimum of three
+   pixels prevents tiny rounding results from admitting isolated details.
+2. **Largest hue difference:** From the eligible buckets, the algorithm selects
+   the one with the greatest circular hue-bucket distance from the primary. If
+   multiple buckets have the same distance, the bucket with more pixels wins.
 
-From all eligible secondary buckets, the algorithm selects the one with the
-greatest hue distance from the primary color. If multiple buckets have the same
-hue distance, the bucket with more pixels wins.
+There is deliberately no fixed minimum hue distance such as 60°. A color that
+is only one 30° bucket away may still become the secondary color when it occurs
+often enough. The size rule decides whether a color is significant; the hue
+distance only decides which significant color is the best secondary.
 
-If no secondary bucket reaches the 10% threshold, the background remains
-effectively single-colored.
+If no second chromatic bucket reaches the minimum size, no separate secondary
+color is extracted. The rendered gradient then derives a slightly darker,
+slightly less saturated second tone from the primary color.
+
+Because the buckets group pixels by hue rather than brightness, light and dark
+versions of the same hue usually land in the same bucket and are averaged. They
+still produce a tonal gradient derived from that primary. If the blue shades
+fall into neighboring hue buckets and both are large enough, they can instead
+be extracted as distinct primary and secondary colors.
 
 ### Examples
 
-- If blue occupies 90% of a cover and red occupies 10%, the secondary threshold
-  is 9% of the cover. Red qualifies and the result is a blue-red gradient.
-- If a mostly blue cover contains only a small yellow star or red logo, those
-  details normally stay below the threshold and do not affect the background.
-- If several blue shades and an orange area all qualify, orange is preferred
-  because it has the greatest hue distance from the primary blue.
+- If the primary blue bucket contains 900 pixels, another bucket needs at least
+  `max(3, 900 / 10) = 90` pixels to qualify.
+- A nearby cyan bucket with 120 pixels qualifies even though it is less than
+  60° away. It can create a blue-cyan gradient instead of being discarded.
+- A distant orange detail with only 20 pixels does not qualify, despite its
+  strong hue contrast, because it is too small to represent the cover.
+- If cyan and orange both qualify, orange is selected because its hue is farther
+  from the primary blue. If two qualifying buckets are equally far away, the
+  larger bucket wins.
 
 ## 3. Final player appearance
 
