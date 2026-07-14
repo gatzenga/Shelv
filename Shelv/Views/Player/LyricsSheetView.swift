@@ -182,6 +182,7 @@ struct LyricsSheetView: View {
         .navigationTitle(String(localized: "lyrics"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(usesNativeInterface ? .hidden : .visible, for: .navigationBar)
+        .toolbarColorScheme(usesNativeInterface ? .dark : colorScheme, for: .navigationBar)
         .onAppear {
             syncPlaybackClock(time: player.currentTime)
             rebuildLines()
