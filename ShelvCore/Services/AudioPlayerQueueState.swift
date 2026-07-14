@@ -142,6 +142,12 @@ nonisolated struct AudioPlayerQueueState: Equatable {
     }
 
     mutating func previous() -> Song? {
+        if queue.indices.contains(currentIndex),
+           let currentSong,
+           queue[currentIndex].id != currentSong.id {
+            return queue[currentIndex]
+        }
+
         let previousIndex = currentIndex - 1
         guard queue.indices.contains(previousIndex) else { return nil }
         currentIndex = previousIndex
