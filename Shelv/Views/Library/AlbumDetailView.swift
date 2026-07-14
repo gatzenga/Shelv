@@ -106,6 +106,16 @@ struct AlbumDetailView: View {
                         }
                     }
                 }
+
+                if searchQuery.isEmpty, !allSongs.isEmpty {
+                    Section {
+                        TrackCollectionSummaryView(
+                            songs: allSongs,
+                            preferredDuration: detail?.duration
+                        )
+                        .listRowSeparator(.hidden)
+                    }
+                }
             } else if let err = errorMessage {
                 Section {
                     Text(err)

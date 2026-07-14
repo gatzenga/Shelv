@@ -6,6 +6,9 @@ final class CarPlayRecapController {
     private let interfaceController: CPInterfaceController
     let rootTemplate: CPListTemplate
     private var cancellables = Set<AnyCancellable>()
+    private weak var weeklyTemplate: CPListTemplate?
+    private weak var monthlyTemplate: CPListTemplate?
+    private weak var yearlyTemplate: CPListTemplate?
 
     init(interfaceController: CPInterfaceController) {
         self.interfaceController = interfaceController
@@ -58,17 +61,23 @@ final class CarPlayRecapController {
                 detailText: nil
             )
             rootTemplate.updateSections([CPListSection(items: [empty])])
+            rebuildOpenPeriodTemplates()
             return
         }
 
-        let items = entries.map { entry -> CPListItem in
-            recapListItem(entry) { [weak self] _, c in
-                guard let self else { c(); return }
-                self.openRecap(entry)
-                c()
+        let items = periodTypes.map { type in
+            menuListItem(title: type.label, systemImage: type.icon) { [weak self] _, completion in
+                completion()
+                self?.pushRecaps(for: type)
             }
         }
         rootTemplate.updateSections([CPListSection(items: items, header: nil, sectionIndexTitle: nil)])
+        rebuildOpenPeriodTemplates()
+    }
+
+    /// Gleiche Reihenfolge wie im Recap-Picker auf dem iPhone.
+    private var periodTypes: [RecapPeriod.PeriodType] {
+        [.week, .month, .year]
     }
 
     private func visibleEntries() -> [RecapRegistryRecord] {
@@ -76,6 +85,50 @@ final class CarPlayRecapController {
         guard OfflineModeService.shared.isOffline else { return all }
         let downloaded = DownloadStore.shared.offlinePlaylistIds
         return all.filter { downloaded.contains($0.playlistId) }
+    }
+
+    private func entries(for type: RecapPeriod.PeriodType) -> [RecapRegistryRecord] {
+        visibleEntries()
+            .filter { $0.periodType == type.rawValue }
+            .sorted { $0.periodStart > $1.periodStart }
+    }
+
+    private func pushRecaps(for type: RecapPeriod.PeriodType) {
+        let template = CPListTemplate(title: type.label, sections: sections(for: type))
+        setOpenTemplate(template, for: type)
+        CarPlayNavigation.safePush(template, on: interfaceController)
+    }
+
+    private func sections(for type: RecapPeriod.PeriodType) -> [CPListSection] {
+        let entries = entries(for: type)
+        guard !entries.isEmpty else {
+            let message = OfflineModeService.shared.isOffline
+                ? String(localized: "no_offline_recaps")
+                : String(localized: "no_recap_generated_yet_for_this_period")
+            return [CPListSection(items: [CPListItem(text: message, detailText: nil)])]
+        }
+
+        let items = entries.map { entry in
+            recapListItem(entry) { [weak self] _, completion in
+                completion()
+                self?.openRecap(entry)
+            }
+        }
+        return [CPListSection(items: items, header: nil, sectionIndexTitle: nil)]
+    }
+
+    private func rebuildOpenPeriodTemplates() {
+        weeklyTemplate?.updateSections(sections(for: .week))
+        monthlyTemplate?.updateSections(sections(for: .month))
+        yearlyTemplate?.updateSections(sections(for: .year))
+    }
+
+    private func setOpenTemplate(_ template: CPListTemplate, for type: RecapPeriod.PeriodType) {
+        switch type {
+        case .week:  weeklyTemplate = template
+        case .month: monthlyTemplate = template
+        case .year:  yearlyTemplate = template
+        }
     }
 
     private func recapListItem(_ entry: RecapRegistryRecord, handler: @escaping CPItemHandler) -> CPListItem {
