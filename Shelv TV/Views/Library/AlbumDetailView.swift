@@ -19,7 +19,11 @@ struct AlbumDetailView: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 60) {
-            leftColumn.frame(width: 300).focusSection()
+            leftColumn
+                .frame(width: 300)
+                .padding(.bottom, songs.isEmpty ? 0 : 80)
+                .offset(y: 12)
+                .focusSection()
             trackList.frame(maxHeight: .infinity).focusSection()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -43,8 +47,28 @@ struct AlbumDetailView: View {
                     .minimumScaleFactor(0.82)
                     .fixedSize(horizontal: false, vertical: true)
                 artistLink
-                if let year = album.year {
-                    Text(String(year)).font(.callout).foregroundStyle(.secondary)
+                if album.year != nil || album.genre?.isEmpty == false {
+                    HStack(spacing: 8) {
+                        if let year = album.year {
+                            Text(String(year))
+                        }
+                        if let genre = album.genre, !genre.isEmpty {
+                            if album.year != nil {
+                                Text("·")
+                            }
+                            Text(genre)
+                        }
+                    }
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                }
+                if !songs.isEmpty {
+                    TrackCollectionSummaryView(
+                        songs: songs,
+                        preferredDuration: album.duration,
+                        layout: .stacked
+                    )
                 }
             }
             VStack(spacing: 12) {
@@ -152,15 +176,6 @@ struct AlbumDetailView: View {
                 .padding(.vertical, 30)
             }
             .scrollIndicators(.hidden)
-
-            if !songs.isEmpty {
-                TrackCollectionSummaryView(
-                    songs: songs,
-                    preferredDuration: album.duration
-                )
-                .padding(.horizontal, 24)
-                .padding(.bottom, 14)
-            }
         }
     }
 

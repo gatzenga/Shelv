@@ -215,7 +215,8 @@ struct PlaylistDetailView: View {
                 if !songs.isEmpty {
                     TrackCollectionSummaryView(
                         songs: songs,
-                        preferredDuration: current.duration
+                        preferredDuration: current.duration,
+                        layout: .stacked
                     )
                 }
             }
