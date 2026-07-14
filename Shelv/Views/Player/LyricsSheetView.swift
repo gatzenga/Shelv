@@ -18,7 +18,12 @@ private struct LyricLineRow: View {
     let accentColor: Color
     let onTap: () -> Void
 
+    @Environment(\.colorScheme) private var colorScheme
     @State private var isHovered = false
+
+    private var activeBackgroundOpacity: Double {
+        colorScheme == .dark ? 0.15 : 0.40
+    }
 
     var body: some View {
         Button(action: onTap) {
@@ -34,7 +39,7 @@ private struct LyricLineRow: View {
         .background {
             if isActive {
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(accentColor.opacity(0.15))
+                    .fill(accentColor.opacity(activeBackgroundOpacity))
             } else if isHovered {
                 RoundedRectangle(cornerRadius: 8)
                     .fill(Color.primary.opacity(0.05))
@@ -126,6 +131,7 @@ private struct NativePlainLyricLine: View {
 struct LyricsSheetView: View {
     @ObservedObject var player = AudioPlayerService.shared
     @EnvironmentObject var lyricsStore: LyricsStore
+    @Environment(\.colorScheme) private var colorScheme
     @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage(PersonalizationPreferenceKey.miniPlayerStyle) private var interfaceStyleRaw = PersonalizationMiniPlayerStyle.shelv.rawValue
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
@@ -172,6 +178,7 @@ struct LyricsSheetView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .ignoresSafeArea(.keyboard)
+        .environment(\.colorScheme, usesNativeInterface ? .dark : colorScheme)
         .navigationTitle(String(localized: "lyrics"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(usesNativeInterface ? .hidden : .visible, for: .navigationBar)

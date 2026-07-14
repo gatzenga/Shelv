@@ -176,16 +176,17 @@ struct TVPlayerGradientBackground: View {
         uiColor.getHue(&h, saturation: &s, brightness: &v, alpha: &a)
         let factor: CGFloat = asSecondary ? 0.88 : 1.0
         if colorScheme == .dark {
+            let brightness = min(max(v, 0.35) * 0.82, 0.72)
             return Color(UIColor(
                 hue: h,
                 saturation: min(s * 1.2 * factor, 0.90),
-                brightness: min(max(v, 0.35) * 0.82, 0.72),
+                brightness: brightness * (asSecondary ? 0.92 : 1.0),
                 alpha: 1
             ))
         } else {
             return Color(UIColor(
                 hue: h,
-                saturation: min(s * 0.82 * factor, 0.78),
+                saturation: min(s * factor, 0.90),
                 brightness: min(v * 0.45 + 0.58, 0.96),
                 alpha: 1
             ))
@@ -198,10 +199,11 @@ private extension UIImage {
         let totalBuckets = 14
         let side = 32
         let totalPixels = side * side
+        let neutralFallback = UIColor(white: 0.28, alpha: 1)
         let size = CGSize(width: side, height: side)
         let renderer = UIGraphicsImageRenderer(size: size)
         let small = renderer.image { _ in draw(in: CGRect(origin: .zero, size: size)) }
-        guard let cgImage = small.cgImage else { return (.systemGray, nil) }
+        guard let cgImage = small.cgImage else { return (neutralFallback, nil) }
 
         var pixels = [UInt8](repeating: 0, count: totalPixels * 4)
         guard let context = CGContext(
@@ -212,7 +214,7 @@ private extension UIImage {
             bytesPerRow: side * 4,
             space: CGColorSpaceCreateDeviceRGB(),
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else { return (.systemGray, nil) }
+        ) else { return (neutralFallback, nil) }
         context.draw(cgImage, in: CGRect(x: 0, y: 0, width: side, height: side))
 
         var rSum = [CGFloat](repeating: 0, count: totalBuckets)
@@ -232,7 +234,7 @@ private extension UIImage {
             UIColor(red: r, green: g, blue: b, alpha: 1).getHue(&h, saturation: &s, brightness: &v, alpha: &a)
 
             let bucket: Int
-            if v < 0.20 {
+            if v < 0.15 {
                 bucket = 12
             } else if v > 0.85, s < 0.12 {
                 bucket = 13
@@ -257,66 +259,28 @@ private extension UIImage {
             .filter { counts[$0] > 0 }
             .sorted { counts[$0] > counts[$1] }
 
-        var primary: UIColor
-        var secondary: UIColor?
-
-        if let primaryIndex = chromaticSorted.first {
-            let chromaticColor = bucketColor(at: primaryIndex)
-            let chromaticCount = counts[primaryIndex]
-            let minSecondaryCount = max(3, chromaticCount / 10)
-
-            for candidateIndex in chromaticSorted.dropFirst() {
-                let diff = abs(candidateIndex - primaryIndex)
-                if min(diff, 12 - diff) >= 2, counts[candidateIndex] >= minSecondaryCount {
-                    secondary = bucketColor(at: candidateIndex)
-                    break
-                }
-            }
-
-            if secondary != nil {
-                primary = chromaticColor
-            } else {
-                let darkCount = counts[12]
-                let lightCount = counts[13]
-                let neutralIndex = darkCount >= lightCount ? 12 : 13
-                let neutralCount = max(darkCount, lightCount)
-                if neutralCount > 0 {
-                    if neutralCount > chromaticCount {
-                        primary = bucketColor(at: neutralIndex)
-                        secondary = chromaticColor
-                    } else {
-                        primary = chromaticColor
-                        secondary = bucketColor(at: neutralIndex)
-                    }
-                } else {
-                    primary = chromaticColor
-                }
-            }
-        } else {
-            let darkCount = counts[12]
-            let lightCount = counts[13]
-            if darkCount >= lightCount {
-                primary = darkCount > 0 ? bucketColor(at: 12) : .systemGray
-                secondary = lightCount > 0 ? bucketColor(at: 13) : nil
-            } else {
-                primary = bucketColor(at: 13)
-                secondary = darkCount > 0 ? bucketColor(at: 12) : nil
-            }
+        guard let primaryIndex = chromaticSorted.first else {
+            return (neutralFallback, nil)
         }
 
-        if secondary == nil {
-            var h: CGFloat = 0
-            var s: CGFloat = 0
-            var v: CGFloat = 0
-            var a: CGFloat = 0
-            primary.getHue(&h, saturation: &s, brightness: &v, alpha: &a)
-            secondary = UIColor(
-                hue: h,
-                saturation: min(s * 0.8, 1.0),
-                brightness: max(v * 0.45, 0.10),
-                alpha: 1
-            )
-        }
+        let primary = bucketColor(at: primaryIndex)
+        let primaryCount = counts[primaryIndex]
+        let minSecondaryCount = max(3, primaryCount / 10)
+        let secondaryIndex = chromaticSorted
+            .dropFirst()
+            .filter { counts[$0] >= minSecondaryCount }
+            .max { lhs, rhs in
+                let lhsDiff = abs(lhs - primaryIndex)
+                let rhsDiff = abs(rhs - primaryIndex)
+                let lhsDistance = min(lhsDiff, 12 - lhsDiff)
+                let rhsDistance = min(rhsDiff, 12 - rhsDiff)
+
+                if lhsDistance == rhsDistance {
+                    return counts[lhs] < counts[rhs]
+                }
+                return lhsDistance < rhsDistance
+            }
+        let secondary = secondaryIndex.map { bucketColor(at: $0) }
 
         return (primary, secondary)
     }
