@@ -13,6 +13,7 @@ private struct LyricLine: Identifiable {
 
 private struct TVNativeLyricLineRow: View {
     let line: LyricLine
+    let isActive: Bool
     let distance: Int
 
     private var opacity: Double {
@@ -45,7 +46,7 @@ private struct TVNativeLyricLineRow: View {
         Text(line.text)
             .font(.system(size: 44, weight: .bold))
             .lineSpacing(7)
-            .foregroundStyle(Color.primary.opacity(opacity))
+            .foregroundStyle((isActive ? Color.white : Color.primary).opacity(opacity))
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
             .blur(radius: blurRadius)
@@ -161,8 +162,9 @@ struct LyricsView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 6) {
                     ForEach(Array(parsedLines.enumerated()), id: \.element.id) { index, line in
+                        let isActive = visualActiveLineIndex == index
                         let distance = visualActiveLineIndex.map { abs(index - $0) } ?? 0
-                        TVNativeLyricLineRow(line: line, distance: distance)
+                        TVNativeLyricLineRow(line: line, isActive: isActive, distance: distance)
                             .id(line.id)
                     }
                 }
