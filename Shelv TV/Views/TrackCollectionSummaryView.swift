@@ -1,29 +1,57 @@
 import SwiftUI
 
 struct TrackCollectionSummaryView: View {
-    let songs: [Song]
-    var preferredDuration: Int? = nil
-
-    var body: some View {
-        Text(summaryText)
-            .font(.callout)
-            .foregroundStyle(.secondary)
-            .monospacedDigit()
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 8)
+    enum Layout: Equatable {
+        case inline
+        case stacked
     }
 
-    private var summaryText: String {
+    let songs: [Song]
+    var preferredDuration: Int? = nil
+    var layout: Layout = .inline
+
+    var body: some View {
+        Group {
+            switch layout {
+            case .inline:
+                Text(summaryText)
+            case .stacked:
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(countText)
+                        .lineLimit(1)
+                    if let durationText {
+                        Text(durationText)
+                            .lineLimit(1)
+                    }
+                }
+            }
+        }
+        .font(.callout)
+        .foregroundStyle(.secondary)
+        .monospacedDigit()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, layout == .inline ? 8 : 4)
+    }
+
+    private var countText: String {
         let countFormat = songs.count == 1
             ? String(localized: "track_collection_count_one_format")
             : String(localized: "track_collection_count_other_format")
-        let countText = String(format: countFormat, locale: .current, songs.count)
+        return String(format: countFormat, locale: .current, songs.count)
+    }
+
+    private var durationText: String? {
         let summedDuration = songs.reduce(0) { $0 + ($1.duration ?? 0) }
         let suppliedDuration = preferredDuration ?? 0
         let duration = suppliedDuration > 0 ? suppliedDuration : summedDuration
 
-        guard duration > 0 else { return countText }
-        return "\(countText) · \(formattedDuration(duration))"
+        guard duration > 0 else { return nil }
+        return formattedDuration(duration)
+    }
+
+    private var summaryText: String {
+        guard let durationText else { return countText }
+        return "\(countText) · \(durationText)"
     }
 
     private func formattedDuration(_ seconds: Int) -> String {
