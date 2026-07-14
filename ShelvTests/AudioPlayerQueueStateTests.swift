@@ -308,14 +308,48 @@ final class AudioPlayerQueueStateTests: XCTestCase {
     func testPreviousMovesToPreviousAlbumTrack() {
         var state = makeQueueState(
             queue: [testSong("album-1"), testSong("album-2")],
-            currentIndex: 1
+            currentIndex: 1,
+            currentSong: testSong("album-2")
         )
 
         let song = state.previous()
 
         XCTAssertEqual(song?.id, "album-1")
         XCTAssertEqual(state.currentIndex, 0)
+        state.currentSong = song
         XCTAssertNil(state.previous())
+    }
+
+    func testPreviousReturnsQueueAnchorBeforeMovingBackwardFromDetachedSong() {
+        var state = makeQueueState(
+            queue: [testSong("album-1"), testSong("pink-floyd"), testSong("album-3")],
+            currentIndex: 1,
+            currentSong: testSong("detached-selection")
+        )
+
+        let anchoredSong = state.previous()
+
+        XCTAssertEqual(anchoredSong?.id, "pink-floyd")
+        XCTAssertEqual(state.currentIndex, 1)
+
+        state.currentSong = anchoredSong
+        let earlierSong = state.previous()
+
+        XCTAssertEqual(earlierSong?.id, "album-1")
+        XCTAssertEqual(state.currentIndex, 0)
+    }
+
+    func testPreviousCanReturnToFirstQueueTrackFromDetachedSong() {
+        var state = makeQueueState(
+            queue: [testSong("pink-floyd"), testSong("album-2")],
+            currentIndex: 0,
+            currentSong: testSong("detached-selection")
+        )
+
+        let song = state.previous()
+
+        XCTAssertEqual(song?.id, "pink-floyd")
+        XCTAssertEqual(state.currentIndex, 0)
     }
 
     func testPeekNextSongPrioritizesPlayNextThenAlbumThenUserQueue() {
