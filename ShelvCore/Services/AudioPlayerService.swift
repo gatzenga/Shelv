@@ -1034,6 +1034,7 @@ class AudioPlayerService: ObservableObject {
         isBuffering = false
         isPlaying = false
         isEngineLoaded = false
+        engine.stop()
         networkResumeSong = song
         networkResumeTime = currentTime
         resumeTime = currentTime
@@ -1103,6 +1104,10 @@ class AudioPlayerService: ObservableObject {
         cancelRemoteStreamStallWatchdog()
         prepareForSongPlayback()
         stopFastSeeking()
+        stopEngineForSongTransition(
+            to: song,
+            startsNewTrackingSession: startsNewTrackingSession
+        )
         let activeServer = SubsonicAPIService.shared.activeServer
         let expectedServerConfigId = startsNewTrackingSession
             ? activeServer?.id.uuidString
@@ -1267,6 +1272,22 @@ class AudioPlayerService: ObservableObject {
                 self.isEngineLoaded = true
             }
         }
+    }
+
+    private func stopEngineForSongTransition(
+        to song: Song,
+        startsNewTrackingSession: Bool
+    ) {
+        guard AudioPlayerPlaybackTransitionPolicy.shouldStopEngine(
+            currentSongId: currentSong?.id,
+            targetSongId: song.id,
+            startsNewTrackingSession: startsNewTrackingSession
+        ) else { return }
+
+        // Den alten Time-Sink zuerst entkoppeln, damit engine.stop() die Position
+        // des neu ausgewählten Songs nicht wieder mit 0 überschreibt.
+        isEngineLoaded = false
+        engine.stop()
     }
 
     /// Erneuert die ephemere Serveranzeige nach App-Aktivierung, Reconnect oder
