@@ -3,13 +3,14 @@ import SwiftUI
 struct TrackCollectionSummaryView: View {
     let songs: [Song]
     var preferredDuration: Int? = nil
+    var alignment: Alignment = .leading
 
     var body: some View {
         Text(summaryText)
             .font(.footnote)
             .foregroundStyle(.secondary)
             .monospacedDigit()
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: alignment)
             .padding(.vertical, 8)
     }
 

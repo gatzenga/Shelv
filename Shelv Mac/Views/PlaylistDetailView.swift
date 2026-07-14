@@ -169,16 +169,6 @@ struct PlaylistDetailView: View {
                 onDelete: deleteSongs
             )
 
-            if !isLoading, searchQuery.isEmpty, !isEditMode, !songs.isEmpty {
-                Section {
-                    TrackCollectionSummaryView(songs: songs)
-                        .listRowInsets(EdgeInsets(top: 8, leading: 28, bottom: 16, trailing: 28))
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
-                        .moveDisabled(true)
-                        .deleteDisabled(true)
-                }
-            }
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
@@ -298,6 +288,10 @@ struct PlaylistDetailView: View {
                                 .font(.body)
                                 .foregroundStyle(.secondary)
                         }
+                    }
+
+                    if !isLoading {
+                        TrackCollectionSummaryView(songs: songs)
                     }
 
                     Spacer(minLength: 12)

@@ -164,11 +164,6 @@ struct PlaylistDetailView: View {
                     }
                     .deleteDisabled(isEditMode)
 
-                    if searchQuery.isEmpty, !isEditMode {
-                        TrackCollectionSummaryView(songs: songs)
-                            .listRowSeparator(.hidden)
-                    }
-
                     PlayerBottomSpacer(activeHeight: 110, inactiveHeight: 0)
                         .listRowInsets(EdgeInsets())
                         .listRowBackground(Color.clear)
@@ -337,6 +332,9 @@ struct PlaylistDetailView: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
+                }
+                if !isLoading {
+                    TrackCollectionSummaryView(songs: songs, alignment: .center)
                 }
             }
             .padding(.horizontal)
