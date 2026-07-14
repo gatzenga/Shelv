@@ -411,6 +411,11 @@
 "name_updated_format" = "\"%@\" aktualisiert";
 "name_recreated_format" = "\"%@\" neu erstellt";
 "count_tracks_format" = "%d Titel";
+"track_collection_count_one_format" = "%d Titel";
+"track_collection_count_other_format" = "%d Titel";
+"track_collection_duration_minutes_format" = "%d Min.";
+"track_collection_duration_hours_format" = "%d Std.";
+"track_collection_duration_hours_minutes_format" = "%d Std. %d Min.";
 "albums_count_format" = "Alben (%d)";
 "count_albums_format" = "%d Alben";
 "artists_count_format" = "Künstler (%d)";

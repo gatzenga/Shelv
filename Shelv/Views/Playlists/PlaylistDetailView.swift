@@ -334,9 +334,7 @@ struct PlaylistDetailView: View {
                         .multilineTextAlignment(.center)
                 }
                 if !isLoading {
-                    Text("\(songs.count) \(String(localized: "songs"))")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
+                    TrackCollectionSummaryView(songs: songs, alignment: .center)
                 }
             }
             .padding(.horizontal)

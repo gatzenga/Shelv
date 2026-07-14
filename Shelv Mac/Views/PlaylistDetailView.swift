@@ -289,16 +289,9 @@ struct PlaylistDetailView: View {
                         }
                     }
 
-                    HStack(spacing: 10) {
-                        Text(String(format: String(localized: "count_tracks_format"), songs.count))
-                        if let dur = playlist.duration, dur > 0 {
-                            Text("·")
-                            Text(formatDuration(dur))
-                        }
+                    if !isLoading {
+                        TrackCollectionSummaryView(songs: songs)
                     }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 2)
 
                     Spacer(minLength: 12)
 
@@ -413,9 +406,4 @@ struct PlaylistDetailView: View {
         isSyncingOrder = false
     }
 
-    private func formatDuration(_ seconds: Int) -> String {
-        let m = seconds / 60
-        let s = seconds % 60
-        return "\(m):\(String(format: "%02d", s)) min"
-    }
 }

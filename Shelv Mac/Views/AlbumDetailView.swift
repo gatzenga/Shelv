@@ -91,6 +91,18 @@ struct AlbumDetailView: View {
                     }
                 }
 
+                if !vm.isLoading, searchQuery.isEmpty, !displaySongs.isEmpty {
+                    TrackCollectionSummaryView(
+                        songs: displaySongs,
+                        preferredDuration: displaySongs.count == vm.songs.count
+                            ? vm.album?.duration
+                            : nil
+                    )
+                    .padding(.horizontal, 28)
+                    .padding(.top, 8)
+                    .padding(.bottom, 20)
+                }
+
                 if let err = vm.errorMessage {
                     Label(err, systemImage: "exclamationmark.triangle")
                         .foregroundStyle(.red)
@@ -158,10 +170,11 @@ struct AlbumDetailView: View {
                     }
 
                     HStack(spacing: 10) {
-                        if let year  = vm.album?.year     { Text(String(year)) }
-                        if let genre = vm.album?.genre    { Text("·"); Text(genre) }
-                        if let count = vm.album?.songCount { Text("·"); Text(String(format: String(localized: "count_tracks_format"), count)) }
-                        if let dur   = vm.album?.duration  { Text("·"); Text(formatDuration(dur)) }
+                        if let year = vm.album?.year { Text(String(year)) }
+                        if let genre = vm.album?.genre {
+                            if vm.album?.year != nil { Text("·") }
+                            Text(genre)
+                        }
                     }
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -314,12 +327,6 @@ struct AlbumDetailView: View {
     private var coverURL: URL? {
         let id = vm.album?.coverArt ?? initialCoverArtId ?? albumId
         return SubsonicAPIService.shared.coverArtURL(id: id, size: 320)
-    }
-
-    private func formatDuration(_ seconds: Int) -> String {
-        let m = seconds / 60
-        let s = seconds % 60
-        return "\(m):\(String(format: "%02d", s)) min"
     }
 
     @ViewBuilder

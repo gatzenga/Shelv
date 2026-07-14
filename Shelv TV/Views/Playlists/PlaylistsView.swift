@@ -212,9 +212,11 @@ struct PlaylistDetailView: View {
                 if let comment = current.comment, !comment.isEmpty {
                     Text(comment).font(.callout).foregroundStyle(.secondary).lineLimit(2)
                 }
-                if let count = current.songCount {
-                    Text("\(count) \(String(localized: "songs"))")
-                        .font(.body).foregroundStyle(.secondary)
+                if !songs.isEmpty {
+                    TrackCollectionSummaryView(
+                        songs: songs,
+                        preferredDuration: current.duration
+                    )
                 }
             }
             VStack(spacing: 12) {
