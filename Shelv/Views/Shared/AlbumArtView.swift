@@ -11,6 +11,7 @@ struct AlbumArtView: View {
     @State private var loadedIdentifier: String?
     @State private var loading: Bool
     @State private var loadRequest = ArtworkLoadRequestTracker()
+    @State private var connectivityReloadToken = UUID()
 
     init(
         coverArtId: String?,
@@ -70,6 +71,14 @@ struct AlbumArtView: View {
         .onReceive(NotificationCenter.default.publisher(for: .artworkIndexReady)) { _ in
             guard uiImage == nil || loadedIdentifier != loadIdentifier else { return }
             Task { await load() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .networkStatusChanged)) { _ in
+            guard ArtworkConnectivityReloadPolicy.shouldReload(
+                hasNetwork: NetworkStatus.shared.hasNetwork
+            ) else { return }
+            // Die strukturierte .task wird dadurch neu gestartet. So kann ein während
+            // Offline geladener kleiner Fallback sofort auf die Zielgröße aktualisieren.
+            connectivityReloadToken = UUID()
         }
     }
 
@@ -185,7 +194,7 @@ struct AlbumArtView: View {
     }
 
     private var taskIdentifier: String {
-        "\(loadIdentifier)|\(reloadToken?.uuidString ?? "static")"
+        "\(loadIdentifier)|\(reloadToken?.uuidString ?? "static")|\(connectivityReloadToken.uuidString)"
     }
 
 }

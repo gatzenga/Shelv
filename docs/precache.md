@@ -16,6 +16,7 @@ Once the current song reaches the 5 s playback marker, `AudioPlayerService` fill
 | Transcoded remote stream + `streamPreCacheEnabled = true` | Current song is cached before playback; the selected upcoming count is cached after the 5 s marker |
 | Raw remote stream + `streamPreCacheEnabled = true` | Current song is cached before playback; the selected upcoming count is cached after the 5 s marker |
 | Raw remote stream + `streamPreCacheEnabled = false` | No upcoming cache — AVPlayer will stream directly later |
+| Network becomes unavailable | No new prefetch jobs start; completed files in the logical cache window stay available and missing jobs resume after reconnect |
 | Local file (downloaded) | Nothing needed — file already on disk |
 
 The managed cache window prevents the same song from being started twice and keeps the current song plus the relevant upcoming songs alive. On track change (skip, stop) cache files outside the window are cancelled and deleted; newly needed upcoming songs are added when the new current song reaches the 5 s marker.
@@ -107,4 +108,5 @@ The same cache logic applies when starting the current song:
 
 - `managedStreamCacheSongIds` and `gaplessPreloadTriggered` are reset or trimmed on every song start and stop — no state leaks between tracks.
 - The cache window ensures the correct cache files are retained or cancelled on skip.
+- Retention is based on the logical queue window, not on whether new network jobs can currently be scheduled; losing connectivity must never collapse a populated window.
 - The gapless swap only fires when `peekNextSong()?.id == gaplessPreloadSong?.id` — queue changes inside the preload window are handled correctly.

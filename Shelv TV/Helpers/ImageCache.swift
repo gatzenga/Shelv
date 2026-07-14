@@ -15,6 +15,7 @@ struct CoverArtView: View {
     @State private var image: UIImage?
     @State private var loadedImageKey: String?
     @State private var loadRequest = ArtworkLoadRequestTracker()
+    @State private var connectivityReloadToken = UUID()
 
     init(
         url: URL?,
@@ -68,8 +69,15 @@ struct CoverArtView: View {
             }
         }
         .onAppear { triggerLoad() }
-        .task(id: stableKey) { await loadImage() }
-        .onChange(of: reloadToken) { _, _ in triggerLoad() }
+        .task(id: taskIdentifier) {
+            await loadImage(requestIdentifier: taskIdentifier)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .networkStatusChanged)) { _ in
+            guard ArtworkConnectivityReloadPolicy.shouldReload(
+                hasNetwork: NetworkStatus.shared.hasNetwork
+            ) else { return }
+            connectivityReloadToken = UUID()
+        }
     }
 
     private var stableKey: String {
@@ -79,10 +87,11 @@ struct CoverArtView: View {
 
     private func triggerLoad() {
         guard url != nil, loadedImageKey != stableKey else { return }
-        Task { await loadImage() }
+        let requestIdentifier = taskIdentifier
+        Task { await loadImage(requestIdentifier: requestIdentifier) }
     }
 
-    private func loadImage() async {
+    private func loadImage(requestIdentifier: String) async {
         guard let url else {
             loadRequest.reset()
             image = nil
@@ -90,11 +99,11 @@ struct CoverArtView: View {
             return
         }
         let key = stableKey
-        guard let attempt = loadRequest.beginIfIdle(key) else { return }
-        defer { loadRequest.finish(key, attempt: attempt) }
+        guard let attempt = loadRequest.beginIfIdle(requestIdentifier) else { return }
+        defer { loadRequest.finish(requestIdentifier, attempt: attempt) }
 
         if let hit = ImageCacheService.shared.cachedImage(url: url) {
-            apply(hit, for: key, attempt: attempt)
+            apply(hit, for: key, requestIdentifier: requestIdentifier, attempt: attempt)
             return
         }
 
@@ -105,31 +114,40 @@ struct CoverArtView: View {
         if let artId, artId.hasPrefix("demo_") {
             if let img = UIImage(named: artId) {
                 ImageCacheService.shared.cache(img, url: url)
-                apply(img, for: key, attempt: attempt)
+                apply(img, for: key, requestIdentifier: requestIdentifier, attempt: attempt)
             }
             return
         }
         #endif
 
         if let img = await ImageCacheService.shared.diskOnlyImage(url: url) {
-            guard isCurrentLoad(key, attempt: attempt) else { return }
-            apply(img, for: key, attempt: attempt)
+            guard isCurrentLoad(requestIdentifier, attempt: attempt) else { return }
+            apply(img, for: key, requestIdentifier: requestIdentifier, attempt: attempt)
         }
 
         if let img = await ImageCacheService.shared.image(url: url) {
-            guard isCurrentLoad(key, attempt: attempt) else { return }
-            apply(img, for: key, attempt: attempt)
+            guard isCurrentLoad(requestIdentifier, attempt: attempt) else { return }
+            apply(img, for: key, requestIdentifier: requestIdentifier, attempt: attempt)
         }
     }
 
-    private func isCurrentLoad(_ key: String, attempt: UUID) -> Bool {
-        loadRequest.accepts(key, attempt: attempt)
+    private func isCurrentLoad(_ requestIdentifier: String, attempt: UUID) -> Bool {
+        loadRequest.accepts(requestIdentifier, attempt: attempt)
     }
 
-    private func apply(_ loadedImage: UIImage, for key: String, attempt: UUID) {
-        guard isCurrentLoad(key, attempt: attempt) else { return }
+    private func apply(
+        _ loadedImage: UIImage,
+        for key: String,
+        requestIdentifier: String,
+        attempt: UUID
+    ) {
+        guard isCurrentLoad(requestIdentifier, attempt: attempt) else { return }
         image = loadedImage
         loadedImageKey = key
+    }
+
+    private var taskIdentifier: String {
+        "\(stableKey)|\(reloadToken?.uuidString ?? "static")|\(connectivityReloadToken.uuidString)"
     }
 }
 

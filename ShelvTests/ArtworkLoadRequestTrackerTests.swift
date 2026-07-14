@@ -1,6 +1,14 @@
 import XCTest
 
 final class ArtworkLoadRequestTrackerTests: XCTestCase {
+    func testArtworkReloadsWhenConnectivityReturns() {
+        XCTAssertTrue(ArtworkConnectivityReloadPolicy.shouldReload(hasNetwork: true))
+    }
+
+    func testArtworkDoesNotReloadWhenConnectivityIsLost() {
+        XCTAssertFalse(ArtworkConnectivityReloadPolicy.shouldReload(hasNetwork: false))
+    }
+
     func testLateOlderRequestCannotReplaceNewestArtwork() {
         var tracker = ArtworkLoadRequestTracker()
 
