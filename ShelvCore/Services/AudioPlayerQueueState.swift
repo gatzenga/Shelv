@@ -6,6 +6,16 @@ nonisolated enum AudioPlayerQueueAdvanceAction: Equatable {
     case none
 }
 
+nonisolated enum AudioPlayerPlaybackTransitionPolicy {
+    static func shouldStopEngine(
+        currentSongId: String?,
+        targetSongId: String,
+        startsNewTrackingSession: Bool
+    ) -> Bool {
+        startsNewTrackingSession || currentSongId != targetSongId
+    }
+}
+
 nonisolated struct AudioPlayerQueueState: Equatable {
     var queue: [Song]
     var currentIndex: Int

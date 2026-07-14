@@ -1,6 +1,36 @@
 import XCTest
 
 final class AudioPlayerQueueStateTests: XCTestCase {
+    func testNewLogicalPlaybackStopsCurrentEngineEvenForSameSong() {
+        XCTAssertTrue(
+            AudioPlayerPlaybackTransitionPolicy.shouldStopEngine(
+                currentSongId: "song-a",
+                targetSongId: "song-a",
+                startsNewTrackingSession: true
+            )
+        )
+    }
+
+    func testInternalReconnectOfSameSongKeepsTransitionContinuous() {
+        XCTAssertFalse(
+            AudioPlayerPlaybackTransitionPolicy.shouldStopEngine(
+                currentSongId: "song-a",
+                targetSongId: "song-a",
+                startsNewTrackingSession: false
+            )
+        )
+    }
+
+    func testDifferentSongAlwaysStopsCurrentEngine() {
+        XCTAssertTrue(
+            AudioPlayerPlaybackTransitionPolicy.shouldStopEngine(
+                currentSongId: "song-a",
+                targetSongId: "song-b",
+                startsNewTrackingSession: false
+            )
+        )
+    }
+
     func testPlayNextWinsOverAlbumQueueAndRemovesTruthEntry() {
         var state = makeQueueState(
             queue: [testSong("album-1"), testSong("album-2")],
