@@ -1052,8 +1052,12 @@ class AudioPlayerService: ObservableObject {
         )
     }
 
-    private func desiredStreamCacheJobs() -> [AudioPlayerStreamCacheJob] {
-        upcomingSongs(limit: backgroundStreamPreCacheLimit).compactMap { streamCacheJob(for: $0) }
+    private func desiredStreamCacheSongs() -> [Song] {
+        upcomingSongs(limit: backgroundStreamPreCacheLimit)
+    }
+
+    private func desiredStreamCacheJobs(for songs: [Song]) -> [AudioPlayerStreamCacheJob] {
+        songs.compactMap { streamCacheJob(for: $0) }
     }
 
     #if os(iOS) || os(tvOS) || os(macOS)
@@ -1101,7 +1105,11 @@ class AudioPlayerService: ObservableObject {
 
     private func currentStreamCacheKeepIds() -> Set<String> {
         guard let currentSong else { return [] }
-        return Set(desiredStreamCacheJobs().map(\.songId)).union([currentSong.id])
+        return AudioPlayerStreamCacheWindowPlan(
+            currentSongId: currentSong.id,
+            desiredUpcomingSongIds: desiredStreamCacheSongs().map(\.id),
+            schedulableJobSongIds: []
+        ).keepSongIds
     }
 
     private func trimManagedStreamCaches(keeping keepIds: Set<String>) {
@@ -1148,9 +1156,15 @@ class AudioPlayerService: ObservableObject {
             cancelAllManagedStreamCaches()
             return
         }
-        let jobs = desiredStreamCacheJobs()
-        let keepIds = Set(jobs.map(\.songId)).union([currentSong.id])
-        let signature = [currentSong.id] + jobs.map(\.songId)
+        let desiredSongs = desiredStreamCacheSongs()
+        let jobs = desiredStreamCacheJobs(for: desiredSongs)
+        let plan = AudioPlayerStreamCacheWindowPlan(
+            currentSongId: currentSong.id,
+            desiredUpcomingSongIds: desiredSongs.map(\.id),
+            schedulableJobSongIds: jobs.map(\.songId)
+        )
+        let keepIds = plan.keepSongIds
+        let signature = plan.schedulingSignature
         guard force || signature != streamCacheWindowSongIds else { return }
 
         streamCacheWindowSongIds = signature

@@ -1,5 +1,11 @@
 import Foundation
 
+nonisolated enum ArtworkConnectivityReloadPolicy {
+    static func shouldReload(hasNetwork: Bool) -> Bool {
+        hasNetwork
+    }
+}
+
 struct ArtworkLoadRequestTracker {
     private(set) var activeIdentifier: String?
     private(set) var activeAttempt: UUID?
