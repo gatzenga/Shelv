@@ -20,10 +20,11 @@ final class PlayerEngine: ObservableObject {
     var onPlaybackStalled: (() -> Void)?
 
     /// Master-Volume (macOS-Lautstärkeregler). Auf iOS regelt die Hardware;
-    /// ReplayGain nutzt dort `setVolume(_:)`.
+    /// ReplayGain wird separat geführt und erst für die Ausgabe kombiniert.
     var volume: Float = 1.0 {
-        didSet { player.volume = volume }
+        didSet { applyEffectiveVolume() }
     }
+    private var replayGainVolume: Float = 1.0
 
     private let player: AVQueuePlayer
     private var timeObserverToken: Any?
@@ -95,7 +96,7 @@ final class PlayerEngine: ObservableObject {
         player.pause()
         player.removeAllItems()
         player.automaticallyWaitsToMinimizeStalling = !url.isFileURL
-        player.volume = volume
+        applyEffectiveVolume()
         player.insert(item, after: nil)
         player.play()
 
@@ -256,8 +257,16 @@ final class PlayerEngine: ObservableObject {
         return false
     }
 
-    func setVolume(_ volume: Float) {
-        player.volume = max(0, min(volume, 1.0))
+    func setReplayGainVolume(_ volume: Float) {
+        replayGainVolume = max(0, min(volume, 1.0))
+        applyEffectiveVolume()
+    }
+
+    private func applyEffectiveVolume() {
+        player.volume = PlayerEngineVolumePolicy.effectiveVolume(
+            masterVolume: volume,
+            replayGainVolume: replayGainVolume
+        )
     }
 
     /// Liest den echten Codec (und einen Bitrate-Schätzwert) aus dem aktuell geladenen

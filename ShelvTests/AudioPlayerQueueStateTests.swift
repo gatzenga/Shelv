@@ -31,6 +31,28 @@ final class AudioPlayerQueueStateTests: XCTestCase {
         )
     }
 
+    func testPlayerVolumeKeepsMacMasterVolumeWithoutReplayGain() {
+        XCTAssertEqual(
+            PlayerEngineVolumePolicy.effectiveVolume(
+                masterVolume: 0.25,
+                replayGainVolume: 1
+            ),
+            0.25,
+            accuracy: 0.0001
+        )
+    }
+
+    func testPlayerVolumeCombinesMasterVolumeAndReplayGain() {
+        XCTAssertEqual(
+            PlayerEngineVolumePolicy.effectiveVolume(
+                masterVolume: 0.4,
+                replayGainVolume: 0.5
+            ),
+            0.2,
+            accuracy: 0.0001
+        )
+    }
+
     func testPlayNextWinsOverAlbumQueueAndRemovesTruthEntry() {
         var state = makeQueueState(
             queue: [testSong("album-1"), testSong("album-2")],

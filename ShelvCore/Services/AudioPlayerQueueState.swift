@@ -16,6 +16,12 @@ nonisolated enum AudioPlayerPlaybackTransitionPolicy {
     }
 }
 
+nonisolated enum PlayerEngineVolumePolicy {
+    static func effectiveVolume(masterVolume: Float, replayGainVolume: Float) -> Float {
+        max(0, min(masterVolume * replayGainVolume, 1))
+    }
+}
+
 nonisolated struct AudioPlayerQueueState: Equatable {
     var queue: [Song]
     var currentIndex: Int
