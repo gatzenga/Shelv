@@ -56,6 +56,7 @@ struct ServerFormView: View {
     @State private var serverURL = ""
     @State private var username = ""
     @State private var password = ""
+    @State private var originalPassword: String?
     @State private var isTesting = false
     @State private var isSaving = false
     @State private var testResult: String?
@@ -136,7 +137,11 @@ struct ServerFormView: View {
 
                 if isEditing && !isActive {
                     Button {
-                        if let s = editingServer { serverStore.activate(server: s); dismiss() }
+                        guard let server = editingServer else { return }
+                        Task {
+                            await serverStore.activate(server: server)
+                            dismiss()
+                        }
                     } label: {
                         Label(String(localized: "activate"), systemImage: "checkmark.circle")
                     }
@@ -146,7 +151,15 @@ struct ServerFormView: View {
             if isEditing {
                 Section {
                     DestructiveButton(title: String(localized: "remove_server"), systemImage: "trash") {
-                        if let s = editingServer { serverStore.delete(server: s); dismiss() }
+                        guard let server = editingServer else { return }
+                        Task {
+                            guard await serverStore.delete(server: server) else {
+                                testSuccess = false
+                                testResult = String(localized: "credential_storage_failed")
+                                return
+                            }
+                            dismiss()
+                        }
                     }
                 }
             }
@@ -168,7 +181,20 @@ struct ServerFormView: View {
             name = server.name
             serverURL = server.baseURL
             username = server.username
-            password = serverStore.password(for: server) ?? ""
+            let cachedPassword = serverStore.password(for: server)
+            password = cachedPassword ?? ""
+            originalPassword = cachedPassword
+        }
+        .task(id: editingServer?.id) {
+            guard password.isEmpty,
+                  let server = editingServer else { return }
+            let serverID = server.id
+                guard let storedPassword = await serverStore.loadPassword(for: server),
+                  !Task.isCancelled,
+                  editingServer?.id == serverID,
+                      password.isEmpty else { return }
+                password = storedPassword
+                originalPassword = storedPassword
         }
     }
 
@@ -201,13 +227,48 @@ struct ServerFormView: View {
             updated.name = trimmedName
             updated.baseURL = normalized
             updated.username = username
-            serverStore.update(server: updated, password: password.isEmpty ? nil : password)
+            updated.sanitizeURLSlots()
+            let authenticationConfigurationChanged =
+                updated.baseURL != existing.baseURL
+                || updated.secondaryBaseURL != existing.secondaryBaseURL
+                || updated.username != existing.username
+            let passwordChanged = originalPassword.map { $0 != password }
+                ?? !password.isEmpty
+            if authenticationConfigurationChanged || passwordChanged {
+                do {
+                    _ = try await SubsonicAPIService.shared.ping(
+                        server: updated,
+                        password: password
+                    )
+                    updated.remoteUserId = try await SubsonicAPIService.shared.authLogin(
+                        server: updated,
+                        password: password
+                    )
+                } catch {
+                    testSuccess = false
+                    testResult = error.localizedDescription
+                    return
+                }
+            }
+            guard await serverStore.update(
+                server: updated,
+                password: passwordChanged ? password : nil,
+                authenticationIdentityVerified: authenticationConfigurationChanged
+            ) else {
+                testSuccess = false
+                testResult = String(localized: "credential_storage_failed")
+                return
+            }
             dismiss()
         } else {
             var server = SubsonicServer(name: trimmedName, baseURL: normalized, username: username)
             do {
                 server.remoteUserId = try await SubsonicAPIService.shared.authLogin(server: server, password: password)
-                serverStore.add(server: server, password: password)
+                guard await serverStore.add(server: server, password: password) else {
+                    testSuccess = false
+                    testResult = String(localized: "credential_storage_failed")
+                    return
+                }
                 dismiss()
             } catch {
                 testSuccess = false

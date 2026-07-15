@@ -166,7 +166,7 @@ final class LibraryDatabaseTests: XCTestCase {
         let database = try await makeDatabase()
 
         try await writeAlbums([album(id: "shared", name: "Old")], to: database, serverKey: "server-a", generation: "g1")
-        try await database.beginGeneration(entity: .albums, serverKey: "server-a")
+        try await database.beginGeneration(entity: .albums, serverKey: "server-a", generation: "g2")
         try await database.upsertAlbums([album(id: "shared", name: "New")], serverKey: "server-a", stableId: nil, generation: "g2")
 
         let visibleDuringRefresh = try await database.albums(serverKey: "server-a").map(\.name)
@@ -181,9 +181,9 @@ final class LibraryDatabaseTests: XCTestCase {
         let database = try await makeDatabase()
 
         try await writeAlbums([album(id: "shared", name: "Old")], to: database, serverKey: "server-a", generation: "g1")
-        try await database.beginGeneration(entity: .albums, serverKey: "server-a")
+        try await database.beginGeneration(entity: .albums, serverKey: "server-a", generation: "g2")
         try await database.upsertAlbums([album(id: "shared", name: "New")], serverKey: "server-a", stableId: nil, generation: "g2")
-        try await database.recordFailure(entity: .albums, serverKey: "server-a", error: TestLibraryError.refreshFailed)
+        try await database.recordFailure(entity: .albums, serverKey: "server-a", generation: "g2", error: TestLibraryError.refreshFailed)
 
         let visibleAfterFailure = try await database.albums(serverKey: "server-a").map(\.name)
         let state = try await database.syncState(serverKey: "server-a", entity: .albums)
@@ -196,9 +196,9 @@ final class LibraryDatabaseTests: XCTestCase {
         let database = try await makeDatabase()
 
         try await writeArtists([artist(id: "shared", name: "Old Artist")], to: database, serverKey: "server-a", generation: "g1")
-        try await database.beginGeneration(entity: .artists, serverKey: "server-a")
+        try await database.beginGeneration(entity: .artists, serverKey: "server-a", generation: "g2")
         try await database.upsertArtists([artist(id: "shared", name: "New Artist")], serverKey: "server-a", stableId: nil, generation: "g2")
-        try await database.recordFailure(entity: .artists, serverKey: "server-a", error: TestLibraryError.refreshFailed)
+        try await database.recordFailure(entity: .artists, serverKey: "server-a", generation: "g2", error: TestLibraryError.refreshFailed)
 
         let visibleAfterFailure = try await database.artists(serverKey: "server-a").map(\.name)
         let state = try await database.syncState(serverKey: "server-a", entity: .artists)
@@ -211,7 +211,7 @@ final class LibraryDatabaseTests: XCTestCase {
         let database = try await makeDatabase()
 
         try await writeAlbums([album(id: "old", name: "Old")], to: database, serverKey: "server-a", generation: "g1")
-        try await database.beginGeneration(entity: .albums, serverKey: "server-a")
+        try await database.beginGeneration(entity: .albums, serverKey: "server-a", generation: "empty")
         try await database.finishGeneration(entity: .albums, serverKey: "server-a", generation: "empty")
 
         let fetched = try await database.albums(serverKey: "server-a")
@@ -245,9 +245,9 @@ final class LibraryDatabaseTests: XCTestCase {
         XCTAssertEqual(migratedAlbumNames, ["Old Album"])
         XCTAssertEqual(migratedArtistNames, ["Old Artist"])
 
-        try await database.beginGeneration(entity: .albums, serverKey: "server-a")
+        try await database.beginGeneration(entity: .albums, serverKey: "server-a", generation: "g2")
         try await database.upsertAlbums([album(id: "shared", name: "New Album")], serverKey: "server-a", stableId: "stable-a", generation: "g2")
-        try await database.beginGeneration(entity: .artists, serverKey: "server-a")
+        try await database.beginGeneration(entity: .artists, serverKey: "server-a", generation: "g2")
         try await database.upsertArtists([artist(id: "shared", name: "New Artist")], serverKey: "server-a", stableId: "stable-a", generation: "g2")
 
         let visibleAlbumNamesDuringRefresh = try await database.albums(serverKey: "server-a").map(\.name)
@@ -255,8 +255,8 @@ final class LibraryDatabaseTests: XCTestCase {
         XCTAssertEqual(visibleAlbumNamesDuringRefresh, ["Old Album"])
         XCTAssertEqual(visibleArtistNamesDuringRefresh, ["Old Artist"])
 
-        try await database.recordFailure(entity: .albums, serverKey: "server-a", error: TestLibraryError.refreshFailed)
-        try await database.recordFailure(entity: .artists, serverKey: "server-a", error: TestLibraryError.refreshFailed)
+        try await database.recordFailure(entity: .albums, serverKey: "server-a", generation: "g2", error: TestLibraryError.refreshFailed)
+        try await database.recordFailure(entity: .artists, serverKey: "server-a", generation: "g2", error: TestLibraryError.refreshFailed)
         let visibleAlbumNamesAfterFailure = try await database.albums(serverKey: "server-a").map(\.name)
         let visibleArtistNamesAfterFailure = try await database.artists(serverKey: "server-a").map(\.name)
         let albumStateAfterFailure = try await database.syncState(serverKey: "server-a", entity: .albums)
@@ -279,6 +279,75 @@ final class LibraryDatabaseTests: XCTestCase {
         let serverBAlbums = try await database.albums(serverKey: "server-b").map(\.id)
         XCTAssertTrue(serverAAlbums.isEmpty)
         XCTAssertEqual(serverBAlbums, ["b1"])
+    }
+
+    func testGenerationOwnershipRejectsStaleABACompletionAndFailure() async throws {
+        let database = try await makeDatabase()
+        try await writeAlbums(
+            [album(id: "base", name: "Visible")],
+            to: database,
+            serverKey: "server-a",
+            generation: "base"
+        )
+
+        try await database.beginGeneration(entity: .albums, serverKey: "server-a", generation: "a-1")
+        try await database.upsertAlbums(
+            [album(id: "a-1", name: "Stale A")],
+            serverKey: "server-a",
+            stableId: "stable-server-a",
+            generation: "a-1"
+        )
+        try await database.beginGeneration(entity: .albums, serverKey: "server-a", generation: "b")
+        try await database.upsertAlbums(
+            [album(id: "b", name: "Stale B")],
+            serverKey: "server-a",
+            stableId: "stable-server-a",
+            generation: "b"
+        )
+        try await database.beginGeneration(entity: .albums, serverKey: "server-a", generation: "a-2")
+        try await database.upsertAlbums(
+            [album(id: "a-2", name: "Current A")],
+            serverKey: "server-a",
+            stableId: "stable-server-a",
+            generation: "a-2"
+        )
+
+        let staleCompletion = try await database.finishGeneration(
+            entity: .albums,
+            serverKey: "server-a",
+            generation: "a-1"
+        )
+        let staleFailure = try await database.recordFailure(
+            entity: .albums,
+            serverKey: "server-a",
+            generation: "b",
+            error: TestLibraryError.refreshFailed
+        )
+        let stateBeforeCurrentCompletion = try await database.syncState(
+            serverKey: "server-a",
+            entity: .albums
+        )
+        let visibleBeforeCurrentCompletion = try await database.albums(serverKey: "server-a").map(\.id)
+
+        XCTAssertFalse(staleCompletion)
+        XCTAssertFalse(staleFailure)
+        XCTAssertEqual(stateBeforeCurrentCompletion?.pendingGeneration, "a-2")
+        XCTAssertEqual(stateBeforeCurrentCompletion?.status, "syncing")
+        XCTAssertEqual(visibleBeforeCurrentCompletion, ["base"])
+
+        let currentCompletion = try await database.finishGeneration(
+            entity: .albums,
+            serverKey: "server-a",
+            generation: "a-2"
+        )
+        let stateAfterCompletion = try await database.syncState(serverKey: "server-a", entity: .albums)
+        let visibleAfterCompletion = try await database.albums(serverKey: "server-a").map(\.id)
+
+        XCTAssertTrue(currentCompletion)
+        XCTAssertEqual(visibleAfterCompletion, ["a-2"])
+        XCTAssertEqual(stateAfterCompletion?.syncGeneration, "a-2")
+        XCTAssertNil(stateAfterCompletion?.pendingGeneration)
+        XCTAssertEqual(stateAfterCompletion?.rowCount, 1)
     }
 
     func testArtistsSearchAndCounts() async throws {
@@ -438,7 +507,7 @@ final class LibraryDatabaseTests: XCTestCase {
         serverKey: String,
         generation: String
     ) async throws {
-        try await database.beginGeneration(entity: .albums, serverKey: serverKey)
+        try await database.beginGeneration(entity: .albums, serverKey: serverKey, generation: generation)
         try await database.upsertAlbums(albums, serverKey: serverKey, stableId: "stable-\(serverKey)", generation: generation)
         try await database.finishGeneration(entity: .albums, serverKey: serverKey, generation: generation)
     }
@@ -449,7 +518,7 @@ final class LibraryDatabaseTests: XCTestCase {
         serverKey: String,
         generation: String
     ) async throws {
-        try await database.beginGeneration(entity: .artists, serverKey: serverKey)
+        try await database.beginGeneration(entity: .artists, serverKey: serverKey, generation: generation)
         try await database.upsertArtists(artists, serverKey: serverKey, stableId: "stable-\(serverKey)", generation: generation)
         try await database.finishGeneration(entity: .artists, serverKey: serverKey, generation: generation)
     }

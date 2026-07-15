@@ -1,8 +1,36 @@
 import Foundation
 
-protocol LibraryAPIClient: AnyObject {
+nonisolated struct LibraryAPIRequestContext: Equatable, Sendable {
+    let serverKey: String
+    let stableId: String?
+    let credentialGeneration: UInt64
+}
+
+nonisolated protocol LibraryAPIClient: AnyObject {
     func getAlbumList(type: String, size: Int, offset: Int) async throws -> [Album]
     func getAllArtists() async throws -> [Artist]
+    func captureLibraryRequestContext(
+        serverKey: String,
+        stableId: String?
+    ) -> LibraryAPIRequestContext?
+    func isLibraryRequestContextCurrent(_ context: LibraryAPIRequestContext) -> Bool
+}
+
+extension LibraryAPIClient {
+    func captureLibraryRequestContext(
+        serverKey: String,
+        stableId: String?
+    ) -> LibraryAPIRequestContext? {
+        LibraryAPIRequestContext(
+            serverKey: serverKey,
+            stableId: stableId,
+            credentialGeneration: 0
+        )
+    }
+
+    func isLibraryRequestContextCurrent(_ context: LibraryAPIRequestContext) -> Bool {
+        true
+    }
 }
 
 /// Builds one deterministic library order across every Shelv platform.
@@ -135,11 +163,24 @@ nonisolated final class LibraryRepository {
         let generation = UUID().uuidString
         do {
             try await database.setup()
-            try await database.beginGeneration(entity: .albums, serverKey: serverKey)
+            try await database.beginGeneration(
+                entity: .albums,
+                serverKey: serverKey,
+                generation: generation
+            )
             try await database.upsertAlbums(albums, serverKey: serverKey, stableId: stableId, generation: generation)
-            try await database.finishGeneration(entity: .albums, serverKey: serverKey, generation: generation)
+            _ = try await database.finishGeneration(
+                entity: .albums,
+                serverKey: serverKey,
+                generation: generation
+            )
         } catch {
-            try? await database.recordFailure(entity: .albums, serverKey: serverKey, error: error)
+            _ = try? await database.recordFailure(
+                entity: .albums,
+                serverKey: serverKey,
+                generation: generation,
+                error: error
+            )
         }
     }
 
@@ -147,11 +188,24 @@ nonisolated final class LibraryRepository {
         let generation = UUID().uuidString
         do {
             try await database.setup()
-            try await database.beginGeneration(entity: .artists, serverKey: serverKey)
+            try await database.beginGeneration(
+                entity: .artists,
+                serverKey: serverKey,
+                generation: generation
+            )
             try await database.upsertArtists(artists, serverKey: serverKey, stableId: stableId, generation: generation)
-            try await database.finishGeneration(entity: .artists, serverKey: serverKey, generation: generation)
+            _ = try await database.finishGeneration(
+                entity: .artists,
+                serverKey: serverKey,
+                generation: generation
+            )
         } catch {
-            try? await database.recordFailure(entity: .artists, serverKey: serverKey, error: error)
+            _ = try? await database.recordFailure(
+                entity: .artists,
+                serverKey: serverKey,
+                generation: generation,
+                error: error
+            )
         }
     }
 
@@ -159,14 +213,24 @@ nonisolated final class LibraryRepository {
         let generation = UUID().uuidString
         do {
             try await database.setup()
-            try await database.beginGeneration(entity: .albums, serverKey: serverKey)
+            let requestContext = try captureRequestContext(
+                serverKey: serverKey,
+                stableId: stableId
+            )
+            try await database.beginGeneration(
+                entity: .albums,
+                serverKey: serverKey,
+                generation: generation
+            )
 
             var offset = 0
             let apiSortBy = Self.apiSort(for: sortBy)
 
             while true {
                 try Task.checkCancellation()
+                try validate(requestContext)
                 let page = try await api.getAlbumList(type: apiSortBy, size: pageSize, offset: offset)
+                try validate(requestContext)
                 if !page.isEmpty {
                     try await database.upsertAlbums(page, serverKey: serverKey, stableId: stableId, generation: generation)
                 }
@@ -174,7 +238,14 @@ nonisolated final class LibraryRepository {
                 offset += pageSize
             }
 
-            try await database.finishGeneration(entity: .albums, serverKey: serverKey, generation: generation)
+            try validate(requestContext)
+            guard try await database.finishGeneration(
+                entity: .albums,
+                serverKey: serverKey,
+                generation: generation
+            ) else {
+                throw CancellationError()
+            }
             let cacheSort = Self.albumCacheSort(for: sortBy)
             return try await database.albums(
                 serverKey: serverKey,
@@ -182,7 +253,12 @@ nonisolated final class LibraryRepository {
                 direction: cacheSort.1
             )
         } catch {
-            try? await database.recordFailure(entity: .albums, serverKey: serverKey, error: error)
+            _ = try? await database.recordFailure(
+                entity: .albums,
+                serverKey: serverKey,
+                generation: generation,
+                error: error
+            )
             throw error
         }
     }
@@ -191,15 +267,56 @@ nonisolated final class LibraryRepository {
         let generation = UUID().uuidString
         do {
             try await database.setup()
-            try await database.beginGeneration(entity: .artists, serverKey: serverKey)
+            let requestContext = try captureRequestContext(
+                serverKey: serverKey,
+                stableId: stableId
+            )
+            try await database.beginGeneration(
+                entity: .artists,
+                serverKey: serverKey,
+                generation: generation
+            )
             try Task.checkCancellation()
+            try validate(requestContext)
             let artists = try await api.getAllArtists()
+            try validate(requestContext)
             try await database.upsertArtists(artists, serverKey: serverKey, stableId: stableId, generation: generation)
-            try await database.finishGeneration(entity: .artists, serverKey: serverKey, generation: generation)
+            try validate(requestContext)
+            guard try await database.finishGeneration(
+                entity: .artists,
+                serverKey: serverKey,
+                generation: generation
+            ) else {
+                throw CancellationError()
+            }
             return try await database.artists(serverKey: serverKey, sort: .name)
         } catch {
-            try? await database.recordFailure(entity: .artists, serverKey: serverKey, error: error)
+            _ = try? await database.recordFailure(
+                entity: .artists,
+                serverKey: serverKey,
+                generation: generation,
+                error: error
+            )
             throw error
+        }
+    }
+
+    private func captureRequestContext(
+        serverKey: String,
+        stableId: String?
+    ) throws -> LibraryAPIRequestContext {
+        guard let context = api.captureLibraryRequestContext(
+            serverKey: serverKey,
+            stableId: stableId
+        ) else {
+            throw CancellationError()
+        }
+        return context
+    }
+
+    private func validate(_ context: LibraryAPIRequestContext) throws {
+        guard api.isLibraryRequestContextCurrent(context) else {
+            throw CancellationError()
         }
     }
 

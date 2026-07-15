@@ -340,7 +340,6 @@ struct DiscoverView: View {
             showDiscoverLoadFailureState = false
             offlineMode.clearServerError()
             vm.reset()
-            libraryStore.reset()
             RadioStationStore.shared.resetInMemory()
             Task { @MainActor in
                 defer {
@@ -469,7 +468,7 @@ struct DiscoverView: View {
         }
 
         locallyInitiatedURLSwitchSignature = targetSignature
-        serverStore.setURLSlot(for: serverID, slot: slot)
+        await serverStore.setURLSlot(for: serverID, slot: slot)
         vm.reset()
         RadioStationStore.shared.resetInMemory()
 

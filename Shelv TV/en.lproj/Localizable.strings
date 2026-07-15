@@ -576,3 +576,4 @@
 "sync_status_cleaning_duplicate_recaps" = "Cleaning duplicate Recap playlists...";
 "sync_status_verifying_icloud" = "Verifying iCloud Sync...";
 "sync_status_complete" = "Sync complete";
+"credential_storage_failed" = "The secure credential operation could not be completed. Please try again.";

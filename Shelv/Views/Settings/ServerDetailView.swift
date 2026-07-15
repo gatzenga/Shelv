@@ -4,6 +4,7 @@ struct ServerDetailView: View {
     let server: SubsonicServer
     let password: String?
 
+    @EnvironmentObject private var serverStore: ServerStore
     @ObservedObject var libraryStore = LibraryStore.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
 
@@ -11,6 +12,9 @@ struct ServerDetailView: View {
     @State private var scanDone = false
     @State private var serverInfo: ServerInfo? = nil
     @State private var errorMessage: String? = nil
+    @State private var loadedPassword: String? = nil
+
+    private var resolvedPassword: String? { loadedPassword ?? password }
 
     private var lastSyncKey: String { "shelv_lastSync_\(server.id)" }
     private var songCountKey: String { "shelv_songCount_\(server.id)" }
@@ -74,7 +78,7 @@ struct ServerDetailView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(accentColor)
-                    .disabled(isScanning || password == nil)
+                    .disabled(isScanning || resolvedPassword == nil)
                 }
                 .padding(.vertical, 4)
                 .animation(.easeInOut, value: scanDone)
@@ -123,6 +127,7 @@ struct ServerDetailView: View {
         .navigationTitle(server.displayName)
         .navigationBarTitleDisplayMode(.inline)
         .task {
+            loadedPassword = await serverStore.loadPassword(for: server)
             await loadServerInfo()
         }
     }
@@ -141,7 +146,7 @@ struct ServerDetailView: View {
     }
 
     private func loadServerInfo() async {
-        guard let password else { return }
+        guard let password = resolvedPassword else { return }
         async let infoTask   = api.ping(server: server, password: password)
         async let statusTask = api.getScanStatus(server: server, password: password)
         serverInfo = try? await infoTask
@@ -151,7 +156,7 @@ struct ServerDetailView: View {
     }
 
     private func runFullScan() async {
-        guard let password else { return }
+        guard let password = resolvedPassword else { return }
         isScanning = true
         scanDone = false
         errorMessage = nil

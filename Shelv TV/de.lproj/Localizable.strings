@@ -576,3 +576,4 @@
 "sync_status_cleaning_duplicate_recaps" = "Doppelte Recap-Playlists werden bereinigt...";
 "sync_status_verifying_icloud" = "iCloud Sync wird geprüft...";
 "sync_status_complete" = "Sync abgeschlossen";
+"credential_storage_failed" = "Der sichere Zugangsdatenvorgang konnte nicht abgeschlossen werden. Bitte versuche es erneut.";

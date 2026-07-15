@@ -381,7 +381,7 @@ struct DiscoverView: View {
         }
 
         locallyInitiatedURLSwitchSignature = targetSignature
-        serverStore.setURLSlot(for: serverID, slot: slot)
+        await serverStore.setURLSlot(for: serverID, slot: slot)
 
         libraryStore.resetDiscoverInMemory()
 

@@ -175,6 +175,66 @@ final class LibraryRepositoryTests: XCTestCase {
         XCTAssertEqual(cachedArtistIds, ["artist-a", "artist-b"])
     }
 
+    func testStableIdentityBackfillCancelsOldRefreshAndRetryPublishesNewIdentity() async throws {
+        let database = try await makeDatabase()
+        let api = MutableContextLibraryAPIClient(
+            stableId: nil,
+            albums: [album(id: "stale", name: "Stale")]
+        )
+        api.onNextAlbumRequest = {
+            api.updateIdentity(serverKey: "server-a", stableId: "stable-a")
+        }
+        let repository = LibraryRepository(database: database, api: api)
+
+        do {
+            _ = try await repository.refreshAlbums(serverKey: "server-a", stableId: nil)
+            XCTFail("Expected the pre-backfill refresh to be cancelled")
+        } catch {
+            XCTAssertTrue(error is CancellationError)
+        }
+
+        let albumsAfterCancellation = try await database.albums(serverKey: "server-a")
+        let stateAfterCancellation = try await database.syncState(serverKey: "server-a", entity: .albums)
+        XCTAssertTrue(albumsAfterCancellation.isEmpty)
+        XCTAssertEqual(stateAfterCancellation?.status, "failed")
+        XCTAssertNil(stateAfterCancellation?.syncGeneration)
+        XCTAssertNil(stateAfterCancellation?.pendingGeneration)
+
+        api.albums = [album(id: "fresh", name: "Fresh")]
+        let refreshed = try await repository.refreshAlbums(
+            serverKey: "server-a",
+            stableId: "stable-a"
+        )
+
+        XCTAssertEqual(refreshed.map(\.id), ["fresh"])
+    }
+
+    func testCredentialEpochRejectsABAResponseBeforePersistence() async throws {
+        let database = try await makeDatabase()
+        let api = MutableContextLibraryAPIClient(
+            stableId: "stable-a",
+            albums: [album(id: "foreign", name: "Foreign")]
+        )
+        api.onNextAlbumRequest = {
+            api.performABASwitch()
+        }
+        let repository = LibraryRepository(database: database, api: api)
+
+        do {
+            _ = try await repository.refreshAlbums(serverKey: "server-a", stableId: "stable-a")
+            XCTFail("Expected the A-to-B-to-A response to be cancelled")
+        } catch {
+            XCTAssertTrue(error is CancellationError)
+        }
+
+        let albumsAfterCancellation = try await database.albums(serverKey: "server-a")
+        let state = try await database.syncState(serverKey: "server-a", entity: .albums)
+        XCTAssertTrue(albumsAfterCancellation.isEmpty)
+        XCTAssertEqual(state?.status, "failed")
+        XCTAssertNil(state?.syncGeneration)
+        XCTAssertNil(state?.pendingGeneration)
+    }
+
     func testLibrarySortKeyIgnoresArticlesInSupportedLanguages() {
         let examples: [(name: String, expected: String)] = [
             ("The Police", "police"),
@@ -276,13 +336,13 @@ final class LibraryRepositoryTests: XCTestCase {
     }
 
     private func seedAlbums(_ albums: [Album], database: LibraryDatabase, generation: String) async throws {
-        try await database.beginGeneration(entity: .albums, serverKey: "server-a")
+        try await database.beginGeneration(entity: .albums, serverKey: "server-a", generation: generation)
         try await database.upsertAlbums(albums, serverKey: "server-a", stableId: "stable-a", generation: generation)
         try await database.finishGeneration(entity: .albums, serverKey: "server-a", generation: generation)
     }
 
     private func seedArtists(_ artists: [Artist], database: LibraryDatabase, generation: String) async throws {
-        try await database.beginGeneration(entity: .artists, serverKey: "server-a")
+        try await database.beginGeneration(entity: .artists, serverKey: "server-a", generation: generation)
         try await database.upsertArtists(artists, serverKey: "server-a", stableId: "stable-a", generation: generation)
         try await database.finishGeneration(entity: .artists, serverKey: "server-a", generation: generation)
     }
@@ -327,6 +387,62 @@ private final class FakeLibraryAPIClient: LibraryAPIClient {
 
 private enum FakeLibraryAPIError: Error {
     case requestFailed
+}
+
+private final class MutableContextLibraryAPIClient: LibraryAPIClient {
+    private(set) var serverKey = "server-a"
+    private(set) var stableId: String?
+    private(set) var credentialGeneration: UInt64 = 1
+    var albums: [Album]
+    var onNextAlbumRequest: (() -> Void)?
+
+    init(stableId: String?, albums: [Album]) {
+        self.stableId = stableId
+        self.albums = albums
+    }
+
+    func captureLibraryRequestContext(
+        serverKey: String,
+        stableId: String?
+    ) -> LibraryAPIRequestContext? {
+        guard self.serverKey == serverKey, self.stableId == stableId else { return nil }
+        return LibraryAPIRequestContext(
+            serverKey: serverKey,
+            stableId: stableId,
+            credentialGeneration: credentialGeneration
+        )
+    }
+
+    func isLibraryRequestContextCurrent(_ context: LibraryAPIRequestContext) -> Bool {
+        serverKey == context.serverKey
+            && stableId == context.stableId
+            && credentialGeneration == context.credentialGeneration
+    }
+
+    func getAlbumList(type: String, size: Int, offset: Int) async throws -> [Album] {
+        if let onNextAlbumRequest {
+            self.onNextAlbumRequest = nil
+            onNextAlbumRequest()
+        }
+        return offset == 0 ? albums : []
+    }
+
+    func getAllArtists() async throws -> [Artist] {
+        []
+    }
+
+    func updateIdentity(serverKey: String, stableId: String?) {
+        self.serverKey = serverKey
+        self.stableId = stableId
+        credentialGeneration &+= 1
+    }
+
+    func performABASwitch() {
+        serverKey = "server-b"
+        credentialGeneration &+= 1
+        serverKey = "server-a"
+        credentialGeneration &+= 1
+    }
 }
 
 private final class GeneratedLibraryAPIClient: LibraryAPIClient {

@@ -51,8 +51,10 @@ struct LoginView: View {
 
             #if DEBUG
             Button(String(localized: "try_demo")) {
-                serverStore.activate(server: DemoContent.server)
-                AudioPlayerService.shared.loadDemoStandby()   // fester Player-Standby wie iOS/Mac
+                Task {
+                    await serverStore.activate(server: DemoContent.server)
+                    AudioPlayerService.shared.loadDemoStandby()   // fester Player-Standby wie iOS/Mac
+                }
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
@@ -73,8 +75,11 @@ struct LoginView: View {
         do {
             try await SubsonicAPIService.shared.ping(server: server, password: password)
             server.remoteUserId = try await SubsonicAPIService.shared.authLogin(server: server, password: password)
-            serverStore.add(server: server, password: password)
-            serverStore.activate(server: server)
+            guard await serverStore.add(server: server, password: password) else {
+                errorMessage = String(localized: "credential_storage_failed")
+                return
+            }
+            await serverStore.activate(server: server)
         } catch {
             errorMessage = error.localizedDescription
         }

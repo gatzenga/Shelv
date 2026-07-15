@@ -118,7 +118,6 @@ struct MainWindowView: View {
                     appState.player.stop()
                     QueueSyncService.shared.handleServerChange()
                     DiscoverViewModel.shared.reset()
-                    libraryStore.reset()
                     RadioStationStore.shared.resetInMemory()
                     #if DEBUG
                     // Demo-Server aktiv -> festes Player-Standbild (nach stop(), sonst sofort

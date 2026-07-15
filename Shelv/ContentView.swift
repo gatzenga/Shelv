@@ -159,7 +159,6 @@ struct ContentView: View {
     private func handleServerChange() {
         AudioPlayerService.shared.stop()
         QueueSyncService.shared.handleServerChange()
-        libraryStore.resetInMemory()
         RadioStationStore.shared.resetInMemory()
         if serverStore.activeServer == nil {
             selectedTab = 0

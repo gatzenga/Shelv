@@ -576,3 +576,4 @@
 "sync_status_cleaning_duplicate_recaps" = "正在清理重复的 Recap 播放列表...";
 "sync_status_verifying_icloud" = "正在验证 iCloud Sync...";
 "sync_status_complete" = "同步完成";
+"credential_storage_failed" = "无法完成安全凭据操作。请重试。";

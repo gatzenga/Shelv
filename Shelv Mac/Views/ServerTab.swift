@@ -6,6 +6,8 @@ struct ServerTab: View {
     @State private var showAddServer = false
     @State private var serverToEdit: SubsonicServer?
     @State private var serverToDelete: SubsonicServer?
+    @State private var operationErrorMessage: String?
+    @State private var switchingURLServerIDs: Set<UUID> = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -14,8 +16,9 @@ struct ServerTab: View {
                     ServerRow(
                         server: server,
                         isActive: serverStore.activeServerID == server.id,
-                        onActivate: { appState.switchServer(server) },
-                        onToggleURLSlot: { Task { await switchServerURLSlot(from: server) } },
+                        isSwitchingURL: switchingURLServerIDs.contains(server.id),
+                        onActivate: { Task { await appState.switchServer(server) } },
+                        onToggleURLSlot: { Task { await switchServerURLSlot(serverID: server.id) } },
                         onEdit: { serverToEdit = server },
                         onDelete: { serverToDelete = server }
                     )
@@ -23,6 +26,14 @@ struct ServerTab: View {
             }
             .listStyle(.inset)
             .frame(minHeight: 140)
+
+            if let operationErrorMessage {
+                Label(operationErrorMessage, systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.red)
+                    .font(.callout)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+            }
 
             Divider()
 
@@ -54,8 +65,14 @@ struct ServerTab: View {
             presenting: serverToDelete
         ) { server in
             Button(String(localized: "remove"), role: .destructive) {
-                appState.deleteServer(server)
-                serverToDelete = nil
+                Task {
+                    if await appState.deleteServer(server) {
+                        operationErrorMessage = nil
+                        serverToDelete = nil
+                    } else {
+                        operationErrorMessage = String(localized: "credential_storage_failed")
+                    }
+                }
             }
             Button(String(localized: "cancel"), role: .cancel) { serverToDelete = nil }
         } message: { server in
@@ -64,19 +81,22 @@ struct ServerTab: View {
     }
 
     @MainActor
-    private func switchServerURLSlot(from server: SubsonicServer) async {
-        serverStore.toggleURLSlot(for: server)
-        guard serverStore.activeServerID == server.id else { return }
+    private func switchServerURLSlot(serverID: UUID) async {
+        guard !switchingURLServerIDs.contains(serverID),
+              let server = serverStore.servers.first(where: { $0.id == serverID })
+        else { return }
+        switchingURLServerIDs.insert(serverID)
+        defer { switchingURLServerIDs.remove(serverID) }
 
-        LibraryViewModel.shared.reset()
+        let target: ServerURLSlot = server.isUsingSecondaryURL ? .primary : .secondary
+        await serverStore.setURLSlot(for: serverID, slot: target)
+        guard serverStore.activeServerID == serverID else { return }
+
         RadioStationStore.shared.resetInMemory()
 
         if await OfflineModeService.shared.beginUserInitiatedServerRefresh() { return }
         defer { OfflineModeService.shared.finishUserInitiatedServerRefresh() }
 
-        await LibraryViewModel.shared.loadAlbums()
-        await LibraryViewModel.shared.loadArtists()
-        await LibraryViewModel.shared.loadPlaylists(force: true)
         await RadioStationStore.shared.refresh()
     }
 }
@@ -84,6 +104,7 @@ struct ServerTab: View {
 private struct ServerRow: View {
     let server: SubsonicServer
     let isActive: Bool
+    let isSwitchingURL: Bool
     let onActivate: () -> Void
     let onToggleURLSlot: () -> Void
     let onEdit: () -> Void
@@ -130,12 +151,19 @@ private struct ServerRow: View {
 
             if server.hasSecondaryURL {
                 Button { onToggleURLSlot() } label: {
-                    Image(systemName: "arrow.triangle.2.circlepath")
-                        .font(.system(size: 15, weight: .medium))
-                        .frame(width: 26, height: 26)
-                        .foregroundStyle(server.isUsingSecondaryURL ? AnyShapeStyle(themeColor) : AnyShapeStyle(.secondary))
+                    Group {
+                        if isSwitchingURL {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                                .foregroundStyle(server.isUsingSecondaryURL ? AnyShapeStyle(themeColor) : AnyShapeStyle(.secondary))
+                        }
+                    }
+                    .font(.system(size: 15, weight: .medium))
+                    .frame(width: 26, height: 26)
                 }
                 .buttonStyle(.borderless)
+                .disabled(isSwitchingURL)
                 .help(server.isUsingSecondaryURL ? String(localized: "use_primary_url") : String(localized: "use_secondary_url"))
             }
 
@@ -195,6 +223,7 @@ private struct AddServerSheet: View {
 
             HStack {
                 Button(String(localized: "cancel")) { dismiss() }
+                    .disabled(isLoading)
                     .keyboardShortcut(.escape)
                 Spacer()
                 Button {
@@ -210,6 +239,7 @@ private struct AddServerSheet: View {
         }
         .padding(24)
         .frame(width: 420)
+        .interactiveDismissDisabled(isLoading)
     }
 
     @ViewBuilder
@@ -269,6 +299,9 @@ private struct EditServerSheet: View {
     @State private var secondaryURL: String
     @State private var username: String
     @State private var password: String = ""
+    @State private var originalPassword: String?
+    @State private var isSaving = false
+    @State private var errorMessage: String?
 
     private var trimmedSecondaryURL: String {
         secondaryURL.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -318,31 +351,92 @@ private struct EditServerSheet: View {
                     .textFieldStyle(.roundedBorder)
             }
 
+            if let errorMessage {
+                Label(errorMessage, systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.red)
+                    .font(.callout)
+                    .multilineTextAlignment(.center)
+            }
+
             HStack {
                 Button(String(localized: "cancel")) { dismiss() }
+                    .disabled(isSaving)
                     .keyboardShortcut(.escape)
                 Spacer()
-                Button(String(localized: "save")) {
-                    var updated = server
-                    updated.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
-                    updated.baseURL = url.trimmingCharacters(in: .whitespacesAndNewlines)
-                    updated.secondaryBaseURL = useSecondaryURL ? trimmedSecondaryURL : nil
-                    if !useSecondaryURL {
-                        updated.activeURLSlot = .primary
+                Button {
+                    Task { await save() }
+                } label: {
+                    if isSaving {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Text(String(localized: "save"))
                     }
-                    updated.username = username.trimmingCharacters(in: .whitespacesAndNewlines)
-                    serverStore.update(
-                        server: updated,
-                        password: password.isEmpty ? nil : password
-                    )
-                    dismiss()
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(!canSave)
+                .disabled(!canSave || isSaving)
                 .keyboardShortcut(.return)
             }
         }
         .padding(24)
         .frame(width: 420)
+        .interactiveDismissDisabled(isSaving)
+        .task(id: server.id) {
+            guard password.isEmpty else { return }
+            guard let storedPassword = await serverStore.loadPassword(for: server),
+                  !Task.isCancelled,
+                  password.isEmpty else { return }
+            password = storedPassword
+            originalPassword = storedPassword
+        }
+    }
+
+    private func save() async {
+        isSaving = true
+        errorMessage = nil
+        defer { isSaving = false }
+
+        var updated = server
+        updated.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        updated.baseURL = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        updated.secondaryBaseURL = useSecondaryURL ? trimmedSecondaryURL : nil
+        if !useSecondaryURL {
+            updated.activeURLSlot = .primary
+        }
+        updated.username = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        updated.sanitizeURLSlots()
+        let authenticationConfigurationChanged =
+            updated.baseURL != server.baseURL
+            || updated.secondaryBaseURL != server.secondaryBaseURL
+            || updated.username != server.username
+        let passwordChanged = originalPassword.map { $0 != password }
+            ?? !password.isEmpty
+        if authenticationConfigurationChanged || passwordChanged {
+            guard !password.isEmpty else {
+                errorMessage = String(localized: "no_password_found")
+                return
+            }
+            do {
+                _ = try await SubsonicAPIService.shared.ping(
+                    server: updated,
+                    password: password
+                )
+                updated.remoteUserId = try await SubsonicAPIService.shared.authLogin(
+                    server: updated,
+                    password: password
+                )
+            } catch {
+                errorMessage = error.localizedDescription
+                return
+            }
+        }
+        guard await serverStore.update(
+            server: updated,
+            password: passwordChanged ? password : nil,
+            authenticationIdentityVerified: authenticationConfigurationChanged
+        ) else {
+            errorMessage = String(localized: "credential_storage_failed")
+            return
+        }
+        dismiss()
     }
 }

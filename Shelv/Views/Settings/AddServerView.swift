@@ -16,6 +16,7 @@ struct AddServerView: View {
     @State private var secondaryBaseURL = ""
     @State private var username = ""
     @State private var password = ""
+    @State private var originalPassword: String?
     @State private var showPassword = false
     @State private var isTesting = false
     @State private var isSaving = false
@@ -137,6 +138,7 @@ struct AddServerView: View {
                 if !requiresServer {
                     ToolbarItem(placement: .cancellationAction) {
                         Button(String(localized: "cancel")) { dismiss() }
+                            .disabled(isSaving)
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
@@ -144,7 +146,7 @@ struct AddServerView: View {
                         ProgressView()
                     } else {
                         Button(confirmationTitle) { Task { await save() } }
-                            .disabled(!canSave)
+                            .disabled(!canSave || isSaving)
                             .bold()
                     }
                 }
@@ -156,12 +158,26 @@ struct AddServerView: View {
                     useSecondaryURL = server.hasSecondaryURL
                     secondaryBaseURL = server.secondaryURL ?? ""
                     username = server.username
-                    password = serverStore.password(for: server) ?? ""
+                    let cachedPassword = serverStore.password(for: server)
+                    password = cachedPassword ?? ""
+                    originalPassword = cachedPassword
                 }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                     focusedField = isEditing ? .name : .url
                 }
             }
+            .task(id: editingServer?.id) {
+                guard password.isEmpty,
+                      let server = editingServer else { return }
+                let serverID = server.id
+                guard let storedPassword = await serverStore.loadPassword(for: server),
+                      !Task.isCancelled,
+                      editingServer?.id == serverID,
+                      password.isEmpty else { return }
+                password = storedPassword
+                originalPassword = storedPassword
+            }
+            .interactiveDismissDisabled(isSaving)
         }
     }
 
@@ -195,7 +211,38 @@ struct AddServerView: View {
                 updated.activeURLSlot = .primary
             }
             updated.username = username
-            serverStore.update(server: updated, password: password.isEmpty ? nil : password)
+            updated.sanitizeURLSlots()
+            let authenticationConfigurationChanged =
+                updated.baseURL != existing.baseURL
+                || updated.secondaryBaseURL != existing.secondaryBaseURL
+                || updated.username != existing.username
+            let passwordChanged = originalPassword.map { $0 != password }
+                ?? !password.isEmpty
+            if authenticationConfigurationChanged || passwordChanged {
+                do {
+                    _ = try await SubsonicAPIService.shared.ping(
+                        server: updated,
+                        password: password
+                    )
+                    updated.remoteUserId = try await SubsonicAPIService.shared.authLogin(
+                        server: updated,
+                        password: password
+                    )
+                } catch {
+                    testResult = error.localizedDescription
+                    testSuccess = false
+                    return
+                }
+            }
+            guard await serverStore.update(
+                server: updated,
+                password: passwordChanged ? password : nil,
+                authenticationIdentityVerified: authenticationConfigurationChanged
+            ) else {
+                testResult = String(localized: "credential_storage_failed")
+                testSuccess = false
+                return
+            }
             dismiss()
         } else {
             let tempServer = SubsonicServer(
@@ -208,7 +255,11 @@ struct AddServerView: View {
                 let uid = try await SubsonicAPIService.shared.authLogin(server: tempServer, password: password)
                 var server = tempServer
                 server.remoteUserId = uid
-                serverStore.add(server: server, password: password)
+                guard await serverStore.add(server: server, password: password) else {
+                    testResult = String(localized: "credential_storage_failed")
+                    testSuccess = false
+                    return
+                }
                 if !requiresServer {
                     dismiss()
                 }

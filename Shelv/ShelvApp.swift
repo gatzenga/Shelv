@@ -80,23 +80,62 @@ struct ShelvApp: App {
                     print("[Shortcuts] Parameters updated")
                     await LyricsStore.shared.setup()
                 }
-                .task(id: serverStore.activeServerID) {
+                .task(id: serverStore.activeServerRevision) {
+                    await serverStore.waitUntilReady()
+                    let revision = serverStore.activeServerRevision
+                    await Task.yield()
+                    guard revision == serverStore.activeServerRevision else { return }
+                    LibraryStore.shared.resetInMemory()
                     guard let server = serverStore.activeServer else { return }
                     OfflineModeService.shared.prepareInitialServerErrorPresentation()
+                    await LibraryStore.shared.loadAlbums()
+                    guard !Task.isCancelled,
+                          revision == serverStore.activeServerRevision,
+                          let currentServer = serverStore.activeServer,
+                          currentServer.id == server.id
+                    else { return }
                     await PlayLogService.shared.setup()
+                    guard !Task.isCancelled,
+                          revision == serverStore.activeServerRevision
+                    else { return }
                     await DownloadDatabase.shared.setup()
-                    await RecapStore.shared.setup(serverId: server.stableId)
+                    guard !Task.isCancelled,
+                          revision == serverStore.activeServerRevision
+                    else { return }
+                    await RecapStore.shared.setup(serverId: currentServer.stableId)
+                    guard !Task.isCancelled,
+                          revision == serverStore.activeServerRevision
+                    else { return }
                     // Artists vor setActiveServer laden: .libraryArtistsLoaded feuert → artistCoverByName
                     // in DownloadStore befüllt, bevor reload() DownloadedArtist-Objekte baut.
                     await LibraryStore.shared.loadArtists()
-                    await DownloadStore.shared.setActiveServer(server.stableId)
-                    PinnedPlaylistStore.shared.setActiveServer(server.stableId)
+                    guard !Task.isCancelled,
+                          revision == serverStore.activeServerRevision,
+                          let refreshedServer = serverStore.activeServer,
+                          refreshedServer.id == server.id
+                    else { return }
+                    await LibraryStore.shared.loadPlaylists()
+                    guard !Task.isCancelled,
+                          revision == serverStore.activeServerRevision
+                    else { return }
+                    await DownloadStore.shared.setActiveServer(refreshedServer.stableId)
+                    guard !Task.isCancelled,
+                          revision == serverStore.activeServerRevision
+                    else { return }
+                    PinnedPlaylistStore.shared.setActiveServer(refreshedServer.stableId)
                     await LibraryStore.shared.loadStarred()
                     // Nach App-Start / Server-Wechsel: auf eine fremde Remote-Queue prüfen.
                     await QueueSyncService.shared.checkForRemoteQueue()
-                    await runKeepLibraryOfflineCheck(serverId: server.stableId)
+                    guard !Task.isCancelled,
+                          revision == serverStore.activeServerRevision
+                    else { return }
+                    await runKeepLibraryOfflineCheck(serverId: refreshedServer.stableId)
+                    guard !Task.isCancelled,
+                          revision == serverStore.activeServerRevision
+                    else { return }
                 }
                 .task {
+                    await serverStore.waitUntilReady()
                     Task.detached(priority: .utility) {
                         await StreamCacheService.shared.cleanupOldFiles()
                     }
@@ -107,12 +146,12 @@ struct ShelvApp: App {
                         await DownloadStore.shared.setActiveServer(active.stableId)
                     }
                     for server in serverStore.servers where server.remoteUserId == nil {
-                        guard let pw = serverStore.password(for: server) else { continue }
+                        guard let pw = await serverStore.loadPassword(for: server) else { continue }
                         do {
                             let uid = try await SubsonicAPIService.shared.authLogin(server: server, password: pw)
                             var updated = server
                             updated.remoteUserId = uid
-                            serverStore.update(server: updated, password: nil)
+                            _ = await serverStore.update(server: updated, password: nil)
                             print("[ServerID] Backfill OK \(server.displayName): \(uid)")
                         } catch {
                             print("[ServerID] Backfill FAILED \(server.displayName): \(error)")

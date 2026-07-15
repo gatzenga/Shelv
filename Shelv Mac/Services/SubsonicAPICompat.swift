@@ -49,7 +49,13 @@ extension SubsonicAPIService {
     /// auth/login mit den aktiven Credentials (Navidrome-User-ID für stableId).
     func authLogin() async throws -> String {
         guard let server = activeServer else { throw SubsonicAPIError.noServer }
-        guard let password = activePassword ?? KeychainService.load(for: server.id) else {
+        let password: String?
+        if let activePassword {
+            password = activePassword
+        } else {
+            password = await KeychainService.load(for: server.id)
+        }
+        guard let password else {
             throw SubsonicAPIError.noPassword
         }
         return try await authLogin(server: server, password: password)
