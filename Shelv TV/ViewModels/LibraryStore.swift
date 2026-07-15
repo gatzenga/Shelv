@@ -25,11 +25,64 @@ final class LibraryStore: ObservableObject {
 
     private let api = SubsonicAPIService.shared
     private let libraryRepository = LibraryRepository.shared
+    private var albumLoadGeneration = 0
+    private var artistLoadGeneration = 0
+    private var starredLoadGeneration = 0
+    private var playlistLoadGeneration = 0
+    private var isRefreshingAlbums = false
+    private var isRefreshingArtists = false
+    private var isRefreshingStarred = false
+    private var isRefreshingPlaylists = false
+    private var refreshingAlbumIdentity: ServerIdentity?
+    private var refreshingArtistIdentity: ServerIdentity?
+    private var refreshingStarredIdentity: ServerIdentity?
+    private var refreshingPlaylistIdentity: ServerIdentity?
+    private var albumRefreshWaiters: [CheckedContinuation<Void, Never>] = []
+    private var artistRefreshWaiters: [CheckedContinuation<Void, Never>] = []
+    private var starredRefreshWaiters: [CheckedContinuation<Void, Never>] = []
+    private var playlistRefreshWaiters: [CheckedContinuation<Void, Never>] = []
 
-    private var activeServerKeys: (serverKey: String, stableId: String?)? {
+    private struct ServerIdentity: Equatable {
+        let id: UUID
+        let serverKey: String
+        let stableId: String?
+        let baseURL: String
+        let username: String
+    }
+
+    private var activeServerIdentity: ServerIdentity? {
         guard let server = api.activeServer else { return nil }
-        let stableId = server.stableId.isEmpty ? nil : server.stableId
-        return (server.id.uuidString, stableId)
+        return ServerIdentity(
+            id: server.id,
+            serverKey: server.id.uuidString,
+            stableId: server.stableId.isEmpty ? nil : server.stableId,
+            baseURL: server.activeBaseURL,
+            username: server.username
+        )
+    }
+
+    private func isCurrentAlbumLoad(_ generation: Int, identity: ServerIdentity) -> Bool {
+        !Task.isCancelled
+            && albumLoadGeneration == generation
+            && activeServerIdentity == identity
+    }
+
+    private func isCurrentArtistLoad(_ generation: Int, identity: ServerIdentity) -> Bool {
+        !Task.isCancelled
+            && artistLoadGeneration == generation
+            && activeServerIdentity == identity
+    }
+
+    private func isCurrentStarredLoad(_ generation: Int, identity: ServerIdentity) -> Bool {
+        !Task.isCancelled
+            && starredLoadGeneration == generation
+            && activeServerIdentity == identity
+    }
+
+    private func isCurrentPlaylistLoad(_ generation: Int, identity: ServerIdentity) -> Bool {
+        !Task.isCancelled
+            && playlistLoadGeneration == generation
+            && activeServerIdentity == identity
     }
 
     #if DEBUG
@@ -69,6 +122,30 @@ final class LibraryStore: ObservableObject {
     /// Alle In-Memory-Daten leeren + Reload anstoßen (wie iOS). Beim Server-Wechsel aufgerufen,
     /// nachdem der Player gestoppt wurde — sonst bleiben Alben/Favoriten/Playlists des alten Servers.
     func resetInMemory() {
+        albumLoadGeneration &+= 1
+        artistLoadGeneration &+= 1
+        starredLoadGeneration &+= 1
+        playlistLoadGeneration &+= 1
+        isRefreshingAlbums = false
+        isRefreshingArtists = false
+        isRefreshingStarred = false
+        isRefreshingPlaylists = false
+        refreshingAlbumIdentity = nil
+        refreshingArtistIdentity = nil
+        refreshingStarredIdentity = nil
+        refreshingPlaylistIdentity = nil
+        let waiters = albumRefreshWaiters
+            + artistRefreshWaiters
+            + starredRefreshWaiters
+            + playlistRefreshWaiters
+        albumRefreshWaiters.removeAll()
+        artistRefreshWaiters.removeAll()
+        starredRefreshWaiters.removeAll()
+        playlistRefreshWaiters.removeAll()
+        waiters.forEach { $0.resume() }
+        isLoadingAlbums = false
+        isLoadingArtists = false
+        isLoadingPlaylists = false
         albums = []
         artists = []
         favoriteSongs = []
@@ -86,30 +163,97 @@ final class LibraryStore: ObservableObject {
         }
         #endif
 
-        guard !isLoadingAlbums else { return }
-        isLoadingAlbums = true; defer { isLoadingAlbums = false }
+        let requestedIdentity = activeServerIdentity
+        if isRefreshingAlbums,
+           refreshingAlbumIdentity == requestedIdentity {
+            await withCheckedContinuation { continuation in
+                albumRefreshWaiters.append(continuation)
+            }
+            guard let identity = requestedIdentity,
+                  activeServerIdentity == identity,
+                  !Task.isCancelled
+            else { return }
+            await applyAlbumSort(sortBy: sortBy)
+            return
+        }
+        isRefreshingAlbums = true
+        refreshingAlbumIdentity = requestedIdentity
+        albumLoadGeneration &+= 1
+        let generation = albumLoadGeneration
+        defer {
+            if albumLoadGeneration == generation {
+                isRefreshingAlbums = false
+                refreshingAlbumIdentity = nil
+                isLoadingAlbums = false
+                let waiters = albumRefreshWaiters
+                albumRefreshWaiters.removeAll()
+                waiters.forEach { $0.resume() }
+            }
+        }
 
-        if albums.isEmpty, let keys = activeServerKeys {
+        guard let identity = requestedIdentity,
+              activeServerIdentity == identity
+        else { return }
+        isLoadingAlbums = albums.isEmpty
+        errorMessage = nil
+
+        if albums.isEmpty {
             let cacheSort = LibraryRepository.albumCacheSort(for: sortBy)
             let cached = await libraryRepository.cachedAlbums(
-                serverKey: keys.serverKey,
+                serverKey: identity.serverKey,
                 sort: cacheSort.0,
                 direction: cacheSort.1
             )
+            guard isCurrentAlbumLoad(generation, identity: identity) else { return }
             if !cached.isEmpty { albums = cached }
         }
 
         guard !OfflineModeService.shared.isOffline else { return }
 
         do {
-            guard let keys = activeServerKeys else { return }
-            albums = try await libraryRepository.refreshAlbums(
-                serverKey: keys.serverKey,
-                stableId: keys.stableId,
+            let result = try await libraryRepository.refreshAlbums(
+                serverKey: identity.serverKey,
+                stableId: identity.stableId,
                 sortBy: sortBy
             )
+            guard isCurrentAlbumLoad(generation, identity: identity) else { return }
+            albums = result
         } catch {
-            if !(error is CancellationError) { errorMessage = error.localizedDescription }
+            if isCurrentAlbumLoad(generation, identity: identity),
+               !(error is CancellationError) {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func applyAlbumSort(sortBy: String) async {
+        let currentAlbums = albums
+        #if DEBUG
+        if DemoContent.isLargeLibraryFixtureEnabled {
+            albums = LibraryRepository.locallySortedAlbums(currentAlbums, sortBy: sortBy)
+            return
+        }
+        #endif
+
+        guard let identity = activeServerIdentity else {
+            albums = LibraryRepository.locallySortedAlbums(currentAlbums, sortBy: sortBy)
+            return
+        }
+        let generation = albumLoadGeneration
+        let cacheSort = LibraryRepository.albumCacheSort(for: sortBy)
+        let cached = await libraryRepository.cachedAlbums(
+            serverKey: identity.serverKey,
+            sort: cacheSort.0,
+            direction: cacheSort.1
+        )
+        guard !Task.isCancelled,
+              generation == albumLoadGeneration,
+              activeServerIdentity == identity
+        else { return }
+        if !cached.isEmpty || currentAlbums.isEmpty {
+            albums = cached
+        } else {
+            albums = LibraryRepository.locallySortedAlbums(currentAlbums, sortBy: sortBy)
         }
     }
 
@@ -121,36 +265,139 @@ final class LibraryStore: ObservableObject {
         }
         #endif
 
-        isLoadingArtists = true; defer { isLoadingArtists = false }
-        if artists.isEmpty, let keys = activeServerKeys {
-            let cached = await libraryRepository.cachedArtists(serverKey: keys.serverKey)
+        let requestedIdentity = activeServerIdentity
+        if isRefreshingArtists,
+           refreshingArtistIdentity == requestedIdentity {
+            await withCheckedContinuation { continuation in
+                artistRefreshWaiters.append(continuation)
+            }
+            return
+        }
+        isRefreshingArtists = true
+        refreshingArtistIdentity = requestedIdentity
+        artistLoadGeneration &+= 1
+        let generation = artistLoadGeneration
+        defer {
+            if artistLoadGeneration == generation {
+                isRefreshingArtists = false
+                refreshingArtistIdentity = nil
+                isLoadingArtists = false
+                let waiters = artistRefreshWaiters
+                artistRefreshWaiters.removeAll()
+                waiters.forEach { $0.resume() }
+            }
+        }
+
+        guard let identity = requestedIdentity,
+              activeServerIdentity == identity
+        else { return }
+        isLoadingArtists = artists.isEmpty
+        errorMessage = nil
+
+        if artists.isEmpty {
+            let cached = await libraryRepository.cachedArtists(serverKey: identity.serverKey)
+            guard isCurrentArtistLoad(generation, identity: identity) else { return }
             if !cached.isEmpty { artists = cached }
         }
 
         guard !OfflineModeService.shared.isOffline else { return }
 
         do {
-            guard let keys = activeServerKeys else { return }
-            artists = try await libraryRepository.refreshArtists(serverKey: keys.serverKey, stableId: keys.stableId)
+            let result = try await libraryRepository.refreshArtists(
+                serverKey: identity.serverKey,
+                stableId: identity.stableId
+            )
+            guard isCurrentArtistLoad(generation, identity: identity) else { return }
+            artists = result
         }
-        catch { if !(error is CancellationError) { errorMessage = error.localizedDescription } }
+        catch {
+            if isCurrentArtistLoad(generation, identity: identity),
+               !(error is CancellationError) {
+                errorMessage = error.localizedDescription
+            }
+        }
     }
 
     func loadStarred() async {
+        let requestedIdentity = activeServerIdentity
+        if isRefreshingStarred,
+           refreshingStarredIdentity == requestedIdentity {
+            await withCheckedContinuation { continuation in
+                starredRefreshWaiters.append(continuation)
+            }
+            return
+        }
+        isRefreshingStarred = true
+        refreshingStarredIdentity = requestedIdentity
+        starredLoadGeneration &+= 1
+        let generation = starredLoadGeneration
+        defer {
+            if starredLoadGeneration == generation {
+                isRefreshingStarred = false
+                refreshingStarredIdentity = nil
+                let waiters = starredRefreshWaiters
+                starredRefreshWaiters.removeAll()
+                waiters.forEach { $0.resume() }
+            }
+        }
+
+        guard let identity = requestedIdentity,
+              activeServerIdentity == identity
+        else { return }
+
         do {
             let r = try await api.getStarred()
+            guard isCurrentStarredLoad(generation, identity: identity) else { return }
             favoriteSongs = r.song ?? []
             favoriteAlbums = r.album ?? []
             favoriteArtists = r.artist ?? []
         } catch {
-            if !(error is CancellationError) { errorMessage = error.localizedDescription }
+            if isCurrentStarredLoad(generation, identity: identity),
+               !(error is CancellationError) {
+                errorMessage = error.localizedDescription
+            }
         }
     }
 
     func loadPlaylists() async {
-        isLoadingPlaylists = true; defer { isLoadingPlaylists = false }
-        do { playlists = try await api.getPlaylists() }
-        catch { if !(error is CancellationError) { errorMessage = error.localizedDescription } }
+        let requestedIdentity = activeServerIdentity
+        if isRefreshingPlaylists,
+           refreshingPlaylistIdentity == requestedIdentity {
+            await withCheckedContinuation { continuation in
+                playlistRefreshWaiters.append(continuation)
+            }
+            return
+        }
+        isRefreshingPlaylists = true
+        refreshingPlaylistIdentity = requestedIdentity
+        playlistLoadGeneration &+= 1
+        let generation = playlistLoadGeneration
+        isLoadingPlaylists = true
+        defer {
+            if playlistLoadGeneration == generation {
+                isRefreshingPlaylists = false
+                refreshingPlaylistIdentity = nil
+                isLoadingPlaylists = false
+                let waiters = playlistRefreshWaiters
+                playlistRefreshWaiters.removeAll()
+                waiters.forEach { $0.resume() }
+            }
+        }
+
+        guard let identity = requestedIdentity,
+              activeServerIdentity == identity
+        else { return }
+
+        do {
+            let result = try await api.getPlaylists()
+            guard isCurrentPlaylistLoad(generation, identity: identity) else { return }
+            playlists = result
+        } catch {
+            if isCurrentPlaylistLoad(generation, identity: identity),
+               !(error is CancellationError) {
+                errorMessage = error.localizedDescription
+            }
+        }
     }
 
     func albumSongs(_ album: Album) async -> [Song] {

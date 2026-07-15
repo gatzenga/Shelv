@@ -41,19 +41,47 @@ struct Shelv_TVApp: App {
                     }
                 }
                 // Pro aktivem Server: Tracking-DB + Recap-Registry (NUR laden, nie generieren) + Pins.
-                .task(id: serverStore.activeServerID) {
+                .task(id: serverStore.activeServerRevision) {
+                    await serverStore.waitUntilReady()
+                    let revision = serverStore.activeServerRevision
+                    await Task.yield()
+                    guard revision == serverStore.activeServerRevision else { return }
+                    LibraryStore.shared.resetInMemory()
                     guard let server = serverStore.activeServer else { return }
                     OfflineModeService.shared.prepareInitialServerErrorPresentation()
                     #if DEBUG
                     AudioPlayerService.shared.ensureDemoStandby()
                     #endif
                     await PlayLogService.shared.setup()
+                    guard !Task.isCancelled,
+                          revision == serverStore.activeServerRevision
+                    else { return }
                     await RecapStore.shared.loadEntries(serverId: server.stableId)
+                    guard !Task.isCancelled,
+                          revision == serverStore.activeServerRevision
+                    else { return }
                     PinnedPlaylistStore.shared.setActiveServer(server.stableId)
+                    await LibraryStore.shared.loadAlbums()
+                    guard !Task.isCancelled,
+                          revision == serverStore.activeServerRevision,
+                          let currentServer = serverStore.activeServer,
+                          currentServer.id == server.id
+                    else { return }
                     // Favoriten + Künstler früh laden: Kontextmenüs zeigen den Stern-Status korrekt,
                     // und der Künstler-Link im Player kann den Künstler per Name auflösen.
                     await LibraryStore.shared.loadStarred()
+                    guard !Task.isCancelled,
+                          revision == serverStore.activeServerRevision
+                    else { return }
                     await LibraryStore.shared.loadArtists()
+                    guard !Task.isCancelled,
+                          revision == serverStore.activeServerRevision,
+                          serverStore.activeServer?.id == currentServer.id
+                    else { return }
+                    await LibraryStore.shared.loadPlaylists()
+                    guard !Task.isCancelled,
+                          revision == serverStore.activeServerRevision
+                    else { return }
                     let library = LibraryStore.shared
                     let estimatedAlbumCount = library.artists.reduce(0) {
                         $0 + max(0, $1.albumCount ?? 0)
@@ -67,14 +95,15 @@ struct Shelv_TVApp: App {
                 }
                 // Einmaliges App-Setup: Tracking starten, remoteUserId-Backfill, iCloud-Sync.
                 .task {
+                    await serverStore.waitUntilReady()
                     await PlayLogService.shared.setup()
                     for server in serverStore.servers where server.remoteUserId == nil {
-                        guard let pw = serverStore.password(for: server) else { continue }
+                        guard let pw = await serverStore.loadPassword(for: server) else { continue }
                         do {
                             let uid = try await SubsonicAPIService.shared.authLogin(server: server, password: pw)
                             var updated = server
                             updated.remoteUserId = uid
-                            serverStore.update(server: updated, password: nil)
+                            _ = await serverStore.update(server: updated, password: nil)
                         } catch {
                             print("[ServerID] Backfill FAILED \(server.displayName): \(error)")
                         }
@@ -84,23 +113,21 @@ struct Shelv_TVApp: App {
                     // keine Remote-Plays; erst syncNow() ruft downloadChanges() und holt die Historie.
                     await CloudKitSyncService.shared.syncNow()
                 }
-                // Server-Wechsel: alten Stream stoppen (VOR dem Reset, sonst spielt der alte
-                // Server weiter) und Library leeren → Views laden über reloadID neu. Wie iOS.
+                // Server-Wechsel: alten Stream stoppen; die revisionsgebundene Root-Task
+                // ist der einzige Owner für Library-Reset und -Reload.
                 .onChange(of: serverStore.activeServerID) { _, _ in
                     #if DEBUG
                     if SubsonicAPIService.shared.isDemoActive {
                         // Demo: kein stop() (kein echter alter Stream) — würde nur den festen
                         // Standby-Eintrag wieder wegwischen. Nur Standby setzen + Views neu laden.
                         AudioPlayerService.shared.ensureDemoStandby(force: true)
-                        LibraryStore.shared.resetInMemory()
                         RadioStationStore.shared.resetInMemory()
                         return
                     }
                     #endif
-                    // Echter Server-Wechsel: alten Stream stoppen (VOR Reset) + Library leeren.
+                    // Echter Server-Wechsel: alten Stream stoppen; Library folgt der Revision.
                     AudioPlayerService.shared.stop()
                     QueueSyncService.shared.handleServerChange()
-                    LibraryStore.shared.resetInMemory()
                     RadioStationStore.shared.resetInMemory()
                 }
                 .onChange(of: scenePhase) { _, phase in

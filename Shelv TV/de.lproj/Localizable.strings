@@ -666,3 +666,4 @@
 "shortcut_error_playback_timed_out" = "Der Start der Wiedergabe hat zu lange gedauert. Versuche es erneut.";
 "shortcut_error_cancelled" = "Die Wiedergabeanfrage wurde abgebrochen.";
 "shortcut_error_unsupported_queue_operation" = "Dieser Inhalt kann nicht an der gewünschten Position zur Warteschlange hinzugefügt werden.";
+"credential_storage_failed" = "Der sichere Vorgang mit den Zugangsdaten konnte nicht abgeschlossen werden. Bitte versuche es erneut.";

@@ -666,3 +666,4 @@
 "shortcut_error_playback_timed_out" = "Playback took too long to start. Please try again.";
 "shortcut_error_cancelled" = "The playback request was cancelled.";
 "shortcut_error_unsupported_queue_operation" = "That item cannot be added at the requested queue position.";
+"credential_storage_failed" = "The secure credential operation could not be completed. Please try again.";

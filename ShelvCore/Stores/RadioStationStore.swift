@@ -14,19 +14,33 @@ final class RadioStationStore: ObservableObject {
     private let decoder = JSONDecoder()
     private var refreshGeneration = 0
     private var stationCoverPrewarmTask: Task<Void, Never>?
+    /// Server scope of the currently published items. An empty list is scoped too,
+    /// so a failed refresh can never leave another server's stations visible.
+    private var itemsServerID: String?
 
     private init() {}
 
+    private var selectedServer: SubsonicServer? {
+        api.activeServer ?? ServerStore.shared.activeServer
+    }
+
+    /// Remote identity used for Cloud-synced station metadata.
     var activeServerId: String? {
-        guard let server = api.activeServer else { return nil }
+        guard let server = selectedServer else { return nil }
         return server.stableId.isEmpty ? server.id.uuidString : server.stableId
+    }
+
+    /// Local configuration identity used for station-list cache ownership.
+    /// Two configurations may intentionally point at the same remote user.
+    private var activeServerConfigurationID: String? {
+        selectedServer?.id.uuidString
     }
 
     func resetInMemory() {
         refreshGeneration += 1
         stationCoverPrewarmTask?.cancel()
         stationCoverPrewarmTask = nil
-        setItems([])
+        replaceItems([], serverID: nil)
         isLoading = false
         errorMessage = nil
     }
@@ -34,14 +48,18 @@ final class RadioStationStore: ObservableObject {
     func refresh(waitForCloudMetadata: Bool = true) async {
         refreshGeneration += 1
         let generation = refreshGeneration
-        guard let serverId = activeServerId else {
-            setItems([])
+        guard let configurationID = activeServerConfigurationID,
+              let metadataServerID = activeServerId else {
+            replaceItems([], serverID: nil)
             isLoading = false
             errorMessage = String(localized: "no_server_configured")
             return
         }
 
-        publishCachedStationsIfNeeded(serverId: serverId)
+        publishCachedStationsIfNeeded(
+            configurationID: configurationID,
+            metadataServerID: metadataServerID
+        )
 
         isLoading = true
         defer {
@@ -52,22 +70,39 @@ final class RadioStationStore: ObservableObject {
 
         do {
             let stations = try await api.getInternetRadioStations()
-            saveCachedStations(stations, serverId: serverId)
+            saveCachedStations(stations, serverId: configurationID)
 
-            let localMetadata = filteredLocalMetadata(for: stations, serverId: serverId)
-            guard refreshGeneration == generation, activeServerId == serverId else { return }
-            setItems(displayItems(for: stations, serverId: serverId, metadataByRecordName: localMetadata))
+            let localMetadata = filteredLocalMetadata(for: stations, serverId: metadataServerID)
+            guard refreshGeneration == generation,
+                  activeServerConfigurationID == configurationID,
+                  activeServerId == metadataServerID else { return }
+            replaceItems(
+                displayItems(for: stations, serverId: metadataServerID, metadataByRecordName: localMetadata),
+                serverID: configurationID
+            )
             errorMessage = nil
 
             if waitForCloudMetadata {
-                await applyMergedMetadata(for: stations, serverId: serverId, generation: generation)
+                await applyMergedMetadata(
+                    for: stations,
+                    configurationID: configurationID,
+                    metadataServerID: metadataServerID,
+                    generation: generation
+                )
             } else {
                 Task { @MainActor [weak self] in
-                    await self?.applyMergedMetadata(for: stations, serverId: serverId, generation: generation)
+                    await self?.applyMergedMetadata(
+                        for: stations,
+                        configurationID: configurationID,
+                        metadataServerID: metadataServerID,
+                        generation: generation
+                    )
                 }
             }
         } catch {
-            guard refreshGeneration == generation else { return }
+            guard refreshGeneration == generation,
+                  activeServerConfigurationID == configurationID,
+                  activeServerId == metadataServerID else { return }
             if !(error is CancellationError) {
                 errorMessage = items.isEmpty ? radioErrorDescription(error) : nil
             }
@@ -77,8 +112,12 @@ final class RadioStationStore: ObservableObject {
     /// Makes the persisted station list available to App Entity suggestions
     /// without turning a cold Shortcuts picker into a network request.
     func publishShortcutCacheIfNeeded() {
-        guard let serverId = activeServerId else { return }
-        publishCachedStationsIfNeeded(serverId: serverId)
+        guard let configurationID = activeServerConfigurationID,
+              let metadataServerID = activeServerId else { return }
+        publishCachedStationsIfNeeded(
+            configurationID: configurationID,
+            metadataServerID: metadataServerID
+        )
     }
 
     func createStation(
@@ -237,10 +276,20 @@ final class RadioStationStore: ObservableObject {
         return local
     }
 
-    private func applyMergedMetadata(for stations: [RadioStation], serverId: String, generation: Int) async {
-        let mergedMetadata = await mergedMetadata(for: stations, serverId: serverId)
-        guard refreshGeneration == generation, activeServerId == serverId else { return }
-        setItems(displayItems(for: stations, serverId: serverId, metadataByRecordName: mergedMetadata))
+    private func applyMergedMetadata(
+        for stations: [RadioStation],
+        configurationID: String,
+        metadataServerID: String,
+        generation: Int
+    ) async {
+        let mergedMetadata = await mergedMetadata(for: stations, serverId: metadataServerID)
+        guard refreshGeneration == generation,
+              activeServerConfigurationID == configurationID,
+              activeServerId == metadataServerID else { return }
+        replaceItems(
+            displayItems(for: stations, serverId: metadataServerID, metadataByRecordName: mergedMetadata),
+            serverID: configurationID
+        )
         errorMessage = nil
     }
 
@@ -259,12 +308,17 @@ final class RadioStationStore: ObservableObject {
         }
     }
 
-    private func publishCachedStationsIfNeeded(serverId: String) {
-        guard items.isEmpty else { return }
-        let stations = loadCachedStations(serverId: serverId)
-        guard !stations.isEmpty else { return }
-        let metadata = filteredLocalMetadata(for: stations, serverId: serverId)
-        setItems(displayItems(for: stations, serverId: serverId, metadataByRecordName: metadata))
+    private func publishCachedStationsIfNeeded(
+        configurationID: String,
+        metadataServerID: String
+    ) {
+        guard itemsServerID != configurationID || items.isEmpty else { return }
+        let stations = loadCachedStations(serverId: configurationID)
+        let metadata = filteredLocalMetadata(for: stations, serverId: metadataServerID)
+        replaceItems(
+            displayItems(for: stations, serverId: metadataServerID, metadataByRecordName: metadata),
+            serverID: configurationID
+        )
         errorMessage = nil
     }
 
@@ -306,6 +360,11 @@ final class RadioStationStore: ObservableObject {
         }
         AudioPlayerService.shared.updateRemoteCommandAvailability()
         prewarmStationCovers(for: newItems)
+    }
+
+    private func replaceItems(_ newItems: [RadioStationDisplayItem], serverID: String?) {
+        itemsServerID = serverID
+        setItems(newItems)
     }
 
     private func prewarmStationCovers(for items: [RadioStationDisplayItem]) {

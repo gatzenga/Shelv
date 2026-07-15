@@ -258,14 +258,19 @@ final class CarPlayDiscoverController {
 
         showLoading()
         isSwitchingServerURL = true
-        serverStore.setURLSlot(for: server.id, slot: slot)
-        lastActiveURLSignature = activeURLSignature
-        LibraryStore.shared.resetInMemory()
-        RadioStationStore.shared.resetInMemory()
-        completion()
-
         loadTask = Task { @MainActor [weak self] in
-            guard let self else { return }
+            guard let self else {
+                completion()
+                return
+            }
+            await self.serverStore.setURLSlot(for: server.id, slot: slot)
+            guard self.isCurrentLoad(generation) else {
+                completion()
+                return
+            }
+            self.lastActiveURLSignature = self.activeURLSignature
+            RadioStationStore.shared.resetInMemory()
+            completion()
             defer {
                 if self.isCurrentLoad(generation) {
                     self.isSwitchingServerURL = false
@@ -293,7 +298,6 @@ final class CarPlayDiscoverController {
         loadTask?.cancel()
         let generation = nextLoadGeneration()
         showLoading()
-        LibraryStore.shared.resetInMemory()
         RadioStationStore.shared.resetInMemory()
         loadTask = Task { @MainActor [weak self] in
             guard let self else { return }

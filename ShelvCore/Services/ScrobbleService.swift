@@ -134,26 +134,37 @@ actor ScrobbleService {
         legacyServerId: String?,
         requireActive: Bool
     ) async -> (server: SubsonicServer, password: String?)? {
-        await MainActor.run {
-            let store = ServerStore.shared
-            let server: SubsonicServer?
-            if let configId, let uuid = UUID(uuidString: configId) {
-                server = store.servers.first { $0.id == uuid }
-            } else if let legacyServerId, !legacyServerId.isEmpty {
-                let matches = store.servers.filter {
-                    $0.stableId == legacyServerId || $0.id.uuidString == legacyServerId
-                }
-                // Alte Queue-Zeilen kannten nur die Remote-ID. Bei mehreren
-                // Konfigurationen mit derselben ID wäre das Ziel nicht eindeutig;
-                // lieber behalten als an den falschen Server senden.
-                server = matches.count == 1 ? matches[0] : nil
-            } else {
-                server = nil
-            }
-
-            guard let server else { return nil }
-            if requireActive, store.activeServer?.id != server.id { return nil }
-            return (server, store.password(for: server))
+        let selection: StoredServerCredentialSelection
+        if let configId, let id = UUID(uuidString: configId) {
+            selection = .configuration(id)
+        } else if let legacyServerId, !legacyServerId.isEmpty {
+            // Alte Queue-Zeilen kannten nur die Remote-ID. Der Store akzeptiert
+            // sie nur, solange sie genau eine lokale Konfiguration bezeichnet.
+            selection = .uniqueLegacyIdentifier(legacyServerId)
+        } else {
+            return nil
         }
+
+        guard !Task.isCancelled,
+              let snapshot = await ServerStore.shared.credentialSnapshot(
+                for: selection,
+                requireActive: requireActive
+              ) else {
+            return nil
+        }
+        guard !Task.isCancelled,
+              await ServerStore.shared.isCredentialSnapshotCurrent(
+                snapshot,
+                selection: selection,
+                requireActive: requireActive
+              ) else {
+            return nil
+        }
+
+        let password: String? = switch snapshot.lookup {
+        case .available(let password): password
+        case .missing, .protectedDataUnavailable, .failed: nil
+        }
+        return (snapshot.server, password)
     }
 }

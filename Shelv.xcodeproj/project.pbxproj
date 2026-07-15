@@ -39,6 +39,7 @@
 		BC10013E2FFE000000000001 /* ShelvCore/Services/PlaybackContentResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC10013F2FFE000000000001 /* ShelvCore/Services/PlaybackContentResolver.swift */; };
 		BC1001402FFE000000000001 /* ShelvCore/Services/ArtworkLoadRequestTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001412FFE000000000001 /* ShelvCore/Services/ArtworkLoadRequestTracker.swift */; };
 		BC1001422FFE000000000001 /* ShelvCore/Services/AudioPlayerStreamCacheJob.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001432FFE000000000001 /* ShelvCore/Services/AudioPlayerStreamCacheJob.swift */; };
+		BC1001442FFE000000000001 /* ShelvCore/Services/KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001452FFE000000000001 /* ShelvCore/Services/KeychainService.swift */; };
 		BC1867E52F91A088006D96E2 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC1867E42F91A088006D96E2 /* GRDB */; };
 		BC51161D2FDC8A850011CDE9 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC51161C2FDC8A850011CDE9 /* GRDB */; };
 		BC5A00012FFF000000000001 /* Shelv TV Siri Extension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = BC5A00032FFF000000000001 /* Shelv TV Siri Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -109,6 +110,7 @@
 		BC10013F2FFE000000000001 /* ShelvCore/Services/PlaybackContentResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/PlaybackContentResolver.swift; sourceTree = "<group>"; };
 		BC1001412FFE000000000001 /* ShelvCore/Services/ArtworkLoadRequestTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/ArtworkLoadRequestTracker.swift; sourceTree = "<group>"; };
 		BC1001432FFE000000000001 /* ShelvCore/Services/AudioPlayerStreamCacheJob.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/AudioPlayerStreamCacheJob.swift; sourceTree = "<group>"; };
+		BC1001452FFE000000000001 /* ShelvCore/Services/KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/KeychainService.swift; sourceTree = "<group>"; };
 		BC2000012FFE000000000001 /* ShelvAppIntentsUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ShelvAppIntentsUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC5116112FDC8A690011CDE9 /* Shelv TV.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Shelv TV.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC5A00032FFF000000000001 /* Shelv TV Siri Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Shelv TV Siri Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -597,6 +599,7 @@
 				BC10010E2FFE000000000001 /* ShelvCore/Services/LibraryDatabase.swift in Sources */,
 				BC10010F2FFE000000000001 /* ShelvCore/Services/LibraryRepository.swift in Sources */,
 				BC1001212FFE000000000001 /* ShelvCore/Support/PersonalizationSettings.swift in Sources */,
+				BC1001442FFE000000000001 /* ShelvCore/Services/KeychainService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

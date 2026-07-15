@@ -666,3 +666,4 @@
 "shortcut_error_playback_timed_out" = "开始播放耗时过长。请重试。";
 "shortcut_error_cancelled" = "播放请求已取消。";
 "shortcut_error_unsupported_queue_operation" = "无法将该项目添加到请求的队列位置。";
+"credential_storage_failed" = "无法完成安全的登录凭据操作。请重试。";

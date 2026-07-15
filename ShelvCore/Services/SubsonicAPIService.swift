@@ -6,6 +6,8 @@ import Security
 enum SubsonicAPIError: LocalizedError {
     case noServer
     case noPassword
+    case protectedDataUnavailable
+    case credentialAccessFailed(OSStatus)
     case invalidURL
     case httpError(Int)
     case networkError(Error)
@@ -16,6 +18,10 @@ enum SubsonicAPIError: LocalizedError {
         switch self {
         case .noServer:              return String(localized: "no_server_configured")
         case .noPassword:            return String(localized: "no_password_found")
+        case .protectedDataUnavailable:
+            return String(localized: "no_password_found")
+        case .credentialAccessFailed:
+            return String(localized: "no_password_found")
         case .invalidURL:            return String(localized: "invalid_server_url")
         case .httpError(let code):   return "\(String(localized: "server_returned_an_error")) (HTTP \(code))"
         case .networkError(let e):
@@ -59,7 +65,8 @@ extension SubsonicAPIError: ShortcutRemoteErrorClassifying {
             return code == 404 ? .notFound : .playbackFailed
         case .apiError(let code, _):
             return code == 70 ? .notFound : .playbackFailed
-        case .noPassword, .invalidURL, .decodingError:
+        case .noPassword, .protectedDataUnavailable, .credentialAccessFailed,
+             .invalidURL, .decodingError:
             return .playbackFailed
         }
     }
@@ -373,21 +380,65 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
     private let credentialLock = NSLock()
     nonisolated(unsafe) private var _activeServer: SubsonicServer?
     nonisolated(unsafe) private var _activePassword: String?
+    nonisolated(unsafe) private var _credentialGeneration: UInt64 = 0
 
     nonisolated var activeServer: SubsonicServer? {
         get { credentialLock.withLock { _activeServer } }
-        set { credentialLock.withLock { _activeServer = newValue } }
+        set {
+            credentialLock.withLock {
+                _activeServer = newValue
+                _credentialGeneration &+= 1
+            }
+        }
     }
 
     nonisolated var activePassword: String? {
         get { credentialLock.withLock { _activePassword } }
-        set { credentialLock.withLock { _activePassword = newValue } }
+        set {
+            credentialLock.withLock {
+                _activePassword = newValue
+                _credentialGeneration &+= 1
+            }
+        }
     }
 
     nonisolated func setCredentials(server: SubsonicServer, password: String?) {
         credentialLock.withLock {
             _activeServer = server
             _activePassword = password
+            _credentialGeneration &+= 1
+        }
+    }
+
+    /// Captures the exact active credential epoch used by a multi-page library
+    /// refresh. The monotonic epoch detects A-to-B-to-A switches as stale too.
+    nonisolated func captureLibraryRequestContext(
+        serverKey: String,
+        stableId: String?
+    ) -> LibraryAPIRequestContext? {
+        credentialLock.withLock {
+            guard let server = _activeServer,
+                  server.id.uuidString == serverKey,
+                  (server.stableId.isEmpty ? nil : server.stableId) == stableId
+            else {
+                return nil
+            }
+            return LibraryAPIRequestContext(
+                serverKey: serverKey,
+                stableId: stableId,
+                credentialGeneration: _credentialGeneration
+            )
+        }
+    }
+
+    nonisolated func isLibraryRequestContextCurrent(
+        _ context: LibraryAPIRequestContext
+    ) -> Bool {
+        credentialLock.withLock {
+            guard let server = _activeServer else { return false }
+            return server.id.uuidString == context.serverKey
+                && (server.stableId.isEmpty ? nil : server.stableId) == context.stableId
+                && _credentialGeneration == context.credentialGeneration
         }
     }
 
@@ -442,15 +493,74 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
 
     private init() {}
 
-    private func resolveCredentials() throws -> (server: SubsonicServer, password: String) {
+    private func resolveCachedCredentials() throws -> (
+        server: SubsonicServer,
+        password: String
+    ) {
         try credentialLock.withLock {
-            guard let s = _activeServer else { throw SubsonicAPIError.noServer }
-            if _activePassword == nil {
-                _activePassword = KeychainService.load(for: s.id)
-            }
-            guard let p = _activePassword else { throw SubsonicAPIError.noPassword }
-            return (s, p)
+            guard let server = _activeServer else { throw SubsonicAPIError.noServer }
+            guard let password = _activePassword else { throw SubsonicAPIError.noPassword }
+            return (server, password)
         }
+    }
+
+    /// Resolves a missing credential without holding the lock while awaiting
+    /// Keychain access. Generation validation prevents a late lookup for an
+    /// old server from being installed after a switch or same-ID edit.
+    private func resolveCredentials() async throws -> (
+        server: SubsonicServer,
+        password: String,
+        generation: UInt64
+    ) {
+        await ServerStore.shared.waitUntilReady()
+        try Task.checkCancellation()
+
+        for _ in 0..<2 {
+            let snapshot: (server: SubsonicServer, password: String?, generation: UInt64) =
+                try credentialLock.withLock {
+                    guard let server = _activeServer else {
+                        throw SubsonicAPIError.noServer
+                    }
+                    return (server, _activePassword, _credentialGeneration)
+                }
+            if let password = snapshot.password {
+                return (snapshot.server, password, snapshot.generation)
+            }
+
+            let lookup = await ServerStore.shared.credentialLookup(for: snapshot.server)
+            try Task.checkCancellation()
+            let installed = credentialLock.withLock {
+                guard _credentialGeneration == snapshot.generation,
+                      _activeServer?.id == snapshot.server.id else {
+                    return false
+                }
+                if case .available(let password) = lookup {
+                    _activePassword = password
+                }
+                return true
+            }
+            guard installed else { continue }
+
+            switch lookup {
+            case .available(let password):
+                return (snapshot.server, password, snapshot.generation)
+            case .missing:
+                throw SubsonicAPIError.noPassword
+            case .protectedDataUnavailable:
+                throw SubsonicAPIError.protectedDataUnavailable
+            case .failed(let status):
+                throw SubsonicAPIError.credentialAccessFailed(status)
+            }
+        }
+        throw CancellationError()
+    }
+
+    func resolvedActiveCredentials() async throws -> (
+        server: SubsonicServer,
+        password: String
+    ) {
+        let credentials = try await resolveCredentials()
+        return (credentials.server, credentials.password)
     }
 
     private func makeAuthParams(server: SubsonicServer, password: String) -> [URLQueryItem] {
@@ -483,12 +593,12 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
     }
 
     func authParams() throws -> [URLQueryItem] {
-        let creds = try resolveCredentials()
+        let creds = try resolveCachedCredentials()
         return makeAuthParams(server: creds.server, password: creds.password)
     }
 
     private func buildURL(path: String, extra: [URLQueryItem] = []) throws -> URL {
-        let creds = try resolveCredentials()
+        let creds = try resolveCachedCredentials()
         var base = creds.server.activeBaseURL
         if base.hasSuffix("/") { base.removeLast() }
         guard var comps = URLComponents(string: "\(base)/rest/\(path)") else {
@@ -499,14 +609,20 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         return url
     }
 
-    private func activeRequestSignature(for server: SubsonicServer) -> String {
-        "\(server.id.uuidString)|\(server.activeBaseURL)"
+    private func activeRequestSignature(
+        for server: SubsonicServer,
+        generation: UInt64
+    ) -> String {
+        "\(server.id.uuidString)|\(server.activeBaseURL)|\(generation)"
     }
 
     private func isCurrentActiveRequest(_ signature: String) -> Bool {
         credentialLock.withLock {
             guard let server = _activeServer else { return false }
-            return activeRequestSignature(for: server) == signature
+            return activeRequestSignature(
+                for: server,
+                generation: _credentialGeneration
+            ) == signature
         }
     }
 
@@ -533,8 +649,11 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
     #endif
 
     private func fetchData(path: String, extra: [URLQueryItem] = [], retries: Int = 0) async throws -> Data {
-        let creds = try resolveCredentials()
-        let requestSignature = activeRequestSignature(for: creds.server)
+        let creds = try await resolveCredentials()
+        let requestSignature = activeRequestSignature(
+            for: creds.server,
+            generation: creds.generation
+        )
         let url = try buildURL(for: creds.server, password: creds.password, path: path, extra: extra)
         await NetworkStatus.shared.waitUntilReady()
         if !NetworkStatus.shared.hasNetwork {

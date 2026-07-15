@@ -64,7 +64,12 @@ class AppState: ObservableObject {
             return
         }
         #endif
-        isLoggedIn = api.hasConfig
+        isLoggedIn = !serverStore.servers.isEmpty || api.hasConfig
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.serverStore.waitUntilReady()
+            self.isLoggedIn = !self.serverStore.servers.isEmpty
+        }
     }
 
     // MARK: - Server Management
@@ -77,34 +82,40 @@ class AppState: ObservableObject {
         password: String,
         secondaryServerURL: String? = nil
     ) async -> Bool {
+        errorMessage = nil
         let normalizedURL = serverURL.hasPrefix("http://") || serverURL.hasPrefix("https://")
             ? serverURL : "https://" + serverURL
         let trimmedSecondary = secondaryServerURL?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let config = ServerConfig(serverURL: normalizedURL, username: username, password: password)
-        api.setConfig(config)
+        var server = SubsonicServer(
+            name: name,
+            baseURL: normalizedURL,
+            username: username,
+            secondaryBaseURL: trimmedSecondary.isEmpty ? nil : trimmedSecondary
+        )
         do {
-            try await api.ping()
-            var server = SubsonicServer(
-                name: name,
-                baseURL: normalizedURL,
-                username: username,
-                secondaryBaseURL: trimmedSecondary.isEmpty ? nil : trimmedSecondary
-            )
-            server.remoteUserId = try await api.authLogin()
-            serverStore.add(server: server, password: password)
+            _ = try await api.ping(server: server, password: password)
+            server.remoteUserId = try await api.authLogin(server: server, password: password)
+            guard await serverStore.add(server: server, password: password) else {
+                errorMessage = String(localized: "credential_storage_failed")
+                return false
+            }
             isLoggedIn = true
             return true
         } catch {
-            api.clearConfig()
             errorMessage = error.localizedDescription
             return false
         }
     }
 
     /// Wechselt zum angegebenen Server.
-    func switchServer(_ server: SubsonicServer) {
-        serverStore.activate(server: server)
-        isLoggedIn = api.hasConfig
+    @discardableResult
+    func switchServer(_ server: SubsonicServer) async -> Bool {
+        errorMessage = nil
+        guard await serverStore.activate(server: server) else {
+            errorMessage = String(localized: "server_no_longer_available")
+            return false
+        }
+        isLoggedIn = !serverStore.servers.isEmpty
         resetNavigation()
         // Imperativ statt nur über ContentView.onChange: Wechsel echter Server → Demo
         // ändert isLoggedIn nicht, dadurch re-evaluiert die View nicht zuverlässig und
@@ -116,20 +127,26 @@ class AppState: ObservableObject {
             player.ensureDemoStandby(force: true)
         }
         #endif
+        return true
     }
 
     /// Entfernt einen Server. Wenn es der letzte war, wird der Nutzer abgemeldet.
-    func deleteServer(_ server: SubsonicServer) {
+    @discardableResult
+    func deleteServer(_ server: SubsonicServer) async -> Bool {
+        errorMessage = nil
         let wasActive = serverStore.activeServerID == server.id
-        serverStore.delete(server: server)
+        guard await serverStore.delete(server: server) else {
+            errorMessage = String(localized: "credential_storage_failed")
+            return false
+        }
         if serverStore.servers.isEmpty {
-            api.clearConfig()
             player.stop()
             isLoggedIn = false
         } else if wasActive {
-            isLoggedIn = api.hasConfig
+            isLoggedIn = !serverStore.servers.isEmpty
             resetNavigation()
         }
+        return true
     }
 
     private func resetNavigation() {
@@ -139,11 +156,16 @@ class AppState: ObservableObject {
     }
 
     /// Meldet vollständig ab und löscht alle Server.
-    func logout() {
-        serverStore.clearAll()
-        api.clearConfig()
+    @discardableResult
+    func logout() async -> Bool {
+        errorMessage = nil
+        guard await serverStore.clearAll() else {
+            errorMessage = String(localized: "credential_storage_failed")
+            return false
+        }
         player.stop()
         isLoggedIn = false
+        return true
     }
 
     // MARK: - Convenience

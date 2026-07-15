@@ -31,6 +31,7 @@ struct LibrarySyncState: Equatable {
     let startedAt: Double?
     let completedAt: Double?
     let syncGeneration: String?
+    let pendingGeneration: String?
     let rowCount: Int?
     let lastError: String?
 }
@@ -179,33 +180,22 @@ actor LibraryDatabase {
         Self.applyStorageAttributes(at: databaseURL)
     }
 
-    func beginGeneration(entity: LibraryEntity, serverKey: String) throws {
+    func beginGeneration(entity: LibraryEntity, serverKey: String, generation: String) throws {
         try ensurePool().write { db in
             let now = Date().timeIntervalSince1970
-            let exists = try Int.fetchOne(
-                db,
-                sql: "SELECT COUNT(*) FROM library_sync_state WHERE serverKey = ? AND entity = ?",
-                arguments: [serverKey, entity.rawValue]
-            ) ?? 0
-
-            if exists > 0 {
-                try db.execute(
-                    sql: """
-                    UPDATE library_sync_state
-                    SET status = ?, startedAt = ?, lastError = NULL
-                    WHERE serverKey = ? AND entity = ?
-                    """,
-                    arguments: ["syncing", now, serverKey, entity.rawValue]
-                )
-            } else {
-                try db.execute(
-                    sql: """
-                    INSERT INTO library_sync_state (serverKey, entity, status, startedAt)
-                    VALUES (?, ?, ?, ?)
-                    """,
-                    arguments: [serverKey, entity.rawValue, "syncing", now]
-                )
-            }
+            try db.execute(
+                sql: """
+                INSERT INTO library_sync_state
+                    (serverKey, entity, status, startedAt, pendingGeneration)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(serverKey, entity) DO UPDATE SET
+                    status = excluded.status,
+                    startedAt = excluded.startedAt,
+                    pendingGeneration = excluded.pendingGeneration,
+                    lastError = NULL
+                """,
+                arguments: [serverKey, entity.rawValue, "syncing", now, generation]
+            )
         }
     }
 
@@ -243,9 +233,40 @@ actor LibraryDatabase {
         }
     }
 
-    func finishGeneration(entity: LibraryEntity, serverKey: String, generation: String) throws {
-        try ensurePool().write { db in
+    /// Atomically promotes only the generation that still owns the current
+    /// refresh slot. A superseded generation may clean up its own rows, but it
+    /// can never delete or replace a newer snapshot.
+    @discardableResult
+    func finishGeneration(
+        entity: LibraryEntity,
+        serverKey: String,
+        generation: String
+    ) throws -> Bool {
+        try ensurePool().write { db -> Bool in
             let table = Self.tableName(for: entity)
+            let pendingGeneration = try String.fetchOne(
+                db,
+                sql: """
+                SELECT pendingGeneration FROM library_sync_state
+                WHERE serverKey = ? AND entity = ?
+                """,
+                arguments: [serverKey, entity.rawValue]
+            )
+            guard pendingGeneration == generation else {
+                let visibleGeneration = try visibleGeneration(
+                    db: db,
+                    serverKey: serverKey,
+                    entity: entity
+                )
+                if visibleGeneration != generation {
+                    try db.execute(
+                        sql: "DELETE FROM \(table) WHERE serverKey = ? AND syncGeneration = ?",
+                        arguments: [serverKey, generation]
+                    )
+                }
+                return false
+            }
+
             let rowCount = try Int.fetchOne(
                 db,
                 sql: "SELECT COUNT(*) FROM \(table) WHERE serverKey = ? AND syncGeneration = ?",
@@ -260,58 +281,67 @@ actor LibraryDatabase {
             let now = Date().timeIntervalSince1970
             try db.execute(
                 sql: """
-                INSERT INTO library_sync_state
-                    (serverKey, entity, status, completedAt, syncGeneration, rowCount, lastError)
-                VALUES (?, ?, ?, ?, ?, ?, NULL)
-                ON CONFLICT(serverKey, entity) DO UPDATE SET
-                    status = excluded.status,
-                    completedAt = excluded.completedAt,
-                    syncGeneration = excluded.syncGeneration,
-                    rowCount = excluded.rowCount,
+                UPDATE library_sync_state
+                SET status = ?,
+                    completedAt = ?,
+                    syncGeneration = ?,
+                    pendingGeneration = NULL,
+                    rowCount = ?,
                     lastError = NULL
+                WHERE serverKey = ? AND entity = ? AND pendingGeneration = ?
                 """,
-                arguments: [serverKey, entity.rawValue, "completed", now, generation, rowCount]
+                arguments: [
+                    "completed", now, generation, rowCount,
+                    serverKey, entity.rawValue, generation,
+                ]
             )
+            return true
         }
     }
 
-    func recordFailure(entity: LibraryEntity, serverKey: String, error: Error) throws {
-        try ensurePool().write { db in
+    /// Records a failure only when `generation` still owns the refresh slot.
+    /// Stale failures are cleanup-only and cannot overwrite newer state.
+    @discardableResult
+    func recordFailure(
+        entity: LibraryEntity,
+        serverKey: String,
+        generation: String,
+        error: Error
+    ) throws -> Bool {
+        try ensurePool().write { db -> Bool in
             let message = error.localizedDescription
             let table = Self.tableName(for: entity)
-            if let visibleGeneration = try visibleGeneration(db: db, serverKey: serverKey, entity: entity) {
+            let visibleGeneration = try visibleGeneration(
+                db: db,
+                serverKey: serverKey,
+                entity: entity
+            )
+            if visibleGeneration != generation {
                 try db.execute(
-                    sql: "DELETE FROM \(table) WHERE serverKey = ? AND syncGeneration != ?",
-                    arguments: [serverKey, visibleGeneration]
+                    sql: "DELETE FROM \(table) WHERE serverKey = ? AND syncGeneration = ?",
+                    arguments: [serverKey, generation]
                 )
-            } else {
-                try db.execute(sql: "DELETE FROM \(table) WHERE serverKey = ?", arguments: [serverKey])
             }
 
-            let exists = try Int.fetchOne(
+            let pendingGeneration = try String.fetchOne(
                 db,
-                sql: "SELECT COUNT(*) FROM library_sync_state WHERE serverKey = ? AND entity = ?",
+                sql: """
+                SELECT pendingGeneration FROM library_sync_state
+                WHERE serverKey = ? AND entity = ?
+                """,
                 arguments: [serverKey, entity.rawValue]
-            ) ?? 0
+            )
+            guard pendingGeneration == generation else { return false }
 
-            if exists > 0 {
-                try db.execute(
-                    sql: """
-                    UPDATE library_sync_state
-                    SET status = ?, lastError = ?
-                    WHERE serverKey = ? AND entity = ?
-                    """,
-                    arguments: ["failed", message, serverKey, entity.rawValue]
-                )
-            } else {
-                try db.execute(
-                    sql: """
-                    INSERT INTO library_sync_state (serverKey, entity, status, lastError)
-                    VALUES (?, ?, ?, ?)
-                    """,
-                    arguments: [serverKey, entity.rawValue, "failed", message]
-                )
-            }
+            try db.execute(
+                sql: """
+                UPDATE library_sync_state
+                SET status = ?, pendingGeneration = NULL, lastError = ?
+                WHERE serverKey = ? AND entity = ? AND pendingGeneration = ?
+                """,
+                arguments: ["failed", message, serverKey, entity.rawValue, generation]
+            )
+            return true
         }
     }
 
@@ -482,6 +512,7 @@ actor LibraryDatabase {
                 startedAt: row["startedAt"],
                 completedAt: row["completedAt"],
                 syncGeneration: row["syncGeneration"],
+                pendingGeneration: row["pendingGeneration"],
                 rowCount: row["rowCount"],
                 lastError: row["lastError"]
             )
@@ -591,6 +622,11 @@ actor LibraryDatabase {
             // their derived keys; metadata correctly remains nil until refresh.
             try Self.rebuildLegacySortKeys(db, table: "library_albums")
             try Self.rebuildLegacySortKeys(db, table: "library_artists")
+        }
+        migrator.registerMigration("v4_library_generation_ownership") { db in
+            try db.alter(table: "library_sync_state") { table in
+                table.add(column: "pendingGeneration", .text)
+            }
         }
         try migrator.migrate(pool)
         return pool

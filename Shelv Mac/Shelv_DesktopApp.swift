@@ -12,6 +12,7 @@ extension Notification.Name {
 @main
 struct Shelv_DesktopApp: App {
     @StateObject private var appState = AppState.shared
+    @StateObject private var serverStore = ServerStore.shared
     private let _playTracker = PlayTracker.shared
     @AppStorage("appColorScheme") private var storedColorScheme: AppColorScheme = .system
     @AppStorage("themeColor") private var themeColorName: String = "violet"
@@ -33,7 +34,7 @@ struct Shelv_DesktopApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(appState)
-                .environmentObject(appState.serverStore)
+                .environmentObject(serverStore)
                 .environmentObject(LyricsStore.shared)
                 .environmentObject(CloudKitSyncService.shared.status)
                 .environmentObject(RecapStore.shared)
@@ -43,47 +44,80 @@ struct Shelv_DesktopApp: App {
                 .frame(minWidth: 1000, minHeight: 600)
                 .task { await LyricsStore.shared.setup() }
                 .task {
+                    await serverStore.waitUntilReady()
                     Task.detached(priority: .utility) {
                         await StreamCacheService.shared.cleanupOldFiles()
                     }
                     await PlayLogService.shared.setup()
                     await DownloadDatabase.shared.setup()
                     await DownloadService.shared.setup()
-                    if let active = appState.serverStore.activeServer {
+                    if let active = serverStore.activeServer {
                         await DownloadStore.shared.setActiveServer(active.stableId)
                     }
                     // DB ist jetzt bereit — sicherstellt dass Downloads geladen werden,
                     // auch wenn setActiveServer oben durch den Guard blockiert wurde
                     await DownloadStore.shared.reload()
                     let api = SubsonicAPIService.shared
-                    for server in appState.serverStore.servers where server.remoteUserId == nil {
-                        guard let pw = appState.serverStore.password(for: server) else { continue }
-                        let cfg = ServerConfig(serverURL: server.activeBaseURL, username: server.username, password: pw)
-                        api.setConfig(cfg)
+                    for server in serverStore.servers where server.remoteUserId == nil {
+                        guard let pw = await serverStore.loadPassword(for: server) else { continue }
                         do {
-                            let uid = try await api.authLogin()
+                            let uid = try await api.authLogin(server: server, password: pw)
                             var updated = server
                             updated.remoteUserId = uid
-                            appState.serverStore.update(server: updated, password: nil)
+                            _ = await serverStore.update(server: updated, password: nil)
                             print("[ServerID] Backfill OK \(server.displayName): \(uid)")
                         } catch {
                             print("[ServerID] Backfill FAILED \(server.displayName): \(error)")
                         }
                     }
-                    if let active = appState.serverStore.activeServer {
-                        appState.serverStore.activate(server: active)
+                    if let active = serverStore.activeServer {
                         print("[ServerID] Active server stableId: \(active.stableId)")
                     }
                     await CloudKitSyncService.shared.setup()
                 }
-                .task(id: appState.serverStore.activeServerID) {
-                    guard let server = appState.serverStore.activeServer else { return }
+                .task(id: serverStore.activeServerRevision) {
+                    await serverStore.waitUntilReady()
+                    let revision = serverStore.activeServerRevision
+                    await Task.yield()
+                    guard revision == serverStore.activeServerRevision else { return }
+                    LibraryViewModel.shared.reset()
+                    guard let server = serverStore.activeServer else { return }
                     OfflineModeService.shared.prepareInitialServerErrorPresentation()
-                    await RecapStore.shared.setup(serverId: server.stableId)
-                    await DownloadStore.shared.setActiveServer(server.stableId)
-                    PinnedPlaylistStore.shared.setActiveServer(server.stableId)
+                    await LibraryViewModel.shared.loadAlbums()
+                    guard !Task.isCancelled,
+                          revision == serverStore.activeServerRevision,
+                          let currentServer = serverStore.activeServer,
+                          currentServer.id == server.id
+                    else { return }
+                    await LibraryViewModel.shared.loadArtists()
+                    guard !Task.isCancelled,
+                          revision == serverStore.activeServerRevision
+                    else { return }
+                    await LibraryViewModel.shared.loadStarred()
+                    guard !Task.isCancelled,
+                          revision == serverStore.activeServerRevision
+                    else { return }
+                    await LibraryViewModel.shared.loadPlaylists(force: true)
+                    guard !Task.isCancelled,
+                          revision == serverStore.activeServerRevision
+                    else { return }
+                    await RecapStore.shared.setup(serverId: currentServer.stableId)
+                    guard !Task.isCancelled,
+                          revision == serverStore.activeServerRevision
+                    else { return }
+                    await DownloadStore.shared.setActiveServer(currentServer.stableId)
+                    guard !Task.isCancelled,
+                          revision == serverStore.activeServerRevision
+                    else { return }
+                    PinnedPlaylistStore.shared.setActiveServer(currentServer.stableId)
                     await QueueSyncService.shared.checkForRemoteQueue()
-                    await runKeepLibraryOfflineCheck(serverId: server.stableId)
+                    guard !Task.isCancelled,
+                          revision == serverStore.activeServerRevision
+                    else { return }
+                    await runKeepLibraryOfflineCheck(serverId: currentServer.stableId)
+                    guard !Task.isCancelled,
+                          revision == serverStore.activeServerRevision
+                    else { return }
                     ShelvPlatformAppShortcuts.updateAppShortcutParameters()
                 }
                 .onChange(of: scenePhase) { _, phase in
@@ -130,7 +164,14 @@ struct Shelv_DesktopApp: App {
                 ServerManagementMenuItem()
                 Divider()
                 Button(String(localized: "log_out")) {
-                    appState.logout()
+                    Task {
+                        guard !(await appState.logout()) else { return }
+                        NotificationCenter.default.post(
+                            name: .showToast,
+                            object: appState.errorMessage
+                                ?? String(localized: "credential_storage_failed")
+                        )
+                    }
                 }
                 .disabled(!appState.isLoggedIn)
             }

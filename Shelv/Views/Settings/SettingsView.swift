@@ -20,6 +20,7 @@ struct SettingsView: View {
     @State private var managingServer: SubsonicServer?
     @State private var showDeleteConfirm = false
     @State private var serverToDelete: SubsonicServer?
+    @State private var showCredentialStorageError = false
     @State private var showAboutRecap = false
     @Binding private var path: NavigationPath
 
@@ -273,6 +274,7 @@ struct SettingsView: View {
                         server: server,
                         password: serverStore.password(for: server)
                     )
+                    .environmentObject(serverStore)
                     .environmentObject(LibraryStore.shared)
                     .tint(accentColor)
                 }
@@ -283,11 +285,24 @@ struct SettingsView: View {
                 presenting: serverToDelete
             ) { server in
                 Button(String(localized: "delete"), role: .destructive) {
-                    serverStore.delete(server: server)
+                    Task {
+                        guard await serverStore.delete(server: server) else {
+                            showCredentialStorageError = true
+                            return
+                        }
+                    }
                 }
                 Button(String(localized: "cancel"), role: .cancel) {}
             } message: { server in
                 Text("\"\(server.displayName)\"")
+            }
+            .alert(
+                String(localized: "error"),
+                isPresented: $showCredentialStorageError
+            ) {
+                Button(String(localized: "ok"), role: .cancel) {}
+            } message: {
+                Text(String(localized: "credential_storage_failed"))
             }
         }
         .tint(accentColor)
@@ -336,7 +351,7 @@ struct SettingsView: View {
             Spacer()
             Menu {
                 Button(String(localized: "activate")) {
-                    serverStore.activate(server: server)
+                    Task { await serverStore.activate(server: server) }
                 }
                 Button(String(localized: "edit")) {
                     editingServer = server
@@ -365,16 +380,15 @@ struct SettingsView: View {
         }
         .contentShape(Rectangle())
         .onTapGesture {
-            serverStore.activate(server: server)
+            Task { await serverStore.activate(server: server) }
         }
     }
 
     @MainActor
     private func switchServerURLSlot(from server: SubsonicServer) async {
-        serverStore.toggleURLSlot(for: server)
+        await serverStore.toggleURLSlot(for: server)
         guard serverStore.activeServerID == server.id else { return }
 
-        LibraryStore.shared.resetInMemory()
         RadioStationStore.shared.resetInMemory()
 
         if await OfflineModeService.shared.beginUserInitiatedServerRefresh() { return }
