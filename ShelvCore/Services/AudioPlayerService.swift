@@ -709,6 +709,7 @@ class AudioPlayerService: ObservableObject {
             self.nowPlaying.updateRadio(station: item, metadata: self.currentRadioMetadata, isPlaying: true)
             MPNowPlayingInfoCenter.default().playbackState = .playing
 
+            self.engine.setReplayGainVolume(1.0)
             self.engine.play(url: url)
             self.engine.trustedDuration = 0
             self.isEngineLoaded = true
@@ -2431,18 +2432,18 @@ class AudioPlayerService: ObservableObject {
 
     private func applyReplayGain(for song: Song) {
         guard replayGainEnabled, let rg = song.replayGain else {
-            engine.setVolume(1.0)
+            engine.setReplayGainVolume(1.0)
             return
         }
         let useTrack = replayGainMode == "track"
         let gain: Float? = useTrack ? (rg.trackGain ?? rg.albumGain) : (rg.albumGain ?? rg.trackGain)
         guard let gain else {
-            engine.setVolume(1.0)
+            engine.setReplayGainVolume(1.0)
             return
         }
         let linear = pow(10.0, gain / 20.0)
         let peak: Float? = useTrack ? rg.trackPeak : rg.albumPeak
         let volume: Float = peak.map { $0 > 0 ? min(linear, 1.0 / $0) : linear } ?? min(linear, 1.0)
-        engine.setVolume(volume)
+        engine.setReplayGainVolume(volume)
     }
 }
