@@ -160,21 +160,24 @@ struct PlayerView: View {
                     songInfoSong = song
                 } label: {
                     MarqueeText(text: player.displayTitle,
-                                uiFont: .preferred(isPad ? .title1 : .title2, bold: true))
+                                uiFont: .preferred(isPad ? .title1 : .title2, bold: true),
+                                resetID: song.id)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(String(localized: "song_info"))
                 .accessibilityHint(String(localized: "song_info_open_accessibility"))
             } else {
                 MarqueeText(text: player.displayTitle,
-                            uiFont: .preferred(isPad ? .title1 : .title2, bold: true))
+                            uiFont: .preferred(isPad ? .title1 : .title2, bold: true),
+                            resetID: player.currentRadioStation?.id)
             }
 
             if let artistName = player.currentSong?.artist {
                 Button { resolveArtist(artistName) } label: {
                     MarqueeText(text: artistName,
                                 uiFont: .preferred(isPad ? .title2 : .title3),
-                                color: Color(.secondaryLabel))
+                                color: Color(.secondaryLabel),
+                                resetID: player.currentSong?.id)
                 }
                 .buttonStyle(.plain)
                 .navigationDestination(item: $artistDestination) { artist in
@@ -189,17 +192,20 @@ struct PlayerView: View {
                 ) {
                     MarqueeText(text: album.name,
                                 uiFont: .preferred(.callout),
-                                color: Color(.tertiaryLabel))
+                                color: Color(.tertiaryLabel),
+                                resetID: player.currentSong?.id)
                 }
                 .buttonStyle(.plain)
             } else if let albumName = player.currentSong?.album {
                 MarqueeText(text: albumName,
                             uiFont: .preferred(.callout),
-                            color: Color(.tertiaryLabel))
+                            color: Color(.tertiaryLabel),
+                            resetID: player.currentSong?.id)
             } else if player.isRadioPlayback {
                 MarqueeText(text: player.displaySubtitleLine,
                             uiFont: .preferred(.callout),
-                            color: Color(.tertiaryLabel))
+                            color: Color(.tertiaryLabel),
+                            resetID: player.currentRadioStation?.id)
             }
         }
         .padding(.horizontal, isPad ? 48 : 32)
