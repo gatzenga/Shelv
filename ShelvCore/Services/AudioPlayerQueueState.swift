@@ -22,6 +22,95 @@ nonisolated enum PlayerEngineVolumePolicy {
     }
 }
 
+/// Sitzungsinterner Rücksprungverlauf. Er liegt bewusst neben dem eigentlichen
+/// Queue-State und wird weder persistiert noch in Queue-Snapshots übernommen.
+nonisolated struct AudioPlayerBackHistoryState: Equatable {
+    nonisolated struct Selection: Equatable {
+        let song: Song
+        let queueAnchorIndex: Int?
+    }
+
+    private struct Entry: Equatable {
+        let song: Song
+        let queueAnchorSongID: String?
+        let queueAnchorIndex: Int?
+    }
+
+    private var entries: [Entry] = []
+    let limit: Int
+
+    init(limit: Int = 500) {
+        self.limit = max(0, limit)
+    }
+
+    var count: Int { entries.count }
+    var previousSong: Song? { entries.last?.song }
+
+    static func recordsSameSongForNext(
+        repeatMode: RepeatMode,
+        triggeredByUser: Bool,
+        hasPlayNextBeforeAdvance: Bool
+    ) -> Bool {
+        repeatMode != .one || triggeredByUser || hasPlayNextBeforeAdvance
+    }
+
+    mutating func recordTransition(
+        from currentSong: Song?,
+        to targetSong: Song,
+        queue: [Song],
+        currentIndex: Int,
+        recordsSameSong: Bool = false
+    ) {
+        guard limit > 0,
+              let currentSong,
+              recordsSameSong || currentSong.id != targetSong.id
+        else { return }
+
+        let hasQueueAnchor = queue.indices.contains(currentIndex)
+        let anchorSongID = hasQueueAnchor ? queue[currentIndex].id : nil
+        let anchorIndex = hasQueueAnchor ? currentIndex : nil
+        entries.append(Entry(
+            song: currentSong,
+            queueAnchorSongID: anchorSongID,
+            queueAnchorIndex: anchorIndex
+        ))
+
+        let overflow = entries.count - limit
+        if overflow > 0 {
+            entries.removeFirst(overflow)
+        }
+    }
+
+    mutating func popPrevious(in queue: [Song]) -> Selection? {
+        guard let entry = entries.popLast() else { return nil }
+
+        let anchorIndex: Int?
+        if let storedIndex = entry.queueAnchorIndex,
+           let anchorSongID = entry.queueAnchorSongID,
+           queue.indices.contains(storedIndex),
+           queue[storedIndex].id == anchorSongID {
+            anchorIndex = storedIndex
+        } else if let anchorSongID = entry.queueAnchorSongID {
+            let matchingIndexes = queue.indices.filter { queue[$0].id == anchorSongID }
+            if let storedIndex = entry.queueAnchorIndex {
+                anchorIndex = matchingIndexes.min {
+                    abs($0 - storedIndex) < abs($1 - storedIndex)
+                }
+            } else {
+                anchorIndex = matchingIndexes.first
+            }
+        } else {
+            anchorIndex = nil
+        }
+
+        return Selection(song: entry.song, queueAnchorIndex: anchorIndex)
+    }
+
+    mutating func removeAll() {
+        entries.removeAll(keepingCapacity: true)
+    }
+}
+
 nonisolated struct AudioPlayerQueueState: Equatable {
     var queue: [Song]
     var currentIndex: Int
