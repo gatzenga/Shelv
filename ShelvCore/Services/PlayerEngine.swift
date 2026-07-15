@@ -45,7 +45,9 @@ final class PlayerEngine: ObservableObject {
 
     init() {
         let p = AVQueuePlayer()
-        p.allowsExternalPlayback = true
+        // AirPlay audio is routed by the long-form AVAudioSession. Keep AVPlayer's
+        // external mode disabled so music is not presented as a video session.
+        p.allowsExternalPlayback = false
         p.automaticallyWaitsToMinimizeStalling = false
         player = p
         timeControlObservation = p.observe(\.timeControlStatus, options: [.initial, .new]) { [weak self] player, _ in
