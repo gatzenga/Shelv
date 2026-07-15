@@ -293,36 +293,58 @@ final class ShelvIntentCatalog {
 
     func items(for identifiers: [String]) async throws -> [ShelvIntentCatalogItem] {
         let references = identifiers.compactMap(ShortcutPlayableReference.init(identifier:))
+        ShelvIntentDiagnostics.entityLookupBegan(
+            identifierCount: identifiers.count,
+            parsedCount: references.count
+        )
         return try await items(for: references)
     }
 
     func items(for references: [ShortcutPlayableReference]) async throws -> [ShelvIntentCatalogItem] {
-        let context = try await activeContext()
-        let matching = references.filter { $0.serverConfigID == context.server.id.uuidString }
-        guard !matching.isEmpty else { return [] }
-        let records = await LocalDownloadCatalog.load(
-            serverId: context.storageServerID
-        ).records
-        let mayLoadRemote = await networkAvailable()
-
-        var result: [ShelvIntentCatalogItem] = []
-        for reference in matching {
-            if let item = await resolve(
-                reference,
-                server: context.server,
-                records: records,
-                mayLoadRemote: mayLoadRemote
-            ) {
-                result.append(item)
+        do {
+            let context = try await activeContext()
+            let matching = references.filter { $0.serverConfigID == context.server.id.uuidString }
+            guard !matching.isEmpty else {
+                ShelvIntentDiagnostics.entityLookupCompleted(
+                    requestedCount: references.count,
+                    matchingServerCount: 0,
+                    resultCount: 0
+                )
+                return []
             }
+            let records = await LocalDownloadCatalog.load(
+                serverId: context.storageServerID
+            ).records
+            let mayLoadRemote = await networkAvailable()
+
+            var result: [ShelvIntentCatalogItem] = []
+            for reference in matching {
+                if let item = await resolve(
+                    reference,
+                    server: context.server,
+                    records: records,
+                    mayLoadRemote: mayLoadRemote
+                ) {
+                    result.append(item)
+                }
+            }
+            try validate(context)
+            ShelvIntentDiagnostics.entityLookupCompleted(
+                requestedCount: references.count,
+                matchingServerCount: matching.count,
+                resultCount: result.count
+            )
+            return result
+        } catch {
+            ShelvIntentDiagnostics.entityLookupFailed(error: error)
+            throw error
         }
-        try validate(context)
-        return result
     }
 
     private func activeContext() async throws -> (server: SubsonicServer, storageServerID: String) {
-        _ = ServerStore.shared
-        guard let server = ServerStore.shared.activeServer else {
+        let serverStore = ServerStore.shared
+        await serverStore.waitUntilReady()
+        guard let server = serverStore.activeServer else {
             throw ShortcutPlaybackError.noActiveServer
         }
         await DownloadDatabase.shared.setup()

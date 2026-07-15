@@ -23,6 +23,7 @@ final class ShelvSiriMediaIntentHandler: NSObject, INPlayMediaIntentHandling {
         for intent: INPlayMediaIntent,
         with completion: @escaping ([INPlayMediaMediaItemResolutionResult]) -> Void
     ) {
+        ShelvIntentDiagnostics.received(route: "siriKit.resolveMediaItems")
         Task { @MainActor in
             do {
                 let items = try await resolvedItems(for: intent)
@@ -54,6 +55,7 @@ final class ShelvSiriMediaIntentHandler: NSObject, INPlayMediaIntentHandling {
         intent: INPlayMediaIntent,
         completion: @escaping (INPlayMediaIntentResponse) -> Void
     ) {
+        ShelvIntentDiagnostics.received(route: "siriKit.handlePlayMedia")
         Task { @MainActor in
             let code: INPlayMediaIntentResponseCode
             do {

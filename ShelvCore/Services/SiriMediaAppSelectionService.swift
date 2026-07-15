@@ -1,6 +1,10 @@
 #if os(iOS) || os(tvOS)
 import Intents
 import OSLog
+#if os(iOS) && compiler(>=6.4) && canImport(AppIntents) && canImport(MediaIntents)
+import AppIntents
+import MediaIntents
+#endif
 
 /// Supplies the affinity signals Siri uses when choosing between Shelv and
 /// Apple Music. Siri-triggered playback is deliberately excluded because the
@@ -12,12 +16,15 @@ final class SiriMediaAppSelectionService {
     private struct PendingDonation {
         let generation: Int
         let intent: INPlayMediaIntent
+        let catalogItem: ShelvIntentCatalogItem
+        let shuffled: Bool
     }
 
     private let logger = Logger(
         subsystem: "ch.vkugler.Shelv",
         category: "SiriAppSelection"
     )
+    private let libraryItemCountDefaultsKey = "siri.mediaUserContext.libraryItemCount"
     private var systemIntentDepth = 0
     private var pendingDonation: PendingDonation?
 
@@ -34,13 +41,43 @@ final class SiriMediaAppSelectionService {
         systemIntentDepth = max(0, systemIntentDepth - 1)
     }
 
+    func restoreUserContext() {
+        guard let count = UserDefaults.standard.object(
+            forKey: libraryItemCountDefaultsKey
+        ) as? Int else {
+            logger.notice("Media user context unavailable until library load")
+            return
+        }
+        publishUserContext(numberOfLibraryItems: count, source: "restored")
+    }
+
     func updateUserContext(numberOfLibraryItems: Int) {
+        let count = max(0, numberOfLibraryItems)
+        UserDefaults.standard.set(count, forKey: libraryItemCountDefaultsKey)
+        publishUserContext(numberOfLibraryItems: count, source: "library")
+    }
+
+    func confirmPlayableCatalog(minimumItemCount: Int) {
+        guard minimumItemCount > 0 else { return }
+        let cachedCount = UserDefaults.standard.object(
+            forKey: libraryItemCountDefaultsKey
+        ) as? Int ?? 0
+        guard cachedCount <= 0 else { return }
+        let count = max(1, minimumItemCount)
+        UserDefaults.standard.set(count, forKey: libraryItemCountDefaultsKey)
+        publishUserContext(numberOfLibraryItems: count, source: "audioSearch")
+    }
+
+    private func publishUserContext(numberOfLibraryItems: Int, source: String) {
         let context = INMediaUserContext()
         // Shelv doesn't sell a media subscription. The library-size signal is
         // accurate; claiming a subscription here would misuse Apple's API.
         context.subscriptionStatus = .unknown
-        context.numberOfLibraryItems = max(0, numberOfLibraryItems)
+        context.numberOfLibraryItems = numberOfLibraryItems
         context.becomeCurrent()
+        logger.notice(
+            "Media user context published source=\(source, privacy: .public) items=\(numberOfLibraryItems, privacy: .public)"
+        )
     }
 
     func prepareMusicDonation(
@@ -82,7 +119,27 @@ final class SiriMediaAppSelectionService {
             playbackSpeed: nil,
             mediaSearch: search
         )
-        pendingDonation = PendingDonation(generation: generation, intent: intent)
+        let catalogItem = ShelvIntentCatalogItem(
+            reference: ShortcutPlayableReference(
+                serverConfigID: SubsonicAPIService.shared.activeServer?.id.uuidString ?? "",
+                kind: .song,
+                contentID: selected.id
+            ),
+            title: selected.title,
+            artistID: selected.artistId,
+            artistName: selected.artist,
+            albumID: selected.albumId,
+            albumTitle: selected.album,
+            duration: selected.duration.map(TimeInterval.init),
+            itemCount: nil,
+            internationalStandardRecordingCode: selected.isrc?.first
+        )
+        pendingDonation = PendingDonation(
+            generation: generation,
+            intent: intent,
+            catalogItem: catalogItem,
+            shuffled: shuffled
+        )
     }
 
     func prepareRadioDonation(
@@ -118,7 +175,27 @@ final class SiriMediaAppSelectionService {
             playbackSpeed: nil,
             mediaSearch: search
         )
-        pendingDonation = PendingDonation(generation: generation, intent: intent)
+        let catalogItem = ShelvIntentCatalogItem(
+            reference: ShortcutPlayableReference(
+                serverConfigID: SubsonicAPIService.shared.activeServer?.id.uuidString ?? "",
+                kind: .radio,
+                contentID: station.id
+            ),
+            title: station.name,
+            artistID: nil,
+            artistName: nil,
+            albumID: nil,
+            albumTitle: nil,
+            duration: nil,
+            itemCount: nil,
+            internationalStandardRecordingCode: nil
+        )
+        pendingDonation = PendingDonation(
+            generation: generation,
+            intent: intent,
+            catalogItem: catalogItem,
+            shuffled: false
+        )
     }
 
     func playbackDidStart(generation: Int) {
@@ -131,11 +208,17 @@ final class SiriMediaAppSelectionService {
         Task {
             do {
                 try await INInteraction(intent: pendingDonation.intent, response: nil).donate()
+                logger.notice("Legacy media interaction donated")
             } catch {
                 logger.error(
                     "Media interaction donation failed error=\(String(describing: error), privacy: .private(mask: .hash))"
                 )
             }
+
+            await donateNativePlayback(
+                item: pendingDonation.catalogItem,
+                shuffled: pendingDonation.shuffled
+            )
         }
     }
 
@@ -174,6 +257,43 @@ final class SiriMediaAppSelectionService {
         }
 
         return nil
+    }
+
+    private func donateNativePlayback(
+        item: ShelvIntentCatalogItem,
+        shuffled: Bool
+    ) async {
+        #if os(iOS) && compiler(>=6.4) && canImport(AppIntents) && canImport(MediaIntents)
+        guard #available(iOS 27.0, *),
+              !item.reference.serverConfigID.isEmpty
+        else { return }
+
+        let audioEntity: ShelvAudioEntity
+        switch item.reference.kind {
+        case .song:
+            audioEntity = .song(ShelvAudioSongEntity(item: item))
+        case .radio:
+            audioEntity = .radio(ShelvAudioRadioEntity(item: item))
+        case .album, .artist, .playlist:
+            return
+        }
+
+        do {
+            let intent = ShelvPlayAudioIntent()
+            intent.audioEntity = audioEntity
+            intent.playbackAttributes = shuffled ? [.shuffle] : []
+            intent.warmupAudioQueueResult = nil
+            intent.queueLocation = nil
+            _ = try await IntentDonationManager.shared.donate(intent: intent)
+            logger.notice(
+                "Native media interaction donated kind=\(item.reference.kind.rawValue, privacy: .public)"
+            )
+        } catch {
+            logger.error(
+                "Native media interaction donation failed error=\(String(describing: error), privacy: .private(mask: .hash))"
+            )
+        }
+        #endif
     }
 }
 #endif

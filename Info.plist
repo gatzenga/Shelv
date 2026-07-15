@@ -2,20 +2,27 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CFBundleSpokenName</key>
+	<string>Shelf</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>INAlternativeAppNames</key>
 	<array>
 		<dict>
 			<key>INAlternativeAppName</key>
-			<string>Shells</string>
+			<string>Shelf</string>
 			<key>INAlternativeAppNamePronunciationHint</key>
-			<string>shells</string>
+			<string>shelf</string>
 		</dict>
 	</array>
 	<key>INIntentsSupported</key>
 	<array>
 		<string>INPlayMediaIntent</string>
+	</array>
+	<key>INSupportedMediaCategories</key>
+	<array>
+		<string>INMediaCategoryMusic</string>
+		<string>INMediaCategoryRadio</string>
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Shelv uses your local network to connect to your Navidrome server.</string>

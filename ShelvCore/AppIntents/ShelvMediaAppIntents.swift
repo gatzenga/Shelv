@@ -651,16 +651,66 @@ enum ShelvAudioEntity {
 
 @available(iOS 27.0, macOS 27.0, *)
 extension ShelvAudioEntity {
+    fileprivate var diagnosticValues: (
+        kind: String,
+        identifier: String,
+        title: String,
+        artist: String?,
+        referenceValid: Bool
+    ) {
+        switch self {
+        case .song(let entity):
+            ("song", entity.id, entity.title, entity.artistName, entity.reference != nil)
+        case .album(let entity):
+            ("album", entity.id, entity.title, entity.artistName, entity.reference != nil)
+        case .artist(let entity):
+            ("artist", entity.id, entity.name, nil, entity.reference != nil)
+        case .playlist(let entity):
+            ("playlist", entity.id, entity.title, nil, entity.reference != nil)
+        case .radio(let entity):
+            ("radio", entity.id, entity.title, nil, entity.reference != nil)
+        case .algorithmicStation(let entity):
+            ("algorithmicStation", entity.id, entity.title, nil, entity.seedReference != nil)
+        }
+    }
+
+    fileprivate func logSearchResult(index: Int) {
+        let values = diagnosticValues
+        ShelvIntentDiagnostics.audioSearchResult(
+            index: index,
+            kind: values.kind,
+            identifier: values.identifier,
+            title: values.title,
+            artist: values.artist,
+            referenceValid: values.referenceValid
+        )
+    }
+
+    fileprivate func logIntentEntity() {
+        let values = diagnosticValues
+        ShelvIntentDiagnostics.audioIntentEntity(
+            kind: values.kind,
+            identifier: values.identifier,
+            title: values.title,
+            referenceValid: values.referenceValid
+        )
+    }
+
     struct AudioIntentValueQuery: IntentValueQuery {
         func values(for input: AudioSearch) async throws -> [ShelvAudioEntity] {
             let criteria = Self.diagnosticCriteria(input.criteria)
             ShelvIntentDiagnostics.audioSearchBegan(criteria: criteria)
+            ShelvIntentDiagnostics.audioSearchInput(
+                criteria: criteria,
+                description: String(reflecting: input)
+            )
 
             do {
                 let resolved: [ShelvAudioEntity]
                 let route: String
                 switch input.criteria {
                 case .searchQuery(let query):
+                    ShelvIntentDiagnostics.audioSearchQuery(query)
                     if let seed = ShelvInstantMixIntentVocabulary.seedQuery(from: query) {
                         let items = try await ShelvIntentCatalog.shared.items(
                             matching: seed,
@@ -709,6 +759,14 @@ extension ShelvAudioEntity {
                     route: route,
                     resultCount: resolved.count
                 )
+                for (index, entity) in resolved.enumerated() {
+                    entity.logSearchResult(index: index)
+                }
+                #if os(iOS)
+                await SiriMediaAppSelectionService.shared.confirmPlayableCatalog(
+                    minimumItemCount: resolved.count
+                )
+                #endif
                 return resolved
             } catch {
                 ShelvIntentDiagnostics.audioSearchFailed(criteria: criteria, error: error)
@@ -776,12 +834,8 @@ struct ShelvAudioWarmupResult: TransientAppEntity {
 struct ShelvPlayAudioIntent: AudioPlaybackIntent {
     static let title: LocalizedStringResource = "shortcut_media_play_title"
     static let description = IntentDescription("shortcut_media_play_description")
-    // The configurable legacy actions remain in Shortcuts for compatibility.
-    // The audio schema is the single natural-language route Siri should use.
-    static let isAssistantOnly = true
     static let openAppWhenRun = false
     static let authenticationPolicy: IntentAuthenticationPolicy = .alwaysAllowed
-    static let supportedModes: IntentModes = .background
 
     var audioEntity: ShelvAudioEntity
 
@@ -793,6 +847,8 @@ struct ShelvPlayAudioIntent: AudioPlaybackIntent {
 
     @MainActor
     func perform() async throws -> some IntentResult {
+        ShelvIntentDiagnostics.received(route: "audioSchema.playAudio")
+        audioEntity.logIntentEntity()
         if let reference = audioEntity.instantMixReference {
             guard queueLocation == nil else {
                 throw ShortcutPlaybackError.unsupportedQueueOperation

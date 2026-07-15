@@ -113,6 +113,10 @@ nonisolated enum ShortcutPlaybackCommand: Hashable, Sendable {
 nonisolated enum ShelvIntentDiagnostics {
     private static let logger = Logger(subsystem: "ch.vkugler.Shelv", category: "AppIntents")
 
+    static func received(route: String) {
+        logger.notice("System intent received route=\(route, privacy: .public)")
+    }
+
     static func began(action: String, reference: ShortcutPlayableReference? = nil) {
         logger.notice(
             "Intent began action=\(action, privacy: .public) kind=\(reference?.kind.rawValue ?? "none", privacy: .public) item=\(reference?.contentID ?? "none", privacy: .private(mask: .hash))"
@@ -149,6 +153,89 @@ nonisolated enum ShelvIntentDiagnostics {
 
     static func audioSearchBegan(criteria: String) {
         logger.notice("Audio search began criteria=\(criteria, privacy: .public)")
+    }
+
+    static func audioSearchInput(criteria: String, description: String) {
+        #if DEBUG
+        logger.notice(
+            "Audio search input criteria=\(criteria, privacy: .public) value=\(description, privacy: .public)"
+        )
+        #else
+        logger.notice(
+            "Audio search input criteria=\(criteria, privacy: .public) descriptionLength=\(description.count, privacy: .public)"
+        )
+        #endif
+    }
+
+    static func audioSearchQuery(_ query: String) {
+        #if DEBUG
+        logger.notice(
+            "Audio search query value=\(query, privacy: .public) length=\(query.count, privacy: .public)"
+        )
+        #else
+        logger.notice("Audio search query length=\(query.count, privacy: .public)")
+        #endif
+    }
+
+    static func audioSearchResult(
+        index: Int,
+        kind: String,
+        identifier: String,
+        title: String,
+        artist: String?,
+        referenceValid: Bool
+    ) {
+        #if DEBUG
+        logger.notice(
+            "Audio search result index=\(index, privacy: .public) kind=\(kind, privacy: .public) id=\(identifier, privacy: .public) idLength=\(identifier.count, privacy: .public) title=\(title, privacy: .public) artist=\(artist ?? "none", privacy: .public) referenceValid=\(referenceValid, privacy: .public)"
+        )
+        #else
+        logger.notice(
+            "Audio search result index=\(index, privacy: .public) kind=\(kind, privacy: .public) id=\(identifier, privacy: .private(mask: .hash)) idLength=\(identifier.count, privacy: .public) title=\(title, privacy: .private(mask: .hash)) referenceValid=\(referenceValid, privacy: .public)"
+        )
+        #endif
+    }
+
+    static func audioIntentEntity(
+        kind: String,
+        identifier: String,
+        title: String,
+        referenceValid: Bool
+    ) {
+        #if DEBUG
+        logger.notice(
+            "Play audio entity received kind=\(kind, privacy: .public) id=\(identifier, privacy: .public) title=\(title, privacy: .public) referenceValid=\(referenceValid, privacy: .public)"
+        )
+        #else
+        logger.notice(
+            "Play audio entity received kind=\(kind, privacy: .public) id=\(identifier, privacy: .private(mask: .hash)) title=\(title, privacy: .private(mask: .hash)) referenceValid=\(referenceValid, privacy: .public)"
+        )
+        #endif
+    }
+
+    static func entityLookupBegan(
+        identifierCount: Int,
+        parsedCount: Int
+    ) {
+        logger.notice(
+            "Audio entity lookup began identifiers=\(identifierCount, privacy: .public) parsed=\(parsedCount, privacy: .public)"
+        )
+    }
+
+    static func entityLookupCompleted(
+        requestedCount: Int,
+        matchingServerCount: Int,
+        resultCount: Int
+    ) {
+        logger.notice(
+            "Audio entity lookup completed requested=\(requestedCount, privacy: .public) matchingServer=\(matchingServerCount, privacy: .public) results=\(resultCount, privacy: .public)"
+        )
+    }
+
+    static func entityLookupFailed(error: Error) {
+        logger.error(
+            "Audio entity lookup failed error=\(String(describing: error), privacy: .private(mask: .hash))"
+        )
     }
 
     static func audioSearchCompleted(criteria: String, route: String, resultCount: Int) {

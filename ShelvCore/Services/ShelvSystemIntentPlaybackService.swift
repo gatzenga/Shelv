@@ -175,8 +175,9 @@ final class ShelvSystemIntentPlaybackService: @unchecked Sendable {
         expectedConfigID: String?,
         flightID: UInt64
     ) async throws -> ServerContext {
-        _ = ServerStore.shared
-        guard let server = ServerStore.shared.activeServer else {
+        let serverStore = ServerStore.shared
+        await serverStore.waitUntilReady()
+        guard let server = serverStore.activeServer else {
             throw ShortcutPlaybackError.noActiveServer
         }
         if let expectedConfigID, expectedConfigID != server.id.uuidString {
