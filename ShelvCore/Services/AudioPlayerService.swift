@@ -177,6 +177,7 @@ class AudioPlayerService: ObservableObject {
     private var truthAlbumQueue: [Song] = []
     private var truthPlayNextQueue: [Song] = []
     private var truthUserQueue: [Song] = []
+    private var playbackBackHistory = AudioPlayerBackHistoryState()
 
     private let engine = PlayerEngine()
     private let nowPlaying = AudioPlayerNowPlayingController()
@@ -468,6 +469,7 @@ class AudioPlayerService: ObservableObject {
         volume = savedVolume > 0 ? Float(savedVolume) : 1.0
         #endif
 
+        playbackBackHistory.removeAll()
         if let song = currentSong { nowPlaying.update(song: song, currentTime: currentTime, playbackRate: 0) }
     }
 
@@ -509,6 +511,7 @@ class AudioPlayerService: ObservableObject {
         var restoredPlayNext = avail(snapshot.playNextQueue)
         var restoredUser = avail(snapshot.userQueue)
         guard !(restoredQueue.isEmpty && restoredPlayNext.isEmpty && restoredUser.isEmpty) else { return }
+        playbackBackHistory.removeAll()
 
         // Ist der Hauptqueue nach der Offline-Filterung leer (aktueller Song nicht geladen),
         // aber Play-Next/User-Queue haben Songs → ersten verfügbaren als aktuellen nehmen,
@@ -564,6 +567,7 @@ class AudioPlayerService: ObservableObject {
 
     func play(songs: [Song], startIndex: Int = 0) {
         guard songs.indices.contains(startIndex) else { return }
+        playbackBackHistory.removeAll()
         prepareForSongPlayback()
         isShuffled = false
         queue = songs
@@ -580,6 +584,7 @@ class AudioPlayerService: ObservableObject {
     }
 
     func playSong(_ song: Song) {
+        playbackBackHistory.removeAll()
         prepareForSongPlayback()
         isShuffled = false
         queue = [song]
@@ -675,6 +680,7 @@ class AudioPlayerService: ObservableObject {
             self.formatProbe.cancel()
             self.lyricsAutoFetcher.cancel()
             self.infinityPendingSongIds.removeAll()
+            self.playbackBackHistory.removeAll()
             self.queue = []
             self.currentIndex = 0
             self.playNextQueue = []
@@ -746,6 +752,7 @@ class AudioPlayerService: ObservableObject {
         truthPlayNextQueue = []
         truthUserQueue = []
         infinityPendingSongIds.removeAll()
+        playbackBackHistory.removeAll()
         currentSong = DemoContent.playerSong
         currentTime = DemoContent.playerCurrentTime
         duration = DemoContent.playerDuration
@@ -1562,6 +1569,7 @@ class AudioPlayerService: ObservableObject {
     func stop() {
         stopFastSeeking()
         clearPlaybackState()
+        playbackBackHistory.removeAll()
         queue = []
         currentIndex = 0
         playNextQueue = []
@@ -1577,6 +1585,7 @@ class AudioPlayerService: ObservableObject {
 
     func playShuffled(songs: [Song]) {
         guard !songs.isEmpty else { return }
+        playbackBackHistory.removeAll()
         prepareForSongPlayback()
         let shuffled = songs.shuffled()
 
@@ -1662,17 +1671,41 @@ class AudioPlayerService: ObservableObject {
         truthUserQueue = state.truthUserQueue
     }
 
+    private func recordPlaybackBackHistoryTransition(
+        to song: Song,
+        recordsSameSong: Bool = false
+    ) {
+        playbackBackHistory.recordTransition(
+            from: currentSong,
+            to: song,
+            queue: queue,
+            currentIndex: currentIndex,
+            recordsSameSong: recordsSameSong
+        )
+    }
+
     func next(triggeredByUser: Bool = false) {
         if isRadioPlayback {
             playNextRadioStation()
             return
         }
         var state = queueState
+        let recordsSameSong = AudioPlayerBackHistoryState.recordsSameSongForNext(
+            repeatMode: repeatMode,
+            triggeredByUser: triggeredByUser,
+            hasPlayNextBeforeAdvance: !state.playNextQueue.isEmpty
+        )
         let action = state.advance(
             repeatMode: repeatMode,
             isShuffled: isShuffled,
             triggeredByUser: triggeredByUser
         )
+        if case .play(let song) = action {
+            recordPlaybackBackHistoryTransition(
+                to: song,
+                recordsSameSong: recordsSameSong
+            )
+        }
         applyQueueState(state)
 
         switch action {
@@ -1693,6 +1726,15 @@ class AudioPlayerService: ObservableObject {
         }
         if currentTime > 3 {
             seek(to: 0)
+            saveState()
+            return
+        }
+        if playbackBackHistory.previousSong != nil,
+           let selection = playbackBackHistory.popPrevious(in: queue) {
+            if let anchorIndex = selection.queueAnchorIndex {
+                currentIndex = anchorIndex
+            }
+            startPlayback(song: selection.song)
             saveState()
             return
         }
@@ -1768,6 +1810,10 @@ class AudioPlayerService: ObservableObject {
     func playFromQueue(index: Int) {
         var state = queueState
         guard let song = state.playFromQueue(index: index) else { return }
+        recordPlaybackBackHistoryTransition(
+            to: song,
+            recordsSameSong: state.currentIndex != currentIndex
+        )
         applyQueueState(state)
         startPlayback(song: song)
         saveState()
@@ -1776,6 +1822,7 @@ class AudioPlayerService: ObservableObject {
     func jumpToPlayNext(at index: Int) {
         var state = queueState
         guard let song = state.jumpToPlayNext(at: index) else { return }
+        recordPlaybackBackHistoryTransition(to: song, recordsSameSong: true)
         applyQueueState(state)
         startPlayback(song: song)
         saveState()
@@ -1784,6 +1831,7 @@ class AudioPlayerService: ObservableObject {
     func jumpToQueueTrack(at queueIndex: Int) {
         var state = queueState
         guard let song = state.jumpToQueueTrack(at: queueIndex) else { return }
+        recordPlaybackBackHistoryTransition(to: song, recordsSameSong: true)
         applyQueueState(state)
         startPlayback(song: song)
         saveState()
@@ -1792,6 +1840,7 @@ class AudioPlayerService: ObservableObject {
     func jumpToUserQueue(at index: Int) {
         var state = queueState
         guard let song = state.jumpToUserQueue(at: index) else { return }
+        recordPlaybackBackHistoryTransition(to: song, recordsSameSong: true)
         applyQueueState(state)
         startPlayback(song: song)
         saveState()
@@ -2147,6 +2196,7 @@ class AudioPlayerService: ObservableObject {
                     return
                 }
 
+                self.recordPlaybackBackHistoryTransition(to: song, recordsSameSong: true)
                 self.advanceQueueState()
                 self.currentSong = song
                 self.trimManagedStreamCaches(keeping: self.currentStreamCacheKeepIds())
