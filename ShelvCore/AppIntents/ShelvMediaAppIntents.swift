@@ -651,7 +651,7 @@ enum ShelvAudioEntity {
 
 @available(iOS 27.0, macOS 27.0, *)
 extension ShelvAudioEntity {
-    fileprivate var diagnosticValues: (
+    nonisolated fileprivate var diagnosticValues: (
         kind: String,
         identifier: String,
         title: String,
@@ -674,7 +674,7 @@ extension ShelvAudioEntity {
         }
     }
 
-    fileprivate func logSearchResult(index: Int) {
+    nonisolated fileprivate func logSearchResult(index: Int) {
         let values = diagnosticValues
         ShelvIntentDiagnostics.audioSearchResult(
             index: index,
@@ -686,7 +686,7 @@ extension ShelvAudioEntity {
         )
     }
 
-    fileprivate func logIntentEntity() {
+    nonisolated fileprivate func logIntentEntity() {
         let values = diagnosticValues
         ShelvIntentDiagnostics.audioIntentEntity(
             kind: values.kind,
