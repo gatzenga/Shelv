@@ -103,7 +103,7 @@ nonisolated enum LibrarySortKey {
 }
 
 #if !SHELV_LOGIC_TESTS
-extension SubsonicAPIService: LibraryAPIClient {}
+nonisolated extension SubsonicAPIService: LibraryAPIClient {}
 #endif
 
 nonisolated final class LibraryRepository {
