@@ -598,9 +598,13 @@
 "sync_status_complete" = "Sync complete";
 
 /* Siri & Shortcuts */
-"shortcut_order_type" = "Playback Order";
-"shortcut_order_in_order" = "In Order";
-"shortcut_order_shuffled" = "Shuffled";
+"Playback" = "Playback";
+"Play" = "Play";
+"Shuffle" = "Shuffle";
+"Play or shuffle?" = "Play or shuffle?";
+"shortcut_order_type" = "Playback";
+"shortcut_order_in_order" = "Play";
+"shortcut_order_shuffled" = "Shuffle";
 "shortcut_order_parameter" = "Order";
 "shortcut_mix_type" = "Mix";
 "shortcut_mix_newest" = "Newest";
@@ -627,6 +631,11 @@
 "shortcut_play_description" = "Play a song, album, artist, playlist, or radio station in Shelv.";
 "shortcut_playable_parameter" = "Music or Radio";
 "shortcut_play_summary" = "Play music or radio";
+"shortcut_play_text_title" = "Play by Name in Shelv";
+"shortcut_play_text_description" = "Play or shuffle named music, radio, or a Shelv smart mix from text supplied by another Shortcuts action.";
+"shortcut_play_text_parameter" = "Name";
+"shortcut_play_text_summary" = "Play named music or radio";
+"shortcut_play_text_mode_parameter" = "Playback";
 "shortcut_shuffle_playable_title" = "Shuffle in Shelv";
 "shortcut_shuffle_playable_description" = "Shuffle a selected song, album, artist, or playlist.";
 "shortcut_shuffle_playable_summary" = "Shuffle selected music";
@@ -696,3 +705,5 @@
 "shortcut_media_queue_last" = "Last";
 "shortcut_media_queue_ready" = "Audio queue ready";
 "shortcut_media_playback_started" = "Playback started in Shelv.";
+"credential_storage_failed" = "The secure credential operation could not be completed. Please try again.";
+"server_no_longer_available" = "The server is no longer available.";

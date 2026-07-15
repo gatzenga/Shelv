@@ -592,9 +592,13 @@
 "sync_status_complete" = "Sync abgeschlossen";
 
 /* Siri & Kurzbefehle */
-"shortcut_order_type" = "Wiedergabereihenfolge";
-"shortcut_order_in_order" = "Der Reihe nach";
-"shortcut_order_shuffled" = "Gemischt";
+"Playback" = "Wiedergabe";
+"Play" = "Abspielen";
+"Shuffle" = "Mischen";
+"Play or shuffle?" = "Abspielen oder mischen?";
+"shortcut_order_type" = "Wiedergabe";
+"shortcut_order_in_order" = "Abspielen";
+"shortcut_order_shuffled" = "Mischen";
 "shortcut_order_parameter" = "Reihenfolge";
 "shortcut_mix_type" = "Mix";
 "shortcut_mix_newest" = "Neueste";
@@ -621,6 +625,11 @@
 "shortcut_play_description" = "Einen Song, ein Album, einen Künstler, eine Playlist oder einen Radiosender in Shelv abspielen.";
 "shortcut_playable_parameter" = "Musik oder Radio";
 "shortcut_play_summary" = "Musik oder Radio abspielen";
+"shortcut_play_text_title" = "Nach Name in Shelv abspielen";
+"shortcut_play_text_description" = "Musik, Radio oder einen Shelv Smart Mix aus einem Text einer anderen Kurzbefehle-Aktion abspielen oder mischen.";
+"shortcut_play_text_parameter" = "Name";
+"shortcut_play_text_summary" = "Musik oder Radio nach Name abspielen";
+"shortcut_play_text_mode_parameter" = "Wiedergabe";
 "shortcut_shuffle_playable_title" = "In Shelv mischen";
 "shortcut_shuffle_playable_description" = "Einen ausgewählten Song, ein Album, einen Künstler oder eine Playlist gemischt abspielen.";
 "shortcut_shuffle_playable_summary" = "Ausgewählte Musik mischen";
@@ -705,3 +714,4 @@
 "siri_shortcuts_carplay_step_3" = "Die Aktion „Alles in Shelv mischen“ hinzufügen.";
 "siri_shortcuts_carplay_step_4" = "„Sofort ausführen“ wählen und Mitteilungen deaktivieren, falls angeboten.";
 "siri_shortcuts_carplay_footer" = "Persönliche Automationen werden auf diesem iPhone gespeichert und müssen einmal von dir erstellt werden. Shelv kann sie nicht automatisch anlegen.";
+"credential_storage_failed" = "Der sichere Vorgang mit den Zugangsdaten konnte nicht abgeschlossen werden. Bitte versuche es erneut.";

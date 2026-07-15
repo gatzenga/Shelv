@@ -254,6 +254,64 @@ struct ShelvPlayPlayableIntent: ShelvBackgroundPlaybackIntent {
     }
 }
 
+/// A text-first companion to ``ShelvPlayPlayableIntent`` for automations.
+/// Keeping this separate preserves the rich entity picker while allowing the
+/// output of Shortcuts actions such as "Ask for Input" to flow in directly.
+struct ShelvPlayFromTextIntent: ShelvBackgroundPlaybackIntent {
+    static let title: LocalizedStringResource = "shortcut_play_text_title"
+    static let description = IntentDescription("shortcut_play_text_description")
+
+    @Parameter(title: "shortcut_play_text_parameter")
+    var query: String
+
+    @Parameter(title: "shortcut_play_text_mode_parameter")
+    var order: ShelvTextPlaybackChoice?
+
+    @Dependency private var playback: ShortcutPlaybackCoordinator
+
+    func perform() async throws -> some IntentResult {
+        ShelvIntentDiagnostics.received(route: "appShortcut.playFromText")
+        let text = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { throw ShortcutPlaybackError.notFound }
+
+        if let mix = ShelvSmartMixIntentVocabulary.smartMix(for: text) {
+            try await playback.execute(.mix(mix))
+            return .result()
+        }
+
+        let candidates = try await ShelvIntentCatalog.shared.items(
+            matching: text,
+            limit: 20,
+            requiresExplicitRadio: false
+        )
+        guard let match = ShelvIntentCatalog.deterministicPlaybackMatches(
+            candidates,
+            query: text
+        ).first else {
+            throw ShortcutPlaybackError.notFound
+        }
+
+        let resolvedOrder: ShortcutPlaybackOrder
+        switch match.reference.kind {
+        case .song, .radio:
+            resolvedOrder = .inOrder
+        case .album, .artist, .playlist:
+            if let order {
+                resolvedOrder = order.playbackOrder
+            } else {
+                let choice = try await $order.requestDisambiguation(
+                    among: [.play, .shuffle],
+                    dialog: "Play or shuffle?"
+                )
+                resolvedOrder = choice.playbackOrder
+            }
+        }
+
+        try await playback.execute(.playable(match.reference, order: resolvedOrder))
+        return .result()
+    }
+}
+
 struct ShelvShufflePlayableIntent: ShelvBackgroundPlaybackIntent {
     static let title: LocalizedStringResource = "shortcut_shuffle_playable_title"
     static let description = IntentDescription("shortcut_shuffle_playable_description")

@@ -598,8 +598,12 @@
 "sync_status_complete" = "同步完成";
 
 /* Siri 与快捷指令 */
-"shortcut_order_type" = "播放顺序";
-"shortcut_order_in_order" = "按顺序";
+"Playback" = "播放方式";
+"Play" = "播放";
+"Shuffle" = "随机播放";
+"Play or shuffle?" = "播放还是随机播放？";
+"shortcut_order_type" = "播放方式";
+"shortcut_order_in_order" = "播放";
 "shortcut_order_shuffled" = "随机播放";
 "shortcut_order_parameter" = "顺序";
 "shortcut_mix_type" = "混音";
@@ -627,6 +631,11 @@
 "shortcut_play_description" = "在 Shelv 中播放歌曲、专辑、艺人、播放列表或电台。";
 "shortcut_playable_parameter" = "音乐或电台";
 "shortcut_play_summary" = "播放音乐或电台";
+"shortcut_play_text_title" = "在 Shelv 中按名称播放";
+"shortcut_play_text_description" = "播放或随机播放由其他快捷指令操作提供的文本所指定的音乐、电台或 Shelv 智能混音。";
+"shortcut_play_text_parameter" = "名称";
+"shortcut_play_text_summary" = "按名称播放音乐或电台";
+"shortcut_play_text_mode_parameter" = "播放方式";
 "shortcut_shuffle_playable_title" = "在 Shelv 中随机播放";
 "shortcut_shuffle_playable_description" = "随机播放所选歌曲、专辑、艺人或播放列表。";
 "shortcut_shuffle_playable_summary" = "随机播放所选音乐";
@@ -696,3 +705,5 @@
 "shortcut_media_queue_last" = "最后";
 "shortcut_media_queue_ready" = "音频队列已就绪";
 "shortcut_media_playback_started" = "已在 Shelv 中开始播放。";
+"credential_storage_failed" = "无法完成安全的登录凭据操作。请重试。";
+"server_no_longer_available" = "该服务器已不可用。";

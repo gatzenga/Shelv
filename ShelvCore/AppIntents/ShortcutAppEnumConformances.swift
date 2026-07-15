@@ -19,6 +19,32 @@ nonisolated extension ShortcutPlaybackOrder: AppEnum {
     }
 }
 
+#if os(iOS) || os(macOS)
+/// Human-readable choices for the runtime text-playback prompt. The visible
+/// strings intentionally double as safe fallbacks if Shortcuts does not load
+/// the app's localization table while presenting a dynamic disambiguation.
+nonisolated enum ShelvTextPlaybackChoice: String, CaseIterable, AppEnum, Sendable {
+    case play
+    case shuffle
+
+    static var typeDisplayRepresentation: TypeDisplayRepresentation { "Playback" }
+
+    static var caseDisplayRepresentations: [Self: DisplayRepresentation] {
+        [
+            .play: "Play",
+            .shuffle: "Shuffle",
+        ]
+    }
+
+    var playbackOrder: ShortcutPlaybackOrder {
+        switch self {
+        case .play: .inOrder
+        case .shuffle: .shuffled
+        }
+    }
+}
+#endif
+
 nonisolated extension ShortcutSmartMix: AppEnum {
     static var typeDisplayRepresentation: TypeDisplayRepresentation {
         "shortcut_mix_type"
