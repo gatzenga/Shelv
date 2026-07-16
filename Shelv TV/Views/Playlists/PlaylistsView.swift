@@ -103,23 +103,26 @@ private struct PlaylistFolderInfoSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(alignment: .leading, spacing: 30) {
+            VStack(alignment: .leading, spacing: 18) {
                 Text(String(localized: "playlist_folder_info_description"))
+                    .font(.callout)
+                    .fixedSize(horizontal: false, vertical: true)
 
-                VStack(alignment: .leading, spacing: 14) {
-                    Label("Rock/Classic Rock/Favorites", systemImage: "folder.fill")
-                        .font(.title2.monospaced())
-                    Text(String(localized: "playlist_folder_info_example"))
-                        .foregroundStyle(.secondary)
-                }
-                .padding(30)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.quaternary, in: RoundedRectangle(cornerRadius: 16))
+                Text("Rock/Classic Rock/Favorites")
+                    .font(.callout.monospaced())
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .allowsTightening(true)
+
+                Text(String(localized: "playlist_folder_info_example"))
+                    .font(.callout)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 Button(String(localized: "done")) { dismiss() }
                     .buttonStyle(.borderedProminent)
             }
-            .padding(80)
+            .padding(.horizontal, 50)
+            .padding(.vertical, 40)
             .navigationTitle(String(localized: "playlist_folders"))
         }
     }
@@ -127,15 +130,26 @@ private struct PlaylistFolderInfoSheet: View {
 
 private struct PlaylistTreeGrid: View {
     let nodes: [PlaylistTreeNode]
+    @AppStorage("playlistSortOption") private var sortRaw = "alphabetical"
+
+    private var sort: PlaylistSortOption { PlaylistSortOption(rawValue: sortRaw) ?? .alphabetical }
 
     var body: some View {
+        let groups = tvSectionIndexGroups(nodes) { node in
+            sort == .alphabetical ? LibrarySortKey.sectionLetter(displayName: node.title) : nil
+        }
+
         ScrollView {
             LazyVGrid(columns: coverGridColumns, alignment: .leading, spacing: 50) {
-                ForEach(nodes) { node in
-                    if let playlist = node.playlist {
-                        PlaylistCard(playlist: playlist, displayNameOverride: node.title)
-                    } else {
-                        PlaylistFolderCard(folder: node)
+                ForEach(groups) { group in
+                    tvIndexedSection(group.label) {
+                        ForEach(group.items) { node in
+                            if let playlist = node.playlist {
+                                PlaylistCard(playlist: playlist, displayNameOverride: node.title)
+                            } else {
+                                PlaylistFolderCard(folder: node)
+                            }
+                        }
                     }
                 }
             }
@@ -148,15 +162,26 @@ private struct PlaylistTreeGrid: View {
 
 private struct PlaylistTreeList: View {
     let nodes: [PlaylistTreeNode]
+    @AppStorage("playlistSortOption") private var sortRaw = "alphabetical"
+
+    private var sort: PlaylistSortOption { PlaylistSortOption(rawValue: sortRaw) ?? .alphabetical }
 
     var body: some View {
+        let groups = tvSectionIndexGroups(nodes) { node in
+            sort == .alphabetical ? LibrarySortKey.sectionLetter(displayName: node.title) : nil
+        }
+
         ScrollView {
             LazyVStack(spacing: 4) {
-                ForEach(nodes) { node in
-                    if let playlist = node.playlist {
-                        PlaylistListRow(playlist: playlist, displayName: node.title)
-                    } else {
-                        PlaylistFolderListRow(folder: node)
+                ForEach(groups) { group in
+                    tvIndexedSection(group.label) {
+                        ForEach(group.items) { node in
+                            if let playlist = node.playlist {
+                                PlaylistListRow(playlist: playlist, displayName: node.title)
+                            } else {
+                                PlaylistFolderListRow(folder: node)
+                            }
+                        }
                     }
                 }
             }

@@ -16,6 +16,8 @@ enum AlbumSortOption: String, CaseIterable {
         case .year:         return String(localized: "year")
         }
     }
+
+    nonisolated var allowsDirection: Bool { self != .alphabetical && self != .artist }
 }
 
 enum SortDirection: String, CaseIterable {
@@ -78,10 +80,14 @@ struct LibraryView: View {
                 Group {
                     switch segment {
                     case 0:
-                        if albumIsGrid { coverGrid(derivedAlbums) { AlbumCard(album: $0) } }
+                        if albumIsGrid {
+                            coverGrid(derivedAlbums, indexLabel: albumIndexLabel) { AlbumCard(album: $0) }
+                        }
                         else { albumList(derivedAlbums) }
                     case 1:
-                        if artistIsGrid { coverGrid(derivedArtists) { ArtistCard(artist: $0) } }
+                        if artistIsGrid {
+                            coverGrid(derivedArtists, indexLabel: artistIndexLabel) { ArtistCard(artist: $0) }
+                        }
                         else { artistList(derivedArtists, counts: derivedAlbumCountByArtist) }
                     default:
                         favoritesList
@@ -145,11 +151,12 @@ struct LibraryView: View {
 
             let nextAlbums: [Album] = {
                 let cacheSort = LibraryRepository.albumCacheSort(for: sort.rawValue)
-                let requestedDirection: LibraryDatabaseSortDirection = sort == .artist
-                    ? .ascending
-                    : albumDirection == .ascending
-                    ? .ascending
-                    : .descending
+                let requestedDirection: LibraryDatabaseSortDirection
+                if sort.allowsDirection {
+                    requestedDirection = albumDirection == .ascending ? .ascending : .descending
+                } else {
+                    requestedDirection = .ascending
+                }
                 return LibraryRepository.locallySortedAlbums(
                     filteredAlbums,
                     sort: cacheSort.0,
@@ -244,7 +251,7 @@ struct LibraryView: View {
             } label: {
                 Label("\(String(localized: "sort")): \(albumSort.label)", systemImage: "arrow.up.arrow.down")
             }
-            if albumSort != .artist {
+            if albumSort.allowsDirection {
                 Button { albumDirRaw = albumDir == .ascending ? "descending" : "ascending" } label: {
                     Image(systemName: albumDir.icon)
                 }
@@ -342,10 +349,20 @@ struct LibraryView: View {
 
     // MARK: - Cover-Grid (Alben / Künstler)
 
-    private func coverGrid<T: Identifiable, Card: View>(_ items: [T], @ViewBuilder card: @escaping (T) -> Card) -> some View {
-        ScrollView {
+    private func coverGrid<T: Identifiable, Card: View>(
+        _ items: [T],
+        indexLabel: @escaping (T) -> String?,
+        @ViewBuilder card: @escaping (T) -> Card
+    ) -> some View {
+        let groups = tvSectionIndexGroups(items, indexLabel: indexLabel)
+
+        return ScrollView {
             LazyVGrid(columns: coverGridColumns, alignment: .leading, spacing: 50) {
-                ForEach(items) { card($0) }
+                ForEach(groups) { group in
+                    tvIndexedSection(group.label) {
+                        ForEach(group.items) { card($0) }
+                    }
+                }
             }
             .padding(.horizontal, 50)
             .padding(.top, 30)
@@ -356,10 +373,16 @@ struct LibraryView: View {
     // MARK: - Listen-Ansicht (Alben / Künstler)
 
     private func albumList(_ albums: [Album]) -> some View {
-        ScrollView {
+        let groups = tvSectionIndexGroups(albums, indexLabel: albumIndexLabel)
+
+        return ScrollView {
             LazyVStack(spacing: 4) {
-                ForEach(albums) { album in
-                    AlbumListRow(album: album) { path.append(album) }
+                ForEach(groups) { group in
+                    tvIndexedSection(group.label) {
+                        ForEach(group.items) { album in
+                            AlbumListRow(album: album) { path.append(album) }
+                        }
+                    }
                 }
             }
             .padding(.vertical, 24)
@@ -367,13 +390,40 @@ struct LibraryView: View {
         .scrollIndicators(.hidden)
     }
 
+    private func albumIndexLabel(_ album: Album) -> String? {
+        switch albumSort {
+        case .alphabetical:
+            return LibrarySortKey.sectionLetter(
+                displayName: album.name,
+                explicitSortName: album.sortName
+            )
+        case .artist:
+            return LibrarySortKey.sectionLetter(displayName: album.artist ?? "")
+        case .frequent, .newest, .year:
+            return nil
+        }
+    }
+
+    private func artistIndexLabel(_ artist: Artist) -> String? {
+        LibrarySortKey.sectionLetter(
+            displayName: artist.name,
+            explicitSortName: artist.sortName
+        )
+    }
+
     private func artistList(_ artists: [Artist], counts: [String: Int]) -> some View {
-        ScrollView {
+        let groups = tvSectionIndexGroups(artists, indexLabel: artistIndexLabel)
+
+        return ScrollView {
             LazyVStack(spacing: 4) {
-                ForEach(artists) { artist in
-                    ArtistListRow(artist: artist,
-                                  albumCount: counts[artist.id] ?? artist.albumCount ?? 0) {
-                        path.append(artist)
+                ForEach(groups) { group in
+                    tvIndexedSection(group.label) {
+                        ForEach(group.items) { artist in
+                            ArtistListRow(artist: artist,
+                                          albumCount: counts[artist.id] ?? artist.albumCount ?? 0) {
+                                path.append(artist)
+                            }
+                        }
                     }
                 }
             }
@@ -421,5 +471,50 @@ struct LibraryView: View {
                 .padding(.vertical, 20)
         }
         .scrollClipDisabled()
+    }
+}
+
+struct TVSectionIndexGroup<Item>: Identifiable {
+    let id: Int
+    let label: String
+    var items: [Item]
+}
+
+func tvSectionIndexGroups<Item>(
+    _ items: [Item],
+    chunkSize: Int = 20,
+    indexLabel: (Item) -> String?
+) -> [TVSectionIndexGroup<Item>] {
+    guard !items.isEmpty else { return [] }
+
+    var groups: [TVSectionIndexGroup<Item>] = []
+
+    for item in items {
+        if let label = indexLabel(item) {
+            if groups.last?.label == label {
+                groups[groups.count - 1].items.append(item)
+            } else {
+                groups.append(TVSectionIndexGroup(id: groups.count, label: label, items: [item]))
+            }
+        } else if (groups.last?.items.count ?? chunkSize) >= chunkSize {
+            groups.append(TVSectionIndexGroup(id: groups.count, label: "•", items: [item]))
+        } else {
+            groups[groups.count - 1].items.append(item)
+        }
+    }
+
+    return groups
+}
+
+@ViewBuilder
+func tvIndexedSection<Content: View>(
+    _ label: String,
+    @ViewBuilder content: () -> Content
+) -> some View {
+    if #available(tvOS 26.0, *) {
+        Section { content() }
+            .sectionIndexLabel(label)
+    } else {
+        Section { content() }
     }
 }

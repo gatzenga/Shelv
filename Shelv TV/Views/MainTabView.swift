@@ -83,6 +83,9 @@ struct MainTabView: View {
                 TVIdleNowPlayingView(panel: nowPlayingSidePanel) {
                     dismissIdleNowPlaying()
                 }
+                .onExitCommand {
+                    dismissIdleNowPlaying()
+                }
                 .transition(.opacity)
                 .zIndex(1)
             }
@@ -93,16 +96,6 @@ struct MainTabView: View {
                 registerUserActivity()
             }
         })
-        .onMoveCommand { _ in
-            if !showIdleNowPlaying {
-                registerUserActivity()
-            }
-        }
-        .onExitCommand {
-            if showIdleNowPlaying {
-                dismissIdleNowPlaying()
-            }
-        }
         .onPlayPauseCommand {
             if !showIdleNowPlaying {
                 registerUserActivity()
