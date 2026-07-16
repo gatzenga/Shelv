@@ -445,7 +445,7 @@ struct PlaylistDetailView: View {
                     showDeleteDownloadConfirm = true
                 } label: {
                     HStack(spacing: 6) {
-                        Image(systemName: "arrow.down.circle")
+                        Image(systemName: DownloadActionSymbols.delete)
                         Text(String(localized: "delete_downloads_2"))
                     }
                     .font(.subheadline).bold()

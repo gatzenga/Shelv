@@ -352,7 +352,7 @@ struct ArtistDetailView: View {
             Button {
                 showDeleteDownloadConfirm = true
             } label: {
-                Label(String(localized: "delete_downloads"), systemImage: "arrow.down.circle")
+                Label(String(localized: "delete_downloads"), systemImage: DownloadActionSymbols.delete)
                     .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
                     .foregroundStyle(.red)
             }
@@ -362,7 +362,7 @@ struct ArtistDetailView: View {
             Button {
                 showDeleteDownloadConfirm = true
             } label: {
-                Label(String(localized: "delete_downloads"), systemImage: "arrow.down.circle")
+                Label(String(localized: "delete_downloads"), systemImage: DownloadActionSymbols.delete)
                     .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
                     .foregroundStyle(.red)
             }

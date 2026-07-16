@@ -1047,9 +1047,9 @@ struct LibraryView: View {
                     Label(String(localized: "download_remaining"), systemImage: "arrow.down.circle")
                 }
             }
-            Button(role: .destructive) { albumToDeleteDownloads = album } label: { Label(String(localized: "delete_downloads_2"), systemImage: "arrow.down.circle") }
+            Button(role: .destructive) { albumToDeleteDownloads = album } label: { Label(String(localized: "delete_downloads_2"), systemImage: DownloadActionSymbols.delete) }
         case .complete:
-            Button(role: .destructive) { albumToDeleteDownloads = album } label: { Label(String(localized: "delete_downloads_2"), systemImage: "arrow.down.circle") }
+            Button(role: .destructive) { albumToDeleteDownloads = album } label: { Label(String(localized: "delete_downloads_2"), systemImage: DownloadActionSymbols.delete) }
         }
     }
 
@@ -1124,7 +1124,7 @@ struct LibraryView: View {
                 Button(role: .destructive) {
                     artistToDeleteDownloads = artist
                 } label: {
-                    Label(String(localized: "delete_downloads_2"), systemImage: "arrow.down.circle")
+                    Label(String(localized: "delete_downloads_2"), systemImage: DownloadActionSymbols.delete)
                 }
             }
         }

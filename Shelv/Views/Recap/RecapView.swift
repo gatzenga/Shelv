@@ -297,7 +297,7 @@ struct RecapView: View {
         if downloadStore.offlinePlaylistIds.contains(entry.playlistId) {
             Button {
                 haptic(); entryToDeleteDownloads = entry
-            } label: { Image(systemName: "arrow.down.circle") }
+            } label: { Image(systemName: DownloadActionSymbols.delete) }
             .tint(.red)
         } else if !offlineMode.isOffline {
             Button {

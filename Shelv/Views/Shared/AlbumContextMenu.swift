@@ -168,13 +168,13 @@ struct AlbumContextMenuModifier: ViewModifier {
             Button(role: .destructive) {
                 showDeleteAlbumDownloadConfirm = true
             } label: {
-                Label(String(localized: "delete_downloads_2"), systemImage: "arrow.down.circle")
+                Label(String(localized: "delete_downloads_2"), systemImage: DownloadActionSymbols.delete)
             }
         case .complete:
             Button(role: .destructive) {
                 showDeleteAlbumDownloadConfirm = true
             } label: {
-                Label(String(localized: "delete_downloads_2"), systemImage: "arrow.down.circle")
+                Label(String(localized: "delete_downloads_2"), systemImage: DownloadActionSymbols.delete)
             }
         }
     }

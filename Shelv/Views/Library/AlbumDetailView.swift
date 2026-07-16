@@ -355,7 +355,7 @@ struct AlbumDetailView: View {
                     haptic(); showDeleteAlbumDownloadConfirm = true
                 } label: {
                     HStack(spacing: 6) {
-                        Image(systemName: "arrow.down.circle")
+                        Image(systemName: DownloadActionSymbols.delete)
                         Text(String(localized: "delete_downloads_2"))
                     }
                     .font(.subheadline).bold()
@@ -371,7 +371,7 @@ struct AlbumDetailView: View {
                     haptic(); showDeleteAlbumDownloadConfirm = true
                 } label: {
                     HStack(spacing: 6) {
-                        Image(systemName: "arrow.down.circle")
+                        Image(systemName: DownloadActionSymbols.delete)
                         Text(String(localized: "delete_downloads_2"))
                     }
                     .font(.subheadline).bold()

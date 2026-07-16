@@ -1,5 +1,21 @@
 import SwiftUI
 
+enum DownloadActionSymbols {
+    static var delete: String {
+        if #available(iOS 26.0, *) {
+            return "arrow.down.circle.badge.xmark"
+        }
+        return "arrow.down.circle"
+    }
+
+    static var filledDelete: String {
+        if #available(iOS 26.0, *) {
+            return "arrow.down.circle.badge.xmark.fill"
+        }
+        return "arrow.down.circle.fill"
+    }
+}
+
 /// Kompakter Status-Indikator für einen einzelnen Song: Ring während Download, Häkchen wenn fertig.
 struct DownloadStatusIcon: View {
     let songId: String
@@ -63,37 +79,18 @@ struct DownloadProgressRing: View {
     }
 }
 
-/// Durchgestrichenes Download-Icon — Diagonale per Path, skaliert mit Symbol-Grösse.
+/// Download-Icon für Aktionen, die lokale Downloads entfernen.
 struct DeleteDownloadIcon: View {
-    /// Wenn gesetzt, wird Image+Strich explizit in dieser Farbe gezeichnet
-    /// (notwendig für Context-Menu-Items mit role: .destructive, weil Label-
-    /// Styling sonst den foregroundStyle vom Icon-Slot überschreibt).
+    /// Für Context-Menu-Items mit `role: .destructive`, deren Icon-Slot die
+    /// geerbte Vordergrundfarbe sonst überschreibt.
     var tint: Color? = nil
 
     var body: some View {
         if let tint {
-            Image(systemName: "arrow.down.circle")
+            Image(systemName: DownloadActionSymbols.delete)
                 .foregroundStyle(tint)
-                .overlay {
-                    GeometryReader { geo in
-                        Path { p in
-                            p.move(to: CGPoint(x: geo.size.width * 0.15, y: geo.size.height * 0.85))
-                            p.addLine(to: CGPoint(x: geo.size.width * 0.85, y: geo.size.height * 0.15))
-                        }
-                        .stroke(tint, lineWidth: max(1.5, min(geo.size.width, geo.size.height) * 0.09))
-                    }
-                }
         } else {
-            Image(systemName: "arrow.down.circle")
-                .overlay {
-                    GeometryReader { geo in
-                        Path { p in
-                            p.move(to: CGPoint(x: geo.size.width * 0.15, y: geo.size.height * 0.85))
-                            p.addLine(to: CGPoint(x: geo.size.width * 0.85, y: geo.size.height * 0.15))
-                        }
-                        .stroke(.foreground, lineWidth: max(1.5, min(geo.size.width, geo.size.height) * 0.09))
-                    }
-                }
+            Image(systemName: DownloadActionSymbols.delete)
         }
     }
 }

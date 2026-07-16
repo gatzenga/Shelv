@@ -289,7 +289,7 @@ struct PlaylistsView: View {
                 Button(role: .destructive) {
                     playlistToDeleteDownloads = playlist
                 } label: {
-                    Label(String(localized: "delete_downloads_2"), systemImage: "arrow.down.circle")
+                    Label(String(localized: "delete_downloads_2"), systemImage: DownloadActionSymbols.delete)
                 }
             }
         }
