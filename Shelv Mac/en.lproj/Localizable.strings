@@ -340,6 +340,9 @@
 "downloads" = "Downloads";
 "cache" = "Cache";
 "info" = "Info";
+"playlist_folders" = "Playlist Folders";
+"playlist_folder_info_description" = "Use / in a playlist name to display it in folders.";
+"playlist_folder_info_example" = "Rock and Classic Rock appear as folders. Favorites is the playlist name.";
 "add_server" = "Add Server…";
 "remove_server" = "Remove Server?";
 "remove" = "Remove";

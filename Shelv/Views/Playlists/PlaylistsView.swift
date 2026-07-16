@@ -57,6 +57,7 @@ struct PlaylistsView: View {
     }
 
     @State private var showCreateSheet = false
+    @State private var showPlaylistFolderInfo = false
     @State private var newPlaylistName = ""
     @FocusState private var nameFieldFocused: Bool
     @State private var showDeleteConfirm = false
@@ -111,10 +112,16 @@ struct PlaylistsView: View {
                     .id(playlist.id)
             }
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button {
+                        showPlaylistFolderInfo = true
+                    } label: {
+                        Image(systemName: "info.circle")
+                    }
+                    .accessibilityLabel(String(localized: "playlist_folders"))
+
                     playlistSortMenu
-                }
-                ToolbarItem(placement: .topBarTrailing) {
+
                     Button {
                         newPlaylistName = ""
                         showCreateSheet = true
@@ -169,6 +176,9 @@ struct PlaylistsView: View {
             }
             .sheet(isPresented: $showCreateSheet) {
                 createPlaylistSheet
+            }
+            .sheet(isPresented: $showPlaylistFolderInfo) {
+                PlaylistFolderInfoSheet()
             }
         }
     }
@@ -475,6 +485,40 @@ struct PlaylistsView: View {
         }
         .presentationSizing(.page)
         .presentationCornerRadius(24)
+        .presentationDragIndicator(.visible)
+    }
+}
+
+private struct PlaylistFolderInfoSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 20) {
+                Text(String(localized: "playlist_folder_info_description"))
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Label("Rock/Classic Rock/Favorites", systemImage: "folder.fill")
+                        .font(.title3.monospaced())
+                    Text(String(localized: "playlist_folder_info_example"))
+                        .foregroundStyle(.secondary)
+                }
+                .padding()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+
+                Spacer()
+            }
+            .padding()
+            .navigationTitle(String(localized: "playlist_folders"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(String(localized: "done")) { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium])
         .presentationDragIndicator(.visible)
     }
 }

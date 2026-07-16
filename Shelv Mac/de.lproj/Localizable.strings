@@ -340,6 +340,9 @@
 "downloads" = "Downloads";
 "cache" = "Cache";
 "info" = "Info";
+"playlist_folders" = "Playlist-Ordner";
+"playlist_folder_info_description" = "Nutze / im Namen einer Playlist, um sie in Ordnern anzuzeigen.";
+"playlist_folder_info_example" = "Rock und Classic Rock werden als Ordner angezeigt. Favorites ist der Playlistname.";
 "add_server" = "Server hinzufügen…";
 "remove_server" = "Server entfernen?";
 "remove" = "Entfernen";

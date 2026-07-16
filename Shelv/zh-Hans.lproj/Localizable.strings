@@ -344,6 +344,9 @@
 "contact" = "联系我们";
 "support_my_work" = "支持我的工作";
 "info" = "关于";
+"playlist_folders" = "播放列表文件夹";
+"playlist_folder_info_description" = "在播放列表名称中使用 /，即可将其显示在文件夹中。";
+"playlist_folder_info_example" = "Rock 和 Classic Rock 显示为文件夹，Favorites 是播放列表名称。";
 "delete_server" = "删除服务器？";
 "reset_lyrics_database_2" = "重置歌词数据库？";
 "clear_cache_2" = "清除缓存？";

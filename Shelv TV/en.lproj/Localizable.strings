@@ -333,6 +333,9 @@
 "contact" = "Contact";
 "support_my_work" = "Support my work";
 "info" = "Info";
+"playlist_folders" = "Playlist Folders";
+"playlist_folder_info_description" = "Use / in a playlist name to display it in folders.";
+"playlist_folder_info_example" = "Rock and Classic Rock appear as folders. Favorites is the playlist name.";
 "delete_server" = "Delete Server?";
 "reset_lyrics_database_2" = "Reset lyrics database?";
 "clear_cache_2" = "Clear Cache?";

@@ -10,6 +10,7 @@ struct PlaylistsView: View {
     @AppStorage("recapEnabled") private var recapEnabled = false
 
     @State private var showCreate = false
+    @State private var showPlaylistFolderInfo = false
 
     private var sort: PlaylistSortOption { PlaylistSortOption(rawValue: sortRaw) ?? .alphabetical }
     private var dir: SortDirection { SortDirection(rawValue: dirRaw) ?? .ascending }
@@ -54,6 +55,10 @@ struct PlaylistsView: View {
                     Button { isGrid.toggle() } label: {
                         Image(systemName: isGrid ? "list.bullet" : "square.grid.2x2")
                     }
+                    Button { showPlaylistFolderInfo = true } label: {
+                        Image(systemName: "info.circle")
+                    }
+                    .accessibilityLabel(String(localized: "playlist_folders"))
                     Spacer()
                     Button { showCreate = true } label: {
                         Label(String(localized: "new_playlist_2"), systemImage: "plus")
@@ -86,6 +91,36 @@ struct PlaylistsView: View {
                     Task { await store.createPlaylist(name: name) }
                 }
             }
+            .sheet(isPresented: $showPlaylistFolderInfo) {
+                PlaylistFolderInfoSheet()
+            }
+        }
+    }
+}
+
+private struct PlaylistFolderInfoSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 30) {
+                Text(String(localized: "playlist_folder_info_description"))
+
+                VStack(alignment: .leading, spacing: 14) {
+                    Label("Rock/Classic Rock/Favorites", systemImage: "folder.fill")
+                        .font(.title2.monospaced())
+                    Text(String(localized: "playlist_folder_info_example"))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(30)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: 16))
+
+                Button(String(localized: "done")) { dismiss() }
+                    .buttonStyle(.borderedProminent)
+            }
+            .padding(80)
+            .navigationTitle(String(localized: "playlist_folders"))
         }
     }
 }

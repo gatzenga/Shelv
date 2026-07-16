@@ -22,6 +22,7 @@ struct SidebarView: View {
     private var sortDirection: SortDirection { SortDirection(rawValue: sortDirectionRaw) ?? .ascending }
 
     @State private var showCreatePlaylist = false
+    @State private var showPlaylistFolderInfo = false
     @State private var newPlaylistName = ""
     @State private var expandedPlaylistFolderIDs: Set<String> = []
 
@@ -139,6 +140,15 @@ struct SidebarView: View {
                         .font(.callout.bold())
                         .foregroundStyle(.secondary)
                     Spacer()
+                    Button {
+                        showPlaylistFolderInfo = true
+                    } label: {
+                        Image(systemName: "info.circle")
+                            .font(.callout.bold())
+                            .foregroundStyle(themeColor)
+                    }
+                    .buttonStyle(.plain)
+                    .help(String(localized: "playlist_folders"))
                     playlistSortMenu
                     Button {
                         newPlaylistName = ""
@@ -233,6 +243,9 @@ struct SidebarView: View {
             Button(String(localized: "cancel"), role: .cancel) { }
         } message: {
             Text(String(localized: "enter_a_name_for_the_new_playlist"))
+        }
+        .sheet(isPresented: $showPlaylistFolderInfo) {
+            PlaylistFolderInfoSheet()
         }
     }
 
@@ -407,6 +420,38 @@ struct SidebarRow: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
+    }
+}
+
+private struct PlaylistFolderInfoSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 20) {
+                Text(String(localized: "playlist_folder_info_description"))
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Label("Rock/Classic Rock/Favorites", systemImage: "folder.fill")
+                        .font(.title3.monospaced())
+                    Text(String(localized: "playlist_folder_info_example"))
+                        .foregroundStyle(.secondary)
+                }
+                .padding()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+
+                Spacer()
+            }
+            .padding(24)
+            .navigationTitle(String(localized: "playlist_folders"))
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(String(localized: "done")) { dismiss() }
+                }
+            }
+        }
+        .frame(width: 440, height: 260)
     }
 }
 

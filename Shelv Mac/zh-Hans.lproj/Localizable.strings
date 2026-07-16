@@ -340,6 +340,9 @@
 "downloads" = "下载";
 "cache" = "缓存";
 "info" = "关于";
+"playlist_folders" = "播放列表文件夹";
+"playlist_folder_info_description" = "在播放列表名称中使用 /，即可将其显示在文件夹中。";
+"playlist_folder_info_example" = "Rock 和 Classic Rock 显示为文件夹，Favorites 是播放列表名称。";
 "add_server" = "添加服务器";
 "remove_server" = "移除服务器";
 "remove" = "移除";

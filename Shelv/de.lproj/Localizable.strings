@@ -344,6 +344,9 @@
 "contact" = "Kontakt";
 "support_my_work" = "Support my work";
 "info" = "Info";
+"playlist_folders" = "Playlist-Ordner";
+"playlist_folder_info_description" = "Nutze / im Namen einer Playlist, um sie in Ordnern anzuzeigen.";
+"playlist_folder_info_example" = "Rock und Classic Rock werden als Ordner angezeigt. Favorites ist der Playlistname.";
 "delete_server" = "Server löschen?";
 "reset_lyrics_database_2" = "Lyrics-Datenbank zurücksetzen?";
 "clear_cache_2" = "Cache leeren?";
