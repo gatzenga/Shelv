@@ -140,11 +140,11 @@
 "disable_downloads_2" = "停用下载？";
 "disabling_downloads_will_cancel_active_downloads_and_remove_downloads" = "正在进行的下载将被取消，所有已下载的歌曲、专辑和艺术家都将从本设备移除。";
 "bulk_download" = "批量下载";
-"download_everything" = "下载全部";
+"download_everything" = "批量下载…";
 "max_storage" = "最大存储";
 "delete_all_downloads" = "删除全部下载";
 "delete_all_downloaded_songs" = "删除所有已下载歌曲？";
-"download_everything_2" = "下载全部";
+"download_everything_2" = "批量下载";
 "songs_to_download" = "待下载歌曲";
 "estimated_size" = "预估大小";
 "storage_limit" = "存储限制";

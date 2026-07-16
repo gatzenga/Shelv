@@ -253,7 +253,7 @@
 "add_server" = "Add Server";
 "connection_successful" = "Connection successful!";
 "calculating" = "Calculating…";
-"download_everything" = "Download Everything";
+"download_everything" = "Bulk Download";
 "start" = "Start";
 "songs_to_download" = "Songs to download";
 "estimated_size" = "Estimated size";
