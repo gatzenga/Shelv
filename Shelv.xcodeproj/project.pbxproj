@@ -40,6 +40,8 @@
 		BC1001402FFE000000000001 /* ShelvCore/Services/ArtworkLoadRequestTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001412FFE000000000001 /* ShelvCore/Services/ArtworkLoadRequestTracker.swift */; };
 		BC1001422FFE000000000001 /* ShelvCore/Services/AudioPlayerStreamCacheJob.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001432FFE000000000001 /* ShelvCore/Services/AudioPlayerStreamCacheJob.swift */; };
 		BC1001442FFE000000000001 /* ShelvCore/Services/KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001452FFE000000000001 /* ShelvCore/Services/KeychainService.swift */; };
+		BC1001462FFE000000000001 /* ShelvCore/Models/Playlist.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001482FFE000000000001 /* ShelvCore/Models/Playlist.swift */; };
+		BC1001472FFE000000000001 /* ShelvCore/Models/PlaylistHierarchy.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001492FFE000000000001 /* ShelvCore/Models/PlaylistHierarchy.swift */; };
 		BC1867E52F91A088006D96E2 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC1867E42F91A088006D96E2 /* GRDB */; };
 		BC51161D2FDC8A850011CDE9 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC51161C2FDC8A850011CDE9 /* GRDB */; };
 		BC5A00012FFF000000000001 /* Shelv TV Siri Extension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = BC5A00032FFF000000000001 /* Shelv TV Siri Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -112,6 +114,8 @@
 		BC1001432FFE000000000001 /* ShelvCore/Services/AudioPlayerStreamCacheJob.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/AudioPlayerStreamCacheJob.swift; sourceTree = "<group>"; };
 		BC1001452FFE000000000001 /* ShelvCore/Services/KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/KeychainService.swift; sourceTree = "<group>"; };
 		BC2000012FFE000000000001 /* ShelvAppIntentsUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ShelvAppIntentsUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		BC1001482FFE000000000001 /* ShelvCore/Models/Playlist.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Models/Playlist.swift; sourceTree = "<group>"; };
+		BC1001492FFE000000000001 /* ShelvCore/Models/PlaylistHierarchy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Models/PlaylistHierarchy.swift; sourceTree = "<group>"; };
 		BC5116112FDC8A690011CDE9 /* Shelv TV.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Shelv TV.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC5A00032FFF000000000001 /* Shelv TV Siri Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Shelv TV Siri Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC7B83F52FDB17700058CB78 /* Shelv.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Shelv.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -241,6 +245,8 @@
 				BC1001122FFE000000000001 /* ShelvCore/Models/Artist.swift */,
 				BC1001132FFE000000000001 /* ShelvCore/Models/Song.swift */,
 				BC1001142FFE000000000001 /* ShelvCore/Models/FlexibleDate.swift */,
+				BC1001482FFE000000000001 /* ShelvCore/Models/Playlist.swift */,
+				BC1001492FFE000000000001 /* ShelvCore/Models/PlaylistHierarchy.swift */,
 				BC1001152FFE000000000001 /* ShelvCore/Models/RepeatMode.swift */,
 				BC1001162FFE000000000001 /* ShelvCore/Models/QueueSnapshot.swift */,
 				BC1001232FFE000000000001 /* ShelvCore/Models/RadioStation.swift */,
@@ -572,6 +578,8 @@
 				BC1001022FFE000000000001 /* ShelvCore/Models/Artist.swift in Sources */,
 				BC1001032FFE000000000001 /* ShelvCore/Models/Song.swift in Sources */,
 				BC1001042FFE000000000001 /* ShelvCore/Models/FlexibleDate.swift in Sources */,
+				BC1001462FFE000000000001 /* ShelvCore/Models/Playlist.swift in Sources */,
+				BC1001472FFE000000000001 /* ShelvCore/Models/PlaylistHierarchy.swift in Sources */,
 				BC1001052FFE000000000001 /* ShelvCore/Models/RepeatMode.swift in Sources */,
 				BC1001062FFE000000000001 /* ShelvCore/Models/QueueSnapshot.swift in Sources */,
 				BC1001222FFE000000000001 /* ShelvCore/Models/RadioStation.swift in Sources */,

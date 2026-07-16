@@ -27,6 +27,10 @@ struct PlaylistsView: View {
         return sortedPlaylists(noRecap)
     }
 
+    private var visiblePlaylistTree: [PlaylistTreeNode] {
+        PlaylistTreeNode.make(from: visiblePlaylists)
+    }
+
     private func sortedPlaylists(_ playlists: [Playlist]) -> [Playlist] {
         let sorted = applySortOption(playlists)
         // Angepinnte oben, zuletzt angepinnt zuoberst (pinRank 0). Rest behält Sortierung.
@@ -83,34 +87,8 @@ struct PlaylistsView: View {
                 } else {
                     List {
                         Section {
-                            ForEach(visiblePlaylists) { playlist in
-                                NavigationLink(value: playlist) {
-                                    playlistRow(playlist)
-                                }
-                                .contextMenu { playlistContextMenu(playlist) }
-                                .personalizedPlaylistSwipeActions(
-                                    isPinned: pinStore.isPinned(playlist.id),
-                                    canDelete: !offlineMode.isOffline,
-                                    downloadState: playlistDownloadState(playlist),
-                                    accentColor: accentColor,
-                                    onPin: {
-                                        haptic()
-                                        pinStore.togglePin(playlist.id)
-                                    },
-                                    onDelete: {
-                                        playlistToDelete = playlist
-                                        showDeleteConfirm = true
-                                    },
-                                    onDownload: {
-                                        handlePlaylistDownloadSwipe(playlist)
-                                    },
-                                    onPlayNext: {
-                                        playNextPlaylist(playlist)
-                                    },
-                                    onAddToQueue: {
-                                        queuePlaylist(playlist)
-                                    }
-                                )
+                            OutlineGroup(visiblePlaylistTree, children: \.children) { node in
+                                playlistTreeRow(node)
                             }
                         }
                         .listSectionSeparator(.hidden, edges: .top)
@@ -172,7 +150,7 @@ struct PlaylistsView: View {
                 }
                 Button(String(localized: "cancel"), role: .cancel) {}
             } message: { playlist in
-                Text("\"\(playlist.name)\"")
+                Text("\"\(playlist.hierarchyDisplayName)\"")
             }
             .shelveToast($currentToast)
             .alert(
@@ -384,12 +362,60 @@ struct PlaylistsView: View {
         }
     }
 
-    private func playlistRow(_ playlist: Playlist) -> some View {
+    @ViewBuilder
+    private func playlistTreeRow(_ node: PlaylistTreeNode) -> some View {
+        if let playlist = node.playlist {
+            NavigationLink(value: playlist) {
+                playlistRow(playlist, displayName: node.title)
+            }
+            .contextMenu { playlistContextMenu(playlist) }
+            .personalizedPlaylistSwipeActions(
+                isPinned: pinStore.isPinned(playlist.id),
+                canDelete: !offlineMode.isOffline,
+                downloadState: playlistDownloadState(playlist),
+                accentColor: accentColor,
+                onPin: {
+                    haptic()
+                    pinStore.togglePin(playlist.id)
+                },
+                onDelete: {
+                    playlistToDelete = playlist
+                    showDeleteConfirm = true
+                },
+                onDownload: {
+                    handlePlaylistDownloadSwipe(playlist)
+                },
+                onPlayNext: {
+                    playNextPlaylist(playlist)
+                },
+                onAddToQueue: {
+                    queuePlaylist(playlist)
+                }
+            )
+        } else {
+            HStack(spacing: 12) {
+                Image(systemName: "folder.fill")
+                    .font(.title3)
+                    .foregroundStyle(accentColor)
+                    .frame(width: 52, height: 52)
+                Text(node.title)
+                    .font(.body)
+                    .lineLimit(1)
+                Spacer()
+                Text(node.playlistCount, format: .number)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.vertical, 4)
+        }
+    }
+
+    private func playlistRow(_ playlist: Playlist, displayName: String? = nil) -> some View {
         HStack(spacing: 12) {
             AlbumArtView(coverArtId: playlist.coverArt, size: 150, cornerRadius: 8)
                 .frame(width: 52, height: 52)
             VStack(alignment: .leading, spacing: 2) {
-                Text(playlist.name)
+                Text(displayName ?? playlist.hierarchyDisplayName)
                     .font(.body)
                     .lineLimit(1)
                     .foregroundStyle(.primary)

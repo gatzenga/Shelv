@@ -10,7 +10,6 @@ struct PlaylistsView: View {
     @AppStorage("recapEnabled") private var recapEnabled = false
 
     @State private var showCreate = false
-    @State private var path = NavigationPath()
 
     private var sort: PlaylistSortOption { PlaylistSortOption(rawValue: sortRaw) ?? .alphabetical }
     private var dir: SortDirection { SortDirection(rawValue: dirRaw) ?? .ascending }
@@ -32,8 +31,12 @@ struct PlaylistsView: View {
         return pinned + rest
     }
 
+    private var displayPlaylistTree: [PlaylistTreeNode] {
+        PlaylistTreeNode.make(from: displayPlaylists)
+    }
+
     var body: some View {
-        NavigationStack(path: $path) {
+        NavigationStack {
             VStack(spacing: 0) {
                 HStack(spacing: 24) {
                     Menu {
@@ -69,14 +72,13 @@ struct PlaylistsView: View {
                         ContentUnavailableView(String(localized: "no_playlists_2"), systemImage: "music.note.list")
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else if isGrid {
-                        gridBody
+                        PlaylistTreeGrid(nodes: displayPlaylistTree)
                     } else {
-                        listBody
+                        PlaylistTreeList(nodes: displayPlaylistTree)
                     }
                 }
                 .focusSection()
             }
-            .navigationDestination(for: Playlist.self) { PlaylistDetailView(playlist: $0) }
             .task(id: store.reloadID) { await store.loadPlaylists() }
             .sheet(isPresented: $showCreate) {
                 PlaylistEditSheet(title: String(localized: "new_playlist_2"),
@@ -86,23 +88,41 @@ struct PlaylistsView: View {
             }
         }
     }
+}
 
-    private var gridBody: some View {
+private struct PlaylistTreeGrid: View {
+    let nodes: [PlaylistTreeNode]
+
+    var body: some View {
         ScrollView {
             LazyVGrid(columns: coverGridColumns, alignment: .leading, spacing: 50) {
-                ForEach(displayPlaylists) { PlaylistCard(playlist: $0) }
+                ForEach(nodes) { node in
+                    if let playlist = node.playlist {
+                        PlaylistCard(playlist: playlist, displayNameOverride: node.title)
+                    } else {
+                        PlaylistFolderCard(folder: node)
+                    }
+                }
             }
             .padding(.horizontal, 50)
             .padding(.top, 30)
             .padding(.bottom, 50)
         }
     }
+}
 
-    private var listBody: some View {
+private struct PlaylistTreeList: View {
+    let nodes: [PlaylistTreeNode]
+
+    var body: some View {
         ScrollView {
             LazyVStack(spacing: 4) {
-                ForEach(displayPlaylists) { playlist in
-                    PlaylistListRow(playlist: playlist) { path.append(playlist) }
+                ForEach(nodes) { node in
+                    if let playlist = node.playlist {
+                        PlaylistListRow(playlist: playlist, displayName: node.title)
+                    } else {
+                        PlaylistFolderListRow(folder: node)
+                    }
                 }
             }
             .padding(.vertical, 24)
@@ -111,14 +131,122 @@ struct PlaylistsView: View {
     }
 }
 
+private struct PlaylistFolderContentsView: View {
+    let folder: PlaylistTreeNode
+    @AppStorage("playlistViewIsGrid") private var isGrid = true
+
+    private var nodes: [PlaylistTreeNode] { folder.children ?? [] }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 24) {
+                Label(folder.title, systemImage: "folder.fill")
+                    .font(.title2.bold())
+                Spacer()
+                Button { isGrid.toggle() } label: {
+                    Image(systemName: isGrid ? "list.bullet" : "square.grid.2x2")
+                }
+            }
+            .buttonStyle(.bordered)
+            .padding(.horizontal, 50)
+            .padding(.top, 40)
+            .padding(.bottom, 16)
+            .focusSection()
+
+            if isGrid {
+                PlaylistTreeGrid(nodes: nodes)
+            } else {
+                PlaylistTreeList(nodes: nodes)
+            }
+        }
+        .toolbar(.hidden, for: .tabBar)
+    }
+}
+
+private struct PlaylistFolderCard: View {
+    let folder: PlaylistTreeNode
+    var size: CGFloat = 240
+    @AppStorage("themeColor") private var themeColor = "violet"
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            NavigationLink {
+                PlaylistFolderContentsView(folder: folder)
+            } label: {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(.quaternary)
+                    Image(systemName: "folder.fill")
+                        .font(.system(size: size * 0.34, weight: .semibold))
+                        .foregroundStyle(AppTheme.color(for: themeColor))
+                }
+                .frame(width: size, height: size)
+            }
+            .buttonStyle(.card)
+
+            Text(folder.title)
+                .lineLimit(1)
+                .font(.callout)
+            Text("\(folder.playlistCount) \(String(localized: "playlists"))")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(width: size)
+    }
+}
+
+private struct PlaylistFolderListRow: View {
+    let folder: PlaylistTreeNode
+    @FocusState private var focused: Bool
+    @AppStorage("themeColor") private var themeColor = "violet"
+
+    var body: some View {
+        NavigationLink {
+            PlaylistFolderContentsView(folder: folder)
+        } label: {
+            HStack(spacing: 20) {
+                Image(systemName: "folder.fill")
+                    .font(.system(size: 36, weight: .semibold))
+                    .foregroundStyle(AppTheme.color(for: themeColor))
+                    .frame(width: 80, height: 80)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(folder.title).lineLimit(1)
+                    Text("\(folder.playlistCount) \(String(localized: "playlists"))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption.bold())
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.vertical, 10)
+            .padding(.horizontal, 24)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(focused ? AppTheme.color(for: themeColor).opacity(0.4) : Color.clear)
+            )
+            .padding(.horizontal, 12)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PlainRowButtonStyle())
+        .focused($focused)
+        .animation(.easeOut(duration: 0.14), value: focused)
+    }
+}
+
 struct PlaylistCard: View {
     let playlist: Playlist
     var size: CGFloat = 240
+    var displayNameOverride: String? = nil
     /// Gesetzt bei Recap-Playlists → Periodentitel statt „Recap" + Periode-Detailansicht.
     var recapPeriod: RecapPeriod? = nil
     @ObservedObject private var pins = PinnedPlaylistStore.shared
 
-    private var displayName: String { recapPeriod?.playlistName ?? playlist.name }
+    private var displayName: String {
+        recapPeriod?.playlistName ?? displayNameOverride ?? playlist.hierarchyDisplayName
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -166,7 +294,9 @@ struct PlaylistDetailView: View {
     private var current: Playlist { store.playlists.first { $0.id == playlist.id } ?? playlist }
 
     /// Recap zeigt den Periodentitel (wie iOS), normale Playlists ihren Namen.
-    private var displayName: String { recapPeriod?.playlistName ?? current.name }
+    private var displayName: String {
+        recapPeriod?.playlistName ?? current.hierarchyDisplayName
+    }
 
     var body: some View {
         HStack(alignment: .center, spacing: 60) {

@@ -49,6 +49,14 @@ struct PlaylistDetailView: View {
         }
     }
 
+    private var currentRawName: String {
+        displayName.isEmpty ? playlist.name : displayName
+    }
+
+    private var visiblePlaylistName: String {
+        PlaylistNamePath(currentRawName).displayName
+    }
+
     var body: some View {
         List {
             Section {
@@ -175,7 +183,7 @@ struct PlaylistDetailView: View {
         .scrollIndicators(.hidden)
         .searchable(text: $searchQuery, prompt: String(localized: "search_songs"))
         .environment(\.editMode, .constant(isEditMode ? .active : .inactive))
-        .navigationTitle(displayName.isEmpty ? playlist.name : displayName)
+        .navigationTitle(visiblePlaylistName)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -194,7 +202,7 @@ struct PlaylistDetailView: View {
                         }
 
                         Button {
-                            newName = playlist.name
+                            newName = currentRawName
                             newComment = playlist.comment ?? ""
                             showRenameAlert = true
                         } label: {
@@ -295,7 +303,7 @@ struct PlaylistDetailView: View {
             }
             Button(String(localized: "cancel"), role: .cancel) {}
         } message: {
-            Text("\"\(playlist.name)\"")
+            Text("\"\(visiblePlaylistName)\"")
         }
         .sheet(isPresented: $showAddToPlaylist) {
             AddToPlaylistSheet(songIds: playlistSongIds)
@@ -324,7 +332,7 @@ struct PlaylistDetailView: View {
                 .shadow(color: .black.opacity(0.3), radius: 20, y: 10)
 
             VStack(spacing: 4) {
-                Text(displayName.isEmpty ? playlist.name : displayName)
+                Text(visiblePlaylistName)
                     .font(.title2).bold()
                     .multilineTextAlignment(.center)
                 if let comment = playlist.comment, !comment.isEmpty {

@@ -616,27 +616,44 @@ struct ArtistListRow: View {
 /// Playlist-Zeile (Listenansicht) im einheitlichen borderless-Akzent-Fokus-Stil.
 struct PlaylistListRow: View {
     let playlist: Playlist
-    let onSelect: () -> Void
+    var displayName: String? = nil
     @ObservedObject private var pins = PinnedPlaylistStore.shared
+    @FocusState private var focused: Bool
+    @AppStorage("themeColor") private var themeColor = "violet"
 
     var body: some View {
-        HStack(spacing: 20) {
-            CoverArtView(url: playlist.coverURL(200), size: 80, cornerRadius: 6)
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 8) {
-                    if pins.isPinned(playlist.id) {
-                        Image(systemName: "pin.fill").font(.caption).foregroundStyle(.secondary)
+        NavigationLink {
+            PlaylistDetailView(playlist: playlist)
+        } label: {
+            HStack(spacing: 20) {
+                CoverArtView(url: playlist.coverURL(200), size: 80, cornerRadius: 6)
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 8) {
+                        if pins.isPinned(playlist.id) {
+                            Image(systemName: "pin.fill").font(.caption).foregroundStyle(.secondary)
+                        }
+                        Text(displayName ?? playlist.hierarchyDisplayName).lineLimit(1)
                     }
-                    Text(playlist.name).lineLimit(1)
+                    if let count = playlist.songCount {
+                        Text("\(count) \(String(localized: "songs"))")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                 }
-                if let count = playlist.songCount {
-                    Text("\(count) \(String(localized: "songs"))")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
+                Spacer()
             }
-            Spacer()
+            .padding(.vertical, 10)
+            .padding(.horizontal, 24)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 14)
+                    .fill(focused ? AppTheme.color(for: themeColor).opacity(0.4) : Color.clear)
+            )
+            .padding(.horizontal, 12)
+            .contentShape(Rectangle())
         }
-        .rowButton(action: onSelect)
+        .buttonStyle(PlainRowButtonStyle())
+        .focused($focused)
+        .animation(.easeOut(duration: 0.14), value: focused)
         .playlistContextMenu(playlist)
     }
 }

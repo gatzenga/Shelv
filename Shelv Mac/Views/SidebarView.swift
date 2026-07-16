@@ -37,6 +37,10 @@ struct SidebarView: View {
         return sortedPlaylists(base)
     }
 
+    private var visiblePlaylistTree: [PlaylistTreeNode] {
+        PlaylistTreeNode.make(from: visiblePlaylists)
+    }
+
     private func sortedPlaylists(_ playlists: [Playlist]) -> [Playlist] {
         let sorted = applySortOption(playlists)
         // Angepinnte oben, zuletzt angepinnt zuoberst (pinRank 0). Rest behält Sortierung.
@@ -135,17 +139,8 @@ struct SidebarView: View {
                                 .foregroundStyle(.tertiary)
                                 .padding(.horizontal, 10)
                         } else {
-                            ForEach(visiblePlaylists) { playlist in
-                                PlaylistSidebarRow(
-                                    playlist: playlist,
-                                    isSelected: selectedPlaylist?.id == playlist.id,
-                                    themeColor: themeColor,
-                                    isPinned: pinStore.isPinned(playlist.id)
-                                ) {
-                                    selectedPlaylist = playlist
-                                    selection = nil
-                                    appState.navigationPath = NavigationPath()
-                                }
+                            OutlineGroup(visiblePlaylistTree, children: \.children) { node in
+                                playlistTreeRow(node)
                             }
                         }
                     }
@@ -242,6 +237,29 @@ struct SidebarView: View {
         .menuIndicator(.hidden)
         .fixedSize()
         .help(String(localized: "sort"))
+    }
+
+    @ViewBuilder
+    private func playlistTreeRow(_ node: PlaylistTreeNode) -> some View {
+        if let playlist = node.playlist {
+            PlaylistSidebarRow(
+                playlist: playlist,
+                displayName: node.title,
+                isSelected: selectedPlaylist?.id == playlist.id,
+                themeColor: themeColor,
+                isPinned: pinStore.isPinned(playlist.id)
+            ) {
+                selectedPlaylist = playlist
+                selection = nil
+                appState.navigationPath = NavigationPath()
+            }
+        } else {
+            PlaylistFolderSidebarRow(
+                title: node.title,
+                playlistCount: node.playlistCount,
+                themeColor: themeColor
+            )
+        }
     }
 
     @ViewBuilder
@@ -342,6 +360,7 @@ struct SidebarRow: View {
 
 struct PlaylistSidebarRow: View {
     let playlist: Playlist
+    var displayName: String? = nil
     let isSelected: Bool
     let themeColor: Color
     var isPinned: Bool = false
@@ -352,7 +371,7 @@ struct PlaylistSidebarRow: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 6) {
-                Label(playlist.name, systemImage: "music.note.list")
+                Label(displayName ?? playlist.hierarchyDisplayName, systemImage: "music.note.list")
                     .font(.body)
                     .fontWeight(isSelected ? .semibold : .regular)
                     .foregroundStyle(isSelected ? themeColor : .primary)
@@ -378,6 +397,28 @@ struct PlaylistSidebarRow: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
+    }
+}
+
+private struct PlaylistFolderSidebarRow: View {
+    let title: String
+    let playlistCount: Int
+    let themeColor: Color
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Label(title, systemImage: "folder.fill")
+                .font(.body)
+                .foregroundStyle(.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text(playlistCount, format: .number)
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .contentShape(Rectangle())
+        .tint(themeColor)
     }
 }
 

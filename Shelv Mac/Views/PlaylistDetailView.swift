@@ -132,6 +132,14 @@ struct PlaylistDetailView: View {
         }
     }
 
+    private var currentRawName: String {
+        displayName.isEmpty ? playlist.name : displayName
+    }
+
+    private var visiblePlaylistName: String {
+        PlaylistNamePath(currentRawName).displayName
+    }
+
     var body: some View {
         List {
             Section {
@@ -172,7 +180,7 @@ struct PlaylistDetailView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
-        .navigationTitle(displayName.isEmpty ? playlist.name : displayName)
+        .navigationTitle(visiblePlaylistName)
         .searchable(text: $searchQuery, prompt: String(localized: "search_songs"))
         .toolbar(content: toolbarContent)
         .alert(String(localized: "delete_downloads_2"), isPresented: $showDeleteDownloadConfirm) {
@@ -280,7 +288,7 @@ struct PlaylistDetailView: View {
                             .textFieldStyle(.roundedBorder)
                             .lineLimit(1...3)
                     } else {
-                        Text(displayName)
+                        Text(visiblePlaylistName)
                             .font(.title.bold())
                             .lineLimit(2)
                         if !displayComment.isEmpty {
