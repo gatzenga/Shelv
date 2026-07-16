@@ -13,6 +13,7 @@ struct AlbumsView: View {
     @State private var displayAlbums: [Album] = []
     @State private var genreOptions: [AlbumGenreFilterOption] = []
     @State private var displayRebuildTask: Task<Void, Never>?
+    @State private var displayRebuildGeneration = 0
     @State private var playbackTask: Task<Void, Never>?
     @State private var isPreparingPlayback = false
     @State private var playbackPreparationIsShuffled = false
@@ -25,6 +26,13 @@ struct AlbumsView: View {
         Binding(
             get: { AlbumGenreFilterOption.selectedGenre(albumGenreFilter, in: genreOptions) ?? "" },
             set: { albumGenreFilter = $0 }
+        )
+    }
+
+    private var sortSelection: Binding<LibrarySortOption> {
+        Binding(
+            get: { vm.sortOption },
+            set: { vm.selectAlbumSortOption($0) }
         )
     }
 
@@ -69,14 +77,21 @@ struct AlbumsView: View {
         .accessibilityLabel(String(localized: "shuffle"))
     }
 
-    private func rebuildDisplayAlbums() {
+    private func rebuildDisplayAlbums(
+        sortedAlbumsOverride: [Album]? = nil,
+        downloadedAlbumsOverride: [DownloadedAlbum]? = nil
+    ) {
         displayRebuildTask?.cancel()
+        displayRebuildGeneration &+= 1
+        let generation = displayRebuildGeneration
         let isOffline = offlineMode.isOffline
         let downloadsOnly = effectiveShowDownloadsOnly
-        let sortedAlbums = vm.sortedAlbums.isEmpty && !vm.albums.isEmpty ? vm.albums : vm.sortedAlbums
+        let latestSortedAlbums = sortedAlbumsOverride ?? vm.sortedAlbums
+        let sortedAlbums = latestSortedAlbums.isEmpty && !vm.albums.isEmpty ? vm.albums : latestSortedAlbums
         let serverAlbumsEmpty = vm.albums.isEmpty
-        let downloadedAlbums = downloadStore.albums.map { $0.asAlbum() }
-        let downloadedIds = Set(downloadStore.albums.map { $0.albumId })
+        let downloadedAlbumRecords = downloadedAlbumsOverride ?? downloadStore.albums
+        let downloadedAlbums = downloadedAlbumRecords.map { $0.asAlbum() }
+        let downloadedIds = Set(downloadedAlbumRecords.map { $0.albumId })
         let query = searchText
         let selectedGenre = showGenreFilter
             ? AlbumGenreFilterOption.normalizedGenre(albumGenreFilter)
@@ -118,6 +133,7 @@ struct AlbumsView: View {
 
             guard !Task.isCancelled else { return }
             await MainActor.run {
+                guard displayRebuildGeneration == generation else { return }
                 displayAlbums = result
                 genreOptions = nextGenreOptions
             }
@@ -208,7 +224,7 @@ struct AlbumsView: View {
                     .tint(.primary)
                     .frame(width: 180)
                 }
-                Picker("\(String(localized: "sort")):", selection: $vm.sortOption) {
+                Picker("\(String(localized: "sort")):", selection: sortSelection) {
                     ForEach(LibrarySortOption.allCases.filter { !offlineMode.isOffline || !$0.requiresServer }, id: \.self) { opt in
                         Text(opt.label).tag(opt)
                     }
@@ -216,7 +232,7 @@ struct AlbumsView: View {
                 .pickerStyle(.menu)
                 .tint(.primary)
                 .frame(width: 180)
-                if vm.sortOption != .name {
+                if vm.sortOption.allowsDirection {
                     Button {
                         vm.albumSortDirection = vm.albumSortDirection == .ascending ? .descending : .ascending
                     } label: {
@@ -292,8 +308,8 @@ struct AlbumsView: View {
         }
         .navigationTitle(String(format: String(localized: "albums_count_format"), displayAlbums.count))
         .onAppear { rebuildDisplayAlbums() }
-        .onReceive(vm.$sortedAlbums) { _ in rebuildDisplayAlbums() }
-        .onReceive(downloadStore.$albums) { _ in rebuildDisplayAlbums() }
+        .onReceive(vm.$sortedAlbums) { rebuildDisplayAlbums(sortedAlbumsOverride: $0) }
+        .onReceive(downloadStore.$albums) { rebuildDisplayAlbums(downloadedAlbumsOverride: $0) }
         .onChange(of: searchText) { _, _ in rebuildDisplayAlbums() }
         .onChange(of: albumGenreFilter) { _, _ in rebuildDisplayAlbums() }
         .onChange(of: showGenreFilter) { _, enabled in

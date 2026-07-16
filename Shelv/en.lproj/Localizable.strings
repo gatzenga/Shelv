@@ -29,6 +29,7 @@
 "library" = "Library";
 "albums" = "Albums";
 "artists" = "Artists";
+"artist" = "Artist";
 "albums_artists" = "Albums & Artists";
 "favorites" = "Favorites";
 "loading" = "Loading…";

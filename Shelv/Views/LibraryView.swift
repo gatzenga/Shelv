@@ -266,7 +266,7 @@ struct LibraryView: View {
 
             // 1. Alben im Hintergrund gruppieren
             let albumCacheSort = LibraryRepository.albumCacheSort(for: sortOpt.rawValue)
-            let requestedAlbumDirection: LibraryDatabaseSortDirection = sortOpt == .alphabetical
+            let requestedAlbumDirection: LibraryDatabaseSortDirection = !sortOpt.allowsDirection
                 ? .ascending
                 : (albumDir == .ascending ? .ascending : .descending)
             let sortedAlbums = LibraryRepository.locallySortedAlbums(
@@ -275,13 +275,16 @@ struct LibraryView: View {
                 direction: requestedAlbumDirection
             )
             let calculatedAlbumGroups: [(letter: String, items: [Album])]
-            if sortOpt == .alphabetical {
+            switch sortOpt {
+            case .alphabetical:
                 calculatedAlbumGroups = LibraryGrouping.groupByFirstLetter(
                     sortedAlbums,
                     name: \.name,
                     sortName: \.sortName
                 )
-            } else {
+            case .artist:
+                calculatedAlbumGroups = LibraryGrouping.groupAlbumsByArtistFirstLetter(sortedAlbums)
+            default:
                 calculatedAlbumGroups = sortedAlbums.isEmpty ? [] : [(letter: "", items: sortedAlbums)]
             }
 

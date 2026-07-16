@@ -29,6 +29,7 @@
 "library" = "音乐库";
 "albums" = "专辑";
 "artists" = "艺术家";
+"artist" = "艺术家";
 "albums_artists" = "专辑与艺术家";
 "favorites" = "收藏";
 "loading" = "加载中…";

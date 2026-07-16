@@ -178,7 +178,7 @@ struct LibrarySortMenu: View {
                 Label(String(localized: "sort"), systemImage: "arrow.up.arrow.down")
             }
 
-            if albumSortOption != .alphabetical {
+            if albumSortOption.allowsDirection {
                 Picker(selection: $albumDirectionRaw) {
                     ForEach(SortDirection.allCases, id: \.rawValue) { dir in
                         Text(dir.label).tag(dir.rawValue)

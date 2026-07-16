@@ -25,6 +25,7 @@
 "discover" = "Discover";
 "albums" = "Albums";
 "artists" = "Artists";
+"artist" = "Artist";
 "favorites" = "Favorites";
 "search" = "Search";
 "name" = "Name";

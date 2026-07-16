@@ -28,6 +28,7 @@
 "library" = "Bibliothek";
 "albums" = "Alben";
 "artists" = "Künstler";
+"artist" = "Künstler";
 "favorites" = "Favoriten";
 "loading" = "Wird geladen…";
 "no_favorites_yet" = "Noch keine Favoriten";

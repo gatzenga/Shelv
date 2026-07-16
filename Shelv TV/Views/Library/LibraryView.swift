@@ -2,6 +2,7 @@ import SwiftUI
 
 enum AlbumSortOption: String, CaseIterable {
     case alphabetical = "alphabeticalByName"
+    case artist       = "artist"
     case frequent     = "frequent"
     case newest       = "newest"
     case year         = "year"
@@ -9,6 +10,7 @@ enum AlbumSortOption: String, CaseIterable {
     var label: String {
         switch self {
         case .alphabetical: return String(localized: "name")
+        case .artist:       return String(localized: "artist")
         case .frequent:     return String(localized: "most_played")
         case .newest:       return String(localized: "recently_added")
         case .year:         return String(localized: "year")
@@ -49,8 +51,10 @@ struct LibraryView: View {
     private var albumDir: SortDirection { SortDirection(rawValue: albumDirRaw) ?? .ascending }
     private var artistDir: SortDirection { SortDirection(rawValue: artistDirRaw) ?? .ascending }
 
-    /// "year" wird client-seitig sortiert → der Server liefert dafür die alphabetische Liste.
-    private var albumServerType: String { albumSort == .year ? "alphabeticalByName" : albumSort.rawValue }
+    /// Lokal sortierte Optionen laden serverseitig die vollständige alphabetische Liste.
+    private var albumServerType: String {
+        albumSort == .year || albumSort == .artist ? "alphabeticalByName" : albumSort.rawValue
+    }
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -141,7 +145,9 @@ struct LibraryView: View {
 
             let nextAlbums: [Album] = {
                 let cacheSort = LibraryRepository.albumCacheSort(for: sort.rawValue)
-                let requestedDirection: LibraryDatabaseSortDirection = albumDirection == .ascending
+                let requestedDirection: LibraryDatabaseSortDirection = sort == .artist
+                    ? .ascending
+                    : albumDirection == .ascending
                     ? .ascending
                     : .descending
                 return LibraryRepository.locallySortedAlbums(
@@ -238,8 +244,10 @@ struct LibraryView: View {
             } label: {
                 Label("\(String(localized: "sort")): \(albumSort.label)", systemImage: "arrow.up.arrow.down")
             }
-            Button { albumDirRaw = albumDir == .ascending ? "descending" : "ascending" } label: {
-                Image(systemName: albumDir.icon)
+            if albumSort != .artist {
+                Button { albumDirRaw = albumDir == .ascending ? "descending" : "ascending" } label: {
+                    Image(systemName: albumDir.icon)
+                }
             }
             Button { albumIsGrid.toggle() } label: {
                 Image(systemName: albumIsGrid ? "list.bullet" : "square.grid.2x2")

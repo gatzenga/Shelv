@@ -113,7 +113,7 @@ struct ArtistDetailView: View {
     private var controls: some View {
         HStack(spacing: 24) {
             Menu {
-                ForEach(AlbumSortOption.allCases, id: \.rawValue) { opt in
+                ForEach(AlbumSortOption.allCases.filter { $0 != .artist }, id: \.rawValue) { opt in
                     Button { sortRaw = opt.rawValue } label: {
                         if sort == opt { Label(opt.label, systemImage: "checkmark") } else { Text(opt.label) }
                     }

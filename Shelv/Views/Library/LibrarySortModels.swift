@@ -2,6 +2,7 @@ import SwiftUI
 
 enum AlbumSortOption: String, CaseIterable {
     case alphabetical = "alphabeticalByName"
+    case artist       = "artist"
     case frequent     = "frequent"
     case newest       = "newest"
     case year         = "year"
@@ -9,6 +10,7 @@ enum AlbumSortOption: String, CaseIterable {
     var label: String {
         switch self {
         case .alphabetical: return String(localized: "name")
+        case .artist:       return String(localized: "artist")
         case .frequent:     return String(localized: "most_played")
         case .newest:       return String(localized: "recently_added")
         case .year:         return String(localized: "year")
@@ -16,6 +18,8 @@ enum AlbumSortOption: String, CaseIterable {
     }
 
     var requiresServer: Bool { self == .frequent || self == .newest }
+
+    nonisolated var allowsDirection: Bool { self != .alphabetical && self != .artist }
 }
 
 enum ArtistSortOption: String, CaseIterable {
@@ -59,6 +63,22 @@ enum LibraryGrouping {
                 explicitSortName: item[keyPath: sortName]
             )
             dict[letter, default: []].append(item)
+        }
+        let letters = dict.keys.sorted {
+            if $0 == "#" { return true }
+            if $1 == "#" { return false }
+            return $0 < $1
+        }
+        return letters.map { ($0, dict[$0, default: []]) }
+    }
+
+    nonisolated static func groupAlbumsByArtistFirstLetter(
+        _ albums: [Album]
+    ) -> [(letter: String, items: [Album])] {
+        var dict: [String: [Album]] = [:]
+        for album in albums {
+            let letter = LibrarySortKey.sectionLetter(displayName: album.artist ?? "")
+            dict[letter, default: []].append(album)
         }
         let letters = dict.keys.sorted {
             if $0 == "#" { return true }

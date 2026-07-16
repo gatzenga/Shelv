@@ -85,6 +85,7 @@ enum SidebarItem: String, CaseIterable, Identifiable {
 
 enum LibrarySortOption: String, CaseIterable {
     case name = "name"
+    case artist = "artist"
     case mostPlayed = "mostPlayed"
     case recentlyAdded = "recentlyAdded"
     case year = "year"
@@ -92,6 +93,7 @@ enum LibrarySortOption: String, CaseIterable {
     var label: String {
         switch self {
         case .name:          return String(localized: "name")
+        case .artist:        return String(localized: "artist")
         case .mostPlayed:    return String(localized: "most_played")
         case .recentlyAdded: return String(localized: "recently_added")
         case .year:          return String(localized: "year")
@@ -99,10 +101,12 @@ enum LibrarySortOption: String, CaseIterable {
     }
 
     var naturalDirection: SortDirection {
-        self == .name ? .ascending : .descending
+        self == .name || self == .artist ? .ascending : .descending
     }
 
     var requiresServer: Bool { self == .mostPlayed || self == .recentlyAdded }
+
+    nonisolated var allowsDirection: Bool { self != .name && self != .artist }
 }
 
 enum ArtistSortOption: String, CaseIterable {

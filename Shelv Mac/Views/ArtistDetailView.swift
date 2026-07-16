@@ -86,7 +86,9 @@ struct ArtistDetailView: View {
                         if !vm.albums.isEmpty {
                             HStack(spacing: 8) {
                                 Picker(String(localized: "sort"), selection: $sortRaw) {
-                                    ForEach(LibrarySortOption.allCases.filter { !offlineMode.isOffline || !$0.requiresServer }, id: \.self) { opt in
+                                    ForEach(LibrarySortOption.allCases.filter {
+                                        $0 != .artist && (!offlineMode.isOffline || !$0.requiresServer)
+                                    }, id: \.self) { opt in
                                         Text(opt.label).tag(opt.rawValue)
                                     }
                                 }

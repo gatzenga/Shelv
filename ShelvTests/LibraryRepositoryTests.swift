@@ -56,6 +56,25 @@ final class LibraryRepositoryTests: XCTestCase {
         XCTAssertEqual(cachedAlbumIds, ["new", "middle", "old"])
     }
 
+    func testRefreshAlbumsSortsByArtistThenAlbumWithoutRequestingUnsupportedAPISort() async throws {
+        let database = try await makeDatabase()
+        let api = FakeLibraryAPIClient(albumPages: [[
+            album(id: "abba", name: "Arrival", artist: "ABBA"),
+            album(id: "asap-z", name: "Zeta", artist: "A$AP Rocky"),
+            album(id: "asap-a", name: "Alpha", artist: "A$AP Rocky"),
+        ]])
+        let repository = LibraryRepository(database: database, api: api)
+
+        let result = try await repository.refreshAlbums(
+            serverKey: "server-a",
+            stableId: "stable-a",
+            sortBy: "artist"
+        )
+
+        XCTAssertEqual(api.albumRequests.map(\.type), ["alphabeticalByName"])
+        XCTAssertEqual(result.map(\.id), ["asap-a", "asap-z", "abba"])
+    }
+
     func testRefreshAlbumsRecentlyAddedRequestsNewestAndSortsCreatedDescending() async throws {
         let database = try await makeDatabase()
         let api = FakeLibraryAPIClient(albumPages: [[
@@ -303,6 +322,29 @@ final class LibraryRepositoryTests: XCTestCase {
         XCTAssertEqual(sorted.map(\.id), ["untagged", "queen", "tagged"])
     }
 
+    func testLocalWeightedAlbumSortingMatchesAscendingAndDescendingLabels() {
+        let albums = [
+            album(id: "low", name: "Low", year: 1990, created: 100, playCount: 2),
+            album(id: "high", name: "High", year: 2025, created: 300, playCount: 20),
+        ]
+
+        for sort in [LibraryAlbumSort.year, .created, .playCount] {
+            let ascending = LibraryRepository.locallySortedAlbums(
+                albums,
+                sort: sort,
+                direction: .ascending
+            )
+            let descending = LibraryRepository.locallySortedAlbums(
+                albums,
+                sort: sort,
+                direction: .descending
+            )
+
+            XCTAssertEqual(ascending.map(\.id), ["low", "high"])
+            XCTAssertEqual(descending.map(\.id), ["high", "low"])
+        }
+    }
+
     func testLocalArtistSortingUsesTagBeforeArticleFallback() {
         let artists = [
             Artist(id: "tagged", name: "The Police", sortName: "The Police"),
@@ -479,14 +521,18 @@ private func album(
     id: String,
     name: String,
     sortName: String? = nil,
+    artist: String? = nil,
     year: Int? = nil,
-    created: TimeInterval? = nil
+    created: TimeInterval? = nil,
+    playCount: Int? = nil
 ) -> Album {
     Album(
         id: id,
         name: name,
         sortName: sortName,
+        artist: artist,
         year: year,
+        playCount: playCount,
         created: created.map(Date.init(timeIntervalSince1970:))
     )
 }

@@ -478,7 +478,9 @@ struct ArtistDetailView: View {
 
             Menu {
                 Picker(selection: $sortRaw) {
-                    ForEach(AlbumSortOption.allCases.filter { !offlineMode.isOffline || !$0.requiresServer }, id: \.rawValue) { option in
+                    ForEach(AlbumSortOption.allCases.filter {
+                        $0 != .artist && (!offlineMode.isOffline || !$0.requiresServer)
+                    }, id: \.rawValue) { option in
                         Text(option.label).tag(option.rawValue)
                     }
                 } label: { EmptyView() }

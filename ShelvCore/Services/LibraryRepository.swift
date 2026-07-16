@@ -429,6 +429,8 @@ nonisolated final class LibraryRepository {
 
     static func albumCacheSort(for sortBy: String) -> (LibraryAlbumSort, LibraryDatabaseSortDirection) {
         switch sortBy {
+        case "artist":
+            return (.artist, .ascending)
         case "year":
             return (.year, .descending)
         case "frequent", "mostPlayed":
@@ -521,7 +523,7 @@ nonisolated final class LibraryRepository {
 
     private static func apiSort(for sortBy: String) -> String {
         switch sortBy {
-        case "year", "frequent", "mostPlayed":
+        case "artist", "year", "frequent", "mostPlayed":
             return "alphabeticalByName"
         case "recentlyAdded":
             return "newest"
