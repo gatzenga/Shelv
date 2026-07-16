@@ -294,7 +294,7 @@ struct RecapDetailView: View {
             Button {
                 showDeleteDownloadConfirm = true
             } label: {
-                Label(String(localized: "delete_downloads"), systemImage: "arrow.down.circle")
+                Label(String(localized: "delete_downloads"), systemImage: DownloadActionSymbols.delete)
                     .foregroundStyle(.red)
             }
             .buttonStyle(.bordered)

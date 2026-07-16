@@ -92,7 +92,7 @@ struct PersonalizedPlaylistSwipeActionsModifier: ViewModifier {
             Button {
                 onDownload()
             } label: {
-                Image(systemName: "arrow.down.circle")
+                Image(systemName: DownloadActionSymbols.filledDelete)
             }
             .tint(.red)
         }
@@ -218,7 +218,7 @@ struct PersonalizedAlbumArtistSwipeActionsModifier: ViewModifier {
             Button {
                 onDownload()
             } label: {
-                Image(systemName: "arrow.down.circle")
+                Image(systemName: DownloadActionSymbols.filledDelete)
             }
             .tint(.red)
         }

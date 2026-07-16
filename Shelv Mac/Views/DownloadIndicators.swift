@@ -1,5 +1,14 @@
 import SwiftUI
 
+enum DownloadActionSymbols {
+    static var delete: String {
+        if #available(macOS 26.0, *) {
+            return "arrow.down.circle.badge.xmark"
+        }
+        return "arrow.down.circle"
+    }
+}
+
 struct DownloadStatusIcon: View {
     let songId: String
     @ObservedObject private var downloadStore = DownloadStore.shared
@@ -60,34 +69,16 @@ struct DownloadProgressRing: View {
     }
 }
 
-/// Durchgestrichenes Download-Icon für „Download entfernen"-Aktionen.
+/// Download-Icon für Aktionen, die lokale Downloads entfernen.
 struct DeleteDownloadIcon: View {
     var tint: Color? = nil
 
     var body: some View {
         if let tint {
-            Image(systemName: "arrow.down.circle")
+            Image(systemName: DownloadActionSymbols.delete)
                 .foregroundStyle(tint)
-                .overlay {
-                    GeometryReader { geo in
-                        Path { p in
-                            p.move(to: CGPoint(x: geo.size.width * 0.15, y: geo.size.height * 0.85))
-                            p.addLine(to: CGPoint(x: geo.size.width * 0.85, y: geo.size.height * 0.15))
-                        }
-                        .stroke(tint, lineWidth: max(1.5, min(geo.size.width, geo.size.height) * 0.09))
-                    }
-                }
         } else {
-            Image(systemName: "arrow.down.circle")
-                .overlay {
-                    GeometryReader { geo in
-                        Path { p in
-                            p.move(to: CGPoint(x: geo.size.width * 0.15, y: geo.size.height * 0.85))
-                            p.addLine(to: CGPoint(x: geo.size.width * 0.85, y: geo.size.height * 0.15))
-                        }
-                        .stroke(.foreground, lineWidth: max(1.5, min(geo.size.width, geo.size.height) * 0.09))
-                    }
-                }
+            Image(systemName: DownloadActionSymbols.delete)
         }
     }
 }
