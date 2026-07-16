@@ -88,9 +88,21 @@ struct PlaylistsView: View {
     }
 
     private var gridBody: some View {
-        ScrollView {
+        let groups = tvSectionIndexGroups(displayPlaylists) { playlist in
+            sort == .alphabetical
+                ? LibrarySortKey.sectionLetter(displayName: playlist.name)
+                : nil
+        }
+
+        return ScrollView {
             LazyVGrid(columns: coverGridColumns, alignment: .leading, spacing: 50) {
-                ForEach(displayPlaylists) { PlaylistCard(playlist: $0) }
+                ForEach(groups) { group in
+                    tvIndexedSection(group.label) {
+                        ForEach(group.items) { playlist in
+                            PlaylistCard(playlist: playlist)
+                        }
+                    }
+                }
             }
             .padding(.horizontal, 50)
             .padding(.top, 30)
@@ -99,10 +111,20 @@ struct PlaylistsView: View {
     }
 
     private var listBody: some View {
-        ScrollView {
+        let groups = tvSectionIndexGroups(displayPlaylists) { playlist in
+            sort == .alphabetical
+                ? LibrarySortKey.sectionLetter(displayName: playlist.name)
+                : nil
+        }
+
+        return ScrollView {
             LazyVStack(spacing: 4) {
-                ForEach(displayPlaylists) { playlist in
-                    PlaylistListRow(playlist: playlist) { path.append(playlist) }
+                ForEach(groups) { group in
+                    tvIndexedSection(group.label) {
+                        ForEach(group.items) { playlist in
+                            PlaylistListRow(playlist: playlist) { path.append(playlist) }
+                        }
+                    }
                 }
             }
             .padding(.vertical, 24)
