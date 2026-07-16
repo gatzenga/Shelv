@@ -530,10 +530,11 @@ class AlbumDetailViewModel: ObservableObject {
             album = detail
             songs = detail.song ?? []
         } catch {
+            let inlineMessage = OfflineModeService.shared.inlineErrorMessage(for: error)
             if let fallback {
                 populateFromLocal(fallback)
             } else {
-                errorMessage = error.localizedDescription
+                errorMessage = inlineMessage
             }
         }
         isLoading = false

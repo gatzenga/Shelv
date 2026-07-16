@@ -203,7 +203,7 @@ struct RecapVerifyView: View {
             diffs = try await recapStore.computeDiffs(serverId: serverId)
         } catch {
             diffs = []
-            loadError = error.localizedDescription
+            loadError = OfflineModeService.shared.inlineErrorMessage(for: error)
         }
         isLoading = false
     }
@@ -227,7 +227,9 @@ struct RecapVerifyView: View {
                 }
                 NotificationCenter.default.post(name: .showToast, object: message)
             } catch {
-                NotificationCenter.default.post(name: .showToast, object: error.localizedDescription)
+                if let message = OfflineModeService.shared.inlineErrorMessage(for: error, userInitiated: true) {
+                    NotificationCenter.default.post(name: .showToast, object: message)
+                }
             }
             processingDiffId = nil
         }

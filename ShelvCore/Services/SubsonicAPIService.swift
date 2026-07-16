@@ -3,7 +3,7 @@ import Combine
 import CryptoKit
 import Security
 
-enum SubsonicAPIError: LocalizedError {
+enum SubsonicAPIError: LocalizedError, ServerConnectivityErrorProviding {
     case noServer
     case noPassword
     case protectedDataUnavailable
@@ -47,6 +47,11 @@ enum SubsonicAPIError: LocalizedError {
         case .decodingError:
             return String(localized: "unexpected_server_response")
         }
+    }
+
+    nonisolated var underlyingConnectivityError: Error? {
+        guard case .networkError(let rootError) = self else { return nil }
+        return rootError
     }
 }
 
@@ -611,6 +616,13 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         }
     }
 
+    private func presentConnectivityErrorIfCurrentRequest(_ signature: String, error: Error) async {
+        await MainActor.run {
+            guard self.isCurrentActiveRequest(signature) else { return }
+            OfflineModeService.shared.presentConnectivityErrorIfNeeded(error)
+        }
+    }
+
     private func clearServerErrorIfCurrentRequest(_ signature: String) async {
         await MainActor.run {
             guard self.isCurrentActiveRequest(signature) else { return }
@@ -637,7 +649,7 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         if !NetworkStatus.shared.hasNetwork {
             let networkError = SubsonicAPIError.networkError(URLError(.notConnectedToInternet))
             ConnectivityDebugLog.log("request failed: \(path) -> no network")
-            await notifyServerErrorIfCurrentRequest(requestSignature, message: networkError.localizedDescription)
+            await presentConnectivityErrorIfCurrentRequest(requestSignature, error: networkError)
             throw networkError
         }
         var lastError: Error?
@@ -684,7 +696,7 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         }
         let rootError = lastError ?? URLError(.unknown)
         let networkError = SubsonicAPIError.networkError(rootError)
-        await notifyServerErrorIfCurrentRequest(requestSignature, message: networkError.localizedDescription)
+        await presentConnectivityErrorIfCurrentRequest(requestSignature, error: networkError)
         throw networkError
     }
 

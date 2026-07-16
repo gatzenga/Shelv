@@ -201,7 +201,8 @@ struct RecapView: View {
                     do {
                         try await recapStore.deleteEntry(playlistId: entry.playlistId, serverId: sid)
                     } catch {
-                        if !(error is CancellationError) {
+                        if !(error is CancellationError),
+                           !OfflineModeService.shared.presentConnectivityErrorIfNeeded(error, userInitiated: true) {
                             NotificationCenter.default.post(name: .showToast, object: String(localized: "could_not_delete_recap"))
                         }
                     }

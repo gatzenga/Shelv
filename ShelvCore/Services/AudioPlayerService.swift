@@ -210,6 +210,7 @@ class AudioPlayerService: ObservableObject {
     private var streamCacheWindowTask: Task<Void, Never>?
     private var isEngineLoaded = false
     private var playbackGeneration: Int = 0
+    private var playbackFailurePresentationPolicy = UserInitiatedPlaybackErrorPresentationPolicy()
     private var networkMonitor = NWPathMonitor()
     private let networkMonitorQueue = DispatchQueue(label: "shelv.network", qos: .utility)
     #if os(iOS)
@@ -565,7 +566,7 @@ class AudioPlayerService: ObservableObject {
         saveState()
     }
 
-    func play(songs: [Song], startIndex: Int = 0) {
+    func play(songs: [Song], startIndex: Int = 0, userInitiated: Bool = true) {
         guard songs.indices.contains(startIndex) else { return }
         playbackBackHistory.removeAll()
         prepareForSongPlayback()
@@ -579,7 +580,7 @@ class AudioPlayerService: ObservableObject {
         truthUserQueue = []
         infinityPendingSongIds.removeAll()
         resumeTime = 0
-        startPlayback(song: songs[startIndex], seekTo: 0)
+        startPlayback(song: songs[startIndex], seekTo: 0, userInitiated: userInitiated)
         saveState()
     }
 
@@ -596,7 +597,7 @@ class AudioPlayerService: ObservableObject {
         truthUserQueue = []
         infinityPendingSongIds.removeAll()
         resumeTime = 0
-        startPlayback(song: song, seekTo: 0)
+        startPlayback(song: song, seekTo: 0, userInitiated: true)
         saveState()
     }
 
@@ -1065,7 +1066,23 @@ class AudioPlayerService: ObservableObject {
         let message = NetworkStatus.shared.hasNetwork
             ? String(localized: "server_unreachable")
             : SubsonicAPIError.networkError(URLError(.notConnectedToInternet)).localizedDescription
-        OfflineModeService.shared.notifyServerError(message, bypassCooldown: true)
+        if consumeUserInitiatedPlaybackFailurePresentation(generation: generation) {
+            OfflineModeService.shared.notifyUserInitiatedServerError(message)
+        }
+    }
+
+    private func configurePlaybackFailurePresentation(generation: Int, userInitiated: Bool) {
+        playbackFailurePresentationPolicy.configure(
+            generation: generation,
+            userInitiated: userInitiated
+        )
+    }
+
+    private func consumeUserInitiatedPlaybackFailurePresentation(
+        generation: Int,
+        now: Date = Date()
+    ) -> Bool {
+        playbackFailurePresentationPolicy.consume(generation: generation, now: now)
     }
 
     @MainActor
@@ -1121,7 +1138,8 @@ class AudioPlayerService: ObservableObject {
     private func startPlayback(
         song: Song,
         seekTo: Double = 0,
-        startsNewTrackingSession: Bool = true
+        startsNewTrackingSession: Bool = true,
+        userInitiated: Bool = false
     ) {
         cancelRemoteStreamStallWatchdog()
         prepareForSongPlayback()
@@ -1147,6 +1165,7 @@ class AudioPlayerService: ObservableObject {
         #endif
         playbackGeneration += 1
         let gen = playbackGeneration
+        configurePlaybackFailurePresentation(generation: gen, userInitiated: userInitiated)
         #if os(tvOS)
         resumeWatchdog?.cancel()
         #endif
@@ -1426,17 +1445,21 @@ class AudioPlayerService: ObservableObject {
         saveState()
     }
 
-    func resume() {
+    func resume(userInitiated: Bool = true) {
         if isRadioPlayback {
             guard let station = currentRadioStation else { return }
             playRadioStation(station)
             return
         }
         guard let song = currentSong else { return }
+        configurePlaybackFailurePresentation(
+            generation: playbackGeneration,
+            userInitiated: userInitiated
+        )
         if !isEngineLoaded {
             let seek = resumeTime
             resumeTime = 0
-            startPlayback(song: song, seekTo: seek)
+            startPlayback(song: song, seekTo: seek, userInitiated: userInitiated)
         } else {
             #if os(iOS) || os(tvOS)
             let gen = playbackGeneration
@@ -1448,15 +1471,15 @@ class AudioPlayerService: ObservableObject {
                       self.isEngineLoaded,
                       self.currentSong?.id == expectedSongId
                 else { return }
-                self.resumeLoadedPlayback(song: song)
+                self.resumeLoadedPlayback(song: song, userInitiated: userInitiated)
             }
             #else
-            resumeLoadedPlayback(song: song)
+            resumeLoadedPlayback(song: song, userInitiated: userInitiated)
             #endif
         }
     }
 
-    private func resumeLoadedPlayback(song: Song) {
+    private func resumeLoadedPlayback(song: Song, userInitiated: Bool) {
         engine.resume()
         isPlaying = true
         nowPlaying.updatePlaybackRate(1, currentTime: currentTime)
@@ -1481,7 +1504,8 @@ class AudioPlayerService: ObservableObject {
             self.startPlayback(
                 song: song,
                 seekTo: resumePosition,
-                startsNewTrackingSession: false
+                startsNewTrackingSession: false,
+                userInitiated: userInitiated
             )
         }
         #endif
@@ -1583,7 +1607,7 @@ class AudioPlayerService: ObservableObject {
         clearSavedState()
     }
 
-    func playShuffled(songs: [Song]) {
+    func playShuffled(songs: [Song], userInitiated: Bool = true) {
         guard !songs.isEmpty else { return }
         playbackBackHistory.removeAll()
         prepareForSongPlayback()
@@ -1600,7 +1624,7 @@ class AudioPlayerService: ObservableObject {
         infinityPendingSongIds.removeAll()
 
         resumeTime = 0
-        startPlayback(song: shuffled[0])
+        startPlayback(song: shuffled[0], userInitiated: userInitiated)
         saveState()
     }
 
@@ -1710,7 +1734,7 @@ class AudioPlayerService: ObservableObject {
 
         switch action {
         case .play(let song):
-            startPlayback(song: song)
+            startPlayback(song: song, userInitiated: triggeredByUser)
         case .clearPlayback:
             clearPlaybackState()
         case .none:
@@ -1734,19 +1758,23 @@ class AudioPlayerService: ObservableObject {
             if let anchorIndex = selection.queueAnchorIndex {
                 currentIndex = anchorIndex
             }
-            startPlayback(song: selection.song)
+            startPlayback(song: selection.song, userInitiated: true)
             saveState()
             return
         }
         var state = queueState
         guard let song = state.previous() else { return }
         applyQueueState(state)
-        startPlayback(song: song)
+        startPlayback(song: song, userInitiated: true)
         saveState()
     }
 
     func seek(to seconds: Double) {
         guard !isRadioPlayback else { return }
+        configurePlaybackFailurePresentation(
+            generation: playbackGeneration,
+            userInitiated: true
+        )
         currentTime = seconds
         isSeeking = true
         nowPlaying.updateTime(seconds, force: true)
@@ -1764,6 +1792,10 @@ class AudioPlayerService: ObservableObject {
 
     func beginRemoteFastSeek(forward: Bool) {
         guard !isRadioPlayback else { return }
+        configurePlaybackFailurePresentation(
+            generation: playbackGeneration,
+            userInitiated: true
+        )
         startFastSeeking(forward: forward)
     }
 
@@ -1815,7 +1847,7 @@ class AudioPlayerService: ObservableObject {
             recordsSameSong: state.currentIndex != currentIndex
         )
         applyQueueState(state)
-        startPlayback(song: song)
+        startPlayback(song: song, userInitiated: true)
         saveState()
     }
 
@@ -1824,7 +1856,7 @@ class AudioPlayerService: ObservableObject {
         guard let song = state.jumpToPlayNext(at: index) else { return }
         recordPlaybackBackHistoryTransition(to: song, recordsSameSong: true)
         applyQueueState(state)
-        startPlayback(song: song)
+        startPlayback(song: song, userInitiated: true)
         saveState()
     }
 
@@ -1833,7 +1865,7 @@ class AudioPlayerService: ObservableObject {
         guard let song = state.jumpToQueueTrack(at: queueIndex) else { return }
         recordPlaybackBackHistoryTransition(to: song, recordsSameSong: true)
         applyQueueState(state)
-        startPlayback(song: song)
+        startPlayback(song: song, userInitiated: true)
         saveState()
     }
 
@@ -1842,7 +1874,7 @@ class AudioPlayerService: ObservableObject {
         guard let song = state.jumpToUserQueue(at: index) else { return }
         recordPlaybackBackHistoryTransition(to: song, recordsSameSong: true)
         applyQueueState(state)
-        startPlayback(song: song)
+        startPlayback(song: song, userInitiated: true)
         saveState()
     }
 
@@ -1919,7 +1951,7 @@ class AudioPlayerService: ObservableObject {
             if self.currentSong == nil {
                 guard startIfIdle, let song = await self.nextInfinitySong() else { return }
                 guard self.infinityModeEnabled, self.currentSong == nil else { return }
-                self.play(songs: [song])
+                self.play(songs: [song], userInitiated: false)
                 guard self.currentSong != nil else { return }
             }
 
@@ -2198,6 +2230,10 @@ class AudioPlayerService: ObservableObject {
 
                 self.recordPlaybackBackHistoryTransition(to: song, recordsSameSong: true)
                 self.advanceQueueState()
+                self.configurePlaybackFailurePresentation(
+                    generation: self.playbackGeneration,
+                    userInitiated: false
+                )
                 self.currentSong = song
                 self.trimManagedStreamCaches(keeping: self.currentStreamCacheKeepIds())
                 self.scheduleLyricsAutoFetch(for: song)
@@ -2316,7 +2352,11 @@ class AudioPlayerService: ObservableObject {
                 let message = NetworkStatus.shared.hasNetwork
                     ? String(localized: "server_unreachable")
                     : SubsonicAPIError.networkError(URLError(.notConnectedToInternet)).localizedDescription
-                OfflineModeService.shared.notifyServerError(message, bypassCooldown: true)
+                if self.consumeUserInitiatedPlaybackFailurePresentation(
+                    generation: self.playbackGeneration
+                ) {
+                    OfflineModeService.shared.notifyUserInitiatedServerError(message)
+                }
                 return
             }
             self.isBuffering = true

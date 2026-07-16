@@ -376,11 +376,13 @@ struct PlaylistDetailView: View {
                 )
                 await libraryStore.loadPlaylists()
             } catch {
-                NotificationCenter.default.post(
-                    name: .showToast,
-                    object: String(localized: "changes_could_not_be_saved")
-                )
-                await loadDetail()
+                if !OfflineModeService.shared.presentConnectivityErrorIfNeeded(error, userInitiated: true) {
+                    NotificationCenter.default.post(
+                        name: .showToast,
+                        object: String(localized: "changes_could_not_be_saved")
+                    )
+                    await loadDetail()
+                }
             }
         }
     }
@@ -397,11 +399,13 @@ struct PlaylistDetailView: View {
                 songIndicesToRemove: allOldIndices
             )
         } catch {
-            NotificationCenter.default.post(
-                name: .showToast,
-                object: String(localized: "order_could_not_be_saved")
-            )
-            await loadDetail()
+            if !OfflineModeService.shared.presentConnectivityErrorIfNeeded(error, userInitiated: true) {
+                NotificationCenter.default.post(
+                    name: .showToast,
+                    object: String(localized: "order_could_not_be_saved")
+                )
+                await loadDetail()
+            }
         }
         isSyncingOrder = false
     }

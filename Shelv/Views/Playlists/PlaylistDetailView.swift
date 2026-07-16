@@ -287,7 +287,8 @@ struct PlaylistDetailView: View {
                         try await libraryStore.deletePlaylist(playlist)
                         dismiss()
                     } catch {
-                        if !(error is CancellationError) {
+                        if !(error is CancellationError),
+                           !OfflineModeService.shared.presentConnectivityErrorIfNeeded(error, userInitiated: true) {
                             currentToast = ShelveToast(message: String(localized: "could_not_delete_playlist"), isError: true)
                         }
                     }

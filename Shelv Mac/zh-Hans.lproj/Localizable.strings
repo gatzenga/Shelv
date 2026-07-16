@@ -38,6 +38,15 @@
 "unknown_error" = "未知错误";
 "no_server_configured" = "未配置服务器";
 "invalid_server_url" = "无效的服务器地址";
+"no_password_found" = "未找到密码";
+"connection_timed_out_please_check_your_network" = "连接超时，请检查您的网络。";
+"no_internet_connection" = "无网络连接。";
+"server_not_reachable_please_check_the_url" = "服务器无法访问，请检查地址。";
+"connection_lost_please_try_again" = "连接断开，请重试。";
+"secure_connection_failed_please_check_the_server_certificate" = "安全连接失败，请检查服务器证书。";
+"network_error_please_try_again" = "网络错误，请重试。";
+"server_returned_an_error" = "服务器返回了错误。";
+"unexpected_server_response" = "意外的服务器响应。";
 "http_error_from_server" = "服务器 HTTP 错误。";
 "not_found" = "未找到。";
 "unexpected_empty_response" = "意外的空响应。";

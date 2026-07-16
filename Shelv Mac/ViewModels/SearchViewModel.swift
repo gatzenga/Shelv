@@ -39,6 +39,7 @@ class SearchViewModel: ObservableObject {
                     songs = result.song ?? []
                 } catch {
                     guard !Task.isCancelled else { return }
+                    guard !OfflineModeService.shared.presentConnectivityErrorIfNeeded(error, userInitiated: true) else { return }
                     NotificationCenter.default.post(name: .showToast, object: String(localized: "search_failed"))
                 }
             }

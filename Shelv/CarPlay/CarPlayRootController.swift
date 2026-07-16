@@ -213,8 +213,10 @@ final class CarPlayRootController: NSObject {
             .dropFirst()
             .sink { [weak self] visible in
                 guard let self else { return }
-                if visible {
-                    self.presentServerErrorAlert()
+                // A reachable network with a temporarily unavailable server should not
+                // interrupt CarPlay with a modal alert. The iPhone banner remains active.
+                if visible, OfflineModeService.shared.lastServerErrorWasDeviceOffline {
+                    self.presentDeviceOfflineAlert()
                 } else if self.isPresentingServerErrorAlert {
                     self.isPresentingServerErrorAlert = false
                     self.interfaceController.dismissTemplate(animated: true, completion: nil)
@@ -223,13 +225,10 @@ final class CarPlayRootController: NSObject {
             .store(in: &cancellables)
     }
 
-    private func presentServerErrorAlert() {
+    private func presentDeviceOfflineAlert() {
         guard !isPresentingServerErrorAlert else { return }
         isPresentingServerErrorAlert = true
-        let title = OfflineModeService.shared.lastServerErrorWasDeviceOffline
-            ? String(localized: "you_are_offline")
-            : String(localized: "server_unreachable")
-        let titleVariants = [title]
+        let titleVariants = [String(localized: "you_are_offline")]
         var actions: [CPAlertAction] = []
         if OfflineModeService.shared.downloadsFeatureEnabled {
             actions.append(CPAlertAction(title: String(localized: "go_offline"), style: .default) { [weak self] _ in

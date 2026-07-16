@@ -404,8 +404,9 @@ class ArtistDetailViewModel: ObservableObject {
             albums = (detail.album ?? []).sorted { ($0.year ?? 0) > ($1.year ?? 0) }
             biography = (try? await artistInfo)?.biography?.strippingHTML
         } catch {
+            let inlineMessage = OfflineModeService.shared.inlineErrorMessage(for: error)
             populateFromLocal(artistId: artistId, artistName: artistName)
-            if artist == nil { errorMessage = error.localizedDescription }
+            if artist == nil { errorMessage = inlineMessage }
         }
         isLoading = false
     }
@@ -451,7 +452,9 @@ class ArtistDetailViewModel: ObservableObject {
                 return results.sorted { $0.0 < $1.0 }.flatMap { $0.1 }
             }
         } catch {
-            NotificationCenter.default.post(name: .showToast, object: String(localized: "playback_failed"))
+            if !OfflineModeService.shared.presentConnectivityErrorIfNeeded(error, userInitiated: true) {
+                NotificationCenter.default.post(name: .showToast, object: String(localized: "playback_failed"))
+            }
             return []
         }
     }

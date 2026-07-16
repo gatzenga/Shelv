@@ -80,7 +80,7 @@ extension AudioPlayerService {
                        self.shouldResumeAfterAudioInterruption,
                        self.hasActivePlayback {
                         // Audio-Session vor Resume reaktivieren: iOS deaktiviert sie bei Interruption.
-                        self.resume()
+                        self.resume(userInitiated: false)
                     }
                 }
             @unknown default:

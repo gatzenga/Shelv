@@ -126,7 +126,16 @@ enum CarPlayNavigation {
                 songs = DownloadStore.shared.albums
                     .first { $0.albumId == album.id }?.songs.map { $0.asSong() } ?? []
             } else {
-                let fetched = (try? await LibraryStore.shared.fetchAlbumSongs(album)) ?? []
+                let fetched: [Song]
+                do {
+                    fetched = try await LibraryStore.shared.fetchAlbumSongs(album)
+                } catch {
+                    _ = OfflineModeService.shared.presentConnectivityErrorIfNeeded(
+                        error,
+                        userInitiated: true
+                    )
+                    fetched = []
+                }
                 if fetched.isEmpty {
                     songs = DownloadStore.shared.albums
                         .first { $0.albumId == album.id }?.songs.map { $0.asSong() } ?? []
@@ -282,7 +291,16 @@ enum CarPlayNavigation {
             if OfflineModeService.shared.isOffline {
                 albums = downloadedAlbums(for: artist)
             } else {
-                let fetched = (try? await SubsonicAPIService.shared.getArtist(id: artist.id))?.album ?? []
+                let fetched: [Album]
+                do {
+                    fetched = try await SubsonicAPIService.shared.getArtist(id: artist.id).album ?? []
+                } catch {
+                    _ = OfflineModeService.shared.presentConnectivityErrorIfNeeded(
+                        error,
+                        userInitiated: true
+                    )
+                    fetched = []
+                }
                 albums = fetched.isEmpty ? downloadedAlbums(for: artist) : fetched
             }
             configureArtistDetail(template, artist: artist, albums: albums, ic: ic)

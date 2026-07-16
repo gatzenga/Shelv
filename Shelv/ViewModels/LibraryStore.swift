@@ -212,7 +212,9 @@ class LibraryStore: ObservableObject {
             guard requestSignature == activeServerSignature else { return }
             randomAlbums = random
         } catch {
-            if !(error is CancellationError) { errorMessage = error.localizedDescription }
+            if !(error is CancellationError) {
+                errorMessage = OfflineModeService.shared.inlineErrorMessage(for: error)
+            }
         }
     }
 
@@ -505,8 +507,17 @@ class LibraryStore: ObservableObject {
                 .first { $0.artistId == artist.id || $0.name == artist.name }?
                 .albums.flatMap { $0.songs.map { $0.asSong() } } ?? []
         }
-        guard let artistDetail = try? await api.getArtist(id: artist.id),
-              let albums = artistDetail.album, !albums.isEmpty else { return [] }
+        let artistDetail: ArtistDetail
+        do {
+            artistDetail = try await api.getArtist(id: artist.id)
+        } catch {
+            _ = OfflineModeService.shared.presentConnectivityErrorIfNeeded(
+                error,
+                userInitiated: true
+            )
+            return []
+        }
+        guard let albums = artistDetail.album, !albums.isEmpty else { return [] }
         let indexed = Array(albums.enumerated())
         return await withTaskGroup(of: (Int, [Song]).self) { group in
             for (i, album) in indexed {
@@ -613,7 +624,9 @@ class LibraryStore: ObservableObject {
             } else {
                 starredSongs.removeAll { $0.id == song.id }
             }
-            if !(error is CancellationError) { errorMessage = error.localizedDescription }
+            if !(error is CancellationError) {
+                errorMessage = OfflineModeService.shared.inlineErrorMessage(for: error, userInitiated: true)
+            }
         }
     }
 
@@ -637,7 +650,9 @@ class LibraryStore: ObservableObject {
             } else {
                 starredAlbums.removeAll { $0.id == album.id }
             }
-            if !(error is CancellationError) { errorMessage = error.localizedDescription }
+            if !(error is CancellationError) {
+                errorMessage = OfflineModeService.shared.inlineErrorMessage(for: error, userInitiated: true)
+            }
         }
     }
 
@@ -661,7 +676,9 @@ class LibraryStore: ObservableObject {
             } else {
                 starredArtists.removeAll { $0.id == artist.id }
             }
-            if !(error is CancellationError) { errorMessage = error.localizedDescription }
+            if !(error is CancellationError) {
+                errorMessage = OfflineModeService.shared.inlineErrorMessage(for: error, userInitiated: true)
+            }
         }
     }
 
@@ -773,7 +790,9 @@ class LibraryStore: ObservableObject {
             playlists.append(created)
             if let id = activeServerID { save(playlists, name: "playlists", serverID: id) }
         } catch {
-            if !(error is CancellationError) { errorMessage = error.localizedDescription }
+            if !(error is CancellationError) {
+                errorMessage = OfflineModeService.shared.inlineErrorMessage(for: error, userInitiated: true)
+            }
         }
     }
 
@@ -804,7 +823,9 @@ class LibraryStore: ObservableObject {
             }
             if let id = activeServerID { save(playlists, name: "playlists", serverID: id) }
         } catch {
-            if !(error is CancellationError) { errorMessage = error.localizedDescription }
+            if !(error is CancellationError) {
+                errorMessage = OfflineModeService.shared.inlineErrorMessage(for: error, userInitiated: true)
+            }
         }
     }
 
@@ -822,7 +843,9 @@ class LibraryStore: ObservableObject {
             }
             return true
         } catch {
-            if !(error is CancellationError) { errorMessage = error.localizedDescription }
+            if !(error is CancellationError) {
+                errorMessage = OfflineModeService.shared.inlineErrorMessage(for: error, userInitiated: true)
+            }
             return false
         }
     }
@@ -839,7 +862,9 @@ class LibraryStore: ObservableObject {
                 if let id = activeServerID { save(playlists, name: "playlists", serverID: id) }
             }
         } catch {
-            if !(error is CancellationError) { errorMessage = error.localizedDescription }
+            if !(error is CancellationError) {
+                errorMessage = OfflineModeService.shared.inlineErrorMessage(for: error, userInitiated: true)
+            }
         }
     }
 }

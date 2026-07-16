@@ -390,7 +390,7 @@ struct InsightsView: View {
         } catch {
             let isCancelled = error is CancellationError || (error as? URLError)?.code == .cancelled
             if !isCancelled {
-                errorMessage = error.localizedDescription
+                errorMessage = OfflineModeService.shared.inlineErrorMessage(for: error)
             }
             isLoading = false
         }

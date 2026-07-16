@@ -86,10 +86,34 @@ final class OfflineModeService: ObservableObject {
             .store(in: &cancellables)
     }
 
-    func notifyServerError(_ message: String? = nil, bypassCooldown: Bool = false) {
+    private func notifyServerError(_ message: String? = nil, bypassCooldown: Bool = false) {
         guard !isOffline else { return }
         guard SubsonicAPIService.shared.activeServer != nil else { return }
         scheduleServerErrorMutation(.notify(message: message, bypassCooldown: bypassCooldown))
+    }
+
+    /// Connection failures have one app-wide presentation: the server banner.
+    /// Returning `nil` from `inlineErrorMessage` prevents a second local error view.
+    @discardableResult
+    func presentConnectivityErrorIfNeeded(
+        _ error: Error,
+        userInitiated: Bool = false
+    ) -> Bool {
+        guard ServerConnectivityErrorClassifier.isConnectivityFailure(error) else { return false }
+        if userInitiated {
+            notifyUserInitiatedServerError(error.localizedDescription)
+        } else {
+            // Connectivity failures can originate from passive work such as lyrics fetching,
+            // queue sync or prefetching. Suppress those globally unless the initial launch or
+            // an explicit user action opened a presentation allowance.
+            notifyServerErrorIfPresentationAllowed(error.localizedDescription)
+        }
+        return true
+    }
+
+    func inlineErrorMessage(for error: Error, userInitiated: Bool = false) -> String? {
+        guard !presentConnectivityErrorIfNeeded(error, userInitiated: userInitiated) else { return nil }
+        return error.localizedDescription
     }
 
     private func notifyServerErrorNow(_ message: String? = nil, bypassCooldown: Bool = false) {
@@ -118,6 +142,13 @@ final class OfflineModeService: ObservableObject {
         guard !isOffline else { return }
         guard SubsonicAPIService.shared.activeServer != nil else { return }
         presentationPolicy.allowUserInitiatedServerErrorPresentation(duration: duration)
+    }
+
+    /// Presents a known user-initiated failure immediately through the same global path.
+    /// Callers must already have established that the failing operation came from user input.
+    func notifyUserInitiatedServerError(_ message: String? = nil) {
+        allowUserInitiatedServerErrorPresentation()
+        notifyServerErrorIfPresentationAllowed(message)
     }
 
     func notifyServerErrorIfPresentationAllowed(_ message: String? = nil) {

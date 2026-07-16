@@ -38,6 +38,15 @@
 "unknown_error" = "Unbekannter Fehler";
 "no_server_configured" = "Kein Server konfiguriert.";
 "invalid_server_url" = "Ungültige Server-URL.";
+"no_password_found" = "Kein Passwort gefunden";
+"connection_timed_out_please_check_your_network" = "Zeitüberschreitung. Bitte Netzwerkverbindung prüfen.";
+"no_internet_connection" = "Keine Internetverbindung.";
+"server_not_reachable_please_check_the_url" = "Server nicht erreichbar. Bitte URL prüfen.";
+"connection_lost_please_try_again" = "Verbindung verloren. Bitte erneut versuchen.";
+"secure_connection_failed_please_check_the_server_certificate" = "Sichere Verbindung fehlgeschlagen. Bitte Serverzertifikat prüfen.";
+"network_error_please_try_again" = "Netzwerkfehler. Bitte erneut versuchen.";
+"server_returned_an_error" = "Server hat einen Fehler zurückgegeben.";
+"unexpected_server_response" = "Unerwartete Serverantwort.";
 "http_error_from_server" = "HTTP-Fehler beim Server.";
 "not_found" = "Nicht gefunden.";
 "unexpected_empty_response" = "Unerwartete leere Antwort.";
