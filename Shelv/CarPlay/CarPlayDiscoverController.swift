@@ -473,6 +473,13 @@ final class CarPlayDiscoverController {
 
     private func makeOfflineMixItem(_ title: String, type: String) -> CPListItem {
         let item = CPListItem(text: title, detailText: nil)
+        let icon: String
+        switch type {
+        case "play": icon = "play.fill"
+        case "shuffle": icon = "shuffle"
+        default: icon = "sparkles"
+        }
+        item.setImage(cpListIcon(icon))
         item.handler = { [weak self] _, c in
             c()
             Task { @MainActor [weak self] in
