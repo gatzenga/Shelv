@@ -22,6 +22,8 @@ nonisolated enum PersonalizationPreferenceKey {
 
     static let swipeLeftPrimary = "ui.swipe.leftPrimary"
     static let swipeLeftSecondary = "ui.swipe.leftSecondary"
+    // Kept only for migrating the short-lived three-action leading layout.
+    static let swipeLeftTertiary = "ui.swipe.leftTertiary"
     static let swipeRightPrimary = "ui.swipe.rightPrimary"
     static let swipeRightSecondary = "ui.swipe.rightSecondary"
     static let swipeRightTertiary = "ui.swipe.rightTertiary"
@@ -30,11 +32,13 @@ nonisolated enum PersonalizationPreferenceKey {
     static let playlistSwipeLeftTertiary = "ui.swipe.playlists.leftTertiary"
     static let playlistSwipeRightPrimary = "ui.swipe.playlists.rightPrimary"
     static let playlistSwipeRightSecondary = "ui.swipe.playlists.rightSecondary"
+    static let playlistSwipeRightTertiary = "ui.swipe.playlists.rightTertiary"
     static let albumArtistSwipeLeftPrimary = "ui.swipe.albumArtists.leftPrimary"
     static let albumArtistSwipeLeftSecondary = "ui.swipe.albumArtists.leftSecondary"
     static let albumArtistSwipeLeftTertiary = "ui.swipe.albumArtists.leftTertiary"
     static let albumArtistSwipeRightPrimary = "ui.swipe.albumArtists.rightPrimary"
     static let albumArtistSwipeRightSecondary = "ui.swipe.albumArtists.rightSecondary"
+    static let albumArtistSwipeRightTertiary = "ui.swipe.albumArtists.rightTertiary"
 
     static let legacyEnablePlaylists = "enablePlaylists"
     static let legacyEnableFavorites = "enableFavorites"
@@ -177,14 +181,14 @@ nonisolated enum PersonalizationSwipeSlot: String, CaseIterable, Hashable {
     case rightTertiary
     case playlistLeftPrimary
     case playlistLeftSecondary
-    case playlistLeftTertiary
     case playlistRightPrimary
     case playlistRightSecondary
+    case playlistRightTertiary
     case albumArtistLeftPrimary
     case albumArtistLeftSecondary
-    case albumArtistLeftTertiary
     case albumArtistRightPrimary
     case albumArtistRightSecondary
+    case albumArtistRightTertiary
 
     var storageKey: String {
         switch self {
@@ -195,31 +199,29 @@ nonisolated enum PersonalizationSwipeSlot: String, CaseIterable, Hashable {
         case .rightTertiary: return PersonalizationPreferenceKey.swipeRightTertiary
         case .playlistLeftPrimary: return PersonalizationPreferenceKey.playlistSwipeLeftPrimary
         case .playlistLeftSecondary: return PersonalizationPreferenceKey.playlistSwipeLeftSecondary
-        case .playlistLeftTertiary: return PersonalizationPreferenceKey.playlistSwipeLeftTertiary
         case .playlistRightPrimary: return PersonalizationPreferenceKey.playlistSwipeRightPrimary
         case .playlistRightSecondary: return PersonalizationPreferenceKey.playlistSwipeRightSecondary
+        case .playlistRightTertiary: return PersonalizationPreferenceKey.playlistSwipeRightTertiary
         case .albumArtistLeftPrimary: return PersonalizationPreferenceKey.albumArtistSwipeLeftPrimary
         case .albumArtistLeftSecondary: return PersonalizationPreferenceKey.albumArtistSwipeLeftSecondary
-        case .albumArtistLeftTertiary: return PersonalizationPreferenceKey.albumArtistSwipeLeftTertiary
         case .albumArtistRightPrimary: return PersonalizationPreferenceKey.albumArtistSwipeRightPrimary
         case .albumArtistRightSecondary: return PersonalizationPreferenceKey.albumArtistSwipeRightSecondary
+        case .albumArtistRightTertiary: return PersonalizationPreferenceKey.albumArtistSwipeRightTertiary
         }
     }
 
     var titleKey: String {
         switch self {
         case .leftPrimary, .playlistLeftPrimary, .albumArtistLeftPrimary:
-            return "swipe_left_1"
-        case .leftSecondary, .playlistLeftSecondary, .albumArtistLeftSecondary:
-            return "swipe_left_2"
-        case .playlistLeftTertiary, .albumArtistLeftTertiary:
-            return "swipe_left_3"
-        case .rightPrimary, .playlistRightPrimary, .albumArtistRightPrimary:
             return "swipe_right_1"
-        case .rightSecondary, .playlistRightSecondary, .albumArtistRightSecondary:
+        case .leftSecondary, .playlistLeftSecondary, .albumArtistLeftSecondary:
             return "swipe_right_2"
-        case .rightTertiary:
-            return "swipe_right_3"
+        case .rightPrimary, .playlistRightPrimary, .albumArtistRightPrimary:
+            return "swipe_left_1"
+        case .rightSecondary, .playlistRightSecondary, .albumArtistRightSecondary:
+            return "swipe_left_2"
+        case .rightTertiary, .playlistRightTertiary, .albumArtistRightTertiary:
+            return "swipe_left_3"
         }
     }
 
@@ -227,9 +229,9 @@ nonisolated enum PersonalizationSwipeSlot: String, CaseIterable, Hashable {
         switch self {
         case .leftPrimary, .leftSecondary, .rightPrimary, .rightSecondary, .rightTertiary:
             return .songs
-        case .playlistLeftPrimary, .playlistLeftSecondary, .playlistLeftTertiary, .playlistRightPrimary, .playlistRightSecondary:
+        case .playlistLeftPrimary, .playlistLeftSecondary, .playlistRightPrimary, .playlistRightSecondary, .playlistRightTertiary:
             return .playlists
-        case .albumArtistLeftPrimary, .albumArtistLeftSecondary, .albumArtistLeftTertiary, .albumArtistRightPrimary, .albumArtistRightSecondary:
+        case .albumArtistLeftPrimary, .albumArtistLeftSecondary, .albumArtistRightPrimary, .albumArtistRightSecondary, .albumArtistRightTertiary:
             return .albumArtists
         }
     }
@@ -237,13 +239,12 @@ nonisolated enum PersonalizationSwipeSlot: String, CaseIterable, Hashable {
     var isLeading: Bool {
         switch self {
         case .leftPrimary, .leftSecondary,
-             .playlistLeftPrimary, .playlistLeftSecondary, .playlistLeftTertiary,
-             .albumArtistLeftPrimary, .albumArtistLeftSecondary, .albumArtistLeftTertiary:
+             .playlistLeftPrimary, .playlistLeftSecondary,
+             .albumArtistLeftPrimary, .albumArtistLeftSecondary:
             return true
-        case .rightPrimary, .rightSecondary,
-             .rightTertiary,
-             .playlistRightPrimary, .playlistRightSecondary,
-             .albumArtistRightPrimary, .albumArtistRightSecondary:
+        case .rightPrimary, .rightSecondary, .rightTertiary,
+             .playlistRightPrimary, .playlistRightSecondary, .playlistRightTertiary,
+             .albumArtistRightPrimary, .albumArtistRightSecondary, .albumArtistRightTertiary:
             return false
         }
     }
@@ -263,23 +264,23 @@ nonisolated enum PersonalizationSwipeSlot: String, CaseIterable, Hashable {
         case .playlistLeftPrimary:
             return .pin
         case .playlistLeftSecondary:
-            return .download
-        case .playlistLeftTertiary:
             return .delete
         case .playlistRightPrimary:
             return .playNext
         case .playlistRightSecondary:
             return .addToQueue
+        case .playlistRightTertiary:
+            return .download
         case .albumArtistLeftPrimary:
             return .favorite
         case .albumArtistLeftSecondary:
             return .addToPlaylist
-        case .albumArtistLeftTertiary:
-            return .download
         case .albumArtistRightPrimary:
             return .playNext
         case .albumArtistRightSecondary:
             return .addToQueue
+        case .albumArtistRightTertiary:
+            return .download
         }
     }
 }
@@ -395,7 +396,7 @@ nonisolated enum ShelvDefaultSettings {
 }
 
 nonisolated enum PersonalizationSettings {
-    static let currentMigrationVersion = 3
+    static let currentMigrationVersion = 7
     static let defaultDiscoverySectionOrderRaw = PersonalizationDiscoverySection.allCases
         .map(\.rawValue)
         .joined(separator: ",")
@@ -572,6 +573,18 @@ nonisolated enum PersonalizationSettings {
             migrateSongInstantMixSwipeOrderDefault(in: defaults)
         }
 
+        if previousVersion < 4 {
+            migrateReleasedSwipeLayouts(in: defaults)
+        } else if previousVersion == 4 {
+            migrateInterimSwipeLayouts(in: defaults)
+        } else if previousVersion == 5 {
+            migrateVersionFiveSongSwipeLayout(in: defaults)
+        }
+
+        if previousVersion >= 4 {
+            migrateMisorderedDownloadDefaults(in: defaults)
+        }
+
         defaults.set(currentMigrationVersion, forKey: PersonalizationPreferenceKey.migrationVersion)
     }
 
@@ -606,27 +619,263 @@ nonisolated enum PersonalizationSettings {
     }
 
     private static func migrateSongInstantMixSwipeOrderDefault(in defaults: UserDefaults) {
-        let previousDefaults: [(PersonalizationSwipeSlot, PersonalizationSwipeAction)] = [
-            (.leftPrimary, .favorite),
-            (.leftSecondary, .addToPlaylist),
-            (.rightPrimary, .playNext),
-            (.rightSecondary, .instantMix),
-            (.rightTertiary, .addToQueue),
+        let previousDefaults: [(key: String, action: PersonalizationSwipeAction)] = [
+            (PersonalizationPreferenceKey.swipeLeftPrimary, .favorite),
+            (PersonalizationPreferenceKey.swipeLeftSecondary, .addToPlaylist),
+            (PersonalizationPreferenceKey.swipeRightPrimary, .playNext),
+            (PersonalizationPreferenceKey.swipeRightSecondary, .instantMix),
+            (PersonalizationPreferenceKey.swipeRightTertiary, .addToQueue),
         ]
 
-        let hasStoredSongSwipes = previousDefaults.contains { slot, _ in
-            defaults.object(forKey: slot.storageKey) != nil
+        let hasStoredSongSwipes = previousDefaults.contains { entry in
+            defaults.object(forKey: entry.key) != nil
         }
         guard hasStoredSongSwipes else { return }
 
-        let usesPreviousDefaults = previousDefaults.allSatisfy { slot, expected in
-            guard let rawValue = defaults.string(forKey: slot.storageKey) else { return true }
-            return PersonalizationSwipeAction(rawValue: rawValue) == expected
+        let usesPreviousDefaults = previousDefaults.allSatisfy { entry in
+            guard let rawValue = defaults.string(forKey: entry.key) else { return true }
+            return PersonalizationSwipeAction(rawValue: rawValue) == entry.action
         }
         guard usesPreviousDefaults else { return }
 
         defaults.set(PersonalizationSwipeAction.addToQueue.rawValue, forKey: PersonalizationPreferenceKey.swipeRightSecondary)
         defaults.set(PersonalizationSwipeAction.instantMix.rawValue, forKey: PersonalizationPreferenceKey.swipeRightTertiary)
+    }
+
+    private static func migrateReleasedSwipeLayouts(in defaults: UserDefaults) {
+        replaceOldDefaultSwipeLayout(
+            [
+                (PersonalizationPreferenceKey.swipeLeftPrimary, .favorite),
+                (PersonalizationPreferenceKey.swipeLeftSecondary, .addToPlaylist),
+                (PersonalizationPreferenceKey.swipeRightPrimary, .playNext),
+                (PersonalizationPreferenceKey.swipeRightSecondary, .addToQueue),
+                (PersonalizationPreferenceKey.swipeRightTertiary, .instantMix),
+            ],
+            with: [
+                (.leftPrimary, .favorite),
+                (.leftSecondary, .addToPlaylist),
+                (.rightPrimary, .playNext),
+                (.rightSecondary, .addToQueue),
+                (.rightTertiary, .instantMix),
+            ],
+            in: defaults
+        )
+
+        let replacedPlaylistDefaults = replaceOldDefaultSwipeLayout(
+            [
+                (PersonalizationPreferenceKey.playlistSwipeLeftPrimary, .pin),
+                (PersonalizationPreferenceKey.playlistSwipeLeftSecondary, .download),
+                (PersonalizationPreferenceKey.playlistSwipeLeftTertiary, .delete),
+                (PersonalizationPreferenceKey.playlistSwipeRightPrimary, .playNext),
+                (PersonalizationPreferenceKey.playlistSwipeRightSecondary, .addToQueue),
+            ],
+            with: [
+                (.playlistLeftPrimary, .pin),
+                (.playlistLeftSecondary, .delete),
+                (.playlistRightPrimary, .playNext),
+                (.playlistRightSecondary, .addToQueue),
+                (.playlistRightTertiary, .download),
+            ],
+            in: defaults
+        )
+        if !replacedPlaylistDefaults {
+            moveLegacyTertiaryAction(
+                from: PersonalizationPreferenceKey.playlistSwipeLeftTertiary,
+                to: PersonalizationPreferenceKey.playlistSwipeRightTertiary,
+                fallback: .delete,
+                in: defaults
+            )
+        }
+        defaults.removeObject(forKey: PersonalizationPreferenceKey.playlistSwipeLeftTertiary)
+
+        let replacedAlbumArtistDefaults = replaceOldDefaultSwipeLayout(
+            [
+                (PersonalizationPreferenceKey.albumArtistSwipeLeftPrimary, .favorite),
+                (PersonalizationPreferenceKey.albumArtistSwipeLeftSecondary, .addToPlaylist),
+                (PersonalizationPreferenceKey.albumArtistSwipeLeftTertiary, .download),
+                (PersonalizationPreferenceKey.albumArtistSwipeRightPrimary, .playNext),
+                (PersonalizationPreferenceKey.albumArtistSwipeRightSecondary, .addToQueue),
+            ],
+            with: [
+                (.albumArtistLeftPrimary, .favorite),
+                (.albumArtistLeftSecondary, .addToPlaylist),
+                (.albumArtistRightPrimary, .playNext),
+                (.albumArtistRightSecondary, .addToQueue),
+                (.albumArtistRightTertiary, .download),
+            ],
+            in: defaults
+        )
+        if !replacedAlbumArtistDefaults {
+            moveLegacyTertiaryAction(
+                from: PersonalizationPreferenceKey.albumArtistSwipeLeftTertiary,
+                to: PersonalizationPreferenceKey.albumArtistSwipeRightTertiary,
+                fallback: .download,
+                in: defaults
+            )
+        }
+        defaults.removeObject(forKey: PersonalizationPreferenceKey.albumArtistSwipeLeftTertiary)
+        defaults.removeObject(forKey: PersonalizationPreferenceKey.swipeLeftTertiary)
+    }
+
+    private static func migrateInterimSwipeLayouts(in defaults: UserDefaults) {
+        moveLegacyTertiaryAction(
+            from: PersonalizationPreferenceKey.swipeLeftTertiary,
+            to: PersonalizationPreferenceKey.swipeRightTertiary,
+            fallback: .instantMix,
+            in: defaults
+        )
+        defaults.removeObject(forKey: PersonalizationPreferenceKey.swipeLeftTertiary)
+        swapInterimSwipeSides(
+            leadingKeys: [
+                PersonalizationPreferenceKey.playlistSwipeLeftPrimary,
+                PersonalizationPreferenceKey.playlistSwipeLeftSecondary,
+                PersonalizationPreferenceKey.playlistSwipeLeftTertiary,
+            ],
+            leadingDefaults: [.download, .playNext, .addToQueue],
+            trailingKeys: [
+                PersonalizationPreferenceKey.playlistSwipeRightPrimary,
+                PersonalizationPreferenceKey.playlistSwipeRightSecondary,
+                PersonalizationPreferenceKey.playlistSwipeRightTertiary,
+            ],
+            trailingDefaults: [.pin, .delete, .addToQueue],
+            in: defaults
+        )
+        swapInterimSwipeSides(
+            leadingKeys: [
+                PersonalizationPreferenceKey.albumArtistSwipeLeftPrimary,
+                PersonalizationPreferenceKey.albumArtistSwipeLeftSecondary,
+                PersonalizationPreferenceKey.albumArtistSwipeLeftTertiary,
+            ],
+            leadingDefaults: [.download, .playNext, .addToQueue],
+            trailingKeys: [
+                PersonalizationPreferenceKey.albumArtistSwipeRightPrimary,
+                PersonalizationPreferenceKey.albumArtistSwipeRightSecondary,
+                PersonalizationPreferenceKey.albumArtistSwipeRightTertiary,
+            ],
+            trailingDefaults: [.favorite, .addToPlaylist, .addToQueue],
+            in: defaults
+        )
+    }
+
+    private static func migrateVersionFiveSongSwipeLayout(in defaults: UserDefaults) {
+        let left = [
+            defaults.string(forKey: PersonalizationPreferenceKey.swipeLeftPrimary)
+                .flatMap(PersonalizationSwipeAction.init(rawValue:)) ?? .playNext,
+            defaults.string(forKey: PersonalizationPreferenceKey.swipeLeftSecondary)
+                .flatMap(PersonalizationSwipeAction.init(rawValue:)) ?? .addToQueue,
+        ]
+        let right = [
+            defaults.string(forKey: PersonalizationPreferenceKey.swipeRightPrimary)
+                .flatMap(PersonalizationSwipeAction.init(rawValue:)) ?? .favorite,
+            defaults.string(forKey: PersonalizationPreferenceKey.swipeRightSecondary)
+                .flatMap(PersonalizationSwipeAction.init(rawValue:)) ?? .addToPlaylist,
+        ]
+
+        let alreadyUsesCorrectSides = left == [.favorite, .addToPlaylist]
+            && right == [.playNext, .addToQueue]
+        guard !alreadyUsesCorrectSides else { return }
+
+        defaults.set(right[0].rawValue, forKey: PersonalizationPreferenceKey.swipeLeftPrimary)
+        defaults.set(right[1].rawValue, forKey: PersonalizationPreferenceKey.swipeLeftSecondary)
+        defaults.set(left[0].rawValue, forKey: PersonalizationPreferenceKey.swipeRightPrimary)
+        defaults.set(left[1].rawValue, forKey: PersonalizationPreferenceKey.swipeRightSecondary)
+    }
+
+    private static func migrateMisorderedDownloadDefaults(in defaults: UserDefaults) {
+        replaceOldDefaultSwipeLayout(
+            [
+                (PersonalizationPreferenceKey.playlistSwipeLeftPrimary, .pin),
+                (PersonalizationPreferenceKey.playlistSwipeLeftSecondary, .delete),
+                (PersonalizationPreferenceKey.playlistSwipeRightPrimary, .download),
+                (PersonalizationPreferenceKey.playlistSwipeRightSecondary, .playNext),
+                (PersonalizationPreferenceKey.playlistSwipeRightTertiary, .addToQueue),
+            ],
+            with: [
+                (.playlistLeftPrimary, .pin),
+                (.playlistLeftSecondary, .delete),
+                (.playlistRightPrimary, .playNext),
+                (.playlistRightSecondary, .addToQueue),
+                (.playlistRightTertiary, .download),
+            ],
+            in: defaults
+        )
+
+        replaceOldDefaultSwipeLayout(
+            [
+                (PersonalizationPreferenceKey.albumArtistSwipeLeftPrimary, .favorite),
+                (PersonalizationPreferenceKey.albumArtistSwipeLeftSecondary, .addToPlaylist),
+                (PersonalizationPreferenceKey.albumArtistSwipeRightPrimary, .download),
+                (PersonalizationPreferenceKey.albumArtistSwipeRightSecondary, .playNext),
+                (PersonalizationPreferenceKey.albumArtistSwipeRightTertiary, .addToQueue),
+            ],
+            with: [
+                (.albumArtistLeftPrimary, .favorite),
+                (.albumArtistLeftSecondary, .addToPlaylist),
+                (.albumArtistRightPrimary, .playNext),
+                (.albumArtistRightSecondary, .addToQueue),
+                (.albumArtistRightTertiary, .download),
+            ],
+            in: defaults
+        )
+    }
+
+    private static func swapInterimSwipeSides(
+        leadingKeys: [String],
+        leadingDefaults: [PersonalizationSwipeAction],
+        trailingKeys: [String],
+        trailingDefaults: [PersonalizationSwipeAction],
+        in defaults: UserDefaults
+    ) {
+        let leading = zip(leadingKeys, leadingDefaults).map { key, fallback in
+            defaults.string(forKey: key).flatMap(PersonalizationSwipeAction.init(rawValue:)) ?? fallback
+        }
+        let trailing = zip(trailingKeys.prefix(2), trailingDefaults.prefix(2)).map { key, fallback in
+            defaults.string(forKey: key).flatMap(PersonalizationSwipeAction.init(rawValue:)) ?? fallback
+        }
+
+        defaults.set(trailing[0].rawValue, forKey: leadingKeys[0])
+        defaults.set(trailing[1].rawValue, forKey: leadingKeys[1])
+        defaults.set(leading[0].rawValue, forKey: trailingKeys[0])
+        defaults.set(leading[1].rawValue, forKey: trailingKeys[1])
+        defaults.set(leading[2].rawValue, forKey: trailingKeys[2])
+        defaults.removeObject(forKey: leadingKeys[2])
+    }
+
+    private static func moveLegacyTertiaryAction(
+        from oldKey: String,
+        to newKey: String,
+        fallback: PersonalizationSwipeAction,
+        in defaults: UserDefaults
+    ) {
+        let action = defaults.string(forKey: oldKey)
+            .flatMap(PersonalizationSwipeAction.init(rawValue:)) ?? fallback
+        defaults.set(action.rawValue, forKey: newKey)
+    }
+
+    @discardableResult
+    private static func replaceOldDefaultSwipeLayout(
+        _ oldLayout: [(key: String, action: PersonalizationSwipeAction)],
+        with newLayout: [(slot: PersonalizationSwipeSlot, action: PersonalizationSwipeAction)],
+        in defaults: UserDefaults
+    ) -> Bool {
+        let alreadyUsesNewDefaults = newLayout.allSatisfy { entry in
+            guard let rawValue = defaults.string(forKey: entry.slot.storageKey) else { return true }
+            return PersonalizationSwipeAction(rawValue: rawValue) == entry.action
+        }
+        if alreadyUsesNewDefaults {
+            return true
+        }
+
+        let usesOldDefaults = oldLayout.allSatisfy { entry in
+            guard let rawValue = defaults.string(forKey: entry.key) else { return true }
+            return PersonalizationSwipeAction(rawValue: rawValue) == entry.action
+        }
+        guard usesOldDefaults else { return false }
+
+        for entry in newLayout {
+            defaults.set(entry.action.rawValue, forKey: entry.slot.storageKey)
+        }
+        return true
     }
 
     static func tabOrder(showPlaylists: Bool) -> [PersonalizationTab] {
