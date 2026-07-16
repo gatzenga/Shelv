@@ -102,6 +102,109 @@ nonisolated enum LibrarySortKey {
     }
 }
 
+/// Resolves a visible album collection into the queue used by Library playback.
+///
+/// Ordered playback keeps the album order supplied by the view and only loads
+/// as many album batches as needed to fill the queue. Shuffle playback resolves
+/// the complete visible collection first so every song has an equal chance of
+/// being included in the capped queue.
+nonisolated enum LibraryPlaybackQueueBuilder {
+    static let maximumSongCount = 500
+
+    private static let defaultConcurrentAlbumLoads = 8
+
+    static func songs(
+        from albums: [Album],
+        shuffled: Bool,
+        maximumSongCount: Int = LibraryPlaybackQueueBuilder.maximumSongCount,
+        maximumConcurrentAlbumLoads: Int = LibraryPlaybackQueueBuilder.defaultConcurrentAlbumLoads,
+        loadSongs: @escaping @Sendable (Album) async -> [Song]
+    ) async -> [Song] {
+        guard !albums.isEmpty, maximumSongCount > 0 else { return [] }
+
+        let concurrencyLimit = max(1, maximumConcurrentAlbumLoads)
+
+        if shuffled {
+            let albumSongs = await loadAlbumSongs(
+                albums,
+                maximumConcurrentLoads: concurrencyLimit,
+                loadSongs: loadSongs
+            )
+            guard !Task.isCancelled else { return [] }
+            return Array(albumSongs.flatMap { $0 }.shuffled().prefix(maximumSongCount))
+        }
+
+        var queue: [Song] = []
+        queue.reserveCapacity(maximumSongCount)
+        var batchStart = 0
+
+        while batchStart < albums.count, queue.count < maximumSongCount {
+            guard !Task.isCancelled else { return [] }
+
+            let batchEnd = min(batchStart + concurrencyLimit, albums.count)
+            let batch = Array(albums[batchStart..<batchEnd])
+            let batchSongs = await loadAlbumSongs(
+                batch,
+                maximumConcurrentLoads: concurrencyLimit,
+                loadSongs: loadSongs
+            )
+
+            guard !Task.isCancelled else { return [] }
+            for songs in batchSongs {
+                let remainingCount = maximumSongCount - queue.count
+                guard remainingCount > 0 else { break }
+                queue.append(contentsOf: songs.prefix(remainingCount))
+            }
+
+            batchStart = batchEnd
+        }
+
+        return queue
+    }
+
+    private static func loadAlbumSongs(
+        _ albums: [Album],
+        maximumConcurrentLoads: Int,
+        loadSongs: @escaping @Sendable (Album) async -> [Song]
+    ) async -> [[Song]] {
+        guard !albums.isEmpty else { return [] }
+
+        return await withTaskGroup(of: (Int, [Song]).self, returning: [[Song]].self) { group in
+            var results = Array(repeating: [Song](), count: albums.count)
+            var nextIndex = 0
+
+            let initialLoadCount = min(maximumConcurrentLoads, albums.count)
+            for index in 0..<initialLoadCount {
+                let album = albums[index]
+                group.addTask {
+                    (index, await loadSongs(album))
+                }
+                nextIndex += 1
+            }
+
+            while let (index, songs) = await group.next() {
+                guard !Task.isCancelled else {
+                    group.cancelAll()
+                    return []
+                }
+
+                results[index] = songs
+
+                if nextIndex < albums.count {
+                    let index = nextIndex
+                    let album = albums[index]
+                    nextIndex += 1
+                    group.addTask {
+                        (index, await loadSongs(album))
+                    }
+                }
+            }
+
+            return results
+        }
+    }
+}
+
 #if !SHELV_LOGIC_TESTS
 nonisolated extension SubsonicAPIService: LibraryAPIClient {}
 #endif

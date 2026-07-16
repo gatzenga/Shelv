@@ -13,6 +13,9 @@ struct AlbumsView: View {
     @State private var displayAlbums: [Album] = []
     @State private var genreOptions: [AlbumGenreFilterOption] = []
     @State private var displayRebuildTask: Task<Void, Never>?
+    @State private var playbackTask: Task<Void, Never>?
+    @State private var isPreparingPlayback = false
+    @State private var playbackPreparationIsShuffled = false
 
     private var effectiveShowDownloadsOnly: Bool {
         offlineMode.isOffline || showDownloadsOnly
@@ -23,6 +26,47 @@ struct AlbumsView: View {
             get: { AlbumGenreFilterOption.selectedGenre(albumGenreFilter, in: genreOptions) ?? "" },
             set: { albumGenreFilter = $0 }
         )
+    }
+
+    @ViewBuilder
+    private var playbackButtons: some View {
+        Button {
+            prepareVisibleAlbumsForPlayback(shuffled: false)
+        } label: {
+            Group {
+                if isPreparingPlayback && !playbackPreparationIsShuffled {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Image(systemName: "play.fill")
+                        .font(.title3)
+                }
+            }
+            .frame(width: 18, height: 18)
+        }
+        .buttonStyle(.borderless)
+        .disabled(displayAlbums.isEmpty || isPreparingPlayback)
+        .help(String(localized: "play"))
+        .accessibilityLabel(String(localized: "play"))
+
+        Button {
+            prepareVisibleAlbumsForPlayback(shuffled: true)
+        } label: {
+            Group {
+                if isPreparingPlayback && playbackPreparationIsShuffled {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Image(systemName: "shuffle")
+                        .font(.title3)
+                }
+            }
+            .frame(width: 18, height: 18)
+        }
+        .buttonStyle(.borderless)
+        .disabled(displayAlbums.isEmpty || isPreparingPlayback)
+        .help(String(localized: "shuffle"))
+        .accessibilityLabel(String(localized: "shuffle"))
     }
 
     private func rebuildDisplayAlbums() {
@@ -80,6 +124,69 @@ struct AlbumsView: View {
         }
     }
 
+    private func prepareVisibleAlbumsForPlayback(shuffled: Bool) {
+        let albums = displayAlbums
+        guard !albums.isEmpty else { return }
+
+        playbackTask?.cancel()
+        playbackPreparationIsShuffled = shuffled
+        isPreparingPlayback = true
+
+        let useDownloadedSongs = effectiveShowDownloadsOnly
+        let downloadedSongsByAlbumID = Dictionary(
+            downloadStore.albums.map { album in
+                (album.albumId, album.songs.map { $0.asSong() })
+            },
+            uniquingKeysWith: { _, latest in latest }
+        )
+        let api = SubsonicAPIService.shared
+        let serverID = api.activeServer?.id
+        let player = appState.player
+
+        playbackTask = Task { @MainActor in
+            let songs = await LibraryPlaybackQueueBuilder.songs(
+                from: albums,
+                shuffled: shuffled
+            ) { album in
+                if useDownloadedSongs {
+                    return downloadedSongsByAlbumID[album.id] ?? []
+                }
+                if let songs = album.songs {
+                    return songs
+                }
+                return (try? await api.getAlbum(id: album.id, retries: 1).song) ?? []
+            }
+
+            guard !Task.isCancelled, api.activeServer?.id == serverID else {
+                isPreparingPlayback = false
+                return
+            }
+
+            isPreparingPlayback = false
+            playbackTask = nil
+
+            guard !songs.isEmpty else {
+                NotificationCenter.default.post(
+                    name: .showToast,
+                    object: String(localized: "playback_failed")
+                )
+                return
+            }
+
+            if shuffled {
+                player.playShuffled(songs: songs)
+            } else {
+                player.play(songs: songs)
+            }
+        }
+    }
+
+    private func cancelPlaybackPreparation() {
+        playbackTask?.cancel()
+        playbackTask = nil
+        isPreparingPlayback = false
+    }
+
     var body: some View {
         let displayAlbums = self.displayAlbums
         let lastAlbumID = displayAlbums.last?.id
@@ -125,6 +232,7 @@ struct AlbumsView: View {
                 }
                 .buttonStyle(.borderless)
                 .help(isGrid ? String(localized: "list_view") : String(localized: "grid_view"))
+                playbackButtons
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 10)
@@ -202,6 +310,7 @@ struct AlbumsView: View {
         .onDisappear {
             displayRebuildTask?.cancel()
             displayRebuildTask = nil
+            cancelPlaybackPreparation()
         }
         .task { await vm.loadAlbums() }
     }

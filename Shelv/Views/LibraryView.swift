@@ -41,6 +41,8 @@ struct LibraryView: View {
     @State private var albumToDeleteDownloads: Album?
     @State private var artistToDeleteDownloads: Artist?
     @State private var rebuildTask: Task<Void, Never>?
+    @State private var playbackTask: Task<Void, Never>?
+    @State private var isPreparingPlayback = false
 
     private let columns = [GridItem(.adaptive(minimum: 150, maximum: 200), spacing: 14)]
 
@@ -147,6 +149,16 @@ struct LibraryView: View {
                     albumIsGrid: $albumIsGrid,
                     artistIsGrid: $artistIsGrid
                 )
+
+                if segment == .albums {
+                    LibraryPlaybackMenu(
+                        isLoading: isPreparingPlayback,
+                        isDisabled: albumGroups.isEmpty,
+                        accentColor: accentColor,
+                        onPlay: { prepareVisibleAlbumsForPlayback(shuffled: false) },
+                        onShuffle: { prepareVisibleAlbumsForPlayback(shuffled: true) }
+                    )
+                }
             }
         }
     }
@@ -207,6 +219,11 @@ struct LibraryView: View {
         .onChange(of: showFavoritesInLibrary) { _, enabled in
             let isFavorites = segment == .favorites
             if !enabled && isFavorites { segment = .albums }
+        }
+        .onDisappear {
+            rebuildTask?.cancel()
+            rebuildTask = nil
+            cancelPlaybackPreparation()
         }
     }
 
@@ -421,6 +438,72 @@ struct LibraryView: View {
                 .environmentObject(libraryStore)
                 .tint(accentColor)
         }
+    }
+
+    private func prepareVisibleAlbumsForPlayback(shuffled: Bool) {
+        let albums = albumGroups.flatMap(\.items)
+        guard !albums.isEmpty else { return }
+
+        playbackTask?.cancel()
+        isPreparingPlayback = true
+
+        let isOffline = offlineMode.isOffline
+        let downloadedSongsByAlbumID: [String: [Song]]
+        if isOffline {
+            downloadedSongsByAlbumID = Dictionary(
+                downloadStore.albums.map { album in
+                    (album.albumId, album.songs.map { $0.asSong() })
+                },
+                uniquingKeysWith: { _, latest in latest }
+            )
+        } else {
+            downloadedSongsByAlbumID = [:]
+        }
+
+        let api = SubsonicAPIService.shared
+        let serverID = api.activeServer?.id
+        let player = self.player
+
+        playbackTask = Task { @MainActor in
+            let songs = await LibraryPlaybackQueueBuilder.songs(
+                from: albums,
+                shuffled: shuffled
+            ) { album in
+                if isOffline {
+                    return downloadedSongsByAlbumID[album.id] ?? []
+                }
+                if let songs = album.songs {
+                    return songs
+                }
+                return (try? await api.getAlbum(id: album.id, retries: 1).song) ?? []
+            }
+
+            guard !Task.isCancelled, api.activeServer?.id == serverID else {
+                isPreparingPlayback = false
+                playbackTask = nil
+                return
+            }
+
+            isPreparingPlayback = false
+            playbackTask = nil
+
+            guard !songs.isEmpty else {
+                currentToast = ShelveToast(message: String(localized: "no_songs"))
+                return
+            }
+
+            if shuffled {
+                player.playShuffled(songs: songs)
+            } else {
+                player.play(songs: songs, startIndex: 0)
+            }
+        }
+    }
+
+    private func cancelPlaybackPreparation() {
+        playbackTask?.cancel()
+        playbackTask = nil
+        isPreparingPlayback = false
     }
 
     private func songsForAlbum(_ album: Album) async -> [Song] {

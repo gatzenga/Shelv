@@ -40,6 +40,9 @@ struct LibraryView: View {
     @State private var derivedAlbumCountByArtist: [String: Int] = [:]
     @State private var derivedRebuildTask: Task<Void, Never>?
     @State private var showAlbumGenrePicker = false
+    @State private var playbackTask: Task<Void, Never>?
+    @State private var isPreparingPlayback = false
+    @State private var playbackPreparationIsShuffled = false
     private let player = AudioPlayerService.shared
 
     private var albumSort: AlbumSortOption { AlbumSortOption(rawValue: albumSortRaw) ?? .alphabetical }
@@ -104,6 +107,7 @@ struct LibraryView: View {
             .onDisappear {
                 derivedRebuildTask?.cancel()
                 derivedRebuildTask = nil
+                cancelPlaybackPreparation()
             }
         }
     }
@@ -172,6 +176,51 @@ struct LibraryView: View {
         }
     }
 
+    private func prepareVisibleAlbumsForPlayback(shuffled: Bool) {
+        let albums = derivedAlbums
+        guard !albums.isEmpty else { return }
+
+        playbackTask?.cancel()
+        playbackPreparationIsShuffled = shuffled
+        isPreparingPlayback = true
+
+        let api = SubsonicAPIService.shared
+        let serverID = api.activeServer?.id
+        let player = self.player
+
+        playbackTask = Task { @MainActor in
+            let songs = await LibraryPlaybackQueueBuilder.songs(
+                from: albums,
+                shuffled: shuffled
+            ) { album in
+                if let songs = album.songs {
+                    return songs
+                }
+                return (try? await api.getAlbum(id: album.id, retries: 1).song) ?? []
+            }
+
+            guard !Task.isCancelled, api.activeServer?.id == serverID else {
+                isPreparingPlayback = false
+                return
+            }
+
+            isPreparingPlayback = false
+            playbackTask = nil
+
+            if shuffled {
+                player.playShuffled(songs: songs)
+            } else {
+                player.play(songs: songs, startIndex: 0)
+            }
+        }
+    }
+
+    private func cancelPlaybackPreparation() {
+        playbackTask?.cancel()
+        playbackTask = nil
+        isPreparingPlayback = false
+    }
+
     // MARK: - Sortier-/Ansicht-Steuerung
 
     private var albumControls: some View {
@@ -195,6 +244,34 @@ struct LibraryView: View {
             Button { albumIsGrid.toggle() } label: {
                 Image(systemName: albumIsGrid ? "list.bullet" : "square.grid.2x2")
             }
+            Button {
+                prepareVisibleAlbumsForPlayback(shuffled: false)
+            } label: {
+                Label {
+                    Text(String(localized: "play"))
+                } icon: {
+                    if isPreparingPlayback && !playbackPreparationIsShuffled {
+                        ProgressView()
+                    } else {
+                        Image(systemName: "play.fill")
+                    }
+                }
+            }
+            .disabled(derivedAlbums.isEmpty || isPreparingPlayback)
+            Button {
+                prepareVisibleAlbumsForPlayback(shuffled: true)
+            } label: {
+                Label {
+                    Text(String(localized: "shuffle"))
+                } icon: {
+                    if isPreparingPlayback && playbackPreparationIsShuffled {
+                        ProgressView()
+                    } else {
+                        Image(systemName: "shuffle")
+                    }
+                }
+            }
+            .disabled(derivedAlbums.isEmpty || isPreparingPlayback)
         }
         .buttonStyle(.bordered)
         .padding(.bottom, 16)

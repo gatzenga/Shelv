@@ -40,6 +40,39 @@ struct LibraryViewToggleButton: View {
     }
 }
 
+struct LibraryPlaybackMenu: View {
+    let isLoading: Bool
+    let isDisabled: Bool
+    let accentColor: Color
+    let onPlay: () -> Void
+    let onShuffle: () -> Void
+
+    var body: some View {
+        Menu {
+            Button(action: onPlay) {
+                Label(String(localized: "play"), systemImage: "play.fill")
+            }
+            Button(action: onShuffle) {
+                Label(String(localized: "shuffle"), systemImage: "shuffle")
+            }
+        } label: {
+            Group {
+                if isLoading {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(accentColor)
+                } else {
+                    Image(systemName: "ellipsis.circle")
+                        .foregroundStyle(accentColor)
+                }
+            }
+            .frame(width: 18, height: 18)
+        }
+        .disabled(isDisabled || isLoading)
+        .accessibilityLabel(String(localized: "playback"))
+    }
+}
+
 struct LibraryGenreFilterMenu: View {
     @Binding var selectedGenre: String
     let options: [AlbumGenreFilterOption]
