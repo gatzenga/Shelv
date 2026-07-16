@@ -38,6 +38,15 @@
 "unknown_error" = "Unknown error";
 "no_server_configured" = "No server configured.";
 "invalid_server_url" = "Invalid server URL.";
+"no_password_found" = "No password found";
+"connection_timed_out_please_check_your_network" = "Connection timed out. Please check your network.";
+"no_internet_connection" = "No internet connection.";
+"server_not_reachable_please_check_the_url" = "Server not reachable. Please check the URL.";
+"connection_lost_please_try_again" = "Connection lost. Please try again.";
+"secure_connection_failed_please_check_the_server_certificate" = "Secure connection failed. Please check the server certificate.";
+"network_error_please_try_again" = "Network error. Please try again.";
+"server_returned_an_error" = "Server returned an error.";
+"unexpected_server_response" = "Unexpected server response.";
 "http_error_from_server" = "HTTP error from server.";
 "not_found" = "Not found.";
 "unexpected_empty_response" = "Unexpected empty response.";

@@ -108,7 +108,9 @@ struct AlbumContextMenuModifier: ViewModifier {
                 let detail = try await SubsonicAPIService.shared.getAlbum(id: album.id)
                 await MainActor.run { action(detail.song ?? []) }
             } catch {
-                NotificationCenter.default.post(name: .showToast, object: errorMsg)
+                if !OfflineModeService.shared.presentConnectivityErrorIfNeeded(error, userInitiated: true) {
+                    NotificationCenter.default.post(name: .showToast, object: errorMsg)
+                }
             }
         }
     }

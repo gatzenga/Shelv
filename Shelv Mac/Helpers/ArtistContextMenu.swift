@@ -21,7 +21,9 @@ struct ArtistContextMenuModifier: ViewModifier {
                         guard !songs.isEmpty else { return }
                         _ = await MainActor.run { AudioPlayerService.shared.play(songs: songs) }
                     } catch {
-                        NotificationCenter.default.post(name: .showToast, object: String(localized: "playback_failed"))
+                        if !OfflineModeService.shared.presentConnectivityErrorIfNeeded(error, userInitiated: true) {
+                            NotificationCenter.default.post(name: .showToast, object: String(localized: "playback_failed"))
+                        }
                     }
                 }
             }
@@ -32,7 +34,9 @@ struct ArtistContextMenuModifier: ViewModifier {
                         guard !songs.isEmpty else { return }
                         _ = await MainActor.run { AudioPlayerService.shared.playShuffled(songs: songs) }
                     } catch {
-                        NotificationCenter.default.post(name: .showToast, object: String(localized: "playback_failed"))
+                        if !OfflineModeService.shared.presentConnectivityErrorIfNeeded(error, userInitiated: true) {
+                            NotificationCenter.default.post(name: .showToast, object: String(localized: "playback_failed"))
+                        }
                     }
                 }
             }
@@ -52,7 +56,9 @@ struct ArtistContextMenuModifier: ViewModifier {
                             NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_play_next"))
                         }
                     } catch {
-                        NotificationCenter.default.post(name: .showToast, object: String(localized: "action_failed"))
+                        if !OfflineModeService.shared.presentConnectivityErrorIfNeeded(error, userInitiated: true) {
+                            NotificationCenter.default.post(name: .showToast, object: String(localized: "action_failed"))
+                        }
                     }
                 }
             }
@@ -66,7 +72,9 @@ struct ArtistContextMenuModifier: ViewModifier {
                             NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_queue"))
                         }
                     } catch {
-                        NotificationCenter.default.post(name: .showToast, object: String(localized: "action_failed"))
+                        if !OfflineModeService.shared.presentConnectivityErrorIfNeeded(error, userInitiated: true) {
+                            NotificationCenter.default.post(name: .showToast, object: String(localized: "action_failed"))
+                        }
                     }
                 }
             }
@@ -90,7 +98,9 @@ struct ArtistContextMenuModifier: ViewModifier {
                                     NotificationCenter.default.post(name: .addSongsToPlaylist, object: ids)
                                 }
                             } catch {
-                                NotificationCenter.default.post(name: .showToast, object: String(localized: "action_failed"))
+                                if !OfflineModeService.shared.presentConnectivityErrorIfNeeded(error, userInitiated: true) {
+                                    NotificationCenter.default.post(name: .showToast, object: String(localized: "action_failed"))
+                                }
                             }
                         }
                     }

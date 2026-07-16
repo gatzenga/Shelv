@@ -398,8 +398,9 @@ class ArtistDetailViewModel: ObservableObject {
             albums = (detail.album ?? []).sorted { ($0.year ?? 0) > ($1.year ?? 0) }
             biography = (try? await artistInfo)?.biography?.strippingHTML
         } catch {
+            let inlineMessage = OfflineModeService.shared.inlineErrorMessage(for: error)
             populateFromLocal(artistId: artistId, artistName: artistName)
-            if artist == nil { errorMessage = error.localizedDescription }
+            if artist == nil { errorMessage = inlineMessage }
         }
         isLoading = false
     }
@@ -431,8 +432,24 @@ class ArtistDetailViewModel: ObservableObject {
                 (songsByAlbum[id] ?? []).sorted { ($0.track ?? 0) < ($1.track ?? 0) }.map { $0.asSong() }
             }
         }
-        return await PlaybackContentResolver.artistSongs(from: albums) { albumID in
-            (try? await SubsonicAPIService.shared.getAlbum(id: albumID).song) ?? []
+        do {
+            let indexed = Array(albums.enumerated())
+            return try await withThrowingTaskGroup(of: (Int, [Song]).self) { group in
+                for (i, album) in indexed {
+                    group.addTask {
+                        let s = try await SubsonicAPIService.shared.getAlbum(id: album.id).song ?? []
+                        return (i, s)
+                    }
+                }
+                var results: [(Int, [Song])] = []
+                for try await result in group { results.append(result) }
+                return results.sorted { $0.0 < $1.0 }.flatMap { $0.1 }
+            }
+        } catch {
+            if !OfflineModeService.shared.presentConnectivityErrorIfNeeded(error, userInitiated: true) {
+                NotificationCenter.default.post(name: .showToast, object: String(localized: "playback_failed"))
+            }
+            return []
         }
     }
 

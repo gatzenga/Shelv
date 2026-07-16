@@ -1,6 +1,10 @@
 import XCTest
 
 final class OfflineServerErrorPresentationPolicyTests: XCTestCase {
+    private struct WrappedConnectivityError: ServerConnectivityErrorProviding {
+        let underlyingConnectivityError: Error?
+    }
+
     private let now = Date(timeIntervalSince1970: 1_800_000_000)
 
     func testPassiveServerErrorsAreThrottled() {
@@ -59,6 +63,12 @@ final class OfflineServerErrorPresentationPolicyTests: XCTestCase {
         policy.prepareInitialServerErrorPresentation()
 
         XCTAssertTrue(policy.consumeServerErrorPresentationAllowance(now: now))
+        XCTAssertFalse(policy.consumeServerErrorPresentationAllowance(now: now))
+    }
+
+    func testPassiveRequestHasNoPresentationAllowance() {
+        var policy = OfflineServerErrorPresentationPolicy()
+
         XCTAssertFalse(policy.consumeServerErrorPresentationAllowance(now: now))
     }
 
@@ -148,5 +158,52 @@ final class OfflineServerErrorPresentationPolicyTests: XCTestCase {
 
         XCTAssertTrue(policy.consumeServerErrorPresentationAllowance(now: now.addingTimeInterval(1)))
         XCTAssertFalse(policy.consumeServerErrorPresentationAllowance(now: now.addingTimeInterval(2)))
+    }
+
+    func testConnectivityFailureRecognizesWrappedAndDirectURLErrors() {
+        XCTAssertTrue(ServerConnectivityErrorClassifier.isConnectivityFailure(
+            WrappedConnectivityError(underlyingConnectivityError: URLError(.timedOut))
+        ))
+        XCTAssertTrue(ServerConnectivityErrorClassifier.isConnectivityFailure(
+            URLError(.notConnectedToInternet)
+        ))
+    }
+
+    func testConnectivityFailureRejectsCancellationAndNonNetworkErrors() {
+        XCTAssertFalse(ServerConnectivityErrorClassifier.isConnectivityFailure(
+            WrappedConnectivityError(underlyingConnectivityError: URLError(.cancelled))
+        ))
+        XCTAssertFalse(ServerConnectivityErrorClassifier.isConnectivityFailure(
+            WrappedConnectivityError(underlyingConnectivityError: nil)
+        ))
+        XCTAssertFalse(ServerConnectivityErrorClassifier.isConnectivityFailure(
+            NSError(domain: "test", code: 1)
+        ))
+    }
+
+    func testUserInitiatedPlaybackFailureIsConsumedOnceWithinWindow() {
+        var policy = UserInitiatedPlaybackErrorPresentationPolicy()
+        policy.configure(generation: 4, userInitiated: true, now: now)
+
+        XCTAssertTrue(policy.consume(generation: 4, now: now.addingTimeInterval(10)))
+        XCTAssertFalse(policy.consume(generation: 4, now: now.addingTimeInterval(11)))
+    }
+
+    func testAutomaticPlaybackFailureIsNotPresented() {
+        var policy = UserInitiatedPlaybackErrorPresentationPolicy()
+        policy.configure(generation: 4, userInitiated: false, now: now)
+
+        XCTAssertFalse(policy.consume(generation: 4, now: now.addingTimeInterval(1)))
+    }
+
+    func testPlaybackFailureAllowanceExpiresAndIgnoresStaleGenerations() {
+        var policy = UserInitiatedPlaybackErrorPresentationPolicy()
+        policy.configure(generation: 5, userInitiated: true, now: now)
+
+        XCTAssertFalse(policy.consume(generation: 4, now: now.addingTimeInterval(1)))
+        XCTAssertTrue(policy.consume(generation: 5, now: now.addingTimeInterval(2)))
+
+        policy.configure(generation: 6, userInitiated: true, now: now)
+        XCTAssertFalse(policy.consume(generation: 6, now: now.addingTimeInterval(21)))
     }
 }

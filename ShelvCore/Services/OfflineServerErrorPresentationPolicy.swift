@@ -1,5 +1,24 @@
 import Foundation
 
+nonisolated protocol ServerConnectivityErrorProviding: Error {
+    var underlyingConnectivityError: Error? { get }
+}
+
+nonisolated enum ServerConnectivityErrorClassifier {
+    static func isConnectivityFailure(_ error: Error) -> Bool {
+        if let wrappedError = error as? ServerConnectivityErrorProviding {
+            guard let rootError = wrappedError.underlyingConnectivityError else { return false }
+            return isConnectivityFailure(rootError)
+        }
+        if let urlError = error as? URLError {
+            return urlError.code != .cancelled
+        }
+        let nsError = error as NSError
+        return nsError.domain == NSURLErrorDomain
+            && nsError.code != NSURLErrorCancelled
+    }
+}
+
 struct OfflineServerErrorPresentationPolicy {
     private var bannerCooldownUntil: Date?
     private var initialServerErrorPending = false
@@ -85,5 +104,37 @@ struct OfflineServerErrorPresentationPolicy {
 
     mutating func resetCooldown() {
         bannerCooldownUntil = nil
+    }
+}
+
+struct UserInitiatedPlaybackErrorPresentationPolicy {
+    private var generation: Int?
+    private var expiresAt: Date?
+
+    mutating func configure(
+        generation: Int,
+        userInitiated: Bool,
+        now: Date = Date(),
+        duration: TimeInterval = 20
+    ) {
+        guard userInitiated else {
+            self.generation = nil
+            expiresAt = nil
+            return
+        }
+        self.generation = generation
+        expiresAt = now.addingTimeInterval(duration)
+    }
+
+    mutating func consume(generation: Int, now: Date = Date()) -> Bool {
+        guard self.generation == generation else { return false }
+        guard let expiresAt, now < expiresAt else {
+            self.generation = nil
+            self.expiresAt = nil
+            return false
+        }
+        self.generation = nil
+        self.expiresAt = nil
+        return true
     }
 }

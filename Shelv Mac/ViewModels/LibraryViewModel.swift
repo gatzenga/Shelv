@@ -362,7 +362,7 @@ class LibraryViewModel: ObservableObject {
         } catch {
             if isCurrentAlbumLoad(generation, identity: identity),
                !(error is CancellationError) {
-                errorMessage = error.localizedDescription
+                errorMessage = OfflineModeService.shared.inlineErrorMessage(for: error)
             }
         }
     }
@@ -445,7 +445,7 @@ class LibraryViewModel: ObservableObject {
         } catch {
             if isCurrentArtistLoad(generation, identity: identity),
                !(error is CancellationError) {
-                errorMessage = error.localizedDescription
+                errorMessage = OfflineModeService.shared.inlineErrorMessage(for: error)
             }
         }
     }
@@ -542,7 +542,7 @@ class LibraryViewModel: ObservableObject {
         } catch {
             if isCurrentStarredLoad(generation, identity: identity),
                !(error is CancellationError) {
-                errorMessage = error.localizedDescription
+                errorMessage = OfflineModeService.shared.inlineErrorMessage(for: error)
             }
         }
     }
@@ -580,7 +580,7 @@ class LibraryViewModel: ObservableObject {
             } else {
                 starredSongs.removeAll { $0.id == song.id }
             }
-            errorMessage = error.localizedDescription
+            errorMessage = OfflineModeService.shared.inlineErrorMessage(for: error, userInitiated: true)
         }
     }
 
@@ -603,7 +603,7 @@ class LibraryViewModel: ObservableObject {
             } else {
                 starredAlbums.removeAll { $0.id == album.id }
             }
-            errorMessage = error.localizedDescription
+            errorMessage = OfflineModeService.shared.inlineErrorMessage(for: error, userInitiated: true)
         }
     }
 
@@ -626,7 +626,7 @@ class LibraryViewModel: ObservableObject {
             } else {
                 starredArtists.removeAll { $0.id == artist.id }
             }
-            errorMessage = error.localizedDescription
+            errorMessage = OfflineModeService.shared.inlineErrorMessage(for: error, userInitiated: true)
         }
     }
 
@@ -685,7 +685,7 @@ class LibraryViewModel: ObservableObject {
         } catch {
             if isCurrentPlaylistLoad(generation, identity: identity),
                !(error is CancellationError) {
-                errorMessage = error.localizedDescription
+                errorMessage = OfflineModeService.shared.inlineErrorMessage(for: error)
             }
         }
     }
@@ -705,7 +705,7 @@ class LibraryViewModel: ObservableObject {
             }
             return detail
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = OfflineModeService.shared.inlineErrorMessage(for: error)
             return nil
         }
     }
@@ -788,7 +788,7 @@ class LibraryViewModel: ObservableObject {
             let created = try await api.createPlaylist(name: name)
             playlists.append(created)
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = OfflineModeService.shared.inlineErrorMessage(for: error, userInitiated: true)
         }
     }
 
@@ -805,7 +805,7 @@ class LibraryViewModel: ObservableObject {
                 NotificationCenter.default.post(name: .recapRegistryUpdated, object: nil)
             }
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = OfflineModeService.shared.inlineErrorMessage(for: error, userInitiated: true)
         }
     }
 
@@ -818,7 +818,7 @@ class LibraryViewModel: ObservableObject {
                                           coverArt: playlist.coverArt)
             }
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = OfflineModeService.shared.inlineErrorMessage(for: error, userInitiated: true)
         }
     }
 
@@ -831,7 +831,7 @@ class LibraryViewModel: ObservableObject {
             }
             return true
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = OfflineModeService.shared.inlineErrorMessage(for: error, userInitiated: true)
             return false
         }
     }
@@ -846,7 +846,7 @@ class LibraryViewModel: ObservableObject {
                                           duration: p.duration, coverArt: p.coverArt)
             }
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = OfflineModeService.shared.inlineErrorMessage(for: error, userInitiated: true)
         }
     }
 
@@ -859,7 +859,7 @@ class LibraryViewModel: ObservableObject {
             try await api.updatePlaylist(id: playlist.id, songIndicesToRemove: removeIndices)
             try await api.updatePlaylist(id: playlist.id, songIdsToAdd: songs.map(\.id))
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = OfflineModeService.shared.inlineErrorMessage(for: error, userInitiated: true)
         }
     }
 }

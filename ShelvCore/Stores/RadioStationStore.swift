@@ -104,7 +104,7 @@ final class RadioStationStore: ObservableObject {
                   activeServerConfigurationID == configurationID,
                   activeServerId == metadataServerID else { return }
             if !(error is CancellationError) {
-                errorMessage = items.isEmpty ? radioErrorDescription(error) : nil
+                publishError(error, onlyWhenItemsEmpty: true)
             }
         }
     }
@@ -146,7 +146,7 @@ final class RadioStationStore: ObservableObject {
             return true
         } catch {
             if !(error is CancellationError) {
-                errorMessage = radioErrorDescription(error)
+                publishError(error, userInitiated: true)
             }
             return false
         }
@@ -195,7 +195,7 @@ final class RadioStationStore: ObservableObject {
             return true
         } catch {
             if !(error is CancellationError) {
-                errorMessage = radioErrorDescription(error)
+                publishError(error, userInitiated: true)
             }
             return false
         }
@@ -213,7 +213,7 @@ final class RadioStationStore: ObservableObject {
             return true
         } catch {
             if !(error is CancellationError) {
-                errorMessage = radioErrorDescription(error)
+                publishError(error, userInitiated: true)
             }
             return false
         }
@@ -499,5 +499,22 @@ final class RadioStationStore: ObservableObject {
             return localized
         }
         return error.localizedDescription
+    }
+
+    private func publishError(
+        _ error: Error,
+        onlyWhenItemsEmpty: Bool = false,
+        userInitiated: Bool = false
+    ) {
+        if OfflineModeService.shared.presentConnectivityErrorIfNeeded(
+            error,
+            userInitiated: userInitiated
+        ) {
+            errorMessage = nil
+        } else {
+            errorMessage = onlyWhenItemsEmpty && !items.isEmpty
+                ? nil
+                : radioErrorDescription(error)
+        }
     }
 }

@@ -208,18 +208,12 @@ final class CarPlayDiscoverController {
 
     private func showNoConnection() {
         setLoadingState(false)
-        var items: [CPListItem] = [
-            actionListItem(title: String(localized: "enable_offline_mode"), systemImage: "wifi.slash") { _, completion in
-                Task { @MainActor in OfflineModeService.shared.enterOfflineMode() }
-                completion()
-            }
-        ]
+        var items: [CPListItem] = []
         if let switchItem = makeServerURLSwitchItem() {
             items.append(switchItem)
         }
-        items.append(actionListItem(title: String(localized: "refresh"), systemImage: "arrow.clockwise") { [weak self] _, c in
-            self?.manualRefresh(completion: c) ?? c()
-        })
+        items.append(makeRefreshItem())
+        items.append(makeEnableOfflineModeItem())
         rootTemplate.updateSections([
             CPListSection(items: items, header: String(localized: "no_connection"), sectionIndexTitle: nil)
         ])
@@ -350,13 +344,27 @@ final class CarPlayDiscoverController {
             }
         }
 
-        // Refresh-Button ganz unten, kein Header
-        let refreshItem = actionListItem(title: String(localized: "refresh"), systemImage: "arrow.clockwise") { [weak self] _, c in
-            self?.manualRefresh(completion: c) ?? c()
-        }
-        sections.append(CPListSection(items: [refreshItem], header: nil, sectionIndexTitle: nil))
+        // Online-Aktionen ganz unten, mit Offline direkt unter Refresh.
+        sections.append(CPListSection(
+            items: [makeRefreshItem(), makeEnableOfflineModeItem()],
+            header: nil,
+            sectionIndexTitle: nil
+        ))
 
         return sections
+    }
+
+    private func makeRefreshItem() -> CPListItem {
+        actionListItem(title: String(localized: "refresh"), systemImage: "arrow.clockwise") { [weak self] _, completion in
+            self?.manualRefresh(completion: completion) ?? completion()
+        }
+    }
+
+    private func makeEnableOfflineModeItem() -> CPListItem {
+        actionListItem(title: String(localized: "enable_offline_mode"), systemImage: "wifi.slash") { _, completion in
+            Task { @MainActor in OfflineModeService.shared.enterOfflineMode() }
+            completion()
+        }
     }
 
     private func visibleSmartMixes() -> [PersonalizationSmartMix] {
@@ -533,7 +541,13 @@ final class CarPlayDiscoverController {
                         self.startCoverEnrichment()
                     }
                 } catch {
-                    await MainActor.run { self?.presentMixError(title: title, message: error.localizedDescription) }
+                    await MainActor.run {
+                        guard !OfflineModeService.shared.presentConnectivityErrorIfNeeded(
+                            error,
+                            userInitiated: true
+                        ) else { return }
+                        self?.presentMixError(title: title, message: error.localizedDescription)
+                    }
                 }
             }
         }

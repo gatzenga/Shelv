@@ -437,7 +437,9 @@ final class LibraryStore: ObservableObject {
         } catch {
             if wasStarred { favoriteSongs.insert(song, at: 0) }
             else { favoriteSongs.removeAll { $0.id == song.id } }
-            if !(error is CancellationError) { errorMessage = error.localizedDescription }
+            if !(error is CancellationError) {
+                errorMessage = OfflineModeService.shared.inlineErrorMessage(for: error, userInitiated: true)
+            }
         }
     }
 
@@ -451,7 +453,9 @@ final class LibraryStore: ObservableObject {
         } catch {
             if wasStarred { favoriteAlbums.insert(album, at: 0) }
             else { favoriteAlbums.removeAll { $0.id == album.id } }
-            if !(error is CancellationError) { errorMessage = error.localizedDescription }
+            if !(error is CancellationError) {
+                errorMessage = OfflineModeService.shared.inlineErrorMessage(for: error, userInitiated: true)
+            }
         }
     }
 
@@ -465,7 +469,9 @@ final class LibraryStore: ObservableObject {
         } catch {
             if wasStarred { favoriteArtists.insert(artist, at: 0) }
             else { favoriteArtists.removeAll { $0.id == artist.id } }
-            if !(error is CancellationError) { errorMessage = error.localizedDescription }
+            if !(error is CancellationError) {
+                errorMessage = OfflineModeService.shared.inlineErrorMessage(for: error, userInitiated: true)
+            }
         }
     }
 
@@ -475,14 +481,22 @@ final class LibraryStore: ObservableObject {
         do {
             _ = try await api.createPlaylist(name: name, songIds: songIds)
             await loadPlaylists()
-        } catch { if !(error is CancellationError) { errorMessage = error.localizedDescription } }
+        } catch {
+            if !(error is CancellationError) {
+                errorMessage = OfflineModeService.shared.inlineErrorMessage(for: error, userInitiated: true)
+            }
+        }
     }
 
     func renamePlaylist(_ playlist: Playlist, name: String, comment: String?) async {
         do {
             try await api.updatePlaylist(id: playlist.id, name: name, comment: comment)
             await loadPlaylists()
-        } catch { if !(error is CancellationError) { errorMessage = error.localizedDescription } }
+        } catch {
+            if !(error is CancellationError) {
+                errorMessage = OfflineModeService.shared.inlineErrorMessage(for: error, userInitiated: true)
+            }
+        }
     }
 
     func deletePlaylist(_ playlist: Playlist) async {
@@ -492,11 +506,19 @@ final class LibraryStore: ObservableObject {
             if PinnedPlaylistStore.shared.isPinned(playlist.id) {
                 PinnedPlaylistStore.shared.togglePin(playlist.id)
             }
-        } catch { if !(error is CancellationError) { errorMessage = error.localizedDescription } }
+        } catch {
+            if !(error is CancellationError) {
+                errorMessage = OfflineModeService.shared.inlineErrorMessage(for: error, userInitiated: true)
+            }
+        }
     }
 
     func addSongs(_ songIds: [String], toPlaylist id: String) async {
         do { try await api.updatePlaylist(id: id, songIdsToAdd: songIds) }
-        catch { if !(error is CancellationError) { errorMessage = error.localizedDescription } }
+        catch {
+            if !(error is CancellationError) {
+                errorMessage = OfflineModeService.shared.inlineErrorMessage(for: error, userInitiated: true)
+            }
+        }
     }
 }

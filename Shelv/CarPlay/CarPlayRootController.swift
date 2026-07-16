@@ -213,6 +213,8 @@ final class CarPlayRootController: NSObject {
             .dropFirst()
             .sink { [weak self] visible in
                 guard let self else { return }
+                // The shared presentation policy only publishes initial-launch and
+                // user-initiated failures. Passive background failures stay silent.
                 if visible {
                     self.presentServerErrorAlert()
                 } else if self.isPresentingServerErrorAlert {
