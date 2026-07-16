@@ -59,11 +59,13 @@ struct PlaylistDetailView: View {
 
     var body: some View {
         List {
-            Section {
-                headerView
-                    .listRowInsets(EdgeInsets())
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.clear)
+            if searchQuery.isEmpty {
+                Section {
+                    headerView
+                        .listRowInsets(EdgeInsets())
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+                }
             }
 
             if isLoading {

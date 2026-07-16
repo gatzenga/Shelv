@@ -109,6 +109,7 @@
 "download_started" = "Download gestartet";
 "download" = "Herunterladen";
 "search_albums" = "Alben suchen…";
+"search_albums_and_songs" = "Alben und Titel suchen…";
 "list_view" = "Listenansicht";
 "grid_view" = "Rasteransicht";
 "sort" = "Sortieren";

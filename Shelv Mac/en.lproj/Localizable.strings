@@ -106,6 +106,7 @@
 "grid_view" = "Grid view";
 "loading_albums" = "Loading albums…";
 "search_albums" = "Search albums…";
+"search_albums_and_songs" = "Search albums and songs…";
 "loading_artists" = "Loading artists…";
 "no_cache_events_yet" = "No cache events yet.";
 "cache_log" = "Cache Log";

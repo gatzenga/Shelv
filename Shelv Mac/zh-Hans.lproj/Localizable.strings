@@ -106,6 +106,7 @@
 "grid_view" = "网格视图";
 "loading_albums" = "正在加载专辑…";
 "search_albums" = "搜索专辑…";
+"search_albums_and_songs" = "搜索专辑和歌曲…";
 "loading_artists" = "正在加载艺术家…";
 "no_cache_events_yet" = "暂无缓存事件。";
 "cache_log" = "缓存日志";
