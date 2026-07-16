@@ -535,7 +535,7 @@ struct DiscoverView: View {
 
                 mixButton(
                     title: String(localized: "mix_latest_downloads"),
-                    icon: "arrow.down.circle.fill",
+                    icon: "clock.fill",
                     key: "offline_newest"
                 ) { loadOfflineMix(type: "offline_newest") }
             }
