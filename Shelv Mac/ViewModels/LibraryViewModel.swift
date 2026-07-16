@@ -15,10 +15,14 @@ class LibraryViewModel: ObservableObject {
         didSet { scheduleSortedArtistsRebuild() }
     }
     @Published var sortOption: LibrarySortOption = .name {
-        didSet { scheduleSortedAlbumsRebuild() }
+        didSet {
+            if !isUpdatingAlbumSortSelection { scheduleSortedAlbumsRebuild() }
+        }
     }
     @Published var albumSortDirection: SortDirection = .ascending {
-        didSet { scheduleSortedAlbumsRebuild() }
+        didSet {
+            if !isUpdatingAlbumSortSelection { scheduleSortedAlbumsRebuild() }
+        }
     }
     @Published var artistSortOption: ArtistSortOption = .name {
         didSet { scheduleSortedArtistsRebuild() }
@@ -36,6 +40,17 @@ class LibraryViewModel: ObservableObject {
     private var sortedArtistsTask: Task<Void, Never>?
     private var sortedAlbumsGeneration = 0
     private var sortedArtistsGeneration = 0
+    private var isUpdatingAlbumSortSelection = false
+
+    func selectAlbumSortOption(_ option: LibrarySortOption) {
+        guard sortOption != option || albumSortDirection != option.naturalDirection else { return }
+
+        isUpdatingAlbumSortSelection = true
+        sortOption = option
+        albumSortDirection = option.naturalDirection
+        isUpdatingAlbumSortSelection = false
+        scheduleSortedAlbumsRebuild()
+    }
 
     private func scheduleSortedAlbumsRebuild() {
         sortedAlbumsTask?.cancel()

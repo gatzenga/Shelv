@@ -303,6 +303,29 @@ final class LibraryRepositoryTests: XCTestCase {
         XCTAssertEqual(sorted.map(\.id), ["untagged", "queen", "tagged"])
     }
 
+    func testLocalWeightedAlbumSortingMatchesAscendingAndDescendingLabels() {
+        let albums = [
+            album(id: "low", name: "Low", year: 1990, created: 100, playCount: 2),
+            album(id: "high", name: "High", year: 2025, created: 300, playCount: 20),
+        ]
+
+        for sort in [LibraryAlbumSort.year, .created, .playCount] {
+            let ascending = LibraryRepository.locallySortedAlbums(
+                albums,
+                sort: sort,
+                direction: .ascending
+            )
+            let descending = LibraryRepository.locallySortedAlbums(
+                albums,
+                sort: sort,
+                direction: .descending
+            )
+
+            XCTAssertEqual(ascending.map(\.id), ["low", "high"])
+            XCTAssertEqual(descending.map(\.id), ["high", "low"])
+        }
+    }
+
     func testLocalArtistSortingUsesTagBeforeArticleFallback() {
         let artists = [
             Artist(id: "tagged", name: "The Police", sortName: "The Police"),
@@ -480,13 +503,15 @@ private func album(
     name: String,
     sortName: String? = nil,
     year: Int? = nil,
-    created: TimeInterval? = nil
+    created: TimeInterval? = nil,
+    playCount: Int? = nil
 ) -> Album {
     Album(
         id: id,
         name: name,
         sortName: sortName,
         year: year,
+        playCount: playCount,
         created: created.map(Date.init(timeIntervalSince1970:))
     )
 }
