@@ -7,6 +7,9 @@ final class CarPlayPlaylistsController {
     let rootTemplate: CPListTemplate
     private var loadTask: Task<Void, Never>?
     private var coverLoadTask: Task<Void, Never>?
+    private var folderCoverLoadTasks: [String: Task<Void, Never>] = [:]
+    private var folderTemplates: [String: CPListTemplate] = [:]
+    private var playlistTree: [PlaylistTreeNode] = []
     private var cancellables = Set<AnyCancellable>()
 
     init(interfaceController: CPInterfaceController) {
@@ -74,6 +77,10 @@ final class CarPlayPlaylistsController {
     func cancel() {
         loadTask?.cancel()
         coverLoadTask?.cancel()
+        folderCoverLoadTasks.values.forEach { $0.cancel() }
+        folderCoverLoadTasks.removeAll()
+        folderTemplates.removeAll()
+        playlistTree.removeAll()
         cancellables.removeAll()
     }
 
@@ -129,32 +136,108 @@ final class CarPlayPlaylistsController {
     }
 
     private func showPlaylists(_ playlists: [Playlist]) {
-        func makeItems() -> (items: [CPListItem], coverMap: [String: [CPListItem]]) {
-            var coverMap: [String: [CPListItem]] = [:]
-            let items = playlists.map { playlist -> CPListItem in
-                let item = playlistListItem(playlist) { [weak self] _, c in
-                    guard let self else { c(); return }
-                    c()
+        playlistTree = PlaylistTreeNode.make(from: playlists)
+        rebuildTemplate(rootTemplate, nodes: playlistTree, folderID: nil)
+
+        for (folderID, template) in folderTemplates {
+            guard let folder = findFolder(id: folderID, in: playlistTree) else {
+                template.updateSections([])
+                continue
+            }
+            rebuildTemplate(template, nodes: folder.children ?? [], folderID: folderID)
+        }
+    }
+
+    private func rebuildTemplate(
+        _ template: CPListTemplate,
+        nodes: [PlaylistTreeNode],
+        folderID: String?
+    ) {
+        var coverMap: [String: [CPListItem]] = [:]
+        let items = nodes.map { node -> CPListItem in
+            if let playlist = node.playlist {
+                let item = playlistListItem(playlist, displayName: node.title) { [weak self, weak template] _, completion in
+                    guard let self else { completion(); return }
+                    completion()
                     CarPlayNavigation.openPlaylist(playlist, from: self.interfaceController)
-                    Task { @MainActor [weak self] in
-                        guard let self else { return }
-                        let (freshItems, freshMap) = makeItems()
-                        prefillCoversFromCache(freshMap)
-                        self.rootTemplate.updateSections([CPListSection(items: freshItems, header: nil, sectionIndexTitle: nil)])
-                        self.coverLoadTask?.cancel()
-                        self.coverLoadTask = Task { await streamCovers(into: freshMap) }
-                    }
+                    guard let template else { return }
+                    self.rebuildTemplate(template, nodes: nodes, folderID: folderID)
                 }
-                if let id = playlist.coverArt { coverMap[id, default: []].append(item) }
+                if let coverArt = playlist.coverArt {
+                    coverMap[coverArt, default: []].append(item)
+                }
                 return item
             }
-            return (items, coverMap)
+
+            let detail = "\(node.playlistCount) \(String(localized: "playlists"))"
+            let item = CPListItem(
+                text: node.title,
+                detailText: detail,
+                image: cpListIcon("folder.fill"),
+                accessoryImage: nil,
+                accessoryType: .disclosureIndicator
+            )
+            item.handler = { [weak self, weak template] _, completion in
+                guard let self else { completion(); return }
+                completion()
+                self.openFolder(node)
+                guard let template else { return }
+                self.rebuildTemplate(template, nodes: nodes, folderID: folderID)
+            }
+            return item
         }
-        let (items, coverMap) = makeItems()
+
         prefillCoversFromCache(coverMap)
-        rootTemplate.updateSections([CPListSection(items: items, header: nil, sectionIndexTitle: nil)])
-        guard !coverMap.isEmpty else { return }
-        coverLoadTask?.cancel()
-        coverLoadTask = Task { await streamCovers(into: coverMap) }
+        template.updateSections([
+            CPListSection(items: items, header: nil, sectionIndexTitle: nil)
+        ])
+        startCoverLoading(coverMap, folderID: folderID)
+    }
+
+    private func openFolder(_ folder: PlaylistTreeNode) {
+        let template: CPListTemplate
+        if let existing = folderTemplates[folder.id] {
+            template = existing
+        } else {
+            template = CPListTemplate(title: folder.title, sections: [])
+            folderTemplates[folder.id] = template
+        }
+        rebuildTemplate(template, nodes: folder.children ?? [], folderID: folder.id)
+        CarPlayNavigation.safePush(template, on: interfaceController)
+    }
+
+    private func startCoverLoading(
+        _ coverMap: [String: [CPListItem]],
+        folderID: String?
+    ) {
+        if let folderID {
+            folderCoverLoadTasks[folderID]?.cancel()
+            guard !coverMap.isEmpty else {
+                folderCoverLoadTasks.removeValue(forKey: folderID)
+                return
+            }
+            folderCoverLoadTasks[folderID] = Task { await streamCovers(into: coverMap) }
+        } else {
+            coverLoadTask?.cancel()
+            guard !coverMap.isEmpty else {
+                coverLoadTask = nil
+                return
+            }
+            coverLoadTask = Task { await streamCovers(into: coverMap) }
+        }
+    }
+
+    private func findFolder(
+        id: String,
+        in nodes: [PlaylistTreeNode]
+    ) -> PlaylistTreeNode? {
+        for node in nodes {
+            if node.id == id, node.isFolder { return node }
+            if let children = node.children,
+               let match = findFolder(id: id, in: children) {
+                return match
+            }
+        }
+        return nil
     }
 }

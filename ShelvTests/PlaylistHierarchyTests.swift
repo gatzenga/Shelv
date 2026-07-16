@@ -55,6 +55,24 @@ final class PlaylistHierarchyTests: XCTestCase {
         XCTAssertEqual(workChildren[1].playlist?.id, "3")
     }
 
+    func testPlaylistCanShareItsNameWithANestedFolder() throws {
+        let roots = PlaylistTreeNode.make(from: [
+            playlist(id: "direct", name: "Rock/Test"),
+            playlist(id: "nested", name: "Rock/Test/Test")
+        ])
+
+        let rock = try XCTUnwrap(roots.first)
+        XCTAssertEqual(rock.title, "Rock")
+
+        let rockChildren = try XCTUnwrap(rock.children)
+        XCTAssertEqual(rockChildren.map(\.title), ["Test", "Test"])
+        XCTAssertEqual(rockChildren[0].playlist?.id, "direct")
+
+        let testFolderChildren = try XCTUnwrap(rockChildren[1].children)
+        XCTAssertEqual(testFolderChildren.map(\.title), ["Test"])
+        XCTAssertEqual(testFolderChildren[0].playlist?.id, "nested")
+    }
+
     private func playlist(id: String, name: String) -> Playlist {
         Playlist(
             id: id,

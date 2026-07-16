@@ -168,9 +168,13 @@ func artistListItem(_ artist: Artist, subtitle: String, handler: @escaping CPIte
     return item
 }
 
-func playlistListItem(_ playlist: Playlist, handler: @escaping CPItemHandler) -> CPListItem {
+func playlistListItem(
+    _ playlist: Playlist,
+    displayName: String? = nil,
+    handler: @escaping CPItemHandler
+) -> CPListItem {
     let subtitle = playlist.songCount.map { "\($0) \(String(localized: "songs"))" } ?? ""
-    let item = CPListItem(text: playlist.name, detailText: subtitle)
+    let item = CPListItem(text: displayName ?? playlist.name, detailText: subtitle)
     item.setImage(cpPlaceholder)
     item.accessoryType = .disclosureIndicator
     item.handler = handler
