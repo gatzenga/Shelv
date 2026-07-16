@@ -48,6 +48,18 @@ final class PersonalizationSettingsTests: XCTestCase {
         XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightPrimary, in: defaults), .playNext)
         XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightSecondary, in: defaults), .addToQueue)
         XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightTertiary, in: defaults), .instantMix)
+
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .playlistLeftPrimary, in: defaults), .pin)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .playlistLeftSecondary, in: defaults), .delete)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .playlistRightPrimary, in: defaults), .playNext)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .playlistRightSecondary, in: defaults), .addToQueue)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .playlistRightTertiary, in: defaults), .download)
+
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .albumArtistLeftPrimary, in: defaults), .favorite)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .albumArtistLeftSecondary, in: defaults), .addToPlaylist)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .albumArtistRightPrimary, in: defaults), .playNext)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .albumArtistRightSecondary, in: defaults), .addToQueue)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .albumArtistRightTertiary, in: defaults), .download)
     }
 
     func testSharedAppDefaultsMatchFreshInstallPolicy() {
@@ -135,6 +147,18 @@ final class PersonalizationSettingsTests: XCTestCase {
         ShelvDefaultSettings.registerDefaults(in: defaults)
 
         XCTAssertFalse(defaults.bool(forKey: "enableDownloads"))
+    }
+
+    func testSwipeSlotsAreNamedAfterFingerDirectionAndUseThreeLeftTwoRight() {
+        for group in PersonalizationSwipeGroup.allCases {
+            let leadingSlots = group.slots.filter(\.isLeading)
+            let trailingSlots = group.slots.filter { !$0.isLeading }
+
+            XCTAssertEqual(leadingSlots.count, 2)
+            XCTAssertEqual(trailingSlots.count, 3)
+            XCTAssertTrue(leadingSlots.allSatisfy { $0.titleKey.hasPrefix("swipe_right_") })
+            XCTAssertTrue(trailingSlots.allSatisfy { $0.titleKey.hasPrefix("swipe_left_") })
+        }
     }
 
     func testCloudUICustomizationKeysCoverVisibleCustomizationSettings() {
@@ -441,6 +465,135 @@ final class PersonalizationSettingsTests: XCTestCase {
 
         XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightSecondary, in: defaults), .instantMix)
         XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightTertiary, in: defaults), .none)
+    }
+
+    func testMigratesFormerDefaultLayoutsToGestureBasedDefaults() {
+        defaults.set(3, forKey: PersonalizationPreferenceKey.migrationVersion)
+
+        defaults.set(PersonalizationSwipeAction.favorite.rawValue, forKey: PersonalizationPreferenceKey.swipeLeftPrimary)
+        defaults.set(PersonalizationSwipeAction.addToPlaylist.rawValue, forKey: PersonalizationPreferenceKey.swipeLeftSecondary)
+        defaults.set(PersonalizationSwipeAction.playNext.rawValue, forKey: PersonalizationPreferenceKey.swipeRightPrimary)
+        defaults.set(PersonalizationSwipeAction.addToQueue.rawValue, forKey: PersonalizationPreferenceKey.swipeRightSecondary)
+        defaults.set(PersonalizationSwipeAction.instantMix.rawValue, forKey: PersonalizationPreferenceKey.swipeRightTertiary)
+
+        defaults.set(PersonalizationSwipeAction.pin.rawValue, forKey: PersonalizationPreferenceKey.playlistSwipeLeftPrimary)
+        defaults.set(PersonalizationSwipeAction.download.rawValue, forKey: PersonalizationPreferenceKey.playlistSwipeLeftSecondary)
+        defaults.set(PersonalizationSwipeAction.delete.rawValue, forKey: PersonalizationPreferenceKey.playlistSwipeLeftTertiary)
+        defaults.set(PersonalizationSwipeAction.playNext.rawValue, forKey: PersonalizationPreferenceKey.playlistSwipeRightPrimary)
+        defaults.set(PersonalizationSwipeAction.addToQueue.rawValue, forKey: PersonalizationPreferenceKey.playlistSwipeRightSecondary)
+
+        defaults.set(PersonalizationSwipeAction.favorite.rawValue, forKey: PersonalizationPreferenceKey.albumArtistSwipeLeftPrimary)
+        defaults.set(PersonalizationSwipeAction.addToPlaylist.rawValue, forKey: PersonalizationPreferenceKey.albumArtistSwipeLeftSecondary)
+        defaults.set(PersonalizationSwipeAction.download.rawValue, forKey: PersonalizationPreferenceKey.albumArtistSwipeLeftTertiary)
+        defaults.set(PersonalizationSwipeAction.playNext.rawValue, forKey: PersonalizationPreferenceKey.albumArtistSwipeRightPrimary)
+        defaults.set(PersonalizationSwipeAction.addToQueue.rawValue, forKey: PersonalizationPreferenceKey.albumArtistSwipeRightSecondary)
+
+        PersonalizationSettings.registerDefaults(in: defaults)
+
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .leftPrimary, in: defaults), .favorite)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .leftSecondary, in: defaults), .addToPlaylist)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightPrimary, in: defaults), .playNext)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightSecondary, in: defaults), .addToQueue)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightTertiary, in: defaults), .instantMix)
+        XCTAssertNil(defaults.object(forKey: PersonalizationPreferenceKey.swipeLeftTertiary))
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .playlistLeftPrimary, in: defaults), .pin)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .playlistLeftSecondary, in: defaults), .delete)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .playlistRightPrimary, in: defaults), .playNext)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .playlistRightSecondary, in: defaults), .addToQueue)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .playlistRightTertiary, in: defaults), .download)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .albumArtistLeftPrimary, in: defaults), .favorite)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .albumArtistLeftSecondary, in: defaults), .addToPlaylist)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .albumArtistRightPrimary, in: defaults), .playNext)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .albumArtistRightSecondary, in: defaults), .addToQueue)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .albumArtistRightTertiary, in: defaults), .download)
+    }
+
+    func testMigratesInterimThreeLeadingActionLayoutsToThreeTrailingActions() {
+        defaults.set(4, forKey: PersonalizationPreferenceKey.migrationVersion)
+
+        defaults.set(PersonalizationSwipeAction.favorite.rawValue, forKey: PersonalizationPreferenceKey.swipeLeftPrimary)
+        defaults.set(PersonalizationSwipeAction.addToPlaylist.rawValue, forKey: PersonalizationPreferenceKey.swipeLeftSecondary)
+        defaults.set(PersonalizationSwipeAction.instantMix.rawValue, forKey: PersonalizationPreferenceKey.swipeLeftTertiary)
+        defaults.set(PersonalizationSwipeAction.playNext.rawValue, forKey: PersonalizationPreferenceKey.swipeRightPrimary)
+        defaults.set(PersonalizationSwipeAction.addToQueue.rawValue, forKey: PersonalizationPreferenceKey.swipeRightSecondary)
+
+        defaults.set(PersonalizationSwipeAction.download.rawValue, forKey: PersonalizationPreferenceKey.playlistSwipeLeftPrimary)
+        defaults.set(PersonalizationSwipeAction.playNext.rawValue, forKey: PersonalizationPreferenceKey.playlistSwipeLeftSecondary)
+        defaults.set(PersonalizationSwipeAction.addToQueue.rawValue, forKey: PersonalizationPreferenceKey.playlistSwipeLeftTertiary)
+        defaults.set(PersonalizationSwipeAction.pin.rawValue, forKey: PersonalizationPreferenceKey.playlistSwipeRightPrimary)
+        defaults.set(PersonalizationSwipeAction.delete.rawValue, forKey: PersonalizationPreferenceKey.playlistSwipeRightSecondary)
+
+        defaults.set(PersonalizationSwipeAction.download.rawValue, forKey: PersonalizationPreferenceKey.albumArtistSwipeLeftPrimary)
+        defaults.set(PersonalizationSwipeAction.playNext.rawValue, forKey: PersonalizationPreferenceKey.albumArtistSwipeLeftSecondary)
+        defaults.set(PersonalizationSwipeAction.addToQueue.rawValue, forKey: PersonalizationPreferenceKey.albumArtistSwipeLeftTertiary)
+        defaults.set(PersonalizationSwipeAction.favorite.rawValue, forKey: PersonalizationPreferenceKey.albumArtistSwipeRightPrimary)
+        defaults.set(PersonalizationSwipeAction.addToPlaylist.rawValue, forKey: PersonalizationPreferenceKey.albumArtistSwipeRightSecondary)
+
+        PersonalizationSettings.registerDefaults(in: defaults)
+
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .leftPrimary, in: defaults), .favorite)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .leftSecondary, in: defaults), .addToPlaylist)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightPrimary, in: defaults), .playNext)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightSecondary, in: defaults), .addToQueue)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightTertiary, in: defaults), .instantMix)
+
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .playlistLeftPrimary, in: defaults), .pin)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .playlistLeftSecondary, in: defaults), .delete)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .playlistRightPrimary, in: defaults), .playNext)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .playlistRightSecondary, in: defaults), .addToQueue)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .playlistRightTertiary, in: defaults), .download)
+
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .albumArtistLeftPrimary, in: defaults), .favorite)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .albumArtistLeftSecondary, in: defaults), .addToPlaylist)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .albumArtistRightPrimary, in: defaults), .playNext)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .albumArtistRightSecondary, in: defaults), .addToQueue)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .albumArtistRightTertiary, in: defaults), .download)
+
+        XCTAssertNil(defaults.object(forKey: PersonalizationPreferenceKey.swipeLeftTertiary))
+        XCTAssertNil(defaults.object(forKey: PersonalizationPreferenceKey.playlistSwipeLeftTertiary))
+        XCTAssertNil(defaults.object(forKey: PersonalizationPreferenceKey.albumArtistSwipeLeftTertiary))
+    }
+
+    func testMigratesVersionFiveSongActionsBackToTheirCorrectSides() {
+        defaults.set(5, forKey: PersonalizationPreferenceKey.migrationVersion)
+        defaults.set(PersonalizationSwipeAction.playNext.rawValue, forKey: PersonalizationPreferenceKey.swipeLeftPrimary)
+        defaults.set(PersonalizationSwipeAction.addToQueue.rawValue, forKey: PersonalizationPreferenceKey.swipeLeftSecondary)
+        defaults.set(PersonalizationSwipeAction.favorite.rawValue, forKey: PersonalizationPreferenceKey.swipeRightPrimary)
+        defaults.set(PersonalizationSwipeAction.addToPlaylist.rawValue, forKey: PersonalizationPreferenceKey.swipeRightSecondary)
+        defaults.set(PersonalizationSwipeAction.instantMix.rawValue, forKey: PersonalizationPreferenceKey.swipeRightTertiary)
+
+        PersonalizationSettings.registerDefaults(in: defaults)
+
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .leftPrimary, in: defaults), .favorite)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .leftSecondary, in: defaults), .addToPlaylist)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightPrimary, in: defaults), .playNext)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightSecondary, in: defaults), .addToQueue)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .rightTertiary, in: defaults), .instantMix)
+    }
+
+    func testMigratesDownloadFromSwipeLeftOneToSwipeLeftThree() {
+        defaults.set(6, forKey: PersonalizationPreferenceKey.migrationVersion)
+
+        defaults.set(PersonalizationSwipeAction.pin.rawValue, forKey: PersonalizationPreferenceKey.playlistSwipeLeftPrimary)
+        defaults.set(PersonalizationSwipeAction.delete.rawValue, forKey: PersonalizationPreferenceKey.playlistSwipeLeftSecondary)
+        defaults.set(PersonalizationSwipeAction.download.rawValue, forKey: PersonalizationPreferenceKey.playlistSwipeRightPrimary)
+        defaults.set(PersonalizationSwipeAction.playNext.rawValue, forKey: PersonalizationPreferenceKey.playlistSwipeRightSecondary)
+        defaults.set(PersonalizationSwipeAction.addToQueue.rawValue, forKey: PersonalizationPreferenceKey.playlistSwipeRightTertiary)
+
+        defaults.set(PersonalizationSwipeAction.favorite.rawValue, forKey: PersonalizationPreferenceKey.albumArtistSwipeLeftPrimary)
+        defaults.set(PersonalizationSwipeAction.addToPlaylist.rawValue, forKey: PersonalizationPreferenceKey.albumArtistSwipeLeftSecondary)
+        defaults.set(PersonalizationSwipeAction.download.rawValue, forKey: PersonalizationPreferenceKey.albumArtistSwipeRightPrimary)
+        defaults.set(PersonalizationSwipeAction.playNext.rawValue, forKey: PersonalizationPreferenceKey.albumArtistSwipeRightSecondary)
+        defaults.set(PersonalizationSwipeAction.addToQueue.rawValue, forKey: PersonalizationPreferenceKey.albumArtistSwipeRightTertiary)
+
+        PersonalizationSettings.registerDefaults(in: defaults)
+
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .playlistRightPrimary, in: defaults), .playNext)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .playlistRightSecondary, in: defaults), .addToQueue)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .playlistRightTertiary, in: defaults), .download)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .albumArtistRightPrimary, in: defaults), .playNext)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .albumArtistRightSecondary, in: defaults), .addToQueue)
+        XCTAssertEqual(PersonalizationSettings.swipeAction(for: .albumArtistRightTertiary, in: defaults), .download)
     }
 
     func testIPhoneTabOrderKeepsSettingsImmediatelyBeforeSearch() {

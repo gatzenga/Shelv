@@ -734,13 +734,13 @@ private struct UISwipeActionGroupSettingsView: View {
 
     var body: some View {
         List {
-            Section(String(localized: "swipe_left")) {
+            Section(String(localized: "swipe_right")) {
                 ForEach(leadingSlots, id: \.self) { slot in
                     SwipeSlotNavigationRow(slot: slot, accentColor: accentColor)
                 }
             }
 
-            Section(String(localized: "swipe_right")) {
+            Section(String(localized: "swipe_left")) {
                 ForEach(trailingSlots, id: \.self) { slot in
                     SwipeSlotNavigationRow(slot: slot, accentColor: accentColor)
                 }

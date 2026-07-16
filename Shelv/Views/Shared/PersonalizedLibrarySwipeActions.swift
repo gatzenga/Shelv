@@ -18,21 +18,21 @@ struct PersonalizedPlaylistSwipeActionsModifier: ViewModifier {
     let onAddToQueue: () -> Void
 
     @AppStorage(PersonalizationPreferenceKey.playlistSwipeLeftPrimary) private var leftPrimary = PersonalizationSwipeAction.pin.rawValue
-    @AppStorage(PersonalizationPreferenceKey.playlistSwipeLeftSecondary) private var leftSecondary = PersonalizationSwipeAction.download.rawValue
-    @AppStorage(PersonalizationPreferenceKey.playlistSwipeLeftTertiary) private var leftTertiary = PersonalizationSwipeAction.delete.rawValue
+    @AppStorage(PersonalizationPreferenceKey.playlistSwipeLeftSecondary) private var leftSecondary = PersonalizationSwipeAction.delete.rawValue
     @AppStorage(PersonalizationPreferenceKey.playlistSwipeRightPrimary) private var rightPrimary = PersonalizationSwipeAction.playNext.rawValue
     @AppStorage(PersonalizationPreferenceKey.playlistSwipeRightSecondary) private var rightSecondary = PersonalizationSwipeAction.addToQueue.rawValue
+    @AppStorage(PersonalizationPreferenceKey.playlistSwipeRightTertiary) private var rightTertiary = PersonalizationSwipeAction.download.rawValue
 
     func body(content: Content) -> some View {
         content
             .swipeActions(edge: .leading, allowsFullSwipe: false) {
                 swipeButton(for: .playlistLeftPrimary)
                 swipeButton(for: .playlistLeftSecondary)
-                swipeButton(for: .playlistLeftTertiary)
             }
             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                 swipeButton(for: .playlistRightPrimary)
                 swipeButton(for: .playlistRightSecondary)
+                swipeButton(for: .playlistRightTertiary)
             }
     }
 
@@ -105,12 +105,12 @@ struct PersonalizedPlaylistSwipeActionsModifier: ViewModifier {
             rawValue = leftPrimary
         case .playlistLeftSecondary:
             rawValue = leftSecondary
-        case .playlistLeftTertiary:
-            rawValue = leftTertiary
         case .playlistRightPrimary:
             rawValue = rightPrimary
         case .playlistRightSecondary:
             rawValue = rightSecondary
+        case .playlistRightTertiary:
+            rawValue = rightTertiary
         default:
             return .none
         }
@@ -147,20 +147,20 @@ struct PersonalizedAlbumArtistSwipeActionsModifier: ViewModifier {
     @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
     @AppStorage(PersonalizationPreferenceKey.albumArtistSwipeLeftPrimary) private var leftPrimary = PersonalizationSwipeAction.favorite.rawValue
     @AppStorage(PersonalizationPreferenceKey.albumArtistSwipeLeftSecondary) private var leftSecondary = PersonalizationSwipeAction.addToPlaylist.rawValue
-    @AppStorage(PersonalizationPreferenceKey.albumArtistSwipeLeftTertiary) private var leftTertiary = PersonalizationSwipeAction.download.rawValue
     @AppStorage(PersonalizationPreferenceKey.albumArtistSwipeRightPrimary) private var rightPrimary = PersonalizationSwipeAction.playNext.rawValue
     @AppStorage(PersonalizationPreferenceKey.albumArtistSwipeRightSecondary) private var rightSecondary = PersonalizationSwipeAction.addToQueue.rawValue
+    @AppStorage(PersonalizationPreferenceKey.albumArtistSwipeRightTertiary) private var rightTertiary = PersonalizationSwipeAction.download.rawValue
 
     func body(content: Content) -> some View {
         content
             .swipeActions(edge: .leading, allowsFullSwipe: false) {
                 swipeButton(for: .albumArtistLeftPrimary)
                 swipeButton(for: .albumArtistLeftSecondary)
-                swipeButton(for: .albumArtistLeftTertiary)
             }
             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                 swipeButton(for: .albumArtistRightPrimary)
                 swipeButton(for: .albumArtistRightSecondary)
+                swipeButton(for: .albumArtistRightTertiary)
             }
     }
 
@@ -231,12 +231,12 @@ struct PersonalizedAlbumArtistSwipeActionsModifier: ViewModifier {
             rawValue = leftPrimary
         case .albumArtistLeftSecondary:
             rawValue = leftSecondary
-        case .albumArtistLeftTertiary:
-            rawValue = leftTertiary
         case .albumArtistRightPrimary:
             rawValue = rightPrimary
         case .albumArtistRightSecondary:
             rawValue = rightSecondary
+        case .albumArtistRightTertiary:
+            rawValue = rightTertiary
         default:
             return .none
         }
