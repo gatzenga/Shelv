@@ -477,7 +477,8 @@ final class CarPlayDiscoverController {
         switch type {
         case "play": icon = "play.fill"
         case "shuffle": icon = "shuffle"
-        default: icon = "sparkles"
+        case "newest": icon = "clock.fill"
+        default: icon = "clock.fill"
         }
         item.setImage(cpListIcon(icon))
         item.handler = { [weak self] _, c in

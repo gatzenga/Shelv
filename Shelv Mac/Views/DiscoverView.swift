@@ -165,7 +165,7 @@ struct DiscoverView: View {
                 }
                 MixButton(
                     title: String(localized: "mix_latest_downloads"),
-                    icon: "arrow.down.circle.fill",
+                    icon: "clock.fill",
                     isLoading: mixLoading == "offline_newest"
                 ) {
                     mixLoading = "offline_newest"
