@@ -23,6 +23,14 @@ struct SidebarView: View {
 
     @State private var showCreatePlaylist = false
     @State private var newPlaylistName = ""
+    @State private var expandedPlaylistFolderIDs: Set<String> = []
+
+    private struct VisiblePlaylistRow: Identifiable {
+        let node: PlaylistTreeNode
+        let depth: Int
+
+        var id: String { node.id }
+    }
 
     private var nonRecapPlaylists: [Playlist] {
         guard recapEnabled else { return libraryStore.playlists }
@@ -39,6 +47,25 @@ struct SidebarView: View {
 
     private var visiblePlaylistTree: [PlaylistTreeNode] {
         PlaylistTreeNode.make(from: visiblePlaylists)
+    }
+
+    private var visiblePlaylistRows: [VisiblePlaylistRow] {
+        flattenedPlaylistRows(visiblePlaylistTree)
+    }
+
+    private func flattenedPlaylistRows(
+        _ nodes: [PlaylistTreeNode],
+        depth: Int = 0
+    ) -> [VisiblePlaylistRow] {
+        nodes.flatMap { node in
+            var rows = [VisiblePlaylistRow(node: node, depth: depth)]
+            if node.isFolder,
+               expandedPlaylistFolderIDs.contains(node.id),
+               let children = node.children {
+                rows.append(contentsOf: flattenedPlaylistRows(children, depth: depth + 1))
+            }
+            return rows
+        }
     }
 
     private func sortedPlaylists(_ playlists: [Playlist]) -> [Playlist] {
@@ -139,8 +166,8 @@ struct SidebarView: View {
                                 .foregroundStyle(.tertiary)
                                 .padding(.horizontal, 10)
                         } else {
-                            OutlineGroup(visiblePlaylistTree, children: \.children) { node in
-                                playlistTreeRow(node)
+                            ForEach(visiblePlaylistRows) { row in
+                                playlistTreeRow(row.node, depth: row.depth)
                             }
                         }
                     }
@@ -240,7 +267,8 @@ struct SidebarView: View {
     }
 
     @ViewBuilder
-    private func playlistTreeRow(_ node: PlaylistTreeNode) -> some View {
+    private func playlistTreeRow(_ node: PlaylistTreeNode, depth: Int) -> some View {
+        let disclosureIndent: CGFloat = 18
         if let playlist = node.playlist {
             PlaylistSidebarRow(
                 playlist: playlist,
@@ -253,12 +281,36 @@ struct SidebarView: View {
                 selection = nil
                 appState.navigationPath = NavigationPath()
             }
+            // Reserve the disclosure-chevron column so playlist and folder icons align.
+            .padding(.leading, CGFloat(depth + 1) * disclosureIndent)
         } else {
-            PlaylistFolderSidebarRow(
-                title: node.title,
-                playlistCount: node.playlistCount,
-                themeColor: themeColor
-            )
+            let isExpanded = expandedPlaylistFolderIDs.contains(node.id)
+            Button {
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    if isExpanded {
+                        expandedPlaylistFolderIDs.remove(node.id)
+                    } else {
+                        expandedPlaylistFolderIDs.insert(node.id)
+                    }
+                }
+            } label: {
+                HStack(spacing: 0) {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                        .frame(width: disclosureIndent)
+
+                    PlaylistFolderSidebarRow(
+                        title: node.title,
+                        playlistCount: node.playlistCount,
+                        themeColor: themeColor
+                    )
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.leading, CGFloat(depth) * disclosureIndent)
         }
     }
 
