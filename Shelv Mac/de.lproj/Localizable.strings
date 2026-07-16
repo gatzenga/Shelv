@@ -105,6 +105,7 @@
 "grid_view" = "Rasteransicht";
 "loading_albums" = "Alben laden…";
 "search_albums" = "Alben suchen…";
+"search_albums_and_songs" = "Alben und Titel suchen…";
 "loading_artists" = "Künstler laden…";
 "no_cache_events_yet" = "Noch keine Cache-Ereignisse.";
 "cache_log" = "Cache-Log";

@@ -19,6 +19,9 @@ struct ArtistDetailView: View {
     @Environment(\.themeColor) private var themeColor
     @State private var showDeleteDownloadConfirm = false
     @State private var searchQuery = ""
+    @State private var artistSongs: [Song]?
+    @State private var isLoadingSearchSongs = false
+    @State private var loadedSongSearchSourceID: String?
 
     private var effectiveShowDownloadsOnly: Bool {
         offlineMode.isOffline || showDownloadsOnly
@@ -32,15 +35,18 @@ struct ArtistDetailView: View {
         SortDirection(rawValue: directionRaw) ?? .descending
     }
 
-    private var displayAlbums: [Album] {
-        let base: [Album]
+    private var availableAlbums: [Album] {
         if effectiveShowDownloadsOnly {
             let downloadedIds = Set(downloadStore.albums.map { $0.albumId })
-            base = vm.albums.filter { downloadedIds.contains($0.id) }
-        } else {
-            base = vm.albums
+            return vm.albums.filter { downloadedIds.contains($0.id) }
         }
-        let filtered = searchQuery.isEmpty ? base : base.filter { $0.name.localizedCaseInsensitiveContains(searchQuery) }
+        return vm.albums
+    }
+
+    private var displayAlbums: [Album] {
+        let filtered = searchQuery.isEmpty
+            ? availableAlbums
+            : availableAlbums.filter { $0.name.localizedCaseInsensitiveContains(searchQuery) }
         switch sortOption {
         case .name:
             return LibraryRepository.locallySortedAlbums(filtered, sort: .name, direction: .ascending)
@@ -54,6 +60,26 @@ struct ArtistDetailView: View {
             let sorted = filtered.sorted { ($0.year ?? 0) < ($1.year ?? 0) }
             return direction == .ascending ? sorted : Array(sorted.reversed())
         }
+    }
+
+    private var filteredSongs: [Song] {
+        guard !searchQuery.isEmpty else { return [] }
+        return (artistSongs ?? []).filter {
+            $0.title.localizedCaseInsensitiveContains(searchQuery)
+                || ($0.album?.localizedCaseInsensitiveContains(searchQuery) ?? false)
+        }
+    }
+
+    private var songSearchSourceID: String {
+        [
+            offlineMode.isOffline ? "offline" : "online",
+            String(downloadStore.songs.count),
+            availableAlbums.map(\.id).joined(separator: ",")
+        ].joined(separator: "|")
+    }
+
+    private var songSearchLoadID: String {
+        "\(searchQuery.isEmpty ? "idle" : "searching")|\(songSearchSourceID)"
     }
 
     var body: some View {
@@ -90,37 +116,39 @@ struct ArtistDetailView: View {
                         .padding(.top, 20)
 
                         if !vm.albums.isEmpty {
-                            HStack(spacing: 8) {
-                                Picker(String(localized: "sort"), selection: $sortRaw) {
-                                    ForEach(LibrarySortOption.allCases.filter { !offlineMode.isOffline || !$0.requiresServer }, id: \.self) { opt in
-                                        Text(opt.label).tag(opt.rawValue)
+                            if searchQuery.isEmpty {
+                                HStack(spacing: 8) {
+                                    Picker(String(localized: "sort"), selection: $sortRaw) {
+                                        ForEach(LibrarySortOption.allCases.filter { !offlineMode.isOffline || !$0.requiresServer }, id: \.self) { opt in
+                                            Text(opt.label).tag(opt.rawValue)
+                                        }
                                     }
-                                }
-                                .pickerStyle(.menu)
-                                .frame(width: 180)
-                                if sortOption != .name {
-                                    Button {
-                                        directionRaw = direction == .ascending
-                                            ? SortDirection.descending.rawValue
-                                            : SortDirection.ascending.rawValue
-                                    } label: {
-                                        Image(systemName: direction == .ascending ? "arrow.up" : "arrow.down")
+                                    .pickerStyle(.menu)
+                                    .frame(width: 180)
+                                    if sortOption != .name {
+                                        Button {
+                                            directionRaw = direction == .ascending
+                                                ? SortDirection.descending.rawValue
+                                                : SortDirection.ascending.rawValue
+                                        } label: {
+                                            Image(systemName: direction == .ascending ? "arrow.up" : "arrow.down")
+                                                .font(.title3)
+                                        }
+                                        .buttonStyle(.borderless)
+                                        .help(direction == .ascending ? String(localized: "ascending") : String(localized: "descending"))
+                                    }
+                                    Spacer()
+                                    Button { isGrid.toggle() } label: {
+                                        Image(systemName: isGrid ? "list.bullet" : "square.grid.2x2")
                                             .font(.title3)
                                     }
                                     .buttonStyle(.borderless)
-                                    .help(direction == .ascending ? String(localized: "ascending") : String(localized: "descending"))
+                                    .help(isGrid ? String(localized: "list_view") : String(localized: "grid_view"))
                                 }
-                                Spacer()
-                                Button { isGrid.toggle() } label: {
-                                    Image(systemName: isGrid ? "list.bullet" : "square.grid.2x2")
-                                        .font(.title3)
-                                }
-                                .buttonStyle(.borderless)
-                                .help(isGrid ? String(localized: "list_view") : String(localized: "grid_view"))
+                                .padding(.horizontal, 20)
                             }
-                            .padding(.horizontal, 20)
 
-                            if isGrid {
+                            if isGrid && searchQuery.isEmpty {
                                 LazyVGrid(
                                     columns: [GridItem(.adaptive(minimum: 160, maximum: 200), spacing: 16)],
                                     spacing: 20
@@ -134,7 +162,7 @@ struct ArtistDetailView: View {
                                     }
                                 }
                                 .padding(20)
-                            } else {
+                            } else if searchQuery.isEmpty {
                                 LazyVStack(spacing: 0) {
                                     ForEach(displayAlbums) { album in
                                         NavigationLink(value: album) {
@@ -148,6 +176,42 @@ struct ArtistDetailView: View {
                                     }
                                 }
                                 .padding(.bottom, 8)
+                            } else if !displayAlbums.isEmpty {
+                                SearchSection(title: String(localized: "albums")) {
+                                    LazyVStack(spacing: 0) {
+                                        ForEach(displayAlbums) { album in
+                                            NavigationLink(value: album) {
+                                                AlbumListRow(album: album)
+                                            }
+                                            .buttonStyle(.plain)
+                                            .albumContextMenu(album)
+                                            if album.id != displayAlbums.last?.id {
+                                                Divider().padding(.leading, 92)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if !searchQuery.isEmpty {
+                            if isLoadingSearchSongs {
+                                ProgressView(String(localized: "loading_tracks"))
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 20)
+                            } else if !filteredSongs.isEmpty {
+                                SearchSection(title: String(localized: "songs")) {
+                                    ForEach(filteredSongs) { song in
+                                        SearchSongRow(song: song) {
+                                            let index = filteredSongs.firstIndex(where: { $0.id == song.id }) ?? 0
+                                            appState.player.play(songs: filteredSongs, startIndex: index)
+                                        } onPlayNext: {
+                                            appState.player.addPlayNext(song)
+                                        } onAddToQueue: {
+                                            appState.player.addToQueue(song)
+                                        }
+                                    }
+                                }
                             }
                         }
 
@@ -162,7 +226,7 @@ struct ArtistDetailView: View {
             }
         }
         .navigationTitle(vm.artist?.name ?? artistName)
-        .searchable(text: $searchQuery, prompt: String(localized: "search_albums"))
+        .searchable(text: $searchQuery, prompt: String(localized: "search_albums_and_songs"))
         .onChange(of: offlineMode.isOffline) { _, isOffline in
             if isOffline && sortOption.requiresServer {
                 sortRaw = LibrarySortOption.name.rawValue
@@ -174,6 +238,19 @@ struct ArtistDetailView: View {
             Task { await vm.load(artistId: artistId, artistName: artistName) }
         }
         .task(id: artistId) { await vm.load(artistId: artistId, artistName: artistName) }
+        .task(id: songSearchLoadID) {
+            guard !searchQuery.isEmpty, !availableAlbums.isEmpty else {
+                isLoadingSearchSongs = false
+                return
+            }
+            guard loadedSongSearchSourceID != songSearchSourceID else { return }
+            isLoadingSearchSongs = true
+            let songs = await vm.fetchSongs(albums: availableAlbums)
+            guard !Task.isCancelled else { return }
+            artistSongs = songs
+            loadedSongSearchSourceID = songSearchSourceID
+            isLoadingSearchSongs = false
+        }
         .alert(String(localized: "delete_downloads_2"), isPresented: $showDeleteDownloadConfirm) {
             Button(String(localized: "delete"), role: .destructive) {
                 for album in vm.albums {

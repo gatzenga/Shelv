@@ -26,6 +26,9 @@ struct ArtistDetailView: View {
     @State private var showError = false
     @State private var currentToast: ShelveToast?
     @State private var searchQuery = ""
+    @State private var artistSongs: [Song]?
+    @State private var isLoadingSearchSongs = false
+    @State private var loadedSongSearchSourceID: String?
     @State private var albumToDeleteDownloads: Album?
     @State private var showDeleteArtistDownloadConfirm = false
     private let columns = [GridItem(.adaptive(minimum: 150, maximum: 200), spacing: 16)]
@@ -41,6 +44,26 @@ struct ArtistDetailView: View {
     private var filteredAlbums: [Album] {
         guard !searchQuery.isEmpty else { return sortedAlbums }
         return sortedAlbums.filter { $0.name.localizedCaseInsensitiveContains(searchQuery) }
+    }
+
+    private var filteredSongs: [Song] {
+        guard !searchQuery.isEmpty else { return [] }
+        return (artistSongs ?? []).filter {
+            $0.title.localizedCaseInsensitiveContains(searchQuery)
+                || ($0.album?.localizedCaseInsensitiveContains(searchQuery) ?? false)
+        }
+    }
+
+    private var songSearchSourceID: String {
+        [
+            offlineMode.isOffline ? "offline" : "online",
+            String(downloadStore.songs.count),
+            sortedAlbums.map(\.id).joined(separator: ",")
+        ].joined(separator: "|")
+    }
+
+    private var songSearchLoadID: String {
+        "\(searchQuery.isEmpty ? "idle" : "searching")|\(songSearchSourceID)"
     }
 
     private var sortedAlbums: [Album] {
@@ -65,13 +88,13 @@ struct ArtistDetailView: View {
 
     var body: some View {
         Group {
-            if isGrid {
+            if isGrid && searchQuery.isEmpty {
                 gridBody
             } else {
                 listBody
             }
         }
-        .searchable(text: $searchQuery, prompt: String(localized: "search_albums"))
+        .searchable(text: $searchQuery, prompt: String(localized: "search_albums_and_songs"))
         .navigationTitle(artist.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -129,6 +152,19 @@ struct ArtistDetailView: View {
         .task {
             guard detail == nil else { return }
             await loadDetail()
+        }
+        .task(id: songSearchLoadID) {
+            guard !searchQuery.isEmpty, !sortedAlbums.isEmpty else {
+                isLoadingSearchSongs = false
+                return
+            }
+            guard loadedSongSearchSourceID != songSearchSourceID else { return }
+            isLoadingSearchSongs = true
+            let songs = await fetchAllSongs(from: sortedAlbums)
+            guard !Task.isCancelled else { return }
+            artistSongs = songs
+            loadedSongSearchSourceID = songSearchSourceID
+            isLoadingSearchSongs = false
         }
     }
 
@@ -216,7 +252,7 @@ struct ArtistDetailView: View {
                         .padding(.horizontal)
                         .padding(.top, 40)
                         .frame(maxWidth: .infinity)
-                } else if !sortedAlbums.isEmpty {
+                } else if !filteredAlbums.isEmpty {
                     Text(String(localized: "albums"))
                         .font(.title3).bold()
                         .padding(.horizontal)
@@ -232,6 +268,30 @@ struct ArtistDetailView: View {
                     .padding(.horizontal)
                 }
 
+                if !searchQuery.isEmpty {
+                    if isLoadingSearchSongs {
+                        ProgressView()
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                    } else if !filteredSongs.isEmpty {
+                        Text(String(localized: "songs"))
+                            .font(.title3).bold()
+                            .padding(.horizontal)
+
+                        LazyVStack(spacing: 0) {
+                            ForEach(Array(filteredSongs.enumerated()), id: \.element.id) { index, song in
+                                Button {
+                                    player.play(songs: filteredSongs, startIndex: index)
+                                } label: {
+                                    LibraryStarredSongRow(song: song)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.horizontal)
+                    }
+                }
+
                 if let bio = biography, !bio.isEmpty {
                     ArtistBiographyBox(biography: bio, accentColor: accentColor)
                         .padding(.horizontal)
@@ -245,11 +305,13 @@ struct ArtistDetailView: View {
 
     private var listBody: some View {
         List {
-            Section {
-                artistHeader
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
+            if searchQuery.isEmpty {
+                Section {
+                    artistHeader
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                }
             }
 
             if isLoading {
@@ -271,7 +333,7 @@ struct ArtistDetailView: View {
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
                 }
-            } else if !sortedAlbums.isEmpty {
+            } else if !filteredAlbums.isEmpty {
                 Section {
                     ForEach(filteredAlbums) { album in
                         NavigationLink(destination: AlbumDetailView(album: album)) {
@@ -310,6 +372,28 @@ struct ArtistDetailView: View {
                         Spacer()
                     }
                     .padding(.leading, 0)
+                }
+            }
+
+            if !searchQuery.isEmpty {
+                if isLoadingSearchSongs {
+                    Section {
+                        ProgressView()
+                            .frame(maxWidth: .infinity)
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                    }
+                } else if !filteredSongs.isEmpty {
+                    Section(String(localized: "songs")) {
+                        ForEach(Array(filteredSongs.enumerated()), id: \.element.id) { index, song in
+                            Button {
+                                player.play(songs: filteredSongs, startIndex: index)
+                            } label: {
+                                LibraryStarredSongRow(song: song)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
                 }
             }
 
