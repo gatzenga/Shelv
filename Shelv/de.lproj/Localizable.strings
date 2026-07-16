@@ -263,7 +263,7 @@
 "add_server" = "Server hinzufügen";
 "connection_successful" = "Verbindung erfolgreich!";
 "calculating" = "Berechne…";
-"download_everything" = "Alles herunterladen";
+"download_everything" = "Massen-Download";
 "start" = "Starten";
 "songs_to_download" = "Songs";
 "estimated_size" = "Geschätzte Grösse";

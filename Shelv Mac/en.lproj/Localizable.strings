@@ -140,11 +140,11 @@
 "disable_downloads_2" = "Disable downloads?";
 "disabling_downloads_will_cancel_active_downloads_and_remove_downloads" = "Active downloads will be canceled and all downloaded songs, albums and artists will be removed from this device.";
 "bulk_download" = "Bulk Download";
-"download_everything" = "Download Everything…";
+"download_everything" = "Bulk Download…";
 "max_storage" = "Max Storage";
 "delete_all_downloads" = "Delete All Downloads";
 "delete_all_downloaded_songs" = "Delete all downloaded songs?";
-"download_everything_2" = "Download Everything";
+"download_everything_2" = "Bulk Download";
 "songs_to_download" = "Songs to download";
 "estimated_size" = "Estimated size";
 "storage_limit" = "Storage limit";

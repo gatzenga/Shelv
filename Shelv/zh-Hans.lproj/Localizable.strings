@@ -263,7 +263,7 @@
 "add_server" = "添加服务器";
 "connection_successful" = "连接成功！";
 "calculating" = "正在计算…";
-"download_everything" = "下载全部";
+"download_everything" = "批量下载";
 "start" = "开始";
 "songs_to_download" = "待下载歌曲";
 "estimated_size" = "预估大小";

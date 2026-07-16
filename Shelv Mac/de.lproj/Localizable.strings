@@ -140,11 +140,11 @@
 "disable_downloads_2" = "Downloads deaktivieren?";
 "disabling_downloads_will_cancel_active_downloads_and_remove_downloads" = "Aktive Downloads werden abgebrochen und alle heruntergeladenen Songs, Alben und Künstler von diesem Gerät entfernt.";
 "bulk_download" = "Massen-Download";
-"download_everything" = "Alles herunterladen…";
+"download_everything" = "Massen-Download…";
 "max_storage" = "Max. Speicher";
 "delete_all_downloads" = "Alle Downloads löschen";
 "delete_all_downloaded_songs" = "Alle Downloads löschen?";
-"download_everything_2" = "Alles herunterladen";
+"download_everything_2" = "Massen-Download";
 "songs_to_download" = "Songs";
 "estimated_size" = "Geschätzte Grösse";
 "storage_limit" = "Limit";
