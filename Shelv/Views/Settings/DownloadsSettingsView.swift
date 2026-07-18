@@ -9,6 +9,7 @@ struct DownloadsSettingsView: View {
     @ObservedObject var offlineMode = OfflineModeService.shared
     @ObservedObject private var keepOffline = KeepLibraryOfflineService.shared
     @ObservedObject private var downloadStore = DownloadStore.shared
+    @ObservedObject private var downloadActivity = DownloadActivityStore.shared
 
     @State private var showBulkDownloadSheet = false
     @State private var showKeepLibraryOfflineSheet = false
@@ -19,7 +20,7 @@ struct DownloadsSettingsView: View {
     private var activeServerId: String? { serverStore.activeServer?.stableId }
     private var hasDownloadsToClear: Bool {
         !downloadStore.songs.isEmpty
-        || downloadStore.batchProgress != nil
+        || downloadActivity.batchProgress != nil
         || !downloadStore.inFlightProgress.isEmpty
         || !downloadStore.inFlightStates.isEmpty
     }
@@ -365,14 +366,14 @@ private struct DownloadStatsCell: View {
 }
 
 private struct ActiveDownloadProgressCell: View {
-    @ObservedObject private var store = DownloadStore.shared
+    @ObservedObject private var activity = DownloadActivityStore.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
     let serverId: String?
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
     var body: some View {
-        if let progress = store.batchProgress {
+        if let progress = activity.batchProgress {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {

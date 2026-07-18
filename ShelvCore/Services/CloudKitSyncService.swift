@@ -3,6 +3,48 @@ import Combine
 import Foundation
 import Network
 
+private nonisolated enum CloudKitBufferedLogKind: Sendable {
+    case operation(isError: Bool)
+    case debug
+    case recap
+}
+
+private nonisolated struct CloudKitBufferedLogEntry: Sendable {
+    let date: Date
+    let message: String
+    let kind: CloudKitBufferedLogKind
+}
+
+/// Syncs can emit dozens of diagnostic messages in a short burst.  Buffering them
+/// here keeps those messages useful without turning every one into a separate
+/// MainActor hop and ObservableObject invalidation.
+private actor CloudKitLogBuffer {
+    static let shared = CloudKitLogBuffer()
+
+    private var pending: [CloudKitBufferedLogEntry] = []
+    private var flushTask: Task<Void, Never>?
+
+    func append(_ message: String, kind: CloudKitBufferedLogKind) {
+        pending.append(CloudKitBufferedLogEntry(date: Date(), message: message, kind: kind))
+        guard flushTask == nil else { return }
+        flushTask = Task(priority: .utility) {
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled else { return }
+            await self.flush()
+        }
+    }
+
+    private func flush() async {
+        let entries = pending
+        pending.removeAll(keepingCapacity: true)
+        flushTask = nil
+        guard !entries.isEmpty else { return }
+        await MainActor.run {
+            CloudKitSyncService.shared.status.apply(entries)
+        }
+    }
+}
+
 // MARK: - Sync Status (UI-facing)
 
 @MainActor
@@ -27,22 +69,37 @@ final class CloudKitSyncStatus: ObservableObject {
         return f
     }()
 
-    func appendLog(_ message: String) {
-        let stamp = Self.timeFormatter.string(from: Date())
-        logEntries.insert("[\(stamp)] \(message)", at: 0)
-        if logEntries.count > 100 { logEntries.removeLast(logEntries.count - 100) }
-    }
+    fileprivate func apply(_ entries: [CloudKitBufferedLogEntry]) {
+        var operations: [String] = []
+        var debug: [String] = []
+        var recap: [String] = []
+        var newestError: String?
 
-    func appendDebugLog(_ message: String) {
-        let stamp = Self.timeFormatter.string(from: Date())
-        debugLogEntries.insert("[\(stamp)] \(message)", at: 0)
-        if debugLogEntries.count > 500 { debugLogEntries.removeLast(debugLogEntries.count - 500) }
-    }
+        for entry in entries {
+            let stamp = Self.timeFormatter.string(from: entry.date)
+            let formatted = "[\(stamp)] \(entry.message)"
+            switch entry.kind {
+            case .operation(let isError):
+                operations.append(formatted)
+                debug.append("[\(stamp)] [CloudKitSync] \(entry.message)")
+                if isError { newestError = entry.message }
+            case .debug:
+                debug.append(formatted)
+            case .recap:
+                recap.append(formatted)
+            }
+        }
 
-    func appendRecapLog(_ message: String) {
-        let stamp = Self.timeFormatter.string(from: Date())
-        recapCreationLog.insert("[\(stamp)] \(message)", at: 0)
-        if recapCreationLog.count > 300 { recapCreationLog.removeLast(recapCreationLog.count - 300) }
+        if !operations.isEmpty {
+            logEntries = Array((operations.reversed() + logEntries).prefix(100))
+        }
+        if !debug.isEmpty {
+            debugLogEntries = Array((debug.reversed() + debugLogEntries).prefix(500))
+        }
+        if !recap.isEmpty {
+            recapCreationLog = Array((recap.reversed() + recapCreationLog).prefix(300))
+        }
+        if let newestError { lastError = newestError }
     }
 }
 
@@ -164,7 +221,9 @@ actor CloudKitSyncService {
     private var lastDisabledLogAt: [String: Date] = [:]
     private let minimumVisibleStatusDuration: TimeInterval = 3
     private var isSyncWorkflowRunning = false
-    private var isSyncNowQueued = false
+    private var isSyncNowWorkflowRunning = false
+    private var syncNowCompletionGeneration: UInt64 = 0
+    private var syncWorkflowWaiters: [CheckedContinuation<Void, Never>] = []
     private var recapSyncFailureMessage: String?
     private var currentStatusChangedAt = Date.distantPast
     private var isApplyingRemoteUICustomizations = false
@@ -301,14 +360,46 @@ actor CloudKitSyncService {
             return false
         }
         isSyncWorkflowRunning = true
+        isSyncNowWorkflowRunning = false
         return true
     }
 
     private func endSyncWorkflow() {
         isSyncWorkflowRunning = false
-        guard isSyncNowQueued else { return }
-        isSyncNowQueued = false
-        Task { await self.syncNow() }
+        let waiters = syncWorkflowWaiters
+        syncWorkflowWaiters.removeAll(keepingCapacity: true)
+        waiters.forEach { $0.resume() }
+    }
+
+    /// Automatic sync requests coalesce, but every caller waits until the one
+    /// follow-up run that covers its request has actually completed.
+    private func acquireSyncNowWorkflow() async -> Bool {
+        let targetGeneration = syncNowCompletionGeneration &+ (
+            isSyncWorkflowRunning && isSyncNowWorkflowRunning ? 2 : 1
+        )
+        var didLogQueue = false
+
+        while syncNowCompletionGeneration < targetGeneration {
+            if !isSyncWorkflowRunning {
+                isSyncWorkflowRunning = true
+                isSyncNowWorkflowRunning = true
+                return true
+            }
+            if !didLogQueue {
+                log("Sync queued — another sync is already running")
+                didLogQueue = true
+            }
+            await withCheckedContinuation { continuation in
+                syncWorkflowWaiters.append(continuation)
+            }
+        }
+        return false
+    }
+
+    private func endSyncNowWorkflow() {
+        isSyncNowWorkflowRunning = false
+        syncNowCompletionGeneration &+= 1
+        endSyncWorkflow()
     }
 
     // MARK: - Device ID
@@ -426,8 +517,10 @@ actor CloudKitSyncService {
         let monitor = NWPathMonitor()
         monitor.pathUpdateHandler = { path in
             guard path.status == .satisfied else { return }
-            Task {
-                await CloudKitSyncService.shared.syncNow()
+            Task(priority: .utility) {
+                await BackgroundWorkCoordinator.shared.run(.cloudSync) {
+                    await CloudKitSyncService.shared.syncNow()
+                }
             }
         }
         monitor.start(queue: DispatchQueue(label: "ch.vkugler.shelv.netmonitor", qos: .utility))
@@ -1455,7 +1548,20 @@ actor CloudKitSyncService {
             record["changedAt"] = changedAt
             record["signature"] = signature
             // Singleton pro Server, last-write-wins → Server-Konflikt bewusst überschreiben.
-            _ = try await db.modifyRecords(saving: [record], deleting: [], savePolicy: .allKeys, atomically: true)
+            let saveResults = try await db.modifyRecords(
+                saving: [record],
+                deleting: [],
+                savePolicy: .allKeys,
+                atomically: true
+            ).saveResults
+            guard let result = saveResults[record.recordID] else {
+                debug("[CloudKitSync] PlayQueue save returned no record result")
+                return false
+            }
+            if case .failure(let error) = result {
+                debug("[CloudKitSync] PlayQueue save failed: \(error.localizedDescription)")
+                return false
+            }
             debug("[CloudKitSync] PlayQueue uploaded (\(payload.count) bytes)")
             return true
         } catch {
@@ -1572,18 +1678,14 @@ actor CloudKitSyncService {
     }
 
     func syncNow() async {
-        guard beginSyncWorkflow(named: "Sync") else {
-            isSyncNowQueued = true
-            log("Sync queued — another sync is already running")
-            return
-        }
-        defer { endSyncWorkflow() }
+        guard await acquireSyncNowWorkflow() else { return }
+        defer { endSyncNowWorkflow() }
         recapSyncFailureMessage = nil
 
         // Queue-Sync hängt an einem eigenen Toggle und läuft unabhängig vom Play-Log-Sync.
         // Bei jedem Sync-Auslöser (Foreground, Pull-to-Refresh, Mac-Refresh, Netz-Reconnect)
         // die Remote-Queue mitprüfen — so wird ein fremder Stand zuverlässig überall erkannt.
-        Task { @MainActor in await QueueSyncService.shared.checkForRemoteQueue() }
+        await QueueSyncService.shared.checkForRemoteQueue()
         // Navidrome-Outbox ist ausdrücklich unabhängig von den folgenden iCloud-Gates.
         await flushScrobbleQueue()
         guard canSyncBase else {
@@ -1619,15 +1721,20 @@ actor CloudKitSyncService {
         }
         if canSync(.recap) {
             await runVisibleStatusStep(statusText("sync_status_syncing_recaps")) {
-                await reuploadAllRecapMarkers()
-                let activeServerId = await MainActor.run { SubsonicAPIService.shared.activeServer?.stableId } ?? ""
-                if !activeServerId.isEmpty {
-                    await canonicalizeLocalRecapRegistry(serverId: activeServerId)
-                    let updated = await applyRecapDiffsWithNavidrome(serverId: activeServerId)
+                if let serverContext = await resolvedServerRequestContext() {
+                    await reuploadAllRecapMarkers(requestContext: serverContext)
+                    await canonicalizeLocalRecapRegistry(serverId: serverContext.serverId)
+                    let updated = await applyRecapDiffsWithNavidrome(
+                        serverId: serverContext.serverId,
+                        requestContext: serverContext
+                    )
                     if updated > 0 {
                         await setCurrentStatus(statusText("sync_status_updating_recap_playlists_format", count: updated))
                     }
-                    _ = await cleanupShelvRecapPlaylistsOnServer(serverId: activeServerId)
+                    _ = await cleanupShelvRecapPlaylistsOnServer(
+                        serverId: serverContext.serverId,
+                        requestContext: serverContext
+                    )
                 }
             }
         } else {
@@ -1700,7 +1807,8 @@ actor CloudKitSyncService {
             return
         }
 
-        let activeServerId = await MainActor.run { SubsonicAPIService.shared.activeServer?.stableId } ?? ""
+        let serverContext = await resolvedServerRequestContext()
+        let activeServerId = serverContext?.serverId ?? ""
 
         await runVisibleStatusStep(statusText("sync_status_preparing_icloud")) {
             await setup()
@@ -1731,9 +1839,12 @@ actor CloudKitSyncService {
                 _ = await uploadPendingEvents()
             }
 
-            if !activeServerId.isEmpty {
+            if let serverContext {
                 await runVisibleStatusStep(statusText("sync_status_cleaning_play_database")) {
-                    let result = await cleanupDeadPlayLogEntries(serverId: activeServerId)
+                    let result = await cleanupDeadPlayLogEntries(
+                        serverId: activeServerId,
+                        requestContext: serverContext
+                    )
                     if result.removedRows > 0 {
                         self.log("Removed \(result.removedRows) dead play rows")
                     }
@@ -1743,13 +1854,13 @@ actor CloudKitSyncService {
             logDisabled(.playHistory, action: "initial play history reconcile")
         }
 
-        if canSync(.recap), !activeServerId.isEmpty {
+        if canSync(.recap), let serverContext {
             await runVisibleStatusStep(statusText("sync_status_downloading_recaps")) {
                 _ = await downloadChanges(for: .recap)
             }
 
             await runVisibleStatusStep(statusText("sync_status_uploading_recaps")) {
-                await reuploadAllRecapMarkers()
+                await reuploadAllRecapMarkers(requestContext: serverContext)
             }
 
             await runVisibleStatusStep(statusText("sync_status_resolving_recap_conflicts")) {
@@ -1757,14 +1868,20 @@ actor CloudKitSyncService {
             }
 
             await runVisibleStatusStep(statusText("sync_status_updating_recap_playlists")) {
-                let updated = await applyRecapDiffsWithNavidrome(serverId: activeServerId)
+                let updated = await applyRecapDiffsWithNavidrome(
+                    serverId: activeServerId,
+                    requestContext: serverContext
+                )
                 if updated > 0 {
                     await setCurrentStatus(statusText("sync_status_updating_recap_playlists_format", count: updated))
                 }
             }
 
             await runVisibleStatusStep(statusText("sync_status_cleaning_duplicate_recaps")) {
-                let deleted = await cleanupShelvRecapPlaylistsOnServer(serverId: activeServerId)
+                let deleted = await cleanupShelvRecapPlaylistsOnServer(
+                    serverId: activeServerId,
+                    requestContext: serverContext
+                )
                 if deleted > 0 {
                     self.log("Deleted \(deleted) duplicate ShelV recap playlists")
                 }
@@ -1779,12 +1896,18 @@ actor CloudKitSyncService {
             resetChangeToken(for: .uiCustomizations)
             _ = await downloadChanges()
             _ = await uploadPendingEvents()
-            if canSync(.recap), !activeServerId.isEmpty {
+            if canSync(.recap), let serverContext {
                 recapSyncFailureMessage = nil
-                await reuploadAllRecapMarkers()
+                await reuploadAllRecapMarkers(requestContext: serverContext)
                 await canonicalizeLocalRecapRegistry(serverId: activeServerId)
-                _ = await applyRecapDiffsWithNavidrome(serverId: activeServerId)
-                _ = await cleanupShelvRecapPlaylistsOnServer(serverId: activeServerId)
+                _ = await applyRecapDiffsWithNavidrome(
+                    serverId: activeServerId,
+                    requestContext: serverContext
+                )
+                _ = await cleanupShelvRecapPlaylistsOnServer(
+                    serverId: activeServerId,
+                    requestContext: serverContext
+                )
             }
             await pushLyricsServerSettingsIfNeeded()
             await pushUICustomizationsIfNeeded()
@@ -1797,7 +1920,10 @@ actor CloudKitSyncService {
         log("Initial iCloud sync complete")
     }
 
-    private func cleanupDeadPlayLogEntries(serverId: String) async -> (checkedSongs: Int, removedRows: Int, deletedCloudEvents: Int) {
+    private func cleanupDeadPlayLogEntries(
+        serverId: String,
+        requestContext: SubsonicServerRequestContext
+    ) async -> (checkedSongs: Int, removedRows: Int, deletedCloudEvents: Int) {
         let ids = await PlayLogService.shared.distinctSongIds(serverId: serverId)
         guard !ids.isEmpty else { return (0, 0, 0) }
 
@@ -1809,13 +1935,17 @@ actor CloudKitSyncService {
 
             while inFlight < maxConcurrent, let id = iterator.next() {
                 inFlight += 1
-                group.addTask { (id, await Self.songIsDead(id: id)) }
+                group.addTask {
+                    (id, await Self.songIsDead(id: id, requestContext: requestContext))
+                }
             }
 
             for await (id, isDead) in group {
                 if isDead { dead.append(id) }
                 if let next = iterator.next() {
-                    group.addTask { (next, await Self.songIsDead(id: next)) }
+                    group.addTask {
+                        (next, await Self.songIsDead(id: next, requestContext: requestContext))
+                    }
                 }
             }
         }
@@ -1847,14 +1977,29 @@ actor CloudKitSyncService {
         return (removed, uuids.count)
     }
 
-    private nonisolated static func songIsDead(id: String) async -> Bool {
+    private nonisolated static func songIsDead(
+        id: String,
+        requestContext: SubsonicServerRequestContext
+    ) async -> Bool {
         do {
-            _ = try await SubsonicAPIService.shared.getSong(id: id)
+            _ = try await SubsonicAPIService.shared.getSong(id: id, context: requestContext)
             return false
         } catch SubsonicAPIError.apiError(let code, let message) {
             return RecapSyncLogic.isDefinitiveNotFound(code: code, message: message)
         } catch {
             return false
+        }
+    }
+
+    private func resolvedServerRequestContext() async -> SubsonicServerRequestContext? {
+        do {
+            let context = try await SubsonicAPIService.shared.resolvedActiveRequestContext()
+            return context.serverId.isEmpty ? nil : context
+        } catch is CancellationError {
+            return nil
+        } catch {
+            log("Server-bound sync skipped: \(error.localizedDescription)", isError: true)
+            return nil
         }
     }
 
@@ -1875,10 +2020,16 @@ actor CloudKitSyncService {
         await RecapStore.shared.loadEntries(serverId: serverId)
     }
 
-    private func applyRecapDiffsWithNavidrome(serverId: String) async -> Int {
+    private func applyRecapDiffsWithNavidrome(
+        serverId: String,
+        requestContext: SubsonicServerRequestContext
+    ) async -> Int {
         let diffs: [RecapDiff]
         do {
-            diffs = try await RecapStore.shared.computeDiffs(serverId: serverId)
+            diffs = try await RecapStore.shared.computeDiffs(
+                serverId: serverId,
+                requestContext: requestContext
+            )
         } catch {
             if recapSyncFailureMessage == nil {
                 recapSyncFailureMessage = error.localizedDescription
@@ -1892,7 +2043,12 @@ actor CloudKitSyncService {
         for diff in diffs {
             let decision: RecapDiffDecision = diff.serverMissing ? .createNew : .update
             do {
-                try await RecapStore.shared.applyDiff(diff, decision: decision, serverId: serverId)
+                try await RecapStore.shared.applyDiff(
+                    diff,
+                    decision: decision,
+                    serverId: serverId,
+                    requestContext: requestContext
+                )
                 applied += 1
             } catch {
                 if recapSyncFailureMessage == nil {
@@ -1905,13 +2061,16 @@ actor CloudKitSyncService {
         return applied
     }
 
-    private func cleanupShelvRecapPlaylistsOnServer(serverId: String) async -> Int {
+    private func cleanupShelvRecapPlaylistsOnServer(
+        serverId: String,
+        requestContext: SubsonicServerRequestContext
+    ) async -> Int {
         let canonicalIds = Set(await PlayLogService.shared.allRegistryEntries(serverId: serverId).map(\.playlistId))
         guard !canonicalIds.isEmpty else { return 0 }
 
         let playlists: [Playlist]
         do {
-            playlists = try await SubsonicAPIService.shared.getPlaylists()
+            playlists = try await SubsonicAPIService.shared.getPlaylists(context: requestContext)
         } catch {
             log("Recap server cleanup skipped: \(error.localizedDescription)", isError: true)
             return 0
@@ -1925,7 +2084,10 @@ actor CloudKitSyncService {
         var deleted = 0
         for playlist in obsolete {
             do {
-                try await SubsonicAPIService.shared.deletePlaylist(id: playlist.id)
+                try await SubsonicAPIService.shared.deletePlaylist(
+                    id: playlist.id,
+                    context: requestContext
+                )
                 deleted += 1
             } catch SubsonicAPIError.apiError(let code, let message)
                 where code == 70 || (message ?? "").localizedCaseInsensitiveContains("not found") {
@@ -1963,15 +2125,20 @@ actor CloudKitSyncService {
         if canSync(.recap) {
             await runVisibleStatusStep(statusText("sync_status_syncing_recaps")) {
                 await pushRetentionIfNeeded()
-                await reuploadAllRecapMarkers()
-                let activeServerId = await MainActor.run { SubsonicAPIService.shared.activeServer?.stableId } ?? ""
-                if !activeServerId.isEmpty {
-                    await canonicalizeLocalRecapRegistry(serverId: activeServerId)
-                    let updated = await applyRecapDiffsWithNavidrome(serverId: activeServerId)
+                if let serverContext = await resolvedServerRequestContext() {
+                    await reuploadAllRecapMarkers(requestContext: serverContext)
+                    await canonicalizeLocalRecapRegistry(serverId: serverContext.serverId)
+                    let updated = await applyRecapDiffsWithNavidrome(
+                        serverId: serverContext.serverId,
+                        requestContext: serverContext
+                    )
                     if updated > 0 {
                         await setCurrentStatus(statusText("sync_status_updating_recap_playlists_format", count: updated))
                     }
-                    _ = await cleanupShelvRecapPlaylistsOnServer(serverId: activeServerId)
+                    _ = await cleanupShelvRecapPlaylistsOnServer(
+                        serverId: serverContext.serverId,
+                        requestContext: serverContext
+                    )
                 }
             }
         }
@@ -1986,16 +2153,24 @@ actor CloudKitSyncService {
         await finishCurrentStatus(recapSyncFailureMessage ?? statusText("sync_status_complete"))
     }
 
-    private func reuploadAllRecapMarkers() async {
+    private func reuploadAllRecapMarkers(
+        requestContext: SubsonicServerRequestContext
+    ) async {
         guard canSync(.recap) else {
             logDisabled(.recap, action: "recap marker reupload")
             return
         }
-        await reuploadRecapMarkers(onlyLocalOnly: false)
+        await reuploadRecapMarkers(
+            onlyLocalOnly: false,
+            requestContext: requestContext
+        )
     }
 
-    private func reuploadRecapMarkers(onlyLocalOnly: Bool) async {
-        let stableId = await MainActor.run { SubsonicAPIService.shared.activeServer?.stableId } ?? ""
+    private func reuploadRecapMarkers(
+        onlyLocalOnly: Bool,
+        requestContext: SubsonicServerRequestContext
+    ) async {
+        let stableId = requestContext.serverId
         guard !stableId.isEmpty else { return }
         let all = await PlayLogService.shared.allRegistryEntries(serverId: stableId)
         let entries = onlyLocalOnly ? all.filter { $0.ckRecordName == nil } : all
@@ -2050,7 +2225,10 @@ actor CloudKitSyncService {
             let recordName = makeRecapMarkerRecordName(serverId: stableId, periodKey: conflict.periodKey, isTest: conflict.entry.isTest)
 
             do {
-                _ = try await SubsonicAPIService.shared.getPlaylist(id: conflict.existingPlaylistId)
+                _ = try await SubsonicAPIService.shared.getPlaylist(
+                    id: conflict.existingPlaylistId,
+                    context: requestContext
+                )
                 if onlyLocalOnly {
                     CloudKitSyncService.debugLog("[Reupload] conflict: iCloud playlistId=\(conflict.existingPlaylistId) exists on Navidrome — adopting, keeping local \(conflict.entry.playlistId) as orphan")
                     let updated = RecapRegistryRecord(
@@ -2066,7 +2244,10 @@ actor CloudKitSyncService {
                     await PlayLogService.shared.registerPlaylist(updated)
                 } else {
                     CloudKitSyncService.debugLog("[Reupload] conflict (full): iCloud has playlistId=\(conflict.existingPlaylistId), local had \(conflict.entry.playlistId) — adopting iCloud")
-                    try? await SubsonicAPIService.shared.deletePlaylist(id: conflict.entry.playlistId)
+                    try? await SubsonicAPIService.shared.deletePlaylist(
+                        id: conflict.entry.playlistId,
+                        context: requestContext
+                    )
                     let updated = RecapRegistryRecord(
                         playlistId: conflict.existingPlaylistId,
                         serverId: conflict.entry.serverId,
@@ -2115,11 +2296,8 @@ actor CloudKitSyncService {
 
     private func log(_ message: String, isError: Bool = false) {
         print("[CloudKitSync] \(message)")
-        let msg = message
-        Task { @MainActor in
-            status.appendLog(msg)
-            status.appendDebugLog("[CloudKitSync] \(msg)")
-            if isError { status.lastError = msg }
+        Task(priority: .utility) {
+            await CloudKitLogBuffer.shared.append(message, kind: .operation(isError: isError))
         }
     }
 
@@ -2146,25 +2324,22 @@ actor CloudKitSyncService {
 
     private func debug(_ message: String) {
         print(message)
-        let msg = message
-        Task { @MainActor in
-            status.appendDebugLog(msg)
+        Task(priority: .utility) {
+            await CloudKitLogBuffer.shared.append(message, kind: .debug)
         }
     }
 
     nonisolated static func debugLog(_ message: String) {
         print(message)
-        let msg = message
-        Task { @MainActor in
-            CloudKitSyncService.shared.status.appendDebugLog(msg)
+        Task(priority: .utility) {
+            await CloudKitLogBuffer.shared.append(message, kind: .debug)
         }
     }
 
     nonisolated static func recapLog(_ message: String) {
         print(message)
-        let msg = message
-        Task { @MainActor in
-            CloudKitSyncService.shared.status.appendRecapLog(msg)
+        Task(priority: .utility) {
+            await CloudKitLogBuffer.shared.append(message, kind: .recap)
         }
     }
 }

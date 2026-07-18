@@ -37,7 +37,7 @@ func haptic(_ style: UIImpactFeedbackGenerator.FeedbackStyle = .light) {
 struct ShelvApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var serverStore = ServerStore.shared
-    @ObservedObject private var downloadStore = DownloadStore.shared
+    private let downloadActivity = DownloadActivityStore.shared
     private let _playTracker = PlayTracker.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage("appAppearance") private var appAppearance = "system"
@@ -102,7 +102,9 @@ struct ShelvApp: App {
                     guard !Task.isCancelled,
                           revision == serverStore.activeServerRevision
                     else { return }
-                    await RecapStore.shared.setup(serverId: currentServer.stableId)
+                    await Task(priority: .utility) {
+                        await RecapStore.shared.setup(serverId: currentServer.stableId)
+                    }.value
                     guard !Task.isCancelled,
                           revision == serverStore.activeServerRevision
                     else { return }
@@ -125,16 +127,22 @@ struct ShelvApp: App {
                     PinnedPlaylistStore.shared.setActiveServer(refreshedServer.stableId)
                     await LibraryStore.shared.loadStarred()
                     // Nach App-Start / Server-Wechsel: auf eine fremde Remote-Queue prüfen.
-                    await QueueSyncService.shared.checkForRemoteQueue()
+                    await Task(priority: .utility) {
+                        await QueueSyncService.shared.checkForRemoteQueue()
+                    }.value
                     guard !Task.isCancelled,
                           revision == serverStore.activeServerRevision
                     else { return }
-                    await runKeepLibraryOfflineCheck(serverId: refreshedServer.stableId)
+                    await Task(priority: .utility) {
+                        await BackgroundWorkCoordinator.shared.run(.keepLibraryOffline) {
+                            await Self.runKeepLibraryOfflineCheck(serverId: refreshedServer.stableId)
+                        }
+                    }.value
                     guard !Task.isCancelled,
                           revision == serverStore.activeServerRevision
                     else { return }
                 }
-                .task {
+                .task(priority: .utility) {
                     await serverStore.waitUntilReady()
                     Task.detached(priority: .utility) {
                         await StreamCacheService.shared.cleanupOldFiles()
@@ -166,12 +174,17 @@ struct ShelvApp: App {
                     updateIdleTimer(phase: phase)
                     guard phase == .active else { return }
                     // syncNow prüft die Remote-Queue automatisch mit.
-                    Task { await CloudKitSyncService.shared.syncNow() }
-                    if let active = serverStore.activeServer {
-                        Task { await runKeepLibraryOfflineCheck(serverId: active.stableId) }
+                    Task(priority: .utility) {
+                        await BackgroundWorkCoordinator.shared.run(.cloudSync) {
+                            await CloudKitSyncService.shared.syncNow()
+                        }
+                        guard !Task.isCancelled, let active = serverStore.activeServer else { return }
+                        await BackgroundWorkCoordinator.shared.run(.keepLibraryOffline) {
+                            await Self.runKeepLibraryOfflineCheck(serverId: active.stableId)
+                        }
                     }
                 }
-                .onChange(of: downloadStore.batchProgress) { _, _ in
+                .onReceive(downloadActivity.$batchProgress) { _ in
                     updateIdleTimer(phase: scenePhase)
                 }
                 .onChange(of: preventSleepDuringDownloads) { _, _ in
@@ -189,7 +202,7 @@ struct ShelvApp: App {
     /// wegfällt (App in Background, Downloads fertig, Toggle aus), wird das normale
     /// Sperrverhalten wiederhergestellt.
     private func updateIdleTimer(phase: ScenePhase) {
-        let hasRunningDownloads = (downloadStore.batchProgress?.remaining ?? 0) > 0
+        let hasRunningDownloads = (downloadActivity.batchProgress?.remaining ?? 0) > 0
         let shouldPrevent = preventSleepDuringDownloads
             && phase == .active
             && hasRunningDownloads
@@ -197,11 +210,14 @@ struct ShelvApp: App {
     }
 
     @MainActor
-    private func runKeepLibraryOfflineCheck(serverId: String, force: Bool = false) async {
+    private static func runKeepLibraryOfflineCheck(serverId: String, force: Bool = false) async {
+        guard SubsonicAPIService.shared.activeServer?.stableId == serverId else { return }
         guard UserDefaults.standard.bool(forKey: "enableDownloads") else { return }
         guard KeepLibraryOfflineService.shared.isEnabled(serverId: serverId) else { return }
         await DownloadService.shared.waitForRestoredInflightTasks()
+        guard SubsonicAPIService.shared.activeServer?.stableId == serverId else { return }
         await LibraryStore.shared.loadAlbums()
+        guard SubsonicAPIService.shared.activeServer?.stableId == serverId else { return }
         let recapIds = UserDefaults.standard.bool(forKey: "recapEnabled")
             ? Array(RecapStore.shared.recapPlaylistIds)
             : []

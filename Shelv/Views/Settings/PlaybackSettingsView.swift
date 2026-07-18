@@ -87,6 +87,9 @@ struct PlaybackSettingsView: View {
                         Image(systemName: "arrow.triangle.2.circlepath").foregroundStyle(accentColor)
                     }
                 }
+                .onChange(of: queueSyncMode) { _, _ in
+                    QueueSyncService.shared.handleModeChange()
+                }
                 Button {
                     showAboutQueueSync = true
                 } label: {

@@ -30,22 +30,13 @@ struct PlaylistDetailView: View {
     @State private var originalRanks: [String: Int] = [:]
     @Environment(\.dismiss) private var dismiss
 
-    private struct IndexedSongRow: Identifiable {
-        let index: Int
-        let song: Song
-
-        var id: String { song.id }
-    }
-
-    private var displayedSongRows: [IndexedSongRow] {
-        songs.enumerated().compactMap { index, song in
-            guard !searchQuery.isEmpty, !isEditMode else {
-                return IndexedSongRow(index: index, song: song)
-            }
-            let matches = song.title.localizedCaseInsensitiveContains(searchQuery)
-                || (song.artist?.localizedCaseInsensitiveContains(searchQuery) ?? false)
-                || (song.album?.localizedCaseInsensitiveContains(searchQuery) ?? false)
-            return matches ? IndexedSongRow(index: index, song: song) : nil
+    private var displayedSongRows: [IndexedSongOccurrence] {
+        let rows = IndexedSongOccurrence.rows(for: songs)
+        guard !searchQuery.isEmpty, !isEditMode else { return rows }
+        return rows.filter { row in
+            row.song.title.localizedCaseInsensitiveContains(searchQuery)
+                || (row.song.artist?.localizedCaseInsensitiveContains(searchQuery) ?? false)
+                || (row.song.album?.localizedCaseInsensitiveContains(searchQuery) ?? false)
         }
     }
 
@@ -149,7 +140,8 @@ struct PlaylistDetailView: View {
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             if searchQuery.isEmpty {
                                 Button {
-                                    haptic(); Task { await removeSong(at: songsIndex) }
+                                    haptic()
+                                    removeSong(at: songsIndex)
                                 } label: {
                                     Image(systemName: "trash")
                                 }
@@ -162,7 +154,7 @@ struct PlaylistDetailView: View {
                         Task { await syncOrder() }
                     }
                     .onDelete { offsets in
-                        Task { await removeSongs(at: offsets) }
+                        removeSongs(at: offsets)
                     }
                     .deleteDisabled(isEditMode)
 
@@ -473,21 +465,27 @@ struct PlaylistDetailView: View {
         isLoading = false
     }
 
-    private func removeSong(at index: Int) async {
-        guard !isSyncing else { return }
+    private func removeSong(at index: Int) {
+        guard !isSyncing, songs.indices.contains(index) else { return }
         isSyncing = true
         songs.remove(at: index)
-        await libraryStore.removeSongsFromPlaylist(playlist, indices: [index])
-        isSyncing = false
+        Task {
+            await libraryStore.removeSongsFromPlaylist(playlist, indices: [index])
+            isSyncing = false
+        }
     }
 
-    private func removeSongs(at offsets: IndexSet) async {
+    private func removeSongs(at offsets: IndexSet) {
         guard !isSyncing else { return }
+        let validOffsets = IndexSet(offsets.filter { songs.indices.contains($0) })
+        guard !validOffsets.isEmpty else { return }
         isSyncing = true
-        let indices = Array(offsets).sorted(by: >)
-        songs.remove(atOffsets: offsets)
-        await libraryStore.removeSongsFromPlaylist(playlist, indices: indices)
-        isSyncing = false
+        let indices = Array(validOffsets).sorted(by: >)
+        songs.remove(atOffsets: validOffsets)
+        Task {
+            await libraryStore.removeSongsFromPlaylist(playlist, indices: indices)
+            isSyncing = false
+        }
     }
 
     private func syncOrder() async {

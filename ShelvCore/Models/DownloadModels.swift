@@ -1,6 +1,6 @@
 import Foundation
 
-nonisolated enum DownloadState: Equatable {
+nonisolated enum DownloadState: Equatable, Sendable {
     case none
     case queued
     case downloading(progress: Double)
@@ -17,7 +17,51 @@ nonisolated enum DownloadState: Equatable {
     }
 }
 
-nonisolated struct DownloadedSong: Identifiable, Hashable {
+/// Keeps delayed download retries addressable while their task is suspended.
+/// Tokens prevent an older sleeper from consuming a newer retry for the same song.
+nonisolated struct DownloadRetryRegistry<Job: Sendable>: Sendable {
+    nonisolated struct Token: Hashable, Sendable {
+        fileprivate let id = UUID()
+    }
+
+    private nonisolated struct Entry: Sendable {
+        let token: Token
+        let job: Job
+    }
+
+    private var entries: [String: Entry] = [:]
+
+    var isEmpty: Bool { entries.isEmpty }
+    var keys: [String] { Array(entries.keys) }
+    var jobs: [Job] { entries.values.map(\.job) }
+
+    func contains(_ key: String) -> Bool {
+        entries[key] != nil
+    }
+
+    @discardableResult
+    mutating func register(_ job: Job, forKey key: String) -> Token {
+        let token = Token()
+        entries[key] = Entry(token: token, job: job)
+        return token
+    }
+
+    @discardableResult
+    mutating func removeValue(forKey key: String) -> Job? {
+        entries.removeValue(forKey: key)?.job
+    }
+
+    mutating func takeValue(forKey key: String, token: Token) -> Job? {
+        guard entries[key]?.token == token else { return nil }
+        return entries.removeValue(forKey: key)?.job
+    }
+
+    mutating func removeAll(keepingCapacity: Bool = false) {
+        entries.removeAll(keepingCapacity: keepingCapacity)
+    }
+}
+
+nonisolated struct DownloadedSong: Identifiable, Hashable, Sendable {
     let songId: String
     let serverId: String
     let albumId: String
@@ -119,7 +163,7 @@ nonisolated struct DownloadedSong: Identifiable, Hashable {
     }
 }
 
-nonisolated struct DownloadedAlbum: Identifiable, Hashable {
+nonisolated struct DownloadedAlbum: Identifiable, Hashable, Sendable {
     let albumId: String
     let serverId: String
     let title: String
@@ -151,7 +195,7 @@ nonisolated struct DownloadedAlbum: Identifiable, Hashable {
     }
 }
 
-nonisolated struct DownloadedArtist: Identifiable, Hashable {
+nonisolated struct DownloadedArtist: Identifiable, Hashable, Sendable {
     let artistId: String
     let serverId: String
     let name: String

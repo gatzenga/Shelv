@@ -10,6 +10,7 @@ struct PlaylistTrackRow: View {
     var isStarred: Bool = false
     let themeColor: Color
     var isEditMode: Bool = false
+    var isMutationDisabled: Bool = false
     var canMoveUp: Bool = false
     var canMoveDown: Bool = false
     let onPlay: () -> Void
@@ -76,7 +77,7 @@ struct PlaylistTrackRow: View {
                             .frame(width: 28, height: 28)
                     }
                     .buttonStyle(.bordered)
-                    .disabled(!canMoveUp)
+                    .disabled(isMutationDisabled || !canMoveUp)
 
                     Button { onMoveDown() } label: {
                         Image(systemName: "chevron.down")
@@ -84,7 +85,7 @@ struct PlaylistTrackRow: View {
                             .frame(width: 28, height: 28)
                     }
                     .buttonStyle(.bordered)
-                    .disabled(!canMoveDown)
+                    .disabled(isMutationDisabled || !canMoveDown)
 
                     Button(role: .destructive) { onRemoveFromPlaylist() } label: {
                         Image(systemName: "trash")
@@ -93,6 +94,7 @@ struct PlaylistTrackRow: View {
                             .frame(width: 28, height: 28)
                     }
                     .buttonStyle(.borderless)
+                    .disabled(isMutationDisabled)
                 }
                 .padding(.trailing, 12)
             }
@@ -130,6 +132,7 @@ struct PlaylistTrackRow: View {
             Button(String(localized: "remove_from_playlist"), role: .destructive) {
                 onRemoveFromPlaylist()
             }
+            .disabled(isMutationDisabled)
             if showFavorite || showPlaylist {
                 Divider()
                 if showFavorite {
@@ -156,9 +159,10 @@ struct PlaylistTrackRow: View {
 struct PlaylistTracksList: View {
     let playlist: Playlist
     @Binding var songs: [Song]
-    var displaySongs: [Song]? = nil
+    var displayRows: [IndexedSongOccurrence]? = nil
     let isLoading: Bool
     let isEditMode: Bool
+    let isMutationDisabled: Bool
     let enableFavorites: Bool
     let enablePlaylists: Bool
     let themeColor: Color
@@ -172,7 +176,9 @@ struct PlaylistTracksList: View {
     let onMove: (IndexSet, Int) -> Void
     let onDelete: (IndexSet) -> Void
 
-    private var tracksToShow: [Song] { displaySongs ?? songs }
+    private var tracksToShow: [IndexedSongOccurrence] {
+        displayRows ?? IndexedSongOccurrence.rows(for: songs)
+    }
 
     var body: some View {
         if isLoading {
@@ -206,7 +212,9 @@ struct PlaylistTracksList: View {
             .deleteDisabled(true)
         } else {
             Section {
-                ForEach(Array(tracksToShow.enumerated()), id: \.element.id) { index, song in
+                ForEach(Array(tracksToShow.enumerated()), id: \.element.id) { displayIndex, row in
+                    let index = row.index
+                    let song = row.song
                     PlaylistTrackRow(
                         song: song,
                         trackNumber: originalRanks[song.id] ?? (index + 1),
@@ -216,9 +224,10 @@ struct PlaylistTracksList: View {
                         isStarred: libraryStore.isSongStarred(song),
                         themeColor: themeColor,
                         isEditMode: isEditMode,
+                        isMutationDisabled: isMutationDisabled,
                         canMoveUp: index > 0,
-                        canMoveDown: index < tracksToShow.count - 1,
-                        onPlay: { onPlayAt(index) },
+                        canMoveDown: displayIndex < tracksToShow.count - 1,
+                        onPlay: { onPlayAt(displayIndex) },
                         onPlayNext: { onPlayNext(song) },
                         onAddToQueue: { onAddToQueue(song) },
                         onFavorite: { Task { await libraryStore.toggleStarSong(song) } },
@@ -233,8 +242,8 @@ struct PlaylistTracksList: View {
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
                 }
-                .onMove(perform: isEditMode ? onMove : nil)
-                .onDelete(perform: isEditMode ? onDelete : nil)
+                .onMove(perform: isEditMode && !isMutationDisabled ? onMove : nil)
+                .onDelete(perform: isEditMode && !isMutationDisabled ? onDelete : nil)
             }
         }
     }

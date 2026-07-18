@@ -11,7 +11,7 @@ final class KeepLibraryOfflineService: ObservableObject {
     @Published private(set) var lowStorageBannerVisible = false
 
     private var activeServerId: String?
-    private var isChecking = false
+    private var checkingServerIds = Set<String>()
     private var pendingManualCancelServers = Set<String>()
     private var pendingLowStorageFailureServers = Set<String>()
     private var lowStorageFailureSignatures: [String: String] = [:]
@@ -61,7 +61,7 @@ final class KeepLibraryOfflineService: ObservableObject {
         Task { [weak self] in
             await DownloadService.shared.cancelBatch()
             await MainActor.run {
-                guard let self, !self.isChecking else { return }
+                guard let self, !self.checkingServerIds.contains(serverId) else { return }
                 self.pendingManualCancelServers.remove(serverId)
             }
         }
@@ -69,22 +69,34 @@ final class KeepLibraryOfflineService: ObservableObject {
 
     func markDownloadStorageFailure(serverId: String, failedSong: Song? = nil) {
         guard isEnabled(serverId: serverId) else { return }
-        activeServerId = serverId
         pendingLowStorageFailureServers.insert(serverId)
-        status = .pausedLowStorage
+        setFullyPaused(true, serverId: serverId)
         let availableBytes = Self.availableDiskBytes()
         saveStoragePause(
             serverId: serverId,
             availableBytes: availableBytes,
             reserveFloorBytes: availableBytes
         )
+        guard isPresentedServer(serverId) else { return }
+        status = .pausedLowStorage
         setLowStorageBannerVisible(shouldShowLowStorageBanner(serverId: serverId))
     }
 
     func prepare(serverId: String) {
         activeServerId = serverId
-        status = isEnabled(serverId: serverId) ? .idle : .inactive
-        setLowStorageBannerVisible(false)
+        guard isEnabled(serverId: serverId) else {
+            status = .inactive
+            setLowStorageBannerVisible(false)
+            return
+        }
+        if pendingLowStorageFailureServers.contains(serverId)
+            || isFullyPaused(serverId: serverId) {
+            status = .pausedLowStorage
+            setLowStorageBannerVisible(shouldShowLowStorageBanner(serverId: serverId))
+        } else {
+            status = .idle
+            setLowStorageBannerVisible(false)
+        }
     }
 
     func dismissLowStorageBanner() {
@@ -92,16 +104,15 @@ final class KeepLibraryOfflineService: ObservableObject {
     }
 
     func markDownloadsStarted(serverId: String) {
-        guard isEnabled(serverId: serverId) else { return }
-        activeServerId = serverId
+        guard isEnabled(serverId: serverId), isPresentedServer(serverId) else { return }
+        setFullyPaused(false, serverId: serverId)
         setLowStorageBannerVisible(false)
         status = .downloading
     }
 
     func markPausedLowStorage(serverId: String, skippedSongs: [Song] = []) {
         guard isEnabled(serverId: serverId) else { return }
-        activeServerId = serverId
-        status = .pausedLowStorage
+        setFullyPaused(true, serverId: serverId)
         if !skippedSongs.isEmpty {
             let availableBytes = Self.availableDiskBytes()
             saveStoragePause(
@@ -110,11 +121,14 @@ final class KeepLibraryOfflineService: ObservableObject {
                 reserveFloorBytes: availableBytes
             )
         }
+        guard isPresentedServer(serverId) else { return }
+        status = .pausedLowStorage
         setLowStorageBannerVisible(shouldShowLowStorageBanner(serverId: serverId))
     }
 
     func rememberStoragePause(serverId: String, availableBytes: Int64?, plan: BulkDownloadPlan) {
         guard isEnabled(serverId: serverId), !plan.skipped.isEmpty else { return }
+        setFullyPaused(false, serverId: serverId)
         saveStoragePause(
             serverId: serverId,
             availableBytes: availableBytes,
@@ -130,27 +144,28 @@ final class KeepLibraryOfflineService: ObservableObject {
         recapPlaylistIds: [String],
         force: Bool = false
     ) async {
-        guard isEnabled(serverId: serverId), !OfflineModeService.shared.isOffline else { return }
+        guard canContinueCheck(serverId: serverId) else { return }
         guard !libraryAlbums.isEmpty else { return }
-        guard !isChecking else { return }
+        guard checkingServerIds.insert(serverId).inserted else { return }
 
         activeServerId = serverId
         var isLowStorageCandidate = pendingLowStorageFailureServers.contains(serverId)
             || lowStorageFailureSignatures[serverId] != nil
-        isChecking = true
         status = .checking
         if !isLowStorageCandidate {
             setLowStorageBannerVisible(false)
         }
-        defer { isChecking = false }
+        defer { checkingServerIds.remove(serverId) }
 
         let availableBytes = Self.availableDiskBytes()
         let existingPause = storagePause(serverId: serverId)
         if let pause = existingPause {
             if !hasEnoughStorageImprovement(since: pause, availableBytes: availableBytes) {
+                setFullyPaused(true, serverId: serverId)
                 status = .pausedLowStorage
                 return
             }
+            setFullyPaused(false, serverId: serverId)
             pendingLowStorageFailureServers.remove(serverId)
             lowStorageFailureSignatures.removeValue(forKey: serverId)
             isLowStorageCandidate = false
@@ -160,6 +175,7 @@ final class KeepLibraryOfflineService: ObservableObject {
             availableBytes: availableBytes,
             pause: existingPause
         )
+        guard canContinueCheck(serverId: serverId) else { return }
         var plan = await DownloadService.shared.planKeepLibraryOffline(
             serverId: serverId,
             maxBytes: maxBytes,
@@ -167,6 +183,7 @@ final class KeepLibraryOfflineService: ObservableObject {
             recapPlaylistIds: recapPlaylistIds,
             libraryAlbums: libraryAlbums
         )
+        guard canContinueCheck(serverId: serverId) else { return }
         plan = BulkDownloadPlan(
             planned: plan.planned,
             skipped: plan.skipped,
@@ -184,6 +201,7 @@ final class KeepLibraryOfflineService: ObservableObject {
                 clearStoragePause(serverId: serverId)
                 status = .nothingToDo
             } else {
+                setFullyPaused(true, serverId: serverId)
                 saveStoragePause(
                     serverId: serverId,
                     availableBytes: availableBytes,
@@ -200,6 +218,7 @@ final class KeepLibraryOfflineService: ObservableObject {
             let planSignature = downloadPlanSignature(plan.planned)
             if pendingLowStorageFailureServers.remove(serverId) != nil {
                 lowStorageFailureSignatures[serverId] = planSignature
+                setFullyPaused(true, serverId: serverId)
                 saveStoragePause(
                     serverId: serverId,
                     availableBytes: availableBytes,
@@ -211,6 +230,7 @@ final class KeepLibraryOfflineService: ObservableObject {
                 return
             }
             if lowStorageFailureSignatures[serverId] == planSignature {
+                setFullyPaused(true, serverId: serverId)
                 status = .pausedLowStorage
                 return
             }
@@ -222,6 +242,7 @@ final class KeepLibraryOfflineService: ObservableObject {
             return
         }
         pendingManualCancelServers.remove(serverId)
+        setFullyPaused(false, serverId: serverId)
 
         if plan.skipped.isEmpty {
             clearStoragePause(serverId: serverId)
@@ -234,7 +255,31 @@ final class KeepLibraryOfflineService: ObservableObject {
             )
         }
         status = .downloading
-        DownloadStore.shared.enqueueSongs(plan.planned)
+        await DownloadService.shared.enqueue(
+            songs: plan.planned,
+            serverId: serverId,
+            requiresKeepLibraryOfflineEnabled: true
+        )
+        if pendingManualCancelServers.remove(serverId) != nil,
+           isPresentedServer(serverId) {
+            status = .idle
+        }
+    }
+
+    func isEnqueueAuthorized(serverId: String) -> Bool {
+        canContinueCheck(serverId: serverId)
+            && !pendingManualCancelServers.contains(serverId)
+    }
+
+    private func canContinueCheck(serverId: String) -> Bool {
+        SubsonicAPIService.shared.activeServer?.stableId == serverId
+            && isEnabled(serverId: serverId)
+            && !OfflineModeService.shared.isOffline
+    }
+
+    private func isPresentedServer(_ serverId: String) -> Bool {
+        activeServerId == serverId
+            && SubsonicAPIService.shared.activeServer?.stableId == serverId
     }
 
     static func availableDiskBytes() -> Int64? {
@@ -289,6 +334,23 @@ final class KeepLibraryOfflineService: ObservableObject {
 
     private func storagePauseKey(serverId: String) -> String {
         "shelv_keep_library_offline_storage_pause_\(serverId)"
+    }
+
+    private func fullyPausedKey(serverId: String) -> String {
+        "shelv_keep_library_offline_fully_paused_\(serverId)"
+    }
+
+    private func isFullyPaused(serverId: String) -> Bool {
+        UserDefaults.standard.bool(forKey: fullyPausedKey(serverId: serverId))
+    }
+
+    private func setFullyPaused(_ paused: Bool, serverId: String) {
+        let key = fullyPausedKey(serverId: serverId)
+        if paused {
+            UserDefaults.standard.set(true, forKey: key)
+        } else {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
     }
 
     private func shouldShowLowStorageBanner(serverId: String) -> Bool {
@@ -351,6 +413,7 @@ final class KeepLibraryOfflineService: ObservableObject {
     private func clearStoragePause(serverId: String) {
         UserDefaults.standard.removeObject(forKey: storagePauseKey(serverId: serverId))
         UserDefaults.standard.removeObject(forKey: lowStorageBannerKey(serverId: serverId))
+        setFullyPaused(false, serverId: serverId)
     }
 
     private func hasEnoughStorageImprovement(since pause: StoragePause, availableBytes: Int64?) -> Bool {

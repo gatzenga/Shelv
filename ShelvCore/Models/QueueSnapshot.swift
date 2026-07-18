@@ -4,7 +4,7 @@ import CryptoKit
 /// Gewählte Methode für den geräteübergreifenden Queue-Sync.
 /// Persistiert via @AppStorage("queueSyncMode"). Bewusst exklusiv —
 /// immer nur eine Quelle der Wahrheit aktiv.
-enum QueueSyncMode: String, CaseIterable {
+nonisolated enum QueueSyncMode: String, CaseIterable, Sendable {
     /// Kein Sync.
     case off
     /// Subsonic `savePlayQueue`/`getPlayQueue` — interoperabel mit anderen Clients,
@@ -21,7 +21,7 @@ enum QueueSyncMode: String, CaseIterable {
 /// einzelnen CloudKit-Record abgelegt (volle Treue). Bei `QueueSyncMode.subsonic`
 /// kann nur `queue` + `currentSongId` + `positionMs` übertragen werden — die
 /// Play-Next-/User-Queue-Trennung und Shuffle/Repeat gehen dort verloren.
-struct QueueSnapshot: Codable, Equatable {
+nonisolated struct QueueSnapshot: Codable, Equatable, Sendable {
     /// Normale Album-/Listen-Queue.
     var queue: [Song]
     /// Index des aktuellen Songs innerhalb von `queue`.

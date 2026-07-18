@@ -851,7 +851,8 @@ class LibraryViewModel: ObservableObject {
         }
     }
 
-    func removeSongsFromPlaylist(_ playlist: Playlist, indices: [Int]) async {
+    @discardableResult
+    func removeSongsFromPlaylist(_ playlist: Playlist, indices: [Int]) async -> Bool {
         do {
             try await api.updatePlaylist(id: playlist.id, songIndicesToRemove: indices)
             if let idx = playlists.firstIndex(where: { $0.id == playlist.id }) {
@@ -860,8 +861,10 @@ class LibraryViewModel: ObservableObject {
                                           songCount: max(0, (p.songCount ?? 0) - indices.count),
                                           duration: p.duration, coverArt: p.coverArt)
             }
+            return true
         } catch {
             errorMessage = OfflineModeService.shared.inlineErrorMessage(for: error, userInitiated: true)
+            return false
         }
     }
 

@@ -63,6 +63,16 @@ nonisolated struct SubsonicPlayQueue {
     let changed: String?
 }
 
+/// Immutable credentials for work that must stay bound to one server even if
+/// the user switches the active server while the request sequence is running.
+nonisolated struct SubsonicServerRequestContext: Sendable {
+    let server: SubsonicServer
+    fileprivate let password: String
+    fileprivate let credentialGeneration: UInt64
+
+    var serverId: String { server.stableId }
+}
+
 private nonisolated struct Envelope<T: Decodable>: Decodable {
     let response: T
 
@@ -546,6 +556,21 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         return (credentials.server, credentials.password)
     }
 
+    func resolvedActiveRequestContext(
+        expectedServerId: String? = nil
+    ) async throws -> SubsonicServerRequestContext {
+        let credentials = try await resolveCredentials()
+        if let expectedServerId,
+           credentials.server.stableId != expectedServerId {
+            throw CancellationError()
+        }
+        return SubsonicServerRequestContext(
+            server: credentials.server,
+            password: credentials.password,
+            credentialGeneration: credentials.generation
+        )
+    }
+
     private func makeAuthParams(server: SubsonicServer, password: String) -> [URLQueryItem] {
         let s = makeSalt()
         let t = makeToken(password: password, salt: s)
@@ -888,6 +913,19 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         return song
     }
 
+    func getSong(id: String, context: SubsonicServerRequestContext) async throws -> Song {
+        let data = try await fetchData(
+            for: context.server,
+            password: context.password,
+            path: "getSong",
+            extra: [URLQueryItem(name: "id", value: id)]
+        )
+        let body = try decoder.decode(Envelope<SongBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+        guard let song = body.song else { throw SubsonicAPIError.apiError(0, "Song not found") }
+        return song
+    }
+
     func getSongsOrdered(ids: [String]) async throws -> [Song] {
         let indexed = Array(ids.enumerated())
         let pairs = await withTaskGroup(of: (Int, Song?).self) { group in
@@ -1045,6 +1083,33 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
             extra.append(URLQueryItem(name: "position", value: String(positionMs)))
         }
         let data = try await fetchData(path: "savePlayQueue", extra: extra)
+        let body = try decoder.decode(Envelope<PingBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+    }
+
+    func savePlayQueue(
+        songIds: [String],
+        current: String?,
+        positionMs: Int,
+        context: SubsonicServerRequestContext
+    ) async throws {
+        #if DEBUG
+        if context.server.baseURL == DemoContent.serverBaseURL
+            || context.server.activeBaseURL == DemoContent.serverBaseURL {
+            return
+        }
+        #endif
+        var extra = songIds.map { URLQueryItem(name: "id", value: $0) }
+        if !songIds.isEmpty {
+            if let current { extra.append(URLQueryItem(name: "current", value: current)) }
+            extra.append(URLQueryItem(name: "position", value: String(positionMs)))
+        }
+        let data = try await fetchData(
+            for: context.server,
+            password: context.password,
+            path: "savePlayQueue",
+            extra: extra
+        )
         let body = try decoder.decode(Envelope<PingBody>.self, from: data).response
         try check(status: body.status, error: body.error)
     }
@@ -1269,6 +1334,23 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         return body.playlists?.playlist ?? []
     }
 
+    func getPlaylists(context: SubsonicServerRequestContext) async throws -> [Playlist] {
+        #if DEBUG
+        if context.server.baseURL == DemoContent.serverBaseURL
+            || context.server.activeBaseURL == DemoContent.serverBaseURL {
+            return DemoContent.playlists
+        }
+        #endif
+        let data = try await fetchData(
+            for: context.server,
+            password: context.password,
+            path: "getPlaylists"
+        )
+        let body = try decoder.decode(Envelope<PlaylistsBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+        return body.playlists?.playlist ?? []
+    }
+
     func getPlaylist(id: String) async throws -> Playlist {
         #if DEBUG
         if isDemoActive {
@@ -1279,6 +1361,35 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         let data = try await fetchData(path: "getPlaylist", extra: [
             URLQueryItem(name: "id", value: id)
         ])
+        let body = try decoder.decode(Envelope<PlaylistBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+        guard let detail = body.playlist else {
+            throw SubsonicAPIError.apiError(0, "Playlist not found")
+        }
+        var playlist = Playlist(
+            id: detail.id, name: detail.name, comment: detail.comment,
+            songCount: detail.songCount, duration: detail.duration, coverArt: detail.coverArt
+        )
+        playlist.songs = detail.entry ?? []
+        return playlist
+    }
+
+    func getPlaylist(id: String, context: SubsonicServerRequestContext) async throws -> Playlist {
+        #if DEBUG
+        if context.server.baseURL == DemoContent.serverBaseURL
+            || context.server.activeBaseURL == DemoContent.serverBaseURL {
+            guard let playlist = DemoContent.playlist(id: id) else {
+                throw SubsonicAPIError.apiError(0, "Playlist not found")
+            }
+            return playlist
+        }
+        #endif
+        let data = try await fetchData(
+            for: context.server,
+            password: context.password,
+            path: "getPlaylist",
+            extra: [URLQueryItem(name: "id", value: id)]
+        )
         let body = try decoder.decode(Envelope<PlaylistBody>.self, from: data).response
         try check(status: body.status, error: body.error)
         guard let detail = body.playlist else {
@@ -1310,6 +1421,34 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         )
     }
 
+    func createPlaylist(
+        name: String,
+        songIds: [String] = [],
+        comment: String? = nil,
+        context: SubsonicServerRequestContext
+    ) async throws -> Playlist {
+        var extra = [URLQueryItem(name: "name", value: name)]
+        extra += songIds.map { URLQueryItem(name: "songId", value: $0) }
+        let data = try await fetchData(
+            for: context.server,
+            password: context.password,
+            path: "createPlaylist",
+            extra: extra
+        )
+        let body = try decoder.decode(Envelope<CreatePlaylistBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+        guard let detail = body.playlist else {
+            throw SubsonicAPIError.apiError(0, "Create playlist failed")
+        }
+        if let comment {
+            try? await updatePlaylist(id: detail.id, comment: comment, context: context)
+        }
+        return Playlist(
+            id: detail.id, name: detail.name, comment: detail.comment,
+            songCount: detail.songCount, duration: detail.duration, coverArt: detail.coverArt
+        )
+    }
+
     func updatePlaylist(id: String, name: String? = nil, comment: String? = nil,
                         songIdsToAdd: [String] = [], songIndicesToRemove: [Int] = []) async throws {
         var extra = [URLQueryItem(name: "playlistId", value: id)]
@@ -1323,6 +1462,30 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         try check(status: body.status, error: body.error)
     }
 
+    func updatePlaylist(
+        id: String,
+        name: String? = nil,
+        comment: String? = nil,
+        songIdsToAdd: [String] = [],
+        songIndicesToRemove: [Int] = [],
+        context: SubsonicServerRequestContext
+    ) async throws {
+        var extra = [URLQueryItem(name: "playlistId", value: id)]
+        if let name { extra.append(URLQueryItem(name: "name", value: name)) }
+        if let comment { extra.append(URLQueryItem(name: "comment", value: comment)) }
+        extra += songIdsToAdd.map { URLQueryItem(name: "songIdToAdd", value: $0) }
+        extra += normalizedPlaylistRemovalIndices(songIndicesToRemove)
+            .map { URLQueryItem(name: "songIndexToRemove", value: "\($0)") }
+        let data = try await fetchData(
+            for: context.server,
+            password: context.password,
+            path: "updatePlaylist",
+            extra: extra
+        )
+        let body = try decoder.decode(Envelope<PingBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+    }
+
     private func normalizedPlaylistRemovalIndices(_ indices: [Int]) -> [Int] {
         Array(Set(indices.filter { $0 >= 0 })).sorted(by: >)
     }
@@ -1331,6 +1494,23 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         let data = try await fetchData(path: "deletePlaylist", extra: [
             URLQueryItem(name: "id", value: id)
         ])
+        let body = try decoder.decode(Envelope<PingBody>.self, from: data).response
+        try check(status: body.status, error: body.error)
+    }
+
+    func deletePlaylist(id: String, context: SubsonicServerRequestContext) async throws {
+        #if DEBUG
+        if context.server.baseURL == DemoContent.serverBaseURL
+            || context.server.activeBaseURL == DemoContent.serverBaseURL {
+            return
+        }
+        #endif
+        let data = try await fetchData(
+            for: context.server,
+            password: context.password,
+            path: "deletePlaylist",
+            extra: [URLQueryItem(name: "id", value: id)]
+        )
         let body = try decoder.decode(Envelope<PingBody>.self, from: data).response
         try check(status: body.status, error: body.error)
     }

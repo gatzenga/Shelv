@@ -282,7 +282,9 @@ struct PlaylistDetailView: View {
     private var trackList: some View {
         ScrollView {
             LazyVStack(spacing: 4) {
-                ForEach(Array(songs.enumerated()), id: \.element.id) { index, song in
+                ForEach(IndexedSongOccurrence.rows(for: songs)) { row in
+                    let index = row.index
+                    let song = row.song
                     DetailSongRow(song: song, number: index, showArtwork: true,
                                   rank: index + 1, rankAccent: isRecap,
                                   playCount: isRecap ? (recapCounts[song.id] ?? 0) : nil) {

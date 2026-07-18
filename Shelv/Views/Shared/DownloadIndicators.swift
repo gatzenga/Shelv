@@ -1,4 +1,5 @@
 import SwiftUI
+@preconcurrency import Combine
 
 enum DownloadActionSymbols {
     static var delete: String {
@@ -58,7 +59,12 @@ struct DownloadStatusIcon: View {
                     .foregroundStyle(.red)
             }
         }
-        .onReceive(DownloadStore.shared.progressPublisher) { _ in progressTick &+= 1 }
+        .onReceive(
+            DownloadStore.shared.progressPublisher
+                .filter { $0.contains(songId) }
+        ) { _ in
+            progressTick &+= 1
+        }
     }
 }
 
