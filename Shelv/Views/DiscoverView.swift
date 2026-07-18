@@ -56,7 +56,7 @@ struct DiscoverView: View {
     @State private var serverURLSwitchTask: Task<Void, Never>?
     @State private var locallyInitiatedURLSwitchSignature: String?
     @State private var discoverAirPlayRouteIsActive = false
-    @State private var hasDownloads = !DownloadUIStateHub.shared.currentSnapshot.songIDs.isEmpty
+    @State private var hasDownloads = DownloadUIStateHub.shared.hasDownloads
     @State private var offlinePlaylistIDs = DownloadStore.shared.offlinePlaylistIds
 
     private var activeServer: SubsonicServer? {
@@ -211,7 +211,7 @@ struct DiscoverView: View {
             }
             .onChange(of: offlineMode.isOffline) { _, isOffline in
                 if isOffline {
-                    hasDownloads = !DownloadUIStateHub.shared.currentSnapshot.songIDs.isEmpty
+                    hasDownloads = DownloadUIStateHub.shared.hasDownloads
                     offlinePlaylistIDs = downloadStore.offlinePlaylistIds
                     showRadioSheet = false
                     showConnectionRecoveryState = false

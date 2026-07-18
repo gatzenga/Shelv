@@ -1,4 +1,5 @@
 import SwiftUI
+@preconcurrency import Combine
 
 enum DownloadActionSymbols {
     static var delete: String {
@@ -11,13 +12,17 @@ enum DownloadActionSymbols {
 
 struct DownloadStatusIcon: View {
     let songId: String
-    @ObservedObject private var downloadStore = DownloadStore.shared
-    @State private var progressTick = 0
+    private let downloadStore = DownloadStore.shared
+    @State private var state: DownloadState
     @State private var isSpinning = false
     @Environment(\.themeColor) private var themeColor
 
+    init(songId: String) {
+        self.songId = songId
+        _state = State(initialValue: DownloadStore.shared.downloadState(songId: songId))
+    }
+
     var body: some View {
-        let state = downloadStore.downloadState(songId: songId)
         Group {
             switch state {
             case .none:
@@ -48,7 +53,21 @@ struct DownloadStatusIcon: View {
                     .foregroundStyle(.red)
             }
         }
-        .onReceive(DownloadStore.shared.progressPublisher) { _ in progressTick &+= 1 }
+        .onReceive(
+            downloadStore.progressPublisher
+                .filter { $0.contains(songId) }
+        ) { _ in
+            state = downloadStore.downloadState(songId: songId)
+        }
+        .onReceive(
+            DownloadUIStateHub.shared.songAvailabilityPublisher(songID: songId)
+        ) { isDownloaded in
+            if isDownloaded {
+                state = .completed
+            } else {
+                state = downloadStore.downloadState(songId: songId)
+            }
+        }
     }
 }
 
@@ -85,18 +104,30 @@ struct DeleteDownloadIcon: View {
 
 struct AlbumDownloadBadge: View {
     let albumId: String
-    @ObservedObject private var statusCache = DownloadStatusCache.shared
+    @State private var isDownloaded: Bool
     @Environment(\.themeColor) private var themeColor
 
+    init(albumId: String) {
+        self.albumId = albumId
+        _isDownloaded = State(
+            initialValue: DownloadUIStateHub.shared.isAlbumDownloaded(albumId)
+        )
+    }
+
     var body: some View {
-        if statusCache.albumIds.contains(albumId) {
-            Image(systemName: "arrow.down.circle.fill")
-                .font(.caption)
-                .foregroundStyle(.white)
-                .padding(4)
-                .background(themeColor, in: Circle())
-                .shadow(color: .black.opacity(0.3), radius: 2, y: 1)
+        Group {
+            if isDownloaded {
+                Image(systemName: "arrow.down.circle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.white)
+                    .padding(4)
+                    .background(themeColor, in: Circle())
+                    .shadow(color: .black.opacity(0.3), radius: 2, y: 1)
+            }
         }
+        .onReceive(
+            DownloadUIStateHub.shared.albumAvailabilityPublisher(albumID: albumId)
+        ) { isDownloaded = $0 }
     }
 }
 

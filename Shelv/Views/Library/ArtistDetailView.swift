@@ -32,7 +32,7 @@ struct ArtistDetailView: View {
     @State private var loadedSongSearchSourceID: String?
     @State private var albumToDeleteDownloads: Album?
     @State private var showDeleteArtistDownloadConfirm = false
-    @State private var downloadedAlbumCounts = DownloadUIStateHub.shared.currentSnapshot.albumDownloadedCounts
+    @State private var downloadedAlbumCounts: [String: Int] = [:]
     private let columns = [GridItem(.adaptive(minimum: 150, maximum: 200), spacing: 16)]
 
     private var sortOption: AlbumSortOption {
@@ -70,14 +70,8 @@ struct ArtistDetailView: View {
 
     private var relevantAlbumDownloadCountsPublisher: AnyPublisher<[String: Int], Never> {
         let albumIDs = Set(sortedAlbums.map(\.id))
-        return DownloadUIStateHub.shared.snapshots
-            .map { snapshot in
-                Dictionary(uniqueKeysWithValues: albumIDs.compactMap { albumID in
-                    snapshot.albumDownloadedCounts[albumID].map { (albumID, $0) }
-                })
-            }
-            .removeDuplicates()
-            .eraseToAnyPublisher()
+        return DownloadUIStateHub.shared
+            .albumDownloadedCountsPublisher(albumIDs: albumIDs)
     }
 
     private var songSearchLoadID: String {
@@ -485,7 +479,7 @@ struct ArtistDetailView: View {
         guard enableDownloads else { return }
         let status = albumDownloadStatus(
             album,
-            counts: DownloadUIStateHub.shared.currentSnapshot.albumDownloadedCounts
+            counts: [album.id: DownloadUIStateHub.shared.albumDownloadedCount(album.id)]
         )
         switch status {
         case .none, .partial:

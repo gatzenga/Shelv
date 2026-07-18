@@ -54,13 +54,9 @@ final class DownloadUIStateHubTests: XCTestCase {
     func testCompletedRecordIsVisibleOptimisticallyAndDuplicateCompletionIsIdempotent() {
         let hub = DownloadUIStateHub()
         var cancellables = Set<AnyCancellable>()
-        var snapshotCount = 0
         var songAvailability: [Bool] = []
         var albumCounts: [Int] = []
 
-        hub.snapshots
-            .sink { _ in snapshotCount += 1 }
-            .store(in: &cancellables)
         hub.songAvailabilityPublisher(songID: "song-1")
             .sink { songAvailability.append($0) }
             .store(in: &cancellables)
@@ -77,7 +73,6 @@ final class DownloadUIStateHubTests: XCTestCase {
         )
         hub.applyCompletedRecord(first)
 
-        XCTAssertEqual(snapshotCount, 2)
         XCTAssertEqual(songAvailability, [false, true])
         XCTAssertEqual(albumCounts, [0, 1])
         XCTAssertEqual(hub.currentSnapshot.songIDs, ["song-1"])
@@ -92,16 +87,12 @@ final class DownloadUIStateHubTests: XCTestCase {
         hub.commit(.empty)
 
         XCTAssertEqual(hub.currentSnapshot, optimisticSnapshot)
-        XCTAssertEqual(snapshotCount, 2)
-
         hub.commit(optimisticSnapshot)
 
         XCTAssertEqual(hub.currentSnapshot, optimisticSnapshot)
-        XCTAssertEqual(snapshotCount, 2)
 
         hub.applyCompletedRecord(first)
 
-        XCTAssertEqual(snapshotCount, 2)
         XCTAssertEqual(songAvailability, [false, true])
         XCTAssertEqual(albumCounts, [0, 1])
         XCTAssertEqual(hub.currentSnapshot.albumDownloadedCounts["album-a"], 1)
@@ -115,7 +106,6 @@ final class DownloadUIStateHubTests: XCTestCase {
             bytes: 600
         ))
 
-        XCTAssertEqual(snapshotCount, 3)
         XCTAssertEqual(albumCounts, [0, 1, 2])
         XCTAssertEqual(hub.currentSnapshot.songIDs, ["song-1", "song-2"])
         XCTAssertEqual(hub.currentSnapshot.albumDownloadedCounts["album-a"], 2)
@@ -188,6 +178,113 @@ final class DownloadUIStateHubTests: XCTestCase {
         XCTAssertEqual(hub.currentSnapshot, firstAuthoritative)
         XCTAssertEqual(secondSongAvailability, [false, true, false])
         XCTAssertEqual(albumCounts, [0, 1, 2, 1])
+    }
+
+    func testCatalogHandoffDoesNotRepublishAlreadyVisibleValues() {
+        let hub = DownloadUIStateHub()
+        var cancellables = Set<AnyCancellable>()
+        var songAvailability: [Bool] = []
+        var albumCounts: [Int] = []
+        var stateChanges = 0
+
+        hub.songAvailabilityPublisher(songID: "song-1")
+            .sink { songAvailability.append($0) }
+            .store(in: &cancellables)
+        hub.albumDownloadedCountPublisher(albumID: "album-a")
+            .sink { albumCounts.append($0) }
+            .store(in: &cancellables)
+        hub.stateChanges
+            .sink { stateChanges += 1 }
+            .store(in: &cancellables)
+
+        let first = record(
+            songID: "song-1",
+            albumID: "album-a",
+            artistName: "Artist",
+            albumArtistName: "Album Artist",
+            bytes: 400
+        )
+        hub.applyCompletedRecord(first)
+        let visibleSnapshot = hub.currentSnapshot
+
+        hub.commitCatalogInsertions(visibleSnapshot, committedSongIDs: ["song-1"])
+
+        XCTAssertEqual(songAvailability, [false, true])
+        XCTAssertEqual(albumCounts, [0, 1])
+        XCTAssertEqual(stateChanges, 2)
+        XCTAssertEqual(hub.currentSnapshot, visibleSnapshot)
+    }
+
+    func testCatalogHandoffReconcilesAnAlbumArtistChangedByTrackOrdering() {
+        let initialSnapshot = DownloadUIStateSnapshot(
+            songIDs: ["song-2"],
+            albumDownloadedCounts: ["album-a": 1],
+            artistNames: ["Old Album Artist"],
+            artistBadgeNames: ["Old Album Artist", "Performer"],
+            totalBytes: 400
+        )
+        let hub = DownloadUIStateHub(initialSnapshot: initialSnapshot)
+        var cancellables = Set<AnyCancellable>()
+        var catalogArtistAvailability: [Bool] = []
+        var badgeArtistAvailability: [Bool] = []
+        var stateChanges = 0
+
+        hub.catalogArtistAvailabilityPublisher(name: "Old Album Artist")
+            .sink { catalogArtistAvailability.append($0) }
+            .store(in: &cancellables)
+        hub.artistAvailabilityPublisher(name: "Old Album Artist")
+            .sink { badgeArtistAvailability.append($0) }
+            .store(in: &cancellables)
+        hub.stateChanges
+            .sink { stateChanges += 1 }
+            .store(in: &cancellables)
+
+        hub.applyCompletedRecord(record(
+            songID: "song-1",
+            albumID: "album-a",
+            artistName: "Performer",
+            albumArtistName: "New Album Artist",
+            bytes: 600
+        ))
+
+        let reorderedCatalogSnapshot = DownloadUIStateSnapshot(
+            songIDs: ["song-1", "song-2"],
+            albumDownloadedCounts: ["album-a": 2],
+            artistNames: ["New Album Artist"],
+            artistBadgeNames: ["New Album Artist", "Performer"],
+            totalBytes: 1_000
+        )
+        hub.commitCatalogInsertions(
+            reorderedCatalogSnapshot,
+            committedSongIDs: ["song-1"]
+        )
+
+        XCTAssertEqual(catalogArtistAvailability, [true, false])
+        XCTAssertEqual(badgeArtistAvailability, [true, false])
+        XCTAssertEqual(stateChanges, 2)
+        XCTAssertEqual(hub.currentSnapshot, reorderedCatalogSnapshot)
+    }
+
+    func testUnrelatedCompletionDoesNotFanOutAcrossKeyedPublishers() {
+        let hub = DownloadUIStateHub()
+        var cancellables = Set<AnyCancellable>()
+        var emissions = Array(repeating: 0, count: 100)
+
+        for index in emissions.indices {
+            hub.songAvailabilityPublisher(songID: "visible-\(index)")
+                .sink { _ in emissions[index] += 1 }
+                .store(in: &cancellables)
+        }
+
+        hub.applyCompletedRecord(record(
+            songID: "unrelated-song",
+            albumID: "unrelated-album",
+            artistName: "Unrelated Artist",
+            albumArtistName: nil,
+            bytes: 100
+        ))
+
+        XCTAssertEqual(emissions, Array(repeating: 1, count: 100))
     }
 
     private func record(

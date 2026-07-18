@@ -47,6 +47,62 @@ private nonisolated struct BulkDownloadUnit: Sendable {
     let playlistMarker: BulkDownloadPlaylistMarker?
 }
 
+private actor DownloadArtworkPipeline {
+    // Match the existing audio concurrency so artwork deduplication does not
+    // delay the visible completion of an otherwise finished batch.
+    private static let maxConcurrentRequests = 5
+    private let session: URLSession
+    private var activeRequests = 0
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+    private var inFlightByKey: [String: Task<Data?, Never>] = [:]
+
+    init() {
+        let configuration = URLSessionConfiguration.default
+        configuration.timeoutIntervalForRequest = 30
+        configuration.timeoutIntervalForResource = 60
+        configuration.httpMaximumConnectionsPerHost = Self.maxConcurrentRequests
+        session = URLSession(configuration: configuration)
+    }
+
+    func data(for key: String, url: URL) async -> Data? {
+        if let task = inFlightByKey[key] {
+            return await task.value
+        }
+
+        let task = Task { [weak self] in
+            await self?.download(url: url)
+        }
+        inFlightByKey[key] = task
+        let data = await task.value
+        inFlightByKey.removeValue(forKey: key)
+        return data
+    }
+
+    private func download(url: URL) async -> Data? {
+        await acquireSlot()
+        defer { releaseSlot() }
+        return try? await session.data(from: url).0
+    }
+
+    private func acquireSlot() async {
+        if activeRequests < Self.maxConcurrentRequests {
+            activeRequests += 1
+            return
+        }
+        await withCheckedContinuation { continuation in
+            waiters.append(continuation)
+        }
+    }
+
+    private func releaseSlot() {
+        if waiters.isEmpty {
+            activeRequests = max(0, activeRequests - 1)
+        } else {
+            waiters.removeFirst().resume()
+        }
+    }
+}
+
 // MARK: - DownloadService
 
 actor DownloadService {
@@ -54,12 +110,7 @@ actor DownloadService {
 
     private let coordinator = DownloadSessionCoordinator()
     private var session: URLSession?
-    private let coverSession: URLSession = {
-        let cfg = URLSessionConfiguration.default
-        cfg.timeoutIntervalForRequest = 30
-        cfg.timeoutIntervalForResource = 60
-        return URLSession(configuration: cfg)
-    }()
+    private let artworkPipeline = DownloadArtworkPipeline()
 
     private let backgroundIdentifier = "ch.vkugler.Shelv.downloads"
     private let maxConcurrent = 5
@@ -457,6 +508,7 @@ actor DownloadService {
     func delete(songId: String, serverId: String) async {
         cancel(songId: songId, serverId: serverId)
         if let path = await DownloadDatabase.shared.filePath(songId: songId, serverId: serverId) {
+            LocalArtworkIndex.shared.remove(path: Self.coverPath(forFilePath: path))
             try? FileManager.default.removeItem(atPath: path)
             try? FileManager.default.removeItem(atPath: Self.coverPath(forFilePath: path))
         }
@@ -474,6 +526,7 @@ actor DownloadService {
             .filter { $0.albumId == albumId }
         for r in records {
             cancel(songId: r.songId, serverId: serverId)
+            LocalArtworkIndex.shared.remove(path: Self.coverPath(forFilePath: r.filePath))
             try? FileManager.default.removeItem(atPath: r.filePath)
             try? FileManager.default.removeItem(atPath: Self.coverPath(forFilePath: r.filePath))
             await DownloadDatabase.shared.delete(songId: r.songId, serverId: serverId)
@@ -502,6 +555,7 @@ actor DownloadService {
         }
         for r in records {
             cancel(songId: r.songId, serverId: serverId)
+            LocalArtworkIndex.shared.remove(path: Self.coverPath(forFilePath: r.filePath))
             try? FileManager.default.removeItem(atPath: r.filePath)
             try? FileManager.default.removeItem(atPath: Self.coverPath(forFilePath: r.filePath))
             await DownloadDatabase.shared.delete(songId: r.songId, serverId: serverId)
@@ -550,6 +604,7 @@ actor DownloadService {
         let records = await DownloadDatabase.shared.allRecords(serverId: serverId)
         for r in records {
             cancel(songId: r.songId, serverId: serverId)
+            LocalArtworkIndex.shared.remove(path: Self.coverPath(forFilePath: r.filePath))
             try? FileManager.default.removeItem(atPath: r.filePath)
             try? FileManager.default.removeItem(atPath: Self.coverPath(forFilePath: r.filePath))
         }
@@ -912,10 +967,25 @@ actor DownloadService {
         }
     }
 
-    func handleProgress(taskIdentifier: Int, written: Int64, total: Int64) {
-        guard let key = jobKeyByTask[taskIdentifier] else { return }
-        let p = total > 0 ? Double(written) / Double(total) : -1
-        publishProgress(key: key, value: p)
+    func handleProgress(_ samples: [DownloadProgressSample]) {
+        var didChange = false
+        for sample in samples {
+            guard let key = jobKeyByTask[sample.taskIdentifier] else { continue }
+            let progress = sample.total > 0
+                ? Double(sample.written) / Double(sample.total)
+                : -1
+            guard currentProgress[key] != progress else { continue }
+            currentProgress[key] = progress
+            didChange = true
+        }
+        guard didChange else { return }
+
+        // The URLSession delegate already limits these batches to one per UI
+        // interval. Publish this batch directly instead of adding a second delay.
+        progressPublishGeneration &+= 1
+        progressPublishTask?.cancel()
+        progressPublishTask = nil
+        publishProgressSnapshotIfChanged()
     }
 
     func handleCompletion(taskIdentifier: Int, tempURL: URL, byteSize: Int64, statusCode: Int?, mimeType: String?, taskDescription: String?) async {
@@ -933,6 +1003,12 @@ actor DownloadService {
 
         let key = Self.key(songId: job.song.id, serverId: job.serverId)
         inCompletionJobs[key] = job
+        if currentProgress[key] != 1 {
+            // Audio transfer is complete. Keep the ring at 100% while payload
+            // validation, artwork and the database commit finish.
+            currentProgress[key] = 1
+            publishProgressImmediately()
+        }
         defer {
             inCompletionJobs.removeValue(forKey: key)
             resetBatchIfDone()
@@ -1257,29 +1333,69 @@ actor DownloadService {
     private func downloadAssetsIfNeeded(for job: DownloadJob, audioPath: String) async {
         let coverPath = Self.coverPath(forFilePath: audioPath)
         if !FileManager.default.fileExists(atPath: coverPath), let coverURL = job.coverURL {
-            if let (data, _) = try? await coverSession.data(from: coverURL) {
+            if let coverArtId = job.coverArtId,
+               let sharedPath = await ensureSharedArtwork(
+                   artId: coverArtId,
+                   url: coverURL,
+                   serverId: job.serverId
+               ) {
+                do {
+                    try FileManager.default.linkItem(
+                        at: URL(fileURLWithPath: sharedPath),
+                        to: URL(fileURLWithPath: coverPath)
+                    )
+                } catch {
+                    try? FileManager.default.copyItem(
+                        at: URL(fileURLWithPath: sharedPath),
+                        to: URL(fileURLWithPath: coverPath)
+                    )
+                }
+            } else if let data = await artworkPipeline.data(
+                for: "\(job.serverId)::song::\(job.song.id)",
+                url: coverURL
+            ) {
                 try? data.write(to: URL(fileURLWithPath: coverPath), options: .atomic)
             }
         }
-        let artDir = Self.artworkDirectory(serverId: job.serverId)
         if let artId = job.artistCoverArtId, let artURL = job.artistCoverURL {
-            let artPath = Self.artistCoverPath(serverId: job.serverId, artId: artId)
-            if !FileManager.default.fileExists(atPath: artPath) {
-                try? FileManager.default.createDirectory(at: artDir, withIntermediateDirectories: true)
-                if let (data, _) = try? await coverSession.data(from: artURL) {
-                    try? data.write(to: URL(fileURLWithPath: artPath), options: .atomic)
-                }
-            }
+            _ = await ensureSharedArtwork(
+                artId: artId,
+                url: artURL,
+                serverId: job.serverId
+            )
         }
         if let artId = job.albumCoverArtId, let artURL = job.albumCoverURL {
-            let artPath = Self.artistCoverPath(serverId: job.serverId, artId: artId)
+            _ = await ensureSharedArtwork(
+                artId: artId,
+                url: artURL,
+                serverId: job.serverId
+            )
+        }
+    }
+
+    private func ensureSharedArtwork(
+        artId: String,
+        url: URL,
+        serverId: String
+    ) async -> String? {
+        let artPath = Self.artistCoverPath(serverId: serverId, artId: artId)
+        if !FileManager.default.fileExists(atPath: artPath) {
+            let artDirectory = Self.artworkDirectory(serverId: serverId)
+            try? FileManager.default.createDirectory(
+                at: artDirectory,
+                withIntermediateDirectories: true
+            )
+            guard let data = await artworkPipeline.data(
+                for: "\(serverId)::\(artId)",
+                url: url
+            ) else { return nil }
             if !FileManager.default.fileExists(atPath: artPath) {
-                try? FileManager.default.createDirectory(at: artDir, withIntermediateDirectories: true)
-                if let (data, _) = try? await coverSession.data(from: artURL) {
-                    try? data.write(to: URL(fileURLWithPath: artPath), options: .atomic)
-                }
+                try? data.write(to: URL(fileURLWithPath: artPath), options: .atomic)
             }
         }
+        guard FileManager.default.fileExists(atPath: artPath) else { return nil }
+        LocalArtworkIndex.shared.set(artId: artId, path: artPath)
+        return artPath
     }
 
     private func publishProgress(key: String, value: Double?) {
@@ -1381,26 +1497,49 @@ actor DownloadService {
 
 // MARK: - Coordinator
 
-private final class DownloadSessionCoordinator: NSObject, URLSessionDownloadDelegate {
+private nonisolated final class DownloadSessionCoordinator: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
     nonisolated(unsafe) weak var service: DownloadService?
+    private let progressQueue: DispatchQueue
+    private let progressCoalescer: DownloadProgressCoalescer
+
+    override init() {
+        let queue = DispatchQueue(
+            label: "ch.vkugler.Shelv.download-progress",
+            qos: .utility
+        )
+        progressQueue = queue
+        progressCoalescer = DownloadProgressCoalescer(
+            schedule: { [queue] work in
+                queue.asyncAfter(deadline: .now() + .milliseconds(200), execute: work)
+            },
+            emit: { _ in }
+        )
+        super.init()
+        progressCoalescer.setEmit { [weak self] samples in
+            guard let service = self?.service else { return }
+            Task.detached(priority: .utility) {
+                await service.handleProgress(samples)
+            }
+        }
+    }
 
     func urlSession(_ session: URLSession,
                     downloadTask: URLSessionDownloadTask,
                     didWriteData bytesWritten: Int64,
                     totalBytesWritten: Int64,
                     totalBytesExpectedToWrite: Int64) {
-        let id = downloadTask.taskIdentifier
-        Task { [weak service] in
-            await service?.handleProgress(taskIdentifier: id,
-                                          written: totalBytesWritten,
-                                          total: totalBytesExpectedToWrite)
-        }
+        progressCoalescer.record(DownloadProgressSample(
+            taskIdentifier: downloadTask.taskIdentifier,
+            written: totalBytesWritten,
+            total: totalBytesExpectedToWrite
+        ))
     }
 
     func urlSession(_ session: URLSession,
                     downloadTask: URLSessionDownloadTask,
                     didFinishDownloadingTo location: URL) {
         let id = downloadTask.taskIdentifier
+        progressCoalescer.discard(taskIdentifier: id)
         let safeURL = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("shelv-dl-\(id)-\(UUID().uuidString)")
         do {
@@ -1437,6 +1576,7 @@ private final class DownloadSessionCoordinator: NSObject, URLSessionDownloadDele
                     didCompleteWithError error: Error?) {
         guard error != nil else { return }
         let id = task.taskIdentifier
+        progressCoalescer.discard(taskIdentifier: id)
         let desc = task.taskDescription
         Task { [weak service] in
             await service?.handleError(taskIdentifier: id, error: error, taskDescription: desc)

@@ -89,7 +89,6 @@ struct SearchSongRow: View {
 
     @Environment(\.themeColor) private var themeColor
     @EnvironmentObject private var appState: AppState
-    @ObservedObject private var downloadStore = DownloadStore.shared
     @ObservedObject private var offlineMode = OfflineModeService.shared
     @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     @AppStorage("enableDownloads") private var enableDownloads = true
@@ -169,7 +168,6 @@ struct LyricsSearchRow: View {
     var onAddToPlaylist: (() -> Void)? = nil
     @Environment(\.themeColor) private var themeColor
     @EnvironmentObject private var appState: AppState
-    @ObservedObject private var downloadStore = DownloadStore.shared
     @ObservedObject private var offlineMode = OfflineModeService.shared
     @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     @AppStorage("enableDownloads") private var enableDownloads = true

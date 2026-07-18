@@ -15,7 +15,7 @@ struct DownloadsSettingsView: View {
     @State private var showKeepLibraryOfflineSheet = false
     @State private var showDeleteAllDownloadsConfirm = false
     @State private var showDisableDownloadsConfirm = false
-    @State private var hasDownloads = !DownloadUIStateHub.shared.currentSnapshot.songIDs.isEmpty
+    @State private var hasDownloads = DownloadUIStateHub.shared.hasDownloads
     @State private var hasActiveDownloads = false
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }

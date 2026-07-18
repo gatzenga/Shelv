@@ -39,8 +39,9 @@ struct RecapDetailView: View {
         )
         _trackedPlaylistSongIDs = State(initialValue: trackedSongIDs)
         _downloadedSongIDs = State(
-            initialValue: DownloadUIStateHub.shared.currentSnapshot.songIDs
-                .intersection(trackedSongIDs)
+            initialValue: DownloadUIStateHub.shared.downloadedSongIDs(
+                in: Set(trackedSongIDs)
+            )
         )
     }
 
@@ -374,8 +375,9 @@ struct RecapDetailView: View {
             if !isMarked && !offlineMode.isOffline {
                 Button {
                     haptic()
-                    let downloadedSongIDs = DownloadUIStateHub.shared.currentSnapshot.songIDs
-                    let missing = allSongs.filter { !downloadedSongIDs.contains($0.id) }
+                    let missing = allSongs.filter {
+                        !DownloadUIStateHub.shared.isSongDownloaded($0.id)
+                    }
                     if !missing.isEmpty { downloadStore.enqueueSongs(missing) }
                     downloadStore.addOfflinePlaylist(
                         entry.playlistId,
@@ -400,8 +402,9 @@ struct RecapDetailView: View {
             if isMarked && remaining > 0 && !offlineMode.isOffline {
                 Button {
                     haptic()
-                    let downloadedSongIDs = DownloadUIStateHub.shared.currentSnapshot.songIDs
-                    let missing = allSongs.filter { !downloadedSongIDs.contains($0.id) }
+                    let missing = allSongs.filter {
+                        !DownloadUIStateHub.shared.isSongDownloaded($0.id)
+                    }
                     if !missing.isEmpty { downloadStore.enqueueSongs(missing) }
                     currentToast = ShelveToast(message: String(localized: "download_started"))
                 } label: {
@@ -463,11 +466,12 @@ struct RecapDetailView: View {
             (rank: idx + 1, song: song, playCount: countMap[song.id] ?? 0)
         }
         let filtered = offlineMode.isOffline
-            ? ranked.filter { DownloadUIStateHub.shared.currentSnapshot.songIDs.contains($0.song.id) }
+            ? ranked.filter { DownloadUIStateHub.shared.isSongDownloaded($0.song.id) }
             : ranked
         songs = filtered.map { SongWithCount(id: $0.song.id, song: $0.song, playCount: $0.playCount, originalRank: $0.rank) }
         trackedPlaylistSongIDs = downloadStore.playlistSongIds[entry.playlistId] ?? allSongs.map(\.id)
-        downloadedSongIDs = DownloadUIStateHub.shared.currentSnapshot.songIDs
-            .intersection(trackedPlaylistSongIDs)
+        downloadedSongIDs = DownloadUIStateHub.shared.downloadedSongIDs(
+            in: Set(trackedPlaylistSongIDs)
+        )
     }
 }

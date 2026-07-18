@@ -11,6 +11,8 @@ private nonisolated struct OfflineSearchDownloadState: Equatable {
         albumIDs = snapshot.albumIDs
         artistNames = snapshot.artistNames
     }
+
+    static let empty = OfflineSearchDownloadState(snapshot: .empty)
 }
 
 struct SearchView: View {
@@ -44,9 +46,7 @@ struct SearchView: View {
     @State private var currentToast: ShelveToast?
     @State private var artistToDeleteDownloads: Artist?
     @State private var albumToDeleteDownloads: Album?
-    @State private var offlineDownloadState = OfflineSearchDownloadState(
-        snapshot: DownloadUIStateHub.shared.currentSnapshot
-    )
+    @State private var offlineDownloadState = OfflineSearchDownloadState.empty
 
     private var matchedFavoriteArtists: [Artist] {
         guard showFavoritesInLibrary, !query.isEmpty else { return [] }
@@ -561,6 +561,11 @@ struct SearchView: View {
             )
             .onAppear {
                 applyResetTokenIfNeeded(resetToken)
+                if offlineMode.isOffline {
+                    offlineDownloadState = OfflineSearchDownloadState(
+                        snapshot: DownloadUIStateHub.shared.currentSnapshot
+                    )
+                }
             }
             .onChange(of: resetToken) { _, newValue in
                 applyResetTokenIfNeeded(newValue)
@@ -572,12 +577,12 @@ struct SearchView: View {
                 )
             }
             .onReceive(
-                DownloadUIStateHub.shared.snapshots
-                    .map(OfflineSearchDownloadState.init(snapshot:))
-                    .removeDuplicates()
-            ) { state in
+                DownloadUIStateHub.shared.stateChanges
+            ) { _ in
                 guard offlineMode.isOffline else { return }
-                offlineDownloadState = state
+                offlineDownloadState = OfflineSearchDownloadState(
+                    snapshot: DownloadUIStateHub.shared.currentSnapshot
+                )
             }
             .onChange(of: query) { _, newValue in
                 searchTask?.cancel()
@@ -671,7 +676,7 @@ struct SearchView: View {
 
     private func handleArtistDownloadSwipe(_ artist: Artist) {
         guard enableDownloads else { return }
-        if DownloadUIStateHub.shared.currentSnapshot.artistNames.contains(artist.name) {
+        if DownloadUIStateHub.shared.isCatalogArtistDownloaded(artist.name) {
             haptic(); artistToDeleteDownloads = artist
         } else if !offlineMode.isOffline {
             haptic()
@@ -747,7 +752,7 @@ struct SearchView: View {
 
     private func handleAlbumDownloadSwipe(_ album: Album) {
         guard enableDownloads else { return }
-        if DownloadUIStateHub.shared.currentSnapshot.albumDownloadedCounts[album.id, default: 0] > 0 {
+        if DownloadUIStateHub.shared.isAlbumDownloaded(album.id) {
             haptic(); albumToDeleteDownloads = album
         } else if !offlineMode.isOffline {
             haptic()

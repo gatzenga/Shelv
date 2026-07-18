@@ -153,7 +153,7 @@ struct ArtistsView: View {
         .navigationTitle(String(format: String(localized: "artists_count_format"), displayArtists.count))
         .onAppear { rebuildDisplayArtists() }
         .onReceive(vm.$sortedArtists) { _ in rebuildDisplayArtists() }
-        .onReceive(downloadStore.$artists) { _ in rebuildDisplayArtists() }
+        .onReceive(downloadStore.catalogPublisher) { _ in rebuildDisplayArtists() }
         .onChange(of: searchText) { _, _ in rebuildDisplayArtists() }
         .onChange(of: showDownloadsOnly) { _, _ in rebuildDisplayArtists() }
         .onChange(of: offlineMode.isOffline) { _, isOffline in

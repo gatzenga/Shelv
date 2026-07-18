@@ -309,7 +309,9 @@ struct AlbumsView: View {
         .navigationTitle(String(format: String(localized: "albums_count_format"), displayAlbums.count))
         .onAppear { rebuildDisplayAlbums() }
         .onReceive(vm.$sortedAlbums) { rebuildDisplayAlbums(sortedAlbumsOverride: $0) }
-        .onReceive(downloadStore.$albums) { rebuildDisplayAlbums(downloadedAlbumsOverride: $0) }
+        .onReceive(downloadStore.catalogPublisher) { _ in
+            rebuildDisplayAlbums(downloadedAlbumsOverride: downloadStore.albums)
+        }
         .onChange(of: searchText) { _, _ in rebuildDisplayAlbums() }
         .onChange(of: albumGenreFilter) { _, _ in rebuildDisplayAlbums() }
         .onChange(of: showGenreFilter) { _, enabled in

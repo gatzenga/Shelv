@@ -357,11 +357,11 @@ struct SidebarView: View {
 }
 
 private struct SidebarBatchProgress: View {
-    @ObservedObject private var downloadStore = DownloadStore.shared
+    @ObservedObject private var downloadActivity = DownloadActivityStore.shared
     @Environment(\.themeColor) private var themeColor
 
     var body: some View {
-        if let progress = downloadStore.batchProgress {
+        if let progress = downloadActivity.batchProgress {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Image(systemName: "arrow.down.circle")

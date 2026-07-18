@@ -57,167 +57,379 @@ nonisolated struct DownloadUIStateSnapshot: Equatable, Sendable {
 final class DownloadUIStateHub {
     static let shared = DownloadUIStateHub()
 
-    private let subject: CurrentValueSubject<DownloadUIStateSnapshot, Never>
-    private let authoritativeSubject: CurrentValueSubject<DownloadUIStateSnapshot, Never>
     private var authoritativeSnapshot: DownloadUIStateSnapshot
     private var optimisticRecordsBySongID: [String: DownloadRecord] = [:]
+    private var optimisticAlbumCounts: [String: Int] = [:]
+    private var optimisticArtistNameCounts: [String: Int] = [:]
+    private var optimisticArtistBadgeNameCounts: [String: Int] = [:]
+    private var optimisticTotalBytes: Int64 = 0
+
+    // Only affected identifiers cross these channels. Subscribers derive their
+    // current scalar value in O(1), so the hub retains no per-row subjects.
+    private let songAvailabilityChangeSubject = CurrentValueSubject<String?, Never>(nil)
+    private let albumDownloadedCountChangeSubject = CurrentValueSubject<String?, Never>(nil)
+    private let catalogArtistAvailabilityChangeSubject = CurrentValueSubject<String?, Never>(nil)
+    private let artistBadgeAvailabilityChangeSubject = CurrentValueSubject<String?, Never>(nil)
+    private let stateChangeSubject = PassthroughSubject<Void, Never>()
+    private let storageStateSubject: CurrentValueSubject<DownloadUIStorageState, Never>
+    private let authoritativeStorageStateSubject: CurrentValueSubject<DownloadUIStorageState, Never>
+    private let hasDownloadsSubject: CurrentValueSubject<Bool, Never>
 
     init(initialSnapshot: DownloadUIStateSnapshot = .empty) {
         authoritativeSnapshot = initialSnapshot
-        subject = CurrentValueSubject(initialSnapshot)
-        authoritativeSubject = CurrentValueSubject(initialSnapshot)
+        storageStateSubject = CurrentValueSubject(initialSnapshot.storageState)
+        authoritativeStorageStateSubject = CurrentValueSubject(initialSnapshot.storageState)
+        hasDownloadsSubject = CurrentValueSubject(!initialSnapshot.songIDs.isEmpty)
     }
 
     // This type is main-actor confined while alive, but its Combine storage does not
     // require executor-bound destruction. Avoid the Swift back-deployment deinit path.
     nonisolated deinit {}
 
-    var currentSnapshot: DownloadUIStateSnapshot { subject.value }
-
-    var snapshots: AnyPublisher<DownloadUIStateSnapshot, Never> {
-        subject.eraseToAnyPublisher()
+    var currentSnapshot: DownloadUIStateSnapshot {
+        var snapshot = authoritativeSnapshot
+        for record in optimisticRecordsBySongID.values {
+            Self.add(record, to: &snapshot)
+        }
+        return snapshot
     }
 
     func commit(_ snapshot: DownloadUIStateSnapshot) {
         authoritativeSnapshot = snapshot
-        if authoritativeSubject.value != snapshot {
-            authoritativeSubject.send(snapshot)
-        }
+        sendIfChanged(authoritativeStorageStateSubject, value: snapshot.storageState)
         optimisticRecordsBySongID = optimisticRecordsBySongID.filter {
             !snapshot.songIDs.contains($0.key)
         }
-        publishMergedSnapshot()
+        rebuildOptimisticAggregates()
+        publishRegisteredValues()
+        stateChangeSubject.send(())
+    }
+
+    /// Hands an incremental catalog batch from the optimistic overlay to the
+    /// authoritative snapshot without making already visible rows transition.
+    func commitCatalogInsertions(
+        _ snapshot: DownloadUIStateSnapshot,
+        committedSongIDs: Set<String>
+    ) {
+        let canHandoffWithoutReconciliation = committedSongIDs.allSatisfy {
+            optimisticRecordsBySongID[$0] != nil && snapshot.songIDs.contains($0)
+        }
+        guard canHandoffWithoutReconciliation else {
+            commit(snapshot)
+            return
+        }
+
+        authoritativeSnapshot = snapshot
+        sendIfChanged(authoritativeStorageStateSubject, value: snapshot.storageState)
+        let handedOffSongIDs = optimisticRecordsBySongID.keys.filter {
+            snapshot.songIDs.contains($0)
+        }
+        for songID in handedOffSongIDs {
+            guard let record = optimisticRecordsBySongID.removeValue(forKey: songID) else { continue }
+            removeFromOptimisticAggregates(record)
+        }
+        // Song, album and visible storage values are unchanged by the overlay
+        // handoff. Track ordering can still alter the resolved album artist.
+        catalogArtistAvailabilityChangeSubject.send(nil)
+        artistBadgeAvailabilityChangeSubject.send(nil)
+        publishScalarValues()
+        stateChangeSubject.send(())
     }
 
     /// Replaces all state after an authoritative reload or server change.
     func replace(with snapshot: DownloadUIStateSnapshot) {
         authoritativeSnapshot = snapshot
-        if authoritativeSubject.value != snapshot {
-            authoritativeSubject.send(snapshot)
-        }
+        sendIfChanged(authoritativeStorageStateSubject, value: snapshot.storageState)
         optimisticRecordsBySongID.removeAll(keepingCapacity: true)
-        publishMergedSnapshot()
+        rebuildOptimisticAggregates()
+        publishRegisteredValues()
+        stateChangeSubject.send(())
     }
 
     /// Makes a completed download visible immediately, before the batched catalog projection.
     /// The next authoritative catalog commit replaces this optimistic projection.
     func applyCompletedRecord(_ record: DownloadRecord) {
-        guard !subject.value.songIDs.contains(record.songId) else { return }
+        guard !isSongDownloaded(record.songId) else { return }
         optimisticRecordsBySongID[record.songId] = record
-        publishMergedSnapshot()
+        addToOptimisticAggregates(record)
+        publishCompletedRecord(record)
+        stateChangeSubject.send(())
     }
 
     func removeOptimisticRecord(songID: String) {
-        guard optimisticRecordsBySongID.removeValue(forKey: songID) != nil else { return }
-        publishMergedSnapshot()
+        guard let record = optimisticRecordsBySongID.removeValue(forKey: songID) else { return }
+        removeFromOptimisticAggregates(record)
+        publishRemovedRecord(record)
+        stateChangeSubject.send(())
+    }
+
+    func isSongDownloaded(_ songID: String) -> Bool {
+        authoritativeSnapshot.songIDs.contains(songID)
+            || optimisticRecordsBySongID[songID] != nil
+    }
+
+    func albumDownloadedCount(_ albumID: String) -> Int {
+        (authoritativeSnapshot.albumDownloadedCounts[albumID] ?? 0)
+            + (optimisticAlbumCounts[albumID] ?? 0)
+    }
+
+    func isAlbumDownloaded(_ albumID: String) -> Bool {
+        albumDownloadedCount(albumID) > 0
+    }
+
+    func isCatalogArtistDownloaded(_ name: String) -> Bool {
+        authoritativeSnapshot.artistNames.contains(name)
+            || (optimisticArtistNameCounts[name] ?? 0) > 0
+    }
+
+    func isArtistBadgeDownloaded(_ name: String) -> Bool {
+        authoritativeSnapshot.artistBadgeNames.contains(name)
+            || (optimisticArtistBadgeNameCounts[name] ?? 0) > 0
+    }
+
+    func downloadedSongIDs(in songIDs: Set<String>) -> Set<String> {
+        Set(songIDs.filter(isSongDownloaded))
+    }
+
+    func downloadedAlbumCounts(for albumIDs: Set<String>) -> [String: Int] {
+        Dictionary(uniqueKeysWithValues: albumIDs.compactMap { albumID in
+            let count = albumDownloadedCount(albumID)
+            return count > 0 ? (albumID, count) : nil
+        })
+    }
+
+    var hasDownloads: Bool {
+        !authoritativeSnapshot.songIDs.isEmpty || !optimisticRecordsBySongID.isEmpty
     }
 
     func songAvailabilityPublisher(songID: String) -> AnyPublisher<Bool, Never> {
-        subject
-            .map { $0.songIDs.contains(songID) }
+        songAvailabilityChangeSubject
+            .map { [weak self] _ in self?.isSongDownloaded(songID) ?? false }
             .removeDuplicates()
             .eraseToAnyPublisher()
     }
 
     func albumAvailabilityPublisher(albumID: String) -> AnyPublisher<Bool, Never> {
-        subject
-            .map { ($0.albumDownloadedCounts[albumID] ?? 0) > 0 }
+        albumDownloadedCountPublisher(albumID: albumID)
+            .map { $0 > 0 }
             .removeDuplicates()
             .eraseToAnyPublisher()
     }
 
     func albumDownloadedCountPublisher(albumID: String) -> AnyPublisher<Int, Never> {
-        subject
-            .map { $0.albumDownloadedCounts[albumID] ?? 0 }
+        albumDownloadedCountChangeSubject
+            .map { [weak self] _ in self?.albumDownloadedCount(albumID) ?? 0 }
+            .removeDuplicates()
+            .eraseToAnyPublisher()
+    }
+
+    func catalogArtistAvailabilityPublisher(name: String) -> AnyPublisher<Bool, Never> {
+        catalogArtistAvailabilityChangeSubject
+            .map { [weak self] _ in self?.isCatalogArtistDownloaded(name) ?? false }
             .removeDuplicates()
             .eraseToAnyPublisher()
     }
 
     func artistAvailabilityPublisher(name: String) -> AnyPublisher<Bool, Never> {
-        subject
-            .map { $0.artistBadgeNames.contains(name) }
+        artistBadgeAvailabilityChangeSubject
+            .map { [weak self] _ in self?.isArtistBadgeDownloaded(name) ?? false }
             .removeDuplicates()
             .eraseToAnyPublisher()
     }
 
     func downloadedSongSubsetPublisher(songIDs: Set<String>) -> AnyPublisher<Set<String>, Never> {
-        subject
-            .map { $0.songIDs.intersection(songIDs) }
+        guard !songIDs.isEmpty else {
+            return Just(Set<String>()).eraseToAnyPublisher()
+        }
+        return songAvailabilityChangeSubject
+            .scan(Optional<Set<String>>.none) { [weak self] current, changedSongID in
+                guard let self else { return current ?? [] }
+                guard let current else {
+                    return self.downloadedSongIDs(in: songIDs)
+                }
+                guard let changedSongID else {
+                    return self.downloadedSongIDs(in: songIDs)
+                }
+                guard songIDs.contains(changedSongID) else { return current }
+                var result = current
+                if self.isSongDownloaded(changedSongID) {
+                    result.insert(changedSongID)
+                } else {
+                    result.remove(changedSongID)
+                }
+                return result
+            }
+            .compactMap { $0 }
             .removeDuplicates()
             .eraseToAnyPublisher()
     }
 
-    var songIDsPublisher: AnyPublisher<Set<String>, Never> {
-        subject
-            .map(\.songIDs)
-            .removeDuplicates()
-            .eraseToAnyPublisher()
-    }
-
-    var albumIDsPublisher: AnyPublisher<Set<String>, Never> {
-        subject
-            .map(\.albumIDs)
-            .removeDuplicates()
-            .eraseToAnyPublisher()
-    }
-
-    var artistBadgeNamesPublisher: AnyPublisher<Set<String>, Never> {
-        subject
-            .map(\.artistBadgeNames)
+    func albumDownloadedCountsPublisher(albumIDs: Set<String>) -> AnyPublisher<[String: Int], Never> {
+        guard !albumIDs.isEmpty else {
+            return Just([String: Int]()).eraseToAnyPublisher()
+        }
+        return albumDownloadedCountChangeSubject
+            .scan(Optional<[String: Int]>.none) { [weak self] current, changedAlbumID in
+                guard let self else { return current ?? [:] }
+                guard let current else {
+                    return self.downloadedAlbumCounts(for: albumIDs)
+                }
+                guard let changedAlbumID else {
+                    return self.downloadedAlbumCounts(for: albumIDs)
+                }
+                guard albumIDs.contains(changedAlbumID) else { return current }
+                var result = current
+                let count = self.albumDownloadedCount(changedAlbumID)
+                if count > 0 {
+                    result[changedAlbumID] = count
+                } else {
+                    result.removeValue(forKey: changedAlbumID)
+                }
+                return result
+            }
+            .compactMap { $0 }
             .removeDuplicates()
             .eraseToAnyPublisher()
     }
 
     var storageStatePublisher: AnyPublisher<DownloadUIStorageState, Never> {
-        subject
-            .map(\.storageState)
-            .removeDuplicates()
-            .eraseToAnyPublisher()
+        storageStateSubject.eraseToAnyPublisher()
     }
 
     /// Storage updates aligned with DownloadStore's committed catalog arrays.
     var authoritativeStorageStatePublisher: AnyPublisher<DownloadUIStorageState, Never> {
-        authoritativeSubject
-            .map(\.storageState)
-            .removeDuplicates()
-            .eraseToAnyPublisher()
+        authoritativeStorageStateSubject.eraseToAnyPublisher()
     }
 
     var hasDownloadsPublisher: AnyPublisher<Bool, Never> {
-        subject
-            .map { !$0.songIDs.isEmpty }
-            .removeDuplicates()
-            .eraseToAnyPublisher()
+        hasDownloadsSubject.eraseToAnyPublisher()
     }
 
-    private func publishMergedSnapshot() {
-        var merged = authoritativeSnapshot
-        for record in optimisticRecordsBySongID.values
-        where !merged.songIDs.contains(record.songId) {
-            merged.songIDs.insert(record.songId)
-            merged.albumDownloadedCounts[record.albumId, default: 0] += 1
+    var stateChanges: AnyPublisher<Void, Never> {
+        stateChangeSubject.eraseToAnyPublisher()
+    }
 
-            let albumArtist = record.albumArtistName?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            let resolvedArtist = (albumArtist?.isEmpty == false ? albumArtist : nil)
-                ?? record.artistName
-            if !resolvedArtist.isEmpty {
-                merged.artistNames.insert(resolvedArtist)
-                merged.artistBadgeNames.insert(resolvedArtist)
-            }
-            merged.artistBadgeNames.formUnion(
-                DownloadArtistNameParser.names(from: record.artistName)
-            )
-            merged.totalBytes += record.bytes
+    private func addToOptimisticAggregates(_ record: DownloadRecord) {
+        optimisticAlbumCounts[record.albumId, default: 0] += 1
+        if let artistName = Self.catalogArtistName(for: record) {
+            optimisticArtistNameCounts[artistName, default: 0] += 1
         }
+        for name in Self.badgeArtistNames(for: record) {
+            optimisticArtistBadgeNameCounts[name, default: 0] += 1
+        }
+        optimisticTotalBytes += record.bytes
+    }
 
-        guard subject.value != merged else { return }
-        subject.send(merged)
+    private func removeFromOptimisticAggregates(_ record: DownloadRecord) {
+        decrement(&optimisticAlbumCounts, key: record.albumId)
+        if let artistName = Self.catalogArtistName(for: record) {
+            decrement(&optimisticArtistNameCounts, key: artistName)
+        }
+        for name in Self.badgeArtistNames(for: record) {
+            decrement(&optimisticArtistBadgeNameCounts, key: name)
+        }
+        optimisticTotalBytes -= record.bytes
+    }
+
+    private func rebuildOptimisticAggregates() {
+        optimisticAlbumCounts.removeAll(keepingCapacity: true)
+        optimisticArtistNameCounts.removeAll(keepingCapacity: true)
+        optimisticArtistBadgeNameCounts.removeAll(keepingCapacity: true)
+        optimisticTotalBytes = 0
+        for record in optimisticRecordsBySongID.values {
+            addToOptimisticAggregates(record)
+        }
+    }
+
+    private func publishCompletedRecord(_ record: DownloadRecord) {
+        songAvailabilityChangeSubject.send(record.songId)
+        albumDownloadedCountChangeSubject.send(record.albumId)
+        if let artistName = Self.catalogArtistName(for: record) {
+            catalogArtistAvailabilityChangeSubject.send(artistName)
+        }
+        for name in Self.badgeArtistNames(for: record) {
+            artistBadgeAvailabilityChangeSubject.send(name)
+        }
+        publishScalarValues()
+    }
+
+    private func publishRemovedRecord(_ record: DownloadRecord) {
+        songAvailabilityChangeSubject.send(record.songId)
+        albumDownloadedCountChangeSubject.send(record.albumId)
+        if let artistName = Self.catalogArtistName(for: record) {
+            catalogArtistAvailabilityChangeSubject.send(artistName)
+        }
+        for name in Self.badgeArtistNames(for: record) {
+            artistBadgeAvailabilityChangeSubject.send(name)
+        }
+        publishScalarValues()
+    }
+
+    private func publishRegisteredValues() {
+        songAvailabilityChangeSubject.send(nil)
+        albumDownloadedCountChangeSubject.send(nil)
+        catalogArtistAvailabilityChangeSubject.send(nil)
+        artistBadgeAvailabilityChangeSubject.send(nil)
+        publishScalarValues()
+    }
+
+    private func publishScalarValues() {
+        let storageState = DownloadUIStorageState(
+            totalBytes: authoritativeSnapshot.totalBytes + optimisticTotalBytes,
+            songCount: authoritativeSnapshot.songIDs.count + optimisticRecordsBySongID.count
+        )
+        sendIfChanged(storageStateSubject, value: storageState)
+        sendIfChanged(hasDownloadsSubject, value: hasDownloads)
+    }
+
+    private func decrement(_ counts: inout [String: Int], key: String) {
+        guard let count = counts[key] else { return }
+        if count <= 1 {
+            counts.removeValue(forKey: key)
+        } else {
+            counts[key] = count - 1
+        }
+    }
+
+    private func sendIfChanged<Value: Equatable>(
+        _ subject: CurrentValueSubject<Value, Never>?,
+        value: Value
+    ) {
+        guard let subject, subject.value != value else { return }
+        subject.send(value)
+    }
+
+    private static func catalogArtistName(for record: DownloadRecord) -> String? {
+        let albumArtist = record.albumArtistName?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolved = (albumArtist?.isEmpty == false ? albumArtist : nil)
+            ?? record.artistName
+        return resolved.isEmpty ? nil : resolved
+    }
+
+    private static func badgeArtistNames(for record: DownloadRecord) -> Set<String> {
+        var names = DownloadArtistNameParser.names(from: record.artistName)
+        if let catalogArtist = catalogArtistName(for: record) {
+            names.insert(catalogArtist)
+        }
+        return names
+    }
+
+    private static func add(_ record: DownloadRecord, to snapshot: inout DownloadUIStateSnapshot) {
+        guard !snapshot.songIDs.contains(record.songId) else { return }
+        snapshot.songIDs.insert(record.songId)
+        snapshot.albumDownloadedCounts[record.albumId, default: 0] += 1
+        if let artistName = catalogArtistName(for: record) {
+            snapshot.artistNames.insert(artistName)
+        }
+        snapshot.artistBadgeNames.formUnion(badgeArtistNames(for: record))
+        snapshot.totalBytes += record.bytes
     }
 }
 
 nonisolated struct DownloadCatalogSnapshot: Equatable, Sendable {
     let songs: [DownloadedSong]
+    let songIndexById: [String: Int]
     let songById: [String: DownloadedSong]
     let recordsByAlbumId: [String: [DownloadedSong]]
     let albums: [DownloadedAlbum]
@@ -228,6 +440,7 @@ nonisolated struct DownloadCatalogSnapshot: Equatable, Sendable {
 
     static let empty = DownloadCatalogSnapshot(
         songs: [],
+        songIndexById: [:],
         songById: [:],
         recordsByAlbumId: [:],
         albums: [],
@@ -296,17 +509,16 @@ nonisolated enum DownloadCatalogBuilder {
         guard !records.isEmpty else { return current }
 
         var songs = current.songs
+        var songIndexById = current.songIndexById
         var songById = current.songById
         var recordsByAlbumId = current.recordsByAlbumId
         var albums = current.albums
         var artists = current.artists
         var totalBytes = current.totalBytes
-        var artistBadgeNames = current.uiState.artistBadgeNames
+        var uiState = current.uiState
+        var artistBadgeNames = uiState.artistBadgeNames
         var shouldRebuildArtistBadgeNames = false
 
-        var songIndexById = Dictionary(
-            uniqueKeysWithValues: songs.enumerated().map { ($0.element.songId, $0.offset) }
-        )
         let previousAlbumsById = Dictionary(uniqueKeysWithValues: albums.map { ($0.albumId, $0) })
         var affectedAlbumIds: Set<String> = []
         var affectedArtistNames: Set<String> = []
@@ -332,13 +544,14 @@ nonisolated enum DownloadCatalogBuilder {
                 songs.append(song)
             }
             songById[song.songId] = song
+            uiState.songIDs.insert(song.songId)
             totalBytes += song.bytes
             affectedAlbumIds.insert(song.albumId)
             recordsByAlbumId[song.albumId, default: []].removeAll { $0.songId == song.songId }
             recordsByAlbumId[song.albumId, default: []].append(song)
             recordsByAlbumId[song.albumId]?.sort(by: songsAreOrdered)
 
-            let albumArtist = song.albumArtistName ?? song.artistName
+            let albumArtist = resolvedAlbumArtistName(for: song)
             if !albumArtist.isEmpty {
                 artistBadgeNames.insert(albumArtist)
             }
@@ -365,6 +578,13 @@ nonisolated enum DownloadCatalogBuilder {
         if !affectedAlbumIds.isEmpty {
             albums.sort(by: albumsAreOrdered)
         }
+        for albumId in affectedAlbumIds {
+            if let count = recordsByAlbumId[albumId]?.count, count > 0 {
+                uiState.albumDownloadedCounts[albumId] = count
+            } else {
+                uiState.albumDownloadedCounts.removeValue(forKey: albumId)
+            }
+        }
 
         for artistName in affectedArtistNames {
             artists.removeAll { $0.name == artistName }
@@ -381,27 +601,29 @@ nonisolated enum DownloadCatalogBuilder {
         if !affectedArtistNames.isEmpty {
             artists.sort(by: artistsAreOrdered)
         }
+        for artistName in affectedArtistNames {
+            if artists.contains(where: { $0.name == artistName }) {
+                uiState.artistNames.insert(artistName)
+            } else {
+                uiState.artistNames.remove(artistName)
+            }
+        }
 
         if shouldRebuildArtistBadgeNames {
             artistBadgeNames = makeArtistBadgeNames(songs: songs, artists: artists)
         }
 
-        let favoriteSongs = songs.filter(\.isFavorite)
-        let uiState = DownloadUIStateSnapshot(
-            songIDs: Set(songById.keys),
-            albumDownloadedCounts: recordsByAlbumId.mapValues(\.count),
-            artistNames: Set(artists.map(\.name)),
-            artistBadgeNames: artistBadgeNames,
-            totalBytes: totalBytes
-        )
+        uiState.artistBadgeNames = artistBadgeNames
+        uiState.totalBytes = totalBytes
 
         return DownloadCatalogSnapshot(
             songs: songs,
+            songIndexById: songIndexById,
             songById: songById,
             recordsByAlbumId: recordsByAlbumId,
             albums: albums,
             artists: artists,
-            favoriteSongs: favoriteSongs,
+            favoriteSongs: songs.filter(\.isFavorite),
             totalBytes: totalBytes,
             uiState: uiState
         )
@@ -428,6 +650,9 @@ nonisolated enum DownloadCatalogBuilder {
         let totalBytes = songs.reduce(0) { $0 + $1.bytes }
         return DownloadCatalogSnapshot(
             songs: songs,
+            songIndexById: Dictionary(
+                uniqueKeysWithValues: songs.enumerated().map { ($0.element.songId, $0.offset) }
+            ),
             songById: songById,
             recordsByAlbumId: recordsByAlbumId,
             albums: albums,
@@ -454,7 +679,7 @@ nonisolated enum DownloadCatalogBuilder {
             albumId: albumId,
             serverId: serverId,
             title: first.albumTitle,
-            artistName: first.albumArtistName ?? first.artistName,
+            artistName: resolvedAlbumArtistName(for: first),
             artistId: first.artistId,
             coverArtId: first.albumCoverArtId ?? first.coverArtId,
             songs: songs
@@ -475,6 +700,15 @@ nonisolated enum DownloadCatalogBuilder {
             coverArtId: first.songs.first?.artistCoverArtId ?? artistCoverByName[name],
             albums: albums
         )
+    }
+
+    private static func resolvedAlbumArtistName(for song: DownloadedSong) -> String {
+        let albumArtist = song.albumArtistName?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let albumArtist, !albumArtist.isEmpty {
+            return albumArtist
+        }
+        return song.artistName
     }
 
     private static func songsAreOrdered(_ lhs: DownloadedSong, _ rhs: DownloadedSong) -> Bool {

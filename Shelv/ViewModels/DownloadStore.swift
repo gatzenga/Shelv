@@ -39,6 +39,7 @@ final class DownloadStore: ObservableObject {
     @Published private(set) var playlistSongIds: [String: [String]] = [:]
 
     private var songById: [String: DownloadedSong] = [:]
+    private var songIndexById: [String: Int] = [:]
     private var recordsByAlbumId: [String: [DownloadedSong]] = [:]
     private var catalogUIState: DownloadUIStateSnapshot = .empty
 
@@ -150,6 +151,7 @@ final class DownloadStore: ObservableObject {
     private var currentCatalogSnapshot: DownloadCatalogSnapshot {
         DownloadCatalogSnapshot(
             songs: songs,
+            songIndexById: songIndexById,
             songById: songById,
             recordsByAlbumId: recordsByAlbumId,
             albums: albums,
@@ -162,9 +164,11 @@ final class DownloadStore: ObservableObject {
 
     private func applyCatalogSnapshot(
         _ snapshot: DownloadCatalogSnapshot,
-        replacingOptimisticState: Bool = false
+        replacingOptimisticState: Bool = false,
+        committedSongIDs: Set<String>? = nil
     ) {
         songById = snapshot.songById
+        songIndexById = snapshot.songIndexById
         recordsByAlbumId = snapshot.recordsByAlbumId
         songs = snapshot.songs
         albums = snapshot.albums
@@ -175,6 +179,11 @@ final class DownloadStore: ObservableObject {
 
         if replacingOptimisticState {
             DownloadUIStateHub.shared.replace(with: snapshot.uiState)
+        } else if let committedSongIDs {
+            DownloadUIStateHub.shared.commitCatalogInsertions(
+                snapshot.uiState,
+                committedSongIDs: committedSongIDs
+            )
         } else {
             DownloadUIStateHub.shared.commit(snapshot.uiState)
         }
@@ -412,14 +421,6 @@ final class DownloadStore: ObservableObject {
         // heruntergeladene Songs unmittelbar lokal abspielen kann.
         let song = record.toDownloadedSong()
         LocalDownloadIndex.shared.setPath(songId: song.songId, serverId: song.serverId, path: song.filePath)
-        if let artId = song.coverArtId {
-            let p = DownloadService.coverPath(forFilePath: song.filePath)
-            if FileManager.default.fileExists(atPath: p) { LocalArtworkIndex.shared.set(artId: artId, path: p) }
-        }
-        if let artId = song.artistCoverArtId {
-            let p = DownloadService.artistCoverPath(serverId: song.serverId, artId: artId)
-            if FileManager.default.fileExists(atPath: p) { LocalArtworkIndex.shared.set(artId: artId, path: p) }
-        }
 
         // Keep the exact existing visual timing: completed songs and albums are
         // visible immediately while the catalog projection stays batched.
@@ -472,7 +473,10 @@ final class DownloadStore: ObservableObject {
                 inFlightProgress.removeValue(forKey: key)
             }
             publishActiveDownloadAvailabilityIfNeeded()
-            applyCatalogSnapshot(snapshot)
+            applyCatalogSnapshot(
+                snapshot,
+                committedSongIDs: Set(records.map(\.songId))
+            )
         }
         isFlushingCatalog = false
 
@@ -505,6 +509,9 @@ final class DownloadStore: ObservableObject {
         if albumNowEmpty { recordsByAlbumId.removeValue(forKey: albumId) }
 
         songs.removeAll { $0.songId == songId }
+        songIndexById = Dictionary(
+            uniqueKeysWithValues: songs.enumerated().map { ($0.element.songId, $0.offset) }
+        )
         favoriteSongs.removeAll { $0.songId == songId }
 
         if let albumIdx = albums.firstIndex(where: { $0.albumId == albumId }) {
@@ -560,7 +567,7 @@ final class DownloadStore: ObservableObject {
         let key = DownloadService.key(songId: songId, serverId: serverId)
         if let p = inFlightProgress[key] { return .downloading(progress: p) }
         if let s = inFlightStates[key] { return s }
-        return isDownloaded(songId: songId) ? .completed : .none
+        return DownloadUIStateHub.shared.isSongDownloaded(songId) ? .completed : .none
     }
 
     func progress(songId: String) -> Double? {
@@ -649,6 +656,7 @@ final class DownloadStore: ObservableObject {
         favoriteSongs = []
         totalBytes = 0
         songById = [:]
+        songIndexById = [:]
         recordsByAlbumId = [:]
         catalogUIState = .empty
         inFlightProgress = [:]

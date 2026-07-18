@@ -84,7 +84,6 @@ struct MainWindowView: View {
     @EnvironmentObject var lyricsStore: LyricsStore
     @ObservedObject var libraryStore = LibraryViewModel.shared
     @ObservedObject var offlineMode = OfflineModeService.shared
-    @ObservedObject var downloadStore = DownloadStore.shared
 
     @State private var showAddToPlaylist = false
     @State private var playlistSongIds: [String] = []
