@@ -4,13 +4,9 @@ struct AlbumContextMenuModifier: ViewModifier {
     let album: Album
     var showPreview: Bool = true
 
-    @ObservedObject var libraryStore = LibraryStore.shared
-    @ObservedObject var offlineMode = OfflineModeService.shared
-    @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
-    @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
-    @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
-    @AppStorage("enableDownloads") private var enableDownloads = true
-    @AppStorage("themeColor") private var themeColorName = "violet"
+    private let libraryStore = LibraryStore.shared
+    private let offlineMode = OfflineModeService.shared
+    @Environment(\.personalizationSwipeConfiguration) private var personalization
 
     @State private var cachedSongs: [Song]?
     @State private var pendingPlaylistIds: PendingPlaylistIds?
@@ -76,7 +72,7 @@ struct AlbumContextMenuModifier: ViewModifier {
             Label(String(localized: "shuffle"), systemImage: "shuffle")
         }
 
-        if showInstantMixActions && !offlineMode.isOffline {
+        if personalization.showInstantMixActions && !offlineMode.isOffline {
             Button {
                 InstantMixService.playAlbumMix(for: album)
             } label: {
@@ -104,9 +100,10 @@ struct AlbumContextMenuModifier: ViewModifier {
             Label(String(localized: "add_to_queue"), systemImage: "text.badge.plus")
         }
 
-        if !offlineMode.isOffline && (showFavoriteActions || showPlaylistActions) {
+        if !offlineMode.isOffline
+            && (personalization.showFavoriteActions || personalization.showPlaylistActions) {
             Divider()
-            if showFavoriteActions {
+            if personalization.showFavoriteActions {
                 Button {
                     Task { await libraryStore.toggleStarAlbum(album) }
                 } label: {
@@ -118,7 +115,7 @@ struct AlbumContextMenuModifier: ViewModifier {
                     )
                 }
             }
-            if showPlaylistActions {
+            if personalization.showPlaylistActions {
                 Button {
                     if let cached = cachedSongs, !cached.isEmpty {
                         pendingPlaylistIds = PendingPlaylistIds(ids: cached.map(\.id))
@@ -188,6 +185,20 @@ struct AlbumContextMenuModifier: ViewModifier {
         let songs = detail.song ?? []
         await MainActor.run { cachedSongs = songs }
         return songs
+    }
+
+    private var enableDownloads: Bool {
+        boolDefaultingToTrue(forKey: "enableDownloads")
+    }
+
+    private var themeColorName: String {
+        UserDefaults.standard.string(forKey: "themeColor") ?? "violet"
+    }
+
+    private func boolDefaultingToTrue(forKey key: String) -> Bool {
+        let defaults = UserDefaults.standard
+        guard defaults.object(forKey: key) != nil else { return true }
+        return defaults.bool(forKey: key)
     }
 }
 

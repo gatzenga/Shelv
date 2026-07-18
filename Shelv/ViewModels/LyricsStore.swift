@@ -2,15 +2,58 @@ import Foundation
 import SwiftUI
 import Combine
 
+nonisolated struct LyricsDownloadActivitySnapshot: Equatable, Sendable {
+    let isDownloading: Bool
+    let fetched: Int
+    let total: Int
+
+    static let idle = LyricsDownloadActivitySnapshot(
+        isDownloading: false,
+        fetched: 0,
+        total: 0
+    )
+}
+
+@MainActor
+final class LyricsDownloadActivityStore: ObservableObject {
+    static let shared = LyricsDownloadActivityStore()
+
+    @Published private(set) var snapshot: LyricsDownloadActivitySnapshot = .idle
+
+    private init() {}
+
+    func begin() {
+        set(.init(isDownloading: true, fetched: 0, total: 0))
+    }
+
+    func setPlannedTotal(_ total: Int) {
+        set(.init(isDownloading: total > 0, fetched: 0, total: total))
+    }
+
+    func update(completed: Int, total: Int) {
+        set(.init(
+            isDownloading: completed < total,
+            fetched: completed,
+            total: total
+        ))
+    }
+
+    func reset() {
+        set(.idle)
+    }
+
+    private func set(_ newSnapshot: LyricsDownloadActivitySnapshot) {
+        guard snapshot != newSnapshot else { return }
+        snapshot = newSnapshot
+    }
+}
+
 @MainActor
 class LyricsStore: ObservableObject {
     static let shared = LyricsStore()
 
     @Published var currentLyrics: LyricsRecord?
     @Published var isLoadingLyrics: Bool = false
-    @Published var isDownloading: Bool = false
-    @Published var downloadFetched: Int = 0
-    @Published var downloadTotal: Int = 0
     @Published var dbSize: String = "—"
     @Published var fetchedCount: Int = 0
 
@@ -19,6 +62,7 @@ class LyricsStore: ObservableObject {
     private var downloadGeneration: UUID?
     private var currentDownloadServerId: String?
     private var progressCancellable: AnyCancellable?
+    private let downloadActivity = LyricsDownloadActivityStore.shared
 
     // MARK: - Setup
 
@@ -35,20 +79,12 @@ class LyricsStore: ObservableObject {
             .sink { [weak self] update in
                 guard let self else { return }
                 if let update {
-                    if self.downloadFetched != update.completed {
-                        self.downloadFetched = update.completed
-                    }
-                    if self.downloadTotal != update.total {
-                        self.downloadTotal = update.total
-                    }
-                    let downloading = update.completed < update.total
-                    if self.isDownloading != downloading {
-                        self.isDownloading = downloading
-                    }
+                    self.downloadActivity.update(
+                        completed: update.completed,
+                        total: update.total
+                    )
                 } else {
-                    if self.downloadFetched != 0 { self.downloadFetched = 0 }
-                    if self.downloadTotal != 0 { self.downloadTotal = 0 }
-                    if self.isDownloading { self.isDownloading = false }
+                    self.downloadActivity.reset()
                     if let sid = self.currentDownloadServerId {
                         Task { await self.refreshFetchedCount(serverId: sid) }
                     }
@@ -74,10 +110,8 @@ class LyricsStore: ObservableObject {
     // MARK: - Bulk download
 
     func startBulkDownload(serverId: String) {
-        guard !isDownloading else { return }
-        isDownloading = true
-        downloadFetched = 0
-        downloadTotal = 0
+        guard !downloadActivity.snapshot.isDownloading else { return }
+        downloadActivity.begin()
         currentDownloadServerId = serverId
         let generation = UUID()
         downloadGeneration = generation
@@ -97,11 +131,7 @@ class LyricsStore: ObservableObject {
                     let running = await LyricsBackgroundService.shared.isRunning()
                     guard store.downloadGeneration == generation else { return }
                     if !running {
-                        store.isDownloading = false
-                        if store.downloadTotal == 0 {
-                            store.downloadFetched = 0
-                            store.downloadTotal = 0
-                        }
+                        store.downloadActivity.reset()
                     }
                 }
             }
@@ -147,7 +177,7 @@ class LyricsStore: ObservableObject {
             let isCurrent = await MainActor.run {
                 let store = LyricsStore.shared
                 guard store.downloadGeneration == generation else { return false }
-                store.downloadTotal = songsToDownload.count
+                store.downloadActivity.setPlannedTotal(songsToDownload.count)
                 return true
             }
             guard isCurrent, !Task.isCancelled else { return }
@@ -157,7 +187,7 @@ class LyricsStore: ObservableObject {
                 await MainActor.run {
                     let store = LyricsStore.shared
                     guard store.downloadGeneration == generation else { return }
-                    store.isDownloading = false
+                    store.downloadActivity.reset()
                 }
             }
         }
@@ -170,9 +200,7 @@ class LyricsStore: ObservableObject {
         Task {
             await LyricsBackgroundService.shared.cancelAll()
         }
-        isDownloading = false
-        downloadFetched = 0
-        downloadTotal = 0
+        downloadActivity.reset()
         if let sid = currentDownloadServerId {
             Task { await self.refreshFetchedCount(serverId: sid) }
         }
@@ -187,8 +215,7 @@ class LyricsStore: ObservableObject {
         await LyricsBackgroundService.shared.cancelAll()
         await LyricsService.shared.resetAll()
         currentLyrics = nil
-        downloadFetched = 0
-        downloadTotal = 0
+        downloadActivity.reset()
         fetchedCount = 0
         refreshDbSize()
     }

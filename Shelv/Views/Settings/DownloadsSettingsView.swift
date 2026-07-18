@@ -1,4 +1,5 @@
 import SwiftUI
+@preconcurrency import Combine
 
 struct DownloadsSettingsView: View {
     @EnvironmentObject var serverStore: ServerStore
@@ -9,7 +10,6 @@ struct DownloadsSettingsView: View {
     @ObservedObject var offlineMode = OfflineModeService.shared
     @ObservedObject private var keepOffline = KeepLibraryOfflineService.shared
     private let downloadStore = DownloadStore.shared
-    @ObservedObject private var downloadActivity = DownloadActivityStore.shared
 
     @State private var showBulkDownloadSheet = false
     @State private var showKeepLibraryOfflineSheet = false
@@ -17,19 +17,17 @@ struct DownloadsSettingsView: View {
     @State private var showDisableDownloadsConfirm = false
     @State private var hasDownloads = DownloadUIStateHub.shared.hasDownloads
     @State private var hasActiveDownloads = false
+    @State private var hasBatchProgress = DownloadActivityStore.shared.batchProgress != nil
+    @State private var maxAllowedStorageGB: Int?
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
     private var activeServerId: String? { serverStore.activeServer?.stableId }
     private var hasDownloadsToClear: Bool {
-        hasDownloads || hasActiveDownloads || downloadActivity.batchProgress != nil
+        hasDownloads || hasActiveDownloads || hasBatchProgress
     }
 
-    private var maxAllowedStorageGB: Int {
-        guard let values = try? URL(fileURLWithPath: NSHomeDirectory())
-            .resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]),
-              let bytes = values.volumeAvailableCapacityForImportantUsage else { return 500 }
-        let gb = Int(bytes / 1_000_000_000)
-        return max(10, (gb / 10) * 10)
+    private var storageStepperMaximumGB: Int {
+        maxAllowedStorageGB ?? max(500, maxBulkStorageGB)
     }
 
     var body: some View {
@@ -107,15 +105,15 @@ struct DownloadsSettingsView: View {
                             Spacer()
                             Stepper("\(maxBulkStorageGB) GB",
                                     value: $maxBulkStorageGB,
-                                    in: 10...maxAllowedStorageGB,
+                                    in: 10...storageStepperMaximumGB,
                                     step: 10)
                                 .labelsHidden()
                             Text("\(maxBulkStorageGB) GB")
                                 .monospacedDigit()
                                 .foregroundStyle(.secondary)
                         }
-                        .onAppear {
-                            maxBulkStorageGB = min(maxBulkStorageGB, maxAllowedStorageGB)
+                        .task {
+                            await refreshStorageLimit()
                         }
                     }
 
@@ -193,6 +191,13 @@ struct DownloadsSettingsView: View {
         .onReceive(downloadStore.hasActiveDownloadsPublisher) { hasActiveDownloads in
             self.hasActiveDownloads = hasActiveDownloads
         }
+        .onReceive(
+            DownloadActivityStore.shared.$batchProgress
+                .map { $0 != nil }
+                .removeDuplicates()
+        ) { hasBatchProgress in
+            self.hasBatchProgress = hasBatchProgress
+        }
     }
 
     private var downloadsEnabledBinding: Binding<Bool> {
@@ -221,6 +226,23 @@ struct DownloadsSettingsView: View {
             offlineMode.exitOfflineMode()
         }
         downloadStore.deleteAll()
+    }
+
+    private func refreshStorageLimit() async {
+        let maximumGB = await Task.detached(priority: .utility) {
+            Self.loadMaxAllowedStorageGB()
+        }.value
+        guard !Task.isCancelled else { return }
+        maxBulkStorageGB = min(maxBulkStorageGB, maximumGB)
+        maxAllowedStorageGB = maximumGB
+    }
+
+    private nonisolated static func loadMaxAllowedStorageGB() -> Int {
+        guard let values = try? URL(fileURLWithPath: NSHomeDirectory())
+            .resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]),
+              let bytes = values.volumeAvailableCapacityForImportantUsage else { return 500 }
+        let gb = Int(bytes / 1_000_000_000)
+        return max(10, (gb / 10) * 10)
     }
 
     private var keepOfflineStatusText: String {

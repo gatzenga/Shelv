@@ -116,7 +116,6 @@ struct DownloadsTab: View {
     @ObservedObject var offlineMode = OfflineModeService.shared
     @ObservedObject private var keepOffline = KeepLibraryOfflineService.shared
     @ObservedObject private var downloadStore = DownloadStore.shared
-    @ObservedObject private var downloadActivity = DownloadActivityStore.shared
     @AppStorage("enableDownloads") private var enableDownloads = true
     @AppStorage("offlineModeEnabled") private var offlineModeEnabled = false
     @AppStorage("maxBulkDownloadStorageGB") private var maxBulkStorageGB = 10
@@ -125,20 +124,18 @@ struct DownloadsTab: View {
     @State private var showKeepLibraryOfflineSheet = false
     @State private var showDeleteAllConfirm = false
     @State private var showDisableDownloadsConfirm = false
+    @State private var hasBatchProgress = DownloadActivityStore.shared.batchProgress != nil
+    @State private var maxAllowedStorageGB: Int?
 
     private var hasDownloadsToClear: Bool {
         !downloadStore.songs.isEmpty
-        || downloadActivity.batchProgress != nil
+        || hasBatchProgress
         || !downloadStore.inFlightProgress.isEmpty
         || !downloadStore.inFlightStates.isEmpty
     }
 
-    private var maxAllowedStorageGB: Int {
-        guard let values = try? URL(fileURLWithPath: NSHomeDirectory())
-            .resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]),
-              let bytes = values.volumeAvailableCapacityForImportantUsage else { return 500 }
-        let gb = Int(bytes / 1_000_000_000)
-        return max(10, (gb / 10) * 10)
+    private var storageStepperMaximumGB: Int {
+        maxAllowedStorageGB ?? max(500, maxBulkStorageGB)
     }
 
     var body: some View {
@@ -190,15 +187,15 @@ struct DownloadsTab: View {
                             Spacer()
                             Stepper("\(maxBulkStorageGB) GB",
                                     value: $maxBulkStorageGB,
-                                    in: 10...maxAllowedStorageGB,
+                                    in: 10...storageStepperMaximumGB,
                                     step: 10)
                                 .labelsHidden()
                             Text("\(maxBulkStorageGB) GB")
                                 .monospacedDigit()
                                 .foregroundStyle(.secondary)
                         }
-                        .onAppear {
-                            maxBulkStorageGB = min(maxBulkStorageGB, maxAllowedStorageGB)
+                        .task {
+                            await refreshStorageLimit()
                         }
                     }
 
@@ -255,6 +252,13 @@ struct DownloadsTab: View {
                 keepOffline.prepare(serverId: stable)
             }
         }
+        .onReceive(
+            DownloadActivityStore.shared.$batchProgress
+                .map { $0 != nil }
+                .removeDuplicates()
+        ) { hasBatchProgress in
+            self.hasBatchProgress = hasBatchProgress
+        }
     }
 
     private var downloadsEnabledBinding: Binding<Bool> {
@@ -283,6 +287,23 @@ struct DownloadsTab: View {
             offlineMode.exitOfflineMode()
         }
         downloadStore.deleteAll()
+    }
+
+    private func refreshStorageLimit() async {
+        let maximumGB = await Task.detached(priority: .utility) {
+            Self.loadMaxAllowedStorageGB()
+        }.value
+        guard !Task.isCancelled else { return }
+        maxBulkStorageGB = min(maxBulkStorageGB, maximumGB)
+        maxAllowedStorageGB = maximumGB
+    }
+
+    private nonisolated static func loadMaxAllowedStorageGB() -> Int {
+        guard let values = try? URL(fileURLWithPath: NSHomeDirectory())
+            .resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]),
+              let bytes = values.volumeAvailableCapacityForImportantUsage else { return 500 }
+        let gb = Int(bytes / 1_000_000_000)
+        return max(10, (gb / 10) * 10)
     }
 
     private var keepOfflineStatusText: String {

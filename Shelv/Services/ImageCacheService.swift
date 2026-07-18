@@ -12,6 +12,11 @@ actor ImageCacheService {
     private static let diskTrimTarget  = 900 * 1024 * 1024 // 900 MB (hysteresis)
     private static let writesPerTrimCheck = 20
     private static let defaultFallbackSizes = [600, 300, 240, 200, 192, 180, 160, 156, 150, 120, 100, 80, 50]
+    private static let fallbackSizesByPreferred: [Int: [Int]] = Dictionary(
+        uniqueKeysWithValues: defaultFallbackSizes.map { preferred in
+            (preferred, [preferred] + defaultFallbackSizes.filter { $0 != preferred })
+        }
+    )
 
     private init() {
         cacheDir = FileManager.default
@@ -28,10 +33,13 @@ actor ImageCacheService {
     }
 
     nonisolated func cachedImage(key: String, fallbackSizes: [Int]) -> UIImage? {
-        for candidate in Self.candidateKeys(for: key, fallbackSizes: fallbackSizes) {
-            if let hit = memory.object(forKey: candidate as NSString) {
-                return hit
-            }
+        if let hit = memory.object(forKey: key as NSString) { return hit }
+        guard let lastUnderscore = key.lastIndex(of: "_") else { return nil }
+        let idPrefix = String(key[key.startIndex..<lastUnderscore]) + "_"
+        for size in fallbackSizes {
+            let candidate = "\(idPrefix)\(size)"
+            guard candidate != key else { continue }
+            if let hit = memory.object(forKey: candidate as NSString) { return hit }
         }
         return nil
     }
@@ -42,8 +50,7 @@ actor ImageCacheService {
     }
 
     nonisolated static func coverFallbackSizes(preferred size: Int) -> [Int] {
-        var seen = Set<Int>()
-        return ([size] + defaultFallbackSizes).filter { seen.insert($0).inserted }
+        fallbackSizesByPreferred[size] ?? ([size] + defaultFallbackSizes)
     }
 
     func diskOnlyImage(key: String, fallbackSizes: [Int] = ImageCacheService.defaultFallbackSizes) async -> UIImage? {
@@ -154,7 +161,7 @@ actor ImageCacheService {
         let idPrefix = String(key[key.startIndex..<lastUnderscore]) + "_"
         for size in fallbackSizes {
             let fallbackKey = "\(idPrefix)\(size)"
-            guard fallbackKey != key, !keys.contains(fallbackKey) else { continue }
+            guard fallbackKey != key else { continue }
             keys.append(fallbackKey)
         }
         return keys

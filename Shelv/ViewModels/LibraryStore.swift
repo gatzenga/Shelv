@@ -136,8 +136,9 @@ class LibraryStore: ObservableObject {
     #if DEBUG
     private func applyLargeLibraryFixtureAlbums(count: Int, sortBy: String) async {
         guard !isLoadingAlbums else { return }
-        isLoadingAlbums = albums.isEmpty
-        errorMessage = nil
+        let shouldShowLoading = albums.isEmpty
+        if isLoadingAlbums != shouldShowLoading { isLoadingAlbums = shouldShowLoading }
+        if errorMessage != nil { errorMessage = nil }
 
         let source: [Album]
         if albums.count == count, albums.first?.id.hasPrefix("fixture-album-") == true {
@@ -148,22 +149,25 @@ class LibraryStore: ObservableObject {
             }.value
         }
 
-        albums = LibraryRepository.locallySortedAlbums(source, sortBy: sortBy)
-        isLoadingAlbums = false
+        let sorted = LibraryRepository.locallySortedAlbums(source, sortBy: sortBy)
+        if albums != sorted { albums = sorted }
+        if isLoadingAlbums { isLoadingAlbums = false }
     }
 
     private func applyLargeLibraryFixtureArtists(albumCount: Int) async {
         guard !isLoadingArtists else { return }
-        isLoadingArtists = artists.isEmpty
-        errorMessage = nil
+        let shouldShowLoading = artists.isEmpty
+        if isLoadingArtists != shouldShowLoading { isLoadingArtists = shouldShowLoading }
+        if errorMessage != nil { errorMessage = nil }
 
         if artists.first?.id.hasPrefix("fixture-artist-") != true {
-            artists = await Task.detached(priority: .userInitiated) {
+            let loaded = await Task.detached(priority: .userInitiated) {
                 DemoContent.largeLibraryArtists(albumCount: albumCount)
             }.value
+            if artists != loaded { artists = loaded }
         }
 
-        isLoadingArtists = false
+        if isLoadingArtists { isLoadingArtists = false }
     }
     #endif
 
@@ -173,10 +177,10 @@ class LibraryStore: ObservableObject {
         discoverLoadGeneration += 1
         let generation = discoverLoadGeneration
         let requestSignature = activeServerSignature
-        isLoadingDiscover = true
-        errorMessage = nil
+        if !isLoadingDiscover { isLoadingDiscover = true }
+        if errorMessage != nil { errorMessage = nil }
         defer {
-            if generation == discoverLoadGeneration {
+            if generation == discoverLoadGeneration, isLoadingDiscover {
                 isLoadingDiscover = false
             }
         }
@@ -187,13 +191,13 @@ class LibraryStore: ObservableObject {
             async let frequent = api.getFrequentlyPlayed(size: 20)
             let (a, p, f) = try await (added, played, frequent)
             guard generation == discoverLoadGeneration, requestSignature == activeServerSignature else { return false }
-            recentlyAdded    = a
-            recentlyPlayed   = p
-            frequentlyPlayed = f
+            if recentlyAdded != a { recentlyAdded = a }
+            if recentlyPlayed != p { recentlyPlayed = p }
+            if frequentlyPlayed != f { frequentlyPlayed = f }
             if randomAlbums.isEmpty {
                 let random = try await api.getAlbumList(type: "random", size: 20)
                 guard generation == discoverLoadGeneration, requestSignature == activeServerSignature else { return false }
-                randomAlbums = random
+                if randomAlbums != random { randomAlbums = random }
             }
             return true
         } catch {
@@ -210,7 +214,7 @@ class LibraryStore: ObservableObject {
         do {
             let random = try await api.getAlbumList(type: "random", size: 20)
             guard requestSignature == activeServerSignature else { return }
-            randomAlbums = random
+            if randomAlbums != random { randomAlbums = random }
         } catch {
             if !(error is CancellationError) {
                 errorMessage = OfflineModeService.shared.inlineErrorMessage(for: error)
@@ -247,7 +251,7 @@ class LibraryStore: ObservableObject {
             if albumLoadGeneration == generation {
                 isRefreshingAlbums = false
                 refreshingAlbumIdentity = nil
-                isLoadingAlbums = false
+                if isLoadingAlbums { isLoadingAlbums = false }
                 let waiters = albumRefreshWaiters
                 albumRefreshWaiters.removeAll()
                 waiters.forEach { $0.resume() }
@@ -257,8 +261,9 @@ class LibraryStore: ObservableObject {
         guard let identity = requestedIdentity,
               activeServerIdentity == identity
         else { return }
-        isLoadingAlbums = albums.isEmpty
-        errorMessage = nil
+        let shouldShowLoading = albums.isEmpty
+        if isLoadingAlbums != shouldShowLoading { isLoadingAlbums = shouldShowLoading }
+        if errorMessage != nil { errorMessage = nil }
 
         if albums.isEmpty {
             let cacheSort = LibraryRepository.albumCacheSort(for: sortBy)
@@ -269,7 +274,7 @@ class LibraryStore: ObservableObject {
             )
             guard isCurrentAlbumLoad(generation, identity: identity) else { return }
             if !cached.isEmpty {
-                albums = cached
+                if albums != cached { albums = cached }
             } else {
                 let serverID = identity.id
                 let legacyCached: [Album]? = await Task.detached(priority: .utility) {
@@ -277,7 +282,7 @@ class LibraryStore: ObservableObject {
                 }.value
                 guard isCurrentAlbumLoad(generation, identity: identity) else { return }
                 if let legacyCached, !legacyCached.isEmpty {
-                    albums = legacyCached
+                    if albums != legacyCached { albums = legacyCached }
                     await libraryRepository.storeAlbums(
                         legacyCached,
                         serverKey: identity.serverKey,
@@ -297,7 +302,7 @@ class LibraryStore: ObservableObject {
                 sortBy: sortBy
             )
             guard isCurrentAlbumLoad(generation, identity: identity) else { return }
-            albums = result
+            if albums != result { albums = result }
             UserDefaults.standard.set(result.count, forKey: "shelv_albumCount_\(identity.id)")
         } catch {
             if isCurrentAlbumLoad(generation, identity: identity),
@@ -311,7 +316,8 @@ class LibraryStore: ObservableObject {
         let currentAlbums = albums
         #if DEBUG
         if DemoContent.isLargeLibraryFixtureEnabled {
-            albums = LibraryRepository.locallySortedAlbums(currentAlbums, sortBy: sortBy)
+            let sorted = LibraryRepository.locallySortedAlbums(currentAlbums, sortBy: sortBy)
+            if albums != sorted { albums = sorted }
             return
         }
         #endif
@@ -329,11 +335,12 @@ class LibraryStore: ObservableObject {
                   activeServerIdentity == identity
             else { return }
             if !cached.isEmpty || currentAlbums.isEmpty {
-                albums = cached
+                if albums != cached { albums = cached }
                 return
             }
         }
-        albums = LibraryRepository.locallySortedAlbums(currentAlbums, sortBy: sortBy)
+        let sorted = LibraryRepository.locallySortedAlbums(currentAlbums, sortBy: sortBy)
+        if albums != sorted { albums = sorted }
     }
 
     func loadArtists() async {
@@ -360,7 +367,7 @@ class LibraryStore: ObservableObject {
             if artistLoadGeneration == generation {
                 isRefreshingArtists = false
                 refreshingArtistIdentity = nil
-                isLoadingArtists = false
+                if isLoadingArtists { isLoadingArtists = false }
                 let waiters = artistRefreshWaiters
                 artistRefreshWaiters.removeAll()
                 waiters.forEach { $0.resume() }
@@ -370,14 +377,15 @@ class LibraryStore: ObservableObject {
         guard let identity = requestedIdentity,
               activeServerIdentity == identity
         else { return }
-        isLoadingArtists = artists.isEmpty
-        errorMessage = nil
+        let shouldShowLoading = artists.isEmpty
+        if isLoadingArtists != shouldShowLoading { isLoadingArtists = shouldShowLoading }
+        if errorMessage != nil { errorMessage = nil }
 
         if artists.isEmpty {
             let cached = await libraryRepository.cachedArtists(serverKey: identity.serverKey)
             guard isCurrentArtistLoad(generation, identity: identity) else { return }
             if !cached.isEmpty {
-                artists = cached
+                if artists != cached { artists = cached }
             } else {
                 let serverID = identity.id
                 let legacyCached: [Artist]? = await Task.detached(priority: .utility) {
@@ -385,7 +393,7 @@ class LibraryStore: ObservableObject {
                 }.value
                 guard isCurrentArtistLoad(generation, identity: identity) else { return }
                 if let legacyCached, !legacyCached.isEmpty {
-                    artists = legacyCached
+                    if artists != legacyCached { artists = legacyCached }
                     await libraryRepository.storeArtists(
                         legacyCached,
                         serverKey: identity.serverKey,
@@ -414,7 +422,7 @@ class LibraryStore: ObservableObject {
                 stableId: identity.stableId
             )
             guard isCurrentArtistLoad(generation, identity: identity) else { return }
-            artists = result
+            if artists != result { artists = result }
             UserDefaults.standard.set(result.count, forKey: "shelv_artistCount_\(identity.id)")
             let map = Dictionary(result.compactMap { artist -> (String, String)? in
                 guard let cover = artist.coverArt else { return nil }
@@ -477,8 +485,8 @@ class LibraryStore: ObservableObject {
 
     func stopDiscoverLoadingForConnectionRecovery() {
         discoverLoadGeneration += 1
-        errorMessage = nil
-        isLoadingDiscover = false
+        if errorMessage != nil { errorMessage = nil }
+        if isLoadingDiscover { isLoadingDiscover = false }
     }
 
     func clearCache() {
@@ -550,7 +558,7 @@ class LibraryStore: ObservableObject {
             if starredLoadGeneration == generation {
                 isRefreshingStarred = false
                 refreshingStarredIdentity = nil
-                isLoadingStarred = false
+                if isLoadingStarred { isLoadingStarred = false }
                 let waiters = starredRefreshWaiters
                 starredRefreshWaiters.removeAll()
                 waiters.forEach { $0.resume() }
@@ -570,23 +578,27 @@ class LibraryStore: ObservableObject {
         }.value
         guard isCurrentStarredLoad(generation, identity: identity) else { return }
         if let cached {
-            starredSongs = cached.song ?? []
-            starredAlbums = cached.album ?? []
-            starredArtists = cached.artist ?? []
+            let songs = cached.song ?? []
+            let albums = cached.album ?? []
+            let artists = cached.artist ?? []
+            if starredSongs != songs { starredSongs = songs }
+            if starredAlbums != albums { starredAlbums = albums }
+            if starredArtists != artists { starredArtists = artists }
         }
 
         guard !OfflineModeService.shared.isOffline else { return }
 
-        isLoadingStarred = starredSongs.isEmpty && starredAlbums.isEmpty && starredArtists.isEmpty
+        let shouldShowLoading = starredSongs.isEmpty && starredAlbums.isEmpty && starredArtists.isEmpty
+        if isLoadingStarred != shouldShowLoading { isLoadingStarred = shouldShowLoading }
         do {
             let result = try await api.getStarred()
             guard isCurrentStarredLoad(generation, identity: identity) else { return }
             let songs = result.song ?? []
             let albums = result.album ?? []
             let artists = result.artist ?? []
-            starredSongs = songs
-            starredAlbums = albums
-            starredArtists = artists
+            if starredSongs != songs { starredSongs = songs }
+            if starredAlbums != albums { starredAlbums = albums }
+            if starredArtists != artists { starredArtists = artists }
             save(songs, name: "starred_songs", serverID: serverID)
             save(albums, name: "starred_albums", serverID: serverID)
             save(artists, name: "starred_artists", serverID: serverID)
@@ -711,7 +723,7 @@ class LibraryStore: ObservableObject {
             if playlistLoadGeneration == generation {
                 isRefreshingPlaylists = false
                 refreshingPlaylistIdentity = nil
-                isLoadingPlaylists = false
+                if isLoadingPlaylists { isLoadingPlaylists = false }
                 let waiters = playlistRefreshWaiters
                 playlistRefreshWaiters.removeAll()
                 waiters.forEach { $0.resume() }
@@ -727,15 +739,16 @@ class LibraryStore: ObservableObject {
             Self.readFromDisk([Playlist].self, name: "playlists", serverID: serverID)
         }.value
         guard isCurrentPlaylistLoad(generation, identity: identity) else { return }
-        if let cached, !cached.isEmpty { playlists = cached }
+        if let cached, !cached.isEmpty, playlists != cached { playlists = cached }
 
         guard !OfflineModeService.shared.isOffline else { return }
 
-        isLoadingPlaylists = playlists.isEmpty
+        let shouldShowLoading = playlists.isEmpty
+        if isLoadingPlaylists != shouldShowLoading { isLoadingPlaylists = shouldShowLoading }
         do {
             let result = try await api.getPlaylists()
             guard isCurrentPlaylistLoad(generation, identity: identity) else { return }
-            playlists = result
+            if playlists != result { playlists = result }
             save(result, name: "playlists", serverID: serverID)
         } catch {
             if isCurrentPlaylistLoad(generation, identity: identity),

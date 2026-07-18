@@ -34,6 +34,23 @@ final class FlexibleDateTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(decoded).timeIntervalSince1970, 1_704_164_645, accuracy: 0.001)
     }
 
+    func testISOStringDoesNotInvokeDecoderDateStrategy() throws {
+        let raw = "2024-01-02T03:04:05.678Z"
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { _ in
+            XCTFail("ISO strings should be parsed before the decoder date strategy")
+            return Date(timeIntervalSince1970: 0)
+        }
+
+        let decoded = try decodeDate(from: #"{"date":"\#(raw)"}"#, decoder: decoder)
+
+        XCTAssertEqual(
+            try XCTUnwrap(decoded).timeIntervalSince1970,
+            try XCTUnwrap(fractionalISOFormatter.date(from: raw)).timeIntervalSince1970,
+            accuracy: 0.001
+        )
+    }
+
     func testEmptyOrMissingDateReturnsNil() throws {
         XCTAssertNil(try decodeDate(from: #"{"date":""}"#))
         XCTAssertNil(try decodeDate(from: #"{}"#))

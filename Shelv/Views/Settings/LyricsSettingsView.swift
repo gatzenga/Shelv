@@ -23,18 +23,10 @@ struct LyricsSettingsView: View {
                         Image(systemName: "text.bubble").foregroundStyle(accentColor)
                     }
                     Spacer()
-                    Group {
-                        if lyricsStore.isDownloading {
-                            let progress = "\(lyricsStore.downloadFetched) / \(lyricsStore.downloadTotal)"
-                            Text(progress)
-                        } else {
-                            let countText = "\(lyricsStore.fetchedCount) · \(lyricsStore.dbSize)"
-                            Text(countText)
-                        }
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
+                    LyricsDatabaseStatusText(
+                        fetchedCount: lyricsStore.fetchedCount,
+                        dbSize: lyricsStore.dbSize
+                    )
                 }
 
                 Toggle(isOn: $autoFetchLyrics) {
@@ -81,31 +73,16 @@ struct LyricsSettingsView: View {
                     }
                 }
 
-                if lyricsStore.isDownloading {
-                    VStack(alignment: .leading, spacing: 8) {
-                        let lyrTotal = max(lyricsStore.downloadTotal, 1)
-                        let lyrDone = max(0, min(lyricsStore.downloadFetched, lyrTotal))
-                        ProgressView(
-                            value: Double(lyrDone),
-                            total: Double(lyrTotal)
-                        )
-                        .tint(accentColor)
-                        Button(String(localized: "cancel_download")) {
-                            lyricsStore.cancelBulkDownload()
-                        }
-                        .foregroundStyle(.red)
-                        .font(.caption)
-                    }
-                } else {
-                    Button {
+                LyricsDownloadControls(
+                    accentColor: accentColor,
+                    onStart: {
                         guard let sid = serverStore.activeServerID?.uuidString else { return }
                         lyricsStore.startBulkDownload(serverId: sid)
-                    } label: {
-                        Label { Text(String(localized: "download_all_lyrics")) } icon: {
-                            Image(systemName: "arrow.down.circle").foregroundStyle(accentColor)
-                        }
+                    },
+                    onCancel: {
+                        lyricsStore.cancelBulkDownload()
                     }
-                }
+                )
 
                 Button(role: .destructive) {
                     showResetLyricsConfirm = true
@@ -145,6 +122,58 @@ struct LyricsSettingsView: View {
             Button(String(localized: "cancel"), role: .cancel) {}
         } message: {
             Text(String(localized: "all_downloaded_lyrics_will_be_removed"))
+        }
+    }
+}
+
+private struct LyricsDatabaseStatusText: View {
+    let fetchedCount: Int
+    let dbSize: String
+
+    @ObservedObject private var activity = LyricsDownloadActivityStore.shared
+
+    var body: some View {
+        let snapshot = activity.snapshot
+        Text(
+            snapshot.isDownloading
+                ? "\(snapshot.fetched) / \(snapshot.total)"
+                : "\(fetchedCount) · \(dbSize)"
+        )
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .monospacedDigit()
+    }
+}
+
+private struct LyricsDownloadControls: View {
+    let accentColor: Color
+    let onStart: () -> Void
+    let onCancel: () -> Void
+
+    @ObservedObject private var activity = LyricsDownloadActivityStore.shared
+
+    @ViewBuilder
+    var body: some View {
+        let snapshot = activity.snapshot
+        if snapshot.isDownloading {
+            VStack(alignment: .leading, spacing: 8) {
+                let total = max(snapshot.total, 1)
+                let fetched = max(0, min(snapshot.fetched, total))
+                ProgressView(
+                    value: Double(fetched),
+                    total: Double(total)
+                )
+                .tint(accentColor)
+                Button(String(localized: "cancel_download"), action: onCancel)
+                    .foregroundStyle(.red)
+                    .font(.caption)
+            }
+        } else {
+            Button(action: onStart) {
+                Label { Text(String(localized: "download_all_lyrics")) } icon: {
+                    Image(systemName: "arrow.down.circle").foregroundStyle(accentColor)
+                }
+            }
         }
     }
 }
