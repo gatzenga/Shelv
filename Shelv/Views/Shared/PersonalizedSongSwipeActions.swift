@@ -12,14 +12,7 @@ struct PersonalizedSongSwipeActionsModifier: ViewModifier {
     let onAddToQueue: () -> Void
 
     @State private var songInfoSong: Song?
-    @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
-    @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
-    @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
-    @AppStorage(PersonalizationPreferenceKey.swipeLeftPrimary) private var leftPrimary = PersonalizationSwipeAction.favorite.rawValue
-    @AppStorage(PersonalizationPreferenceKey.swipeLeftSecondary) private var leftSecondary = PersonalizationSwipeAction.addToPlaylist.rawValue
-    @AppStorage(PersonalizationPreferenceKey.swipeRightPrimary) private var rightPrimary = PersonalizationSwipeAction.playNext.rawValue
-    @AppStorage(PersonalizationPreferenceKey.swipeRightSecondary) private var rightSecondary = PersonalizationSwipeAction.addToQueue.rawValue
-    @AppStorage(PersonalizationPreferenceKey.swipeRightTertiary) private var rightTertiary = PersonalizationSwipeAction.instantMix.rawValue
+    @Environment(\.personalizationSwipeConfiguration) private var personalization
 
     func body(content: Content) -> some View {
         content
@@ -48,7 +41,7 @@ struct PersonalizedSongSwipeActionsModifier: ViewModifier {
             Label(String(localized: "play"), systemImage: "play.fill")
         }
 
-        if !isOffline && showInstantMixActions {
+        if !isOffline && personalization.showInstantMixActions {
             Button {
                 InstantMixService.playSongMix(for: song)
             } label: {
@@ -70,10 +63,10 @@ struct PersonalizedSongSwipeActionsModifier: ViewModifier {
             Label(String(localized: "add_to_queue"), systemImage: "text.badge.plus")
         }
 
-        if !isOffline && (showFavoriteActions || showPlaylistActions) {
+        if !isOffline && (personalization.showFavoriteActions || personalization.showPlaylistActions) {
             Divider()
 
-            if showFavoriteActions {
+            if personalization.showFavoriteActions {
                 Button {
                     onFavorite()
                 } label: {
@@ -84,7 +77,7 @@ struct PersonalizedSongSwipeActionsModifier: ViewModifier {
                 }
             }
 
-            if showPlaylistActions {
+            if personalization.showPlaylistActions {
                 Button {
                     onAddToPlaylist()
                 } label: {
@@ -108,7 +101,7 @@ struct PersonalizedSongSwipeActionsModifier: ViewModifier {
         case .none, .download, .pin, .delete:
             EmptyView()
         case .favorite:
-            if !isOffline && showFavoriteActions {
+            if !isOffline && personalization.showFavoriteActions {
                 Button {
                     onFavorite()
                 } label: {
@@ -117,7 +110,7 @@ struct PersonalizedSongSwipeActionsModifier: ViewModifier {
                 .tint(.pink)
             }
         case .addToPlaylist:
-            if !isOffline && showPlaylistActions {
+            if !isOffline && personalization.showPlaylistActions {
                 Button {
                     onAddToPlaylist()
                 } label: {
@@ -126,7 +119,7 @@ struct PersonalizedSongSwipeActionsModifier: ViewModifier {
                 .tint(accentColor)
             }
         case .instantMix:
-            if !isOffline && showInstantMixActions {
+            if !isOffline && personalization.showInstantMixActions {
                 Button {
                     InstantMixService.playSongMix(for: song)
                 } label: {
@@ -154,15 +147,15 @@ struct PersonalizedSongSwipeActionsModifier: ViewModifier {
     private func action(for slot: PersonalizationSwipeSlot) -> PersonalizationSwipeAction {
         switch slot {
         case .leftPrimary:
-            return PersonalizationSwipeAction(rawValue: leftPrimary).flatMap(normalized) ?? .none
+            return PersonalizationSwipeAction(rawValue: personalization.songLeftPrimary).flatMap(normalized) ?? .none
         case .leftSecondary:
-            return PersonalizationSwipeAction(rawValue: leftSecondary).flatMap(normalized) ?? .none
+            return PersonalizationSwipeAction(rawValue: personalization.songLeftSecondary).flatMap(normalized) ?? .none
         case .rightPrimary:
-            return PersonalizationSwipeAction(rawValue: rightPrimary).flatMap(normalized) ?? .none
+            return PersonalizationSwipeAction(rawValue: personalization.songRightPrimary).flatMap(normalized) ?? .none
         case .rightSecondary:
-            return PersonalizationSwipeAction(rawValue: rightSecondary).flatMap(normalized) ?? .none
+            return PersonalizationSwipeAction(rawValue: personalization.songRightSecondary).flatMap(normalized) ?? .none
         case .rightTertiary:
-            return PersonalizationSwipeAction(rawValue: rightTertiary).flatMap(normalized) ?? .none
+            return PersonalizationSwipeAction(rawValue: personalization.songRightTertiary).flatMap(normalized) ?? .none
         default:
             return .none
         }
@@ -171,11 +164,11 @@ struct PersonalizedSongSwipeActionsModifier: ViewModifier {
     private func normalized(_ action: PersonalizationSwipeAction) -> PersonalizationSwipeAction {
         switch action {
         case .favorite:
-            return showFavoriteActions ? action : .none
+            return personalization.showFavoriteActions ? action : .none
         case .addToPlaylist:
-            return showPlaylistActions ? action : .none
+            return personalization.showPlaylistActions ? action : .none
         case .instantMix:
-            return showInstantMixActions ? action : .none
+            return personalization.showInstantMixActions ? action : .none
         case .none, .playNext, .addToQueue:
             return action
         case .download, .pin, .delete:

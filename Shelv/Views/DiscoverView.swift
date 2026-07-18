@@ -9,6 +9,7 @@ struct DiscoverView: View {
     private let downloadStore = DownloadStore.shared
     @EnvironmentObject var serverStore: ServerStore
     @EnvironmentObject var recapStore: RecapStore
+    @Environment(\.personalizationSwipeConfiguration) private var personalization
     private let player = AudioPlayerService.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage("recapEnabled") private var recapEnabled = false
@@ -690,7 +691,13 @@ struct DiscoverView: View {
                     HStack(spacing: 14) {
                         ForEach(albums) { album in
                             NavigationLink(destination: AlbumDetailView(album: album)) {
-                                AlbumCardView(album: album, fixedSize: 140, showArtist: true)
+                                AlbumCardView(
+                                    album: album,
+                                    personalization: personalization,
+                                    fixedSize: 140,
+                                    showArtist: true
+                                )
+                                    .equatable()
                             }
                             .buttonStyle(.plain)
                         }

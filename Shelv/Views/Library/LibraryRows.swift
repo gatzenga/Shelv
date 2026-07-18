@@ -14,6 +14,7 @@ struct DownloadedArtistAvailability: Equatable {
 struct AlbumDownloadStatusReader<Content: View>: View {
     let albumID: String
     let totalSongs: Int
+    let tracksIntermediateProgress: Bool
     private let content: (AlbumDownloadStatus) -> Content
 
     @State private var downloadedCount: Int
@@ -21,10 +22,12 @@ struct AlbumDownloadStatusReader<Content: View>: View {
     init(
         albumID: String,
         totalSongs: Int,
+        tracksIntermediateProgress: Bool = true,
         @ViewBuilder content: @escaping (AlbumDownloadStatus) -> Content
     ) {
         self.albumID = albumID
         self.totalSongs = totalSongs
+        self.tracksIntermediateProgress = tracksIntermediateProgress
         self.content = content
         _downloadedCount = State(
             initialValue: DownloadUIStateHub.shared.albumDownloadedCount(albumID)
@@ -35,13 +38,24 @@ struct AlbumDownloadStatusReader<Content: View>: View {
         content(downloadStatus)
             .onReceive(
                 DownloadUIStateHub.shared.albumDownloadedCountPublisher(albumID: albumID)
-            ) { downloadedCount = $0 }
+            ) { newCount in
+                guard tracksIntermediateProgress
+                        || downloadPhase(for: newCount) != downloadPhase(for: downloadedCount)
+                else { return }
+                downloadedCount = newCount
+            }
     }
 
     private var downloadStatus: AlbumDownloadStatus {
         if downloadedCount == 0 { return .none }
         if downloadedCount >= totalSongs { return .complete }
         return .partial(downloaded: downloadedCount, total: totalSongs)
+    }
+
+    private func downloadPhase(for count: Int) -> Int {
+        if count == 0 { return 0 }
+        if count >= totalSongs { return 2 }
+        return 1
     }
 }
 

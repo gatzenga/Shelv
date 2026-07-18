@@ -4,6 +4,7 @@ import SwiftUI
 struct ArtistDetailView: View {
     let artist: Artist
     @ObservedObject var libraryStore = LibraryStore.shared
+    @Environment(\.personalizationSwipeConfiguration) private var personalization
     private let downloadStore = DownloadStore.shared
     @ObservedObject var offlineMode = OfflineModeService.shared
     @EnvironmentObject var serverStore: ServerStore
@@ -269,7 +270,13 @@ struct ArtistDetailView: View {
                     LazyVGrid(columns: columns, spacing: 20) {
                         ForEach(filteredAlbums) { album in
                             NavigationLink(destination: AlbumDetailView(album: album)) {
-                                AlbumCardView(album: album, showArtist: false, showYear: true)
+                                AlbumCardView(
+                                    album: album,
+                                    personalization: personalization,
+                                    showArtist: false,
+                                    showYear: true
+                                )
+                                    .equatable()
                             }
                             .buttonStyle(.plain)
                         }

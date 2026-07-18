@@ -9,7 +9,6 @@ private enum SettingsRoute: Hashable {
 
 struct SettingsView: View {
     @EnvironmentObject var serverStore: ServerStore
-    @EnvironmentObject var lyricsStore: LyricsStore
     @AppStorage("appAppearance") private var appAppearance = "system"
     @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage("recapEnabled") private var recapEnabled = false
@@ -116,10 +115,7 @@ struct SettingsView: View {
                             Image(systemName: "arrow.down.circle").foregroundStyle(accentColor)
                         }
                     }
-                    NavigationLink(destination: LyricsSettingsView()
-                        .environmentObject(serverStore)
-                        .environmentObject(lyricsStore)
-                    ) {
+                    NavigationLink(destination: LyricsSettingsView()) {
                         Label { Text(String(localized: "lyrics")) } icon: {
                             Image(systemName: "text.bubble").foregroundStyle(accentColor)
                         }

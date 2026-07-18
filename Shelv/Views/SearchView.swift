@@ -195,7 +195,8 @@ struct SearchView: View {
                                 ForEach(albums) { album in
                                     AlbumDownloadStatusReader(
                                         albumID: album.id,
-                                        totalSongs: album.songCount ?? 0
+                                        totalSongs: album.songCount ?? 0,
+                                        tracksIntermediateProgress: false
                                     ) { downloadStatus in
                                         NavigationLink(destination: AlbumDetailView(album: album)) {
                                             HStack(spacing: 12) {
@@ -444,7 +445,8 @@ struct SearchView: View {
                                 ForEach(matchedFavoriteAlbums) { album in
                                     AlbumDownloadStatusReader(
                                         albumID: album.id,
-                                        totalSongs: album.songCount ?? 0
+                                        totalSongs: album.songCount ?? 0,
+                                        tracksIntermediateProgress: false
                                     ) { downloadStatus in
                                         NavigationLink(destination: AlbumDetailView(album: album)) {
                                             HStack(spacing: 12) {

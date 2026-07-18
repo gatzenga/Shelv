@@ -1,5 +1,90 @@
 import SwiftUI
 
+struct PersonalizationSwipeConfiguration: Equatable {
+    var showFavoriteActions = true
+    var showPlaylistActions = true
+    var showInstantMixActions = true
+
+    var songLeftPrimary = PersonalizationSwipeAction.favorite.rawValue
+    var songLeftSecondary = PersonalizationSwipeAction.addToPlaylist.rawValue
+    var songRightPrimary = PersonalizationSwipeAction.playNext.rawValue
+    var songRightSecondary = PersonalizationSwipeAction.addToQueue.rawValue
+    var songRightTertiary = PersonalizationSwipeAction.instantMix.rawValue
+
+    var playlistLeftPrimary = PersonalizationSwipeAction.pin.rawValue
+    var playlistLeftSecondary = PersonalizationSwipeAction.delete.rawValue
+    var playlistRightPrimary = PersonalizationSwipeAction.playNext.rawValue
+    var playlistRightSecondary = PersonalizationSwipeAction.addToQueue.rawValue
+    var playlistRightTertiary = PersonalizationSwipeAction.download.rawValue
+
+    var albumArtistLeftPrimary = PersonalizationSwipeAction.favorite.rawValue
+    var albumArtistLeftSecondary = PersonalizationSwipeAction.addToPlaylist.rawValue
+    var albumArtistRightPrimary = PersonalizationSwipeAction.playNext.rawValue
+    var albumArtistRightSecondary = PersonalizationSwipeAction.addToQueue.rawValue
+    var albumArtistRightTertiary = PersonalizationSwipeAction.download.rawValue
+}
+
+private struct PersonalizationSwipeConfigurationKey: EnvironmentKey {
+    static let defaultValue = PersonalizationSwipeConfiguration()
+}
+
+extension EnvironmentValues {
+    var personalizationSwipeConfiguration: PersonalizationSwipeConfiguration {
+        get { self[PersonalizationSwipeConfigurationKey.self] }
+        set { self[PersonalizationSwipeConfigurationKey.self] = newValue }
+    }
+}
+
+private struct PersonalizationSwipeEnvironmentModifier: ViewModifier {
+    @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
+    @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
+    @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
+
+    @AppStorage(PersonalizationPreferenceKey.swipeLeftPrimary) private var songLeftPrimary = PersonalizationSwipeAction.favorite.rawValue
+    @AppStorage(PersonalizationPreferenceKey.swipeLeftSecondary) private var songLeftSecondary = PersonalizationSwipeAction.addToPlaylist.rawValue
+    @AppStorage(PersonalizationPreferenceKey.swipeRightPrimary) private var songRightPrimary = PersonalizationSwipeAction.playNext.rawValue
+    @AppStorage(PersonalizationPreferenceKey.swipeRightSecondary) private var songRightSecondary = PersonalizationSwipeAction.addToQueue.rawValue
+    @AppStorage(PersonalizationPreferenceKey.swipeRightTertiary) private var songRightTertiary = PersonalizationSwipeAction.instantMix.rawValue
+
+    @AppStorage(PersonalizationPreferenceKey.playlistSwipeLeftPrimary) private var playlistLeftPrimary = PersonalizationSwipeAction.pin.rawValue
+    @AppStorage(PersonalizationPreferenceKey.playlistSwipeLeftSecondary) private var playlistLeftSecondary = PersonalizationSwipeAction.delete.rawValue
+    @AppStorage(PersonalizationPreferenceKey.playlistSwipeRightPrimary) private var playlistRightPrimary = PersonalizationSwipeAction.playNext.rawValue
+    @AppStorage(PersonalizationPreferenceKey.playlistSwipeRightSecondary) private var playlistRightSecondary = PersonalizationSwipeAction.addToQueue.rawValue
+    @AppStorage(PersonalizationPreferenceKey.playlistSwipeRightTertiary) private var playlistRightTertiary = PersonalizationSwipeAction.download.rawValue
+
+    @AppStorage(PersonalizationPreferenceKey.albumArtistSwipeLeftPrimary) private var albumArtistLeftPrimary = PersonalizationSwipeAction.favorite.rawValue
+    @AppStorage(PersonalizationPreferenceKey.albumArtistSwipeLeftSecondary) private var albumArtistLeftSecondary = PersonalizationSwipeAction.addToPlaylist.rawValue
+    @AppStorage(PersonalizationPreferenceKey.albumArtistSwipeRightPrimary) private var albumArtistRightPrimary = PersonalizationSwipeAction.playNext.rawValue
+    @AppStorage(PersonalizationPreferenceKey.albumArtistSwipeRightSecondary) private var albumArtistRightSecondary = PersonalizationSwipeAction.addToQueue.rawValue
+    @AppStorage(PersonalizationPreferenceKey.albumArtistSwipeRightTertiary) private var albumArtistRightTertiary = PersonalizationSwipeAction.download.rawValue
+
+    func body(content: Content) -> some View {
+        content.environment(
+            \.personalizationSwipeConfiguration,
+            PersonalizationSwipeConfiguration(
+                showFavoriteActions: showFavoriteActions,
+                showPlaylistActions: showPlaylistActions,
+                showInstantMixActions: showInstantMixActions,
+                songLeftPrimary: songLeftPrimary,
+                songLeftSecondary: songLeftSecondary,
+                songRightPrimary: songRightPrimary,
+                songRightSecondary: songRightSecondary,
+                songRightTertiary: songRightTertiary,
+                playlistLeftPrimary: playlistLeftPrimary,
+                playlistLeftSecondary: playlistLeftSecondary,
+                playlistRightPrimary: playlistRightPrimary,
+                playlistRightSecondary: playlistRightSecondary,
+                playlistRightTertiary: playlistRightTertiary,
+                albumArtistLeftPrimary: albumArtistLeftPrimary,
+                albumArtistLeftSecondary: albumArtistLeftSecondary,
+                albumArtistRightPrimary: albumArtistRightPrimary,
+                albumArtistRightSecondary: albumArtistRightSecondary,
+                albumArtistRightTertiary: albumArtistRightTertiary
+            )
+        )
+    }
+}
+
 enum PersonalizedDownloadSwipeState: Equatable {
     case hidden
     case download
@@ -17,11 +102,7 @@ struct PersonalizedPlaylistSwipeActionsModifier: ViewModifier {
     let onPlayNext: () -> Void
     let onAddToQueue: () -> Void
 
-    @AppStorage(PersonalizationPreferenceKey.playlistSwipeLeftPrimary) private var leftPrimary = PersonalizationSwipeAction.pin.rawValue
-    @AppStorage(PersonalizationPreferenceKey.playlistSwipeLeftSecondary) private var leftSecondary = PersonalizationSwipeAction.delete.rawValue
-    @AppStorage(PersonalizationPreferenceKey.playlistSwipeRightPrimary) private var rightPrimary = PersonalizationSwipeAction.playNext.rawValue
-    @AppStorage(PersonalizationPreferenceKey.playlistSwipeRightSecondary) private var rightSecondary = PersonalizationSwipeAction.addToQueue.rawValue
-    @AppStorage(PersonalizationPreferenceKey.playlistSwipeRightTertiary) private var rightTertiary = PersonalizationSwipeAction.download.rawValue
+    @Environment(\.personalizationSwipeConfiguration) private var personalization
 
     func body(content: Content) -> some View {
         content
@@ -102,15 +183,15 @@ struct PersonalizedPlaylistSwipeActionsModifier: ViewModifier {
         let rawValue: String
         switch slot {
         case .playlistLeftPrimary:
-            rawValue = leftPrimary
+            rawValue = personalization.playlistLeftPrimary
         case .playlistLeftSecondary:
-            rawValue = leftSecondary
+            rawValue = personalization.playlistLeftSecondary
         case .playlistRightPrimary:
-            rawValue = rightPrimary
+            rawValue = personalization.playlistRightPrimary
         case .playlistRightSecondary:
-            rawValue = rightSecondary
+            rawValue = personalization.playlistRightSecondary
         case .playlistRightTertiary:
-            rawValue = rightTertiary
+            rawValue = personalization.playlistRightTertiary
         default:
             return .none
         }
@@ -143,13 +224,7 @@ struct PersonalizedAlbumArtistSwipeActionsModifier: ViewModifier {
     let onPlayNext: () -> Void
     let onAddToQueue: () -> Void
 
-    @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
-    @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
-    @AppStorage(PersonalizationPreferenceKey.albumArtistSwipeLeftPrimary) private var leftPrimary = PersonalizationSwipeAction.favorite.rawValue
-    @AppStorage(PersonalizationPreferenceKey.albumArtistSwipeLeftSecondary) private var leftSecondary = PersonalizationSwipeAction.addToPlaylist.rawValue
-    @AppStorage(PersonalizationPreferenceKey.albumArtistSwipeRightPrimary) private var rightPrimary = PersonalizationSwipeAction.playNext.rawValue
-    @AppStorage(PersonalizationPreferenceKey.albumArtistSwipeRightSecondary) private var rightSecondary = PersonalizationSwipeAction.addToQueue.rawValue
-    @AppStorage(PersonalizationPreferenceKey.albumArtistSwipeRightTertiary) private var rightTertiary = PersonalizationSwipeAction.download.rawValue
+    @Environment(\.personalizationSwipeConfiguration) private var personalization
 
     func body(content: Content) -> some View {
         content
@@ -228,15 +303,15 @@ struct PersonalizedAlbumArtistSwipeActionsModifier: ViewModifier {
         let rawValue: String
         switch slot {
         case .albumArtistLeftPrimary:
-            rawValue = leftPrimary
+            rawValue = personalization.albumArtistLeftPrimary
         case .albumArtistLeftSecondary:
-            rawValue = leftSecondary
+            rawValue = personalization.albumArtistLeftSecondary
         case .albumArtistRightPrimary:
-            rawValue = rightPrimary
+            rawValue = personalization.albumArtistRightPrimary
         case .albumArtistRightSecondary:
-            rawValue = rightSecondary
+            rawValue = personalization.albumArtistRightSecondary
         case .albumArtistRightTertiary:
-            rawValue = rightTertiary
+            rawValue = personalization.albumArtistRightTertiary
         default:
             return .none
         }
@@ -247,9 +322,9 @@ struct PersonalizedAlbumArtistSwipeActionsModifier: ViewModifier {
     private func normalized(_ action: PersonalizationSwipeAction) -> PersonalizationSwipeAction {
         switch action {
         case .favorite:
-            return !isOffline && showFavoriteActions ? action : .none
+            return !isOffline && personalization.showFavoriteActions ? action : .none
         case .addToPlaylist:
-            return !isOffline && showPlaylistActions ? action : .none
+            return !isOffline && personalization.showPlaylistActions ? action : .none
         case .download:
             return downloadState == .hidden ? .none : action
         case .playNext, .addToQueue:
@@ -261,6 +336,10 @@ struct PersonalizedAlbumArtistSwipeActionsModifier: ViewModifier {
 }
 
 extension View {
+    func personalizationSwipeEnvironment() -> some View {
+        modifier(PersonalizationSwipeEnvironmentModifier())
+    }
+
     func personalizedPlaylistSwipeActions(
         isPinned: Bool,
         canDelete: Bool,

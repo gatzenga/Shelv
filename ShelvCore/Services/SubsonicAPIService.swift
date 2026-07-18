@@ -103,23 +103,25 @@ private nonisolated struct Envelope<T: Decodable>: Decodable {
     }
 }
 
-private nonisolated struct StatusCheck: Decodable {
+extension Envelope: Sendable where T: Sendable {}
+
+private nonisolated struct StatusCheck: Decodable, Sendable {
     let status: String
     let error: APIError?
 
-    struct APIError: Decodable {
+    struct APIError: Decodable, Sendable {
         let code: Int
         let message: String?
     }
 }
 
-private nonisolated struct AlbumListBody: Decodable {
+private nonisolated struct AlbumListBody: Decodable, Sendable {
     let status: String
     let error: StatusCheck.APIError?
     let albumList2: AlbumListContainer?
 }
 
-private nonisolated struct ArtistsBody: Decodable {
+private nonisolated struct ArtistsBody: Decodable, Sendable {
     let status: String
     let error: StatusCheck.APIError?
     let artists: ArtistsContainer?
@@ -204,15 +206,15 @@ nonisolated struct ScanStatus {
     let count: Int
 }
 
-nonisolated struct AlbumListContainer: Decodable {
+nonisolated struct AlbumListContainer: Decodable, Sendable {
     let album: [Album]?
 }
 
-nonisolated struct ArtistsContainer: Decodable {
+nonisolated struct ArtistsContainer: Decodable, Sendable {
     let index: [ArtistIndex]?
 }
 
-nonisolated struct ArtistIndex: Decodable {
+nonisolated struct ArtistIndex: Decodable, Sendable {
     let name: String
     let artist: [Artist]?
 }
@@ -465,39 +467,29 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
 
     private let apiVersion = "1.16.1"
     private let clientName = "Shelv"
-    private let decoder: JSONDecoder = {
+    private let decoder = SubsonicAPIService.makeDecoder()
+
+    nonisolated private static func makeDecoder() -> JSONDecoder {
         let d = JSONDecoder()
         d.dateDecodingStrategy = .custom { decoder in
             let container = try decoder.singleValueContainer()
             let raw = try container.decode(String.self)
 
-            let normalized: String
-            if let dotRange = raw.range(of: "."),
-               let zRange = raw.range(of: "Z", options: .backwards),
-               dotRange.upperBound <= zRange.lowerBound {
-                let fractional = String(raw[dotRange.upperBound..<zRange.lowerBound])
-                let trimmed = String(fractional.prefix(3)).padding(toLength: 3, withPad: "0", startingAt: 0)
-                normalized = String(raw[raw.startIndex..<dotRange.lowerBound]) + "." + trimmed + "Z"
-            } else if let dotRange = raw.range(of: "."),
-                      let plusRange = raw.range(of: "+", range: dotRange.upperBound..<raw.endIndex) {
-                let fractional = String(raw[dotRange.upperBound..<plusRange.lowerBound])
-                let trimmed = String(fractional.prefix(3)).padding(toLength: 3, withPad: "0", startingAt: 0)
-                normalized = String(raw[raw.startIndex..<dotRange.lowerBound]) + "." + trimmed + String(raw[plusRange.lowerBound...])
-            } else {
-                normalized = raw
-            }
-
-            let formatter = ISO8601DateFormatter()
-            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            if let date = formatter.date(from: normalized) { return date }
-
-            formatter.formatOptions = [.withInternetDateTime]
-            if let date = formatter.date(from: normalized) { return date }
+            if let date = FlexibleDate.parseISOString(raw) { return date }
 
             throw DecodingError.dataCorruptedError(in: container, debugDescription: "Cannot parse date: \(raw)")
         }
         return d
-    }()
+    }
+
+    nonisolated private static func decodeOffMain<T: Decodable & Sendable>(
+        _ type: T.Type,
+        from data: Data
+    ) async throws -> T {
+        try await Task.detached(priority: .userInitiated) {
+            try makeDecoder().decode(type, from: data)
+        }.value
+    }
 
     private let session: URLSession = {
         let config = URLSessionConfiguration.default
@@ -852,7 +844,7 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
             URLQueryItem(name: "size", value: "\(size)"),
             URLQueryItem(name: "offset", value: "\(offset)")
         ])
-        let body = try decoder.decode(Envelope<AlbumListBody>.self, from: data).response
+        let body = try await Self.decodeOffMain(Envelope<AlbumListBody>.self, from: data).response
         try check(status: body.status, error: body.error)
         return body.albumList2?.album ?? []
     }
@@ -874,7 +866,7 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         if isDemoActive { return DemoContent.artists }
         #endif
         let data = try await fetchData(path: "getArtists")
-        let body = try decoder.decode(Envelope<ArtistsBody>.self, from: data).response
+        let body = try await Self.decodeOffMain(Envelope<ArtistsBody>.self, from: data).response
         try check(status: body.status, error: body.error)
         let indices = body.artists?.index ?? []
         return indices.flatMap { $0.artist ?? [] }

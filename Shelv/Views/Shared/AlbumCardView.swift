@@ -1,7 +1,8 @@
 import SwiftUI
 
-struct AlbumCardView: View {
+struct AlbumCardView: View, Equatable {
     let album: Album
+    let personalization: PersonalizationSwipeConfiguration
     var fixedSize: CGFloat? = nil
     var showArtist: Bool = true
     var showYear: Bool = false
@@ -38,5 +39,6 @@ struct AlbumCardView: View {
         }
         .frame(width: fixedSize)
         .albumContextMenu(album)
+        .environment(\.personalizationSwipeConfiguration, personalization)
     }
 }

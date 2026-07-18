@@ -128,17 +128,24 @@ class RecapStore: ObservableObject {
         if SubsonicAPIService.shared.isDemoActive {
             guard revision == loadRevision,
                   SubsonicAPIService.shared.activeServer?.stableId == serverId else { return }
-            entries = DemoContent.recapEntries
-            recapPlaylistIds = Set(entries.map { $0.playlistId })
+            let loadedEntries = DemoContent.recapEntries
+            let loadedPlaylistIds = Set(loadedEntries.map(\.playlistId))
+            if entries != loadedEntries { entries = loadedEntries }
+            if recapPlaylistIds != loadedPlaylistIds { recapPlaylistIds = loadedPlaylistIds }
             return
         }
         #endif
         let all = await PlayLogService.shared.allRegistryEntries(serverId: serverId)
         guard revision == loadRevision,
               SubsonicAPIService.shared.activeServer?.stableId == serverId else { return }
-        entries = all
-        recapPlaylistIds = Set(all.map { $0.playlistId })
-        UserDefaults.standard.set(Array(recapPlaylistIds), forKey: "shelv_recap_playlist_ids")
+        let loadedPlaylistIds = Set(all.map(\.playlistId))
+        if entries != all { entries = all }
+        guard recapPlaylistIds != loadedPlaylistIds else { return }
+        recapPlaylistIds = loadedPlaylistIds
+        UserDefaults.standard.set(
+            loadedPlaylistIds.sorted(),
+            forKey: "shelv_recap_playlist_ids"
+        )
     }
 
     func refreshWithCleanup(serverId: String) async {

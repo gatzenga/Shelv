@@ -204,6 +204,9 @@ final class DownloadUIStateHub {
 
     func songAvailabilityPublisher(songID: String) -> AnyPublisher<Bool, Never> {
         songAvailabilityChangeSubject
+            .filter { changedSongID in
+                changedSongID == nil || changedSongID == songID
+            }
             .map { [weak self] _ in self?.isSongDownloaded(songID) ?? false }
             .removeDuplicates()
             .eraseToAnyPublisher()
@@ -218,6 +221,9 @@ final class DownloadUIStateHub {
 
     func albumDownloadedCountPublisher(albumID: String) -> AnyPublisher<Int, Never> {
         albumDownloadedCountChangeSubject
+            .filter { changedAlbumID in
+                changedAlbumID == nil || changedAlbumID == albumID
+            }
             .map { [weak self] _ in self?.albumDownloadedCount(albumID) ?? 0 }
             .removeDuplicates()
             .eraseToAnyPublisher()
@@ -225,6 +231,9 @@ final class DownloadUIStateHub {
 
     func catalogArtistAvailabilityPublisher(name: String) -> AnyPublisher<Bool, Never> {
         catalogArtistAvailabilityChangeSubject
+            .filter { changedArtistName in
+                changedArtistName == nil || changedArtistName == name
+            }
             .map { [weak self] _ in self?.isCatalogArtistDownloaded(name) ?? false }
             .removeDuplicates()
             .eraseToAnyPublisher()
@@ -232,6 +241,9 @@ final class DownloadUIStateHub {
 
     func artistAvailabilityPublisher(name: String) -> AnyPublisher<Bool, Never> {
         artistBadgeAvailabilityChangeSubject
+            .filter { changedArtistName in
+                changedArtistName == nil || changedArtistName == name
+            }
             .map { [weak self] _ in self?.isArtistBadgeDownloaded(name) ?? false }
             .removeDuplicates()
             .eraseToAnyPublisher()

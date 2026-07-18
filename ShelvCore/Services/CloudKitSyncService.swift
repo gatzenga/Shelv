@@ -444,40 +444,37 @@ actor CloudKitSyncService {
     }
 
     private nonisolated static func setUserDefault(_ value: UserDefaultValue, forKey key: String) {
-        if Thread.isMainThread {
-            writeUserDefault(value, forKey: key)
-        } else {
-            DispatchQueue.main.sync {
-                writeUserDefault(value, forKey: key)
-            }
-        }
+        writeUserDefault(value, forKey: key)
     }
 
     private nonisolated static func writeUserDefault(_ value: UserDefaultValue, forKey key: String) {
+        let defaults = UserDefaults.standard
         switch value {
         case .bool(let value):
-            UserDefaults.standard.set(value, forKey: key)
+            guard defaults.object(forKey: key) as? Bool != value else { return }
+            defaults.set(value, forKey: key)
         case .string(let value):
-            UserDefaults.standard.set(value, forKey: key)
+            guard defaults.string(forKey: key) != value else { return }
+            defaults.set(value, forKey: key)
         case .data(let value):
-            UserDefaults.standard.set(value, forKey: key)
+            guard defaults.data(forKey: key) != value else { return }
+            defaults.set(value, forKey: key)
         case .stringArray(let value):
-            UserDefaults.standard.set(value, forKey: key)
+            guard defaults.stringArray(forKey: key) != value else { return }
+            defaults.set(value, forKey: key)
         case .int(let value):
-            UserDefaults.standard.set(value, forKey: key)
+            guard defaults.object(forKey: key) as? Int != value else { return }
+            defaults.set(value, forKey: key)
         case .double(let value):
-            UserDefaults.standard.set(value, forKey: key)
+            guard defaults.object(forKey: key) as? Double != value else { return }
+            defaults.set(value, forKey: key)
         }
     }
 
     private nonisolated static func removeUserDefault(forKey key: String) {
-        if Thread.isMainThread {
-            UserDefaults.standard.removeObject(forKey: key)
-        } else {
-            DispatchQueue.main.sync {
-                UserDefaults.standard.removeObject(forKey: key)
-            }
-        }
+        let defaults = UserDefaults.standard
+        guard defaults.object(forKey: key) != nil else { return }
+        defaults.removeObject(forKey: key)
     }
 
     // MARK: - Setup

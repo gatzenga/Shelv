@@ -229,6 +229,7 @@ struct LibraryView: View {
     @ObservedObject var libraryStore = LibraryStore.shared
     @ObservedObject var offlineMode = OfflineModeService.shared
     @EnvironmentObject var serverStore: ServerStore
+    @Environment(\.personalizationSwipeConfiguration) private var personalization
     private let player = AudioPlayerService.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
@@ -738,7 +739,12 @@ struct LibraryView: View {
                         LazyVGrid(columns: columns, spacing: 14) {
                             ForEach(group.items) { album in
                                 NavigationLink(destination: AlbumDetailView(album: album)) {
-                                    AlbumCardView(album: album, showArtist: true)
+                                    AlbumCardView(
+                                        album: album,
+                                        personalization: personalization,
+                                        showArtist: true
+                                    )
+                                        .equatable()
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -770,7 +776,8 @@ struct LibraryView: View {
                         ForEach(group.items) { album in
                             AlbumDownloadStatusReader(
                                 albumID: album.id,
-                                totalSongs: album.songCount ?? 0
+                                totalSongs: album.songCount ?? 0,
+                                tracksIntermediateProgress: false
                             ) { downloadStatus in
                                 Button { navigateToAlbum = album } label: {
                                     LibraryAlbumListRow(album: album)
@@ -1027,7 +1034,8 @@ struct LibraryView: View {
                         ForEach(albums) { album in
                             AlbumDownloadStatusReader(
                                 albumID: album.id,
-                                totalSongs: album.songCount ?? 0
+                                totalSongs: album.songCount ?? 0,
+                                tracksIntermediateProgress: false
                             ) { downloadStatus in
                                 NavigationLink(destination: AlbumDetailView(album: album)) {
                                     LibraryFavoriteAlbumRow(album: album)

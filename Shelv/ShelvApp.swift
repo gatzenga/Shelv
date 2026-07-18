@@ -1,4 +1,5 @@
 import AppIntents
+@preconcurrency import Combine
 import Intents
 import SwiftUI
 
@@ -75,6 +76,7 @@ struct ShelvApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .personalizationSwipeEnvironment()
                 .environmentObject(serverStore)
                 .environmentObject(LibraryStore.shared)
                 .environmentObject(AudioPlayerService.shared)
@@ -206,7 +208,11 @@ struct ShelvApp: App {
                         }
                     }
                 }
-                .onReceive(downloadActivity.$batchProgress) { _ in
+                .onReceive(
+                    downloadActivity.$batchProgress
+                        .map { ($0?.remaining ?? 0) > 0 }
+                        .removeDuplicates()
+                ) { _ in
                     updateIdleTimer(phase: scenePhase)
                 }
                 .onChange(of: preventSleepDuringDownloads) { _, _ in
