@@ -73,8 +73,10 @@ struct LoginView: View {
             ? serverURL : "https://" + serverURL
         var server = SubsonicServer(name: name.trimmingCharacters(in: .whitespaces), baseURL: normalized, username: username)
         do {
-            try await SubsonicAPIService.shared.ping(server: server, password: password)
-            server.remoteUserId = try await SubsonicAPIService.shared.authLogin(server: server, password: password)
+            server.remoteUserId = try await SubsonicAPIService.shared.validatedStableId(
+                server: server,
+                password: password
+            )
             guard await serverStore.add(server: server, password: password) else {
                 errorMessage = String(localized: "credential_storage_failed")
                 return

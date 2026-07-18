@@ -220,11 +220,7 @@ struct AddServerView: View {
                 ?? !password.isEmpty
             if authenticationConfigurationChanged || passwordChanged {
                 do {
-                    _ = try await SubsonicAPIService.shared.ping(
-                        server: updated,
-                        password: password
-                    )
-                    updated.remoteUserId = try await SubsonicAPIService.shared.authLogin(
+                    updated.remoteUserId = try await SubsonicAPIService.shared.validatedStableId(
                         server: updated,
                         password: password
                     )
@@ -252,7 +248,10 @@ struct AddServerView: View {
                 secondaryBaseURL: useSecondaryURL ? trimmedSecondaryBaseURL : nil
             )
             do {
-                let uid = try await SubsonicAPIService.shared.authLogin(server: tempServer, password: password)
+                let uid = try await SubsonicAPIService.shared.validatedStableId(
+                    server: tempServer,
+                    password: password
+                )
                 var server = tempServer
                 server.remoteUserId = uid
                 guard await serverStore.add(server: server, password: password) else {

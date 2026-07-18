@@ -46,21 +46,6 @@ extension SubsonicAPIService {
         return ServerConfig(serverURL: server.activeBaseURL, username: server.username, password: password)
     }
 
-    /// auth/login mit den aktiven Credentials (Navidrome-User-ID für stableId).
-    func authLogin() async throws -> String {
-        guard let server = activeServer else { throw SubsonicAPIError.noServer }
-        let password: String?
-        if let activePassword {
-            password = activePassword
-        } else {
-            password = await KeychainService.load(for: server.id)
-        }
-        guard let password else {
-            throw SubsonicAPIError.noPassword
-        }
-        return try await authLogin(server: server, password: password)
-    }
-
     // MARK: - Signatur-Aliase
 
     func getAlbumList(type: AlbumListType, size: Int = 50, offset: Int = 0) async throws -> [Album] {

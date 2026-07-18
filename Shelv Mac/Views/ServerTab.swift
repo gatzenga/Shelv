@@ -416,11 +416,7 @@ private struct EditServerSheet: View {
                 return
             }
             do {
-                _ = try await SubsonicAPIService.shared.ping(
-                    server: updated,
-                    password: password
-                )
-                updated.remoteUserId = try await SubsonicAPIService.shared.authLogin(
+                updated.remoteUserId = try await SubsonicAPIService.shared.validatedStableId(
                     server: updated,
                     password: password
                 )

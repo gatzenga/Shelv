@@ -236,11 +236,7 @@ struct ServerFormView: View {
                 ?? !password.isEmpty
             if authenticationConfigurationChanged || passwordChanged {
                 do {
-                    _ = try await SubsonicAPIService.shared.ping(
-                        server: updated,
-                        password: password
-                    )
-                    updated.remoteUserId = try await SubsonicAPIService.shared.authLogin(
+                    updated.remoteUserId = try await SubsonicAPIService.shared.validatedStableId(
                         server: updated,
                         password: password
                     )
@@ -263,7 +259,10 @@ struct ServerFormView: View {
         } else {
             var server = SubsonicServer(name: trimmedName, baseURL: normalized, username: username)
             do {
-                server.remoteUserId = try await SubsonicAPIService.shared.authLogin(server: server, password: password)
+                server.remoteUserId = try await SubsonicAPIService.shared.validatedStableId(
+                    server: server,
+                    password: password
+                )
                 guard await serverStore.add(server: server, password: password) else {
                     testSuccess = false
                     testResult = String(localized: "credential_storage_failed")
