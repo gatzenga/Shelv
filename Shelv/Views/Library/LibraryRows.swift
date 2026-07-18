@@ -1,4 +1,79 @@
+import Combine
 import SwiftUI
+
+struct DownloadedArtistAvailability: Equatable {
+    let isCatalogDownloaded: Bool
+    let isBadgeDownloaded: Bool
+
+    fileprivate init(snapshot: DownloadUIStateSnapshot, artistName: String) {
+        isCatalogDownloaded = snapshot.artistNames.contains(artistName)
+        isBadgeDownloaded = snapshot.artistBadgeNames.contains(artistName)
+    }
+}
+
+struct AlbumDownloadStatusReader<Content: View>: View {
+    let albumID: String
+    let totalSongs: Int
+    private let content: (AlbumDownloadStatus) -> Content
+
+    @State private var downloadedCount: Int
+
+    init(
+        albumID: String,
+        totalSongs: Int,
+        @ViewBuilder content: @escaping (AlbumDownloadStatus) -> Content
+    ) {
+        self.albumID = albumID
+        self.totalSongs = totalSongs
+        self.content = content
+        _downloadedCount = State(
+            initialValue: DownloadUIStateHub.shared.currentSnapshot.albumDownloadedCounts[albumID] ?? 0
+        )
+    }
+
+    var body: some View {
+        content(downloadStatus)
+            .onReceive(
+                DownloadUIStateHub.shared.albumDownloadedCountPublisher(albumID: albumID)
+            ) { downloadedCount = $0 }
+    }
+
+    private var downloadStatus: AlbumDownloadStatus {
+        if downloadedCount == 0 { return .none }
+        if downloadedCount >= totalSongs { return .complete }
+        return .partial(downloaded: downloadedCount, total: totalSongs)
+    }
+}
+
+struct ArtistDownloadAvailabilityReader<Content: View>: View {
+    let artistName: String
+    private let content: (DownloadedArtistAvailability) -> Content
+
+    @State private var availability: DownloadedArtistAvailability
+
+    init(
+        artistName: String,
+        @ViewBuilder content: @escaping (DownloadedArtistAvailability) -> Content
+    ) {
+        self.artistName = artistName
+        self.content = content
+        _availability = State(
+            initialValue: DownloadedArtistAvailability(
+                snapshot: DownloadUIStateHub.shared.currentSnapshot,
+                artistName: artistName
+            )
+        )
+    }
+
+    var body: some View {
+        content(availability)
+            .onReceive(
+                DownloadUIStateHub.shared.snapshots
+                    .map { DownloadedArtistAvailability(snapshot: $0, artistName: artistName) }
+                    .removeDuplicates()
+            ) { availability = $0 }
+    }
+}
 
 struct LibraryAlbumListRow: View {
     let album: Album

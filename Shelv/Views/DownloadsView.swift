@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct DownloadsView: View {
-    @ObservedObject var downloadStore = DownloadStore.shared
+    private let downloadStore = DownloadStore.shared
     @ObservedObject var offlineMode = OfflineModeService.shared
     @ObservedObject var libraryStore = LibraryStore.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
@@ -10,8 +10,13 @@ struct DownloadsView: View {
     @AppStorage("downloadsAlbumIsGrid") private var albumIsGrid: Bool = true
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
+    @State private var catalog: DownloadCatalogSnapshot
     @State private var albumToDeleteDownloads: DownloadedAlbum?
     @State private var artistToDeleteDownloads: DownloadedArtist?
+
+    init() {
+        _catalog = State(initialValue: DownloadStore.shared.currentCatalogSnapshot)
+    }
 
     enum Segment: String, CaseIterable {
         case albums, artists, favorites
@@ -51,6 +56,7 @@ struct DownloadsView: View {
             .navigationTitle(offlineMode.isOffline ? String(localized: "offline") : String(localized: "downloads"))
             .navigationBarTitleDisplayMode(.inline)
             .task { await downloadStore.reload() }
+            .onReceive(downloadStore.catalogPublisher) { catalog = $0 }
             .alert(
                 String(localized: "delete_downloads"),
                 isPresented: Binding(get: { albumToDeleteDownloads != nil }, set: { if !$0 { albumToDeleteDownloads = nil } }),
@@ -80,7 +86,7 @@ struct DownloadsView: View {
 
     @ViewBuilder
     private var albumsList: some View {
-        if downloadStore.albums.isEmpty {
+        if catalog.albums.isEmpty {
             emptyState(title: String(localized: "no_downloaded_albums"),
                        icon: "square.grid.2x2")
         } else {
@@ -97,7 +103,7 @@ struct DownloadsView: View {
                 if albumIsGrid {
                     ScrollView {
                         LazyVGrid(columns: [GridItem(.adaptive(minimum: 130, maximum: 180), spacing: 14)], spacing: 18) {
-                            ForEach(downloadStore.albums) { album in
+                            ForEach(catalog.albums) { album in
                                 NavigationLink(value: album) {
                                     downloadedAlbumGridCell(album)
                                 }
@@ -115,7 +121,7 @@ struct DownloadsView: View {
                     .scrollIndicators(.hidden)
                 } else {
                     List {
-                        ForEach(downloadStore.albums) { album in
+                        ForEach(catalog.albums) { album in
                             NavigationLink(value: album) {
                                 DownloadedAlbumRow(album: album)
                             }
@@ -153,12 +159,12 @@ struct DownloadsView: View {
 
     @ViewBuilder
     private var artistsList: some View {
-        if downloadStore.artists.isEmpty {
+        if catalog.artists.isEmpty {
             emptyState(title: String(localized: "no_downloaded_artists"),
                        icon: "music.mic")
         } else {
             List {
-                ForEach(downloadStore.artists) { artist in
+                ForEach(catalog.artists) { artist in
                     NavigationLink(value: artist) {
                         DownloadedArtistRow(artist: artist)
                     }
@@ -189,11 +195,11 @@ struct DownloadsView: View {
     @ViewBuilder
     private var favoritesList: some View {
         // Cross-Filter: Library-Favoriten gegen Downloads
-        let downloadedAlbumIds = Set(downloadStore.albums.map { $0.albumId })
-        let downloadedArtistNames = Set(downloadStore.artists.map { $0.name })
+        let downloadedAlbumIds = Set(catalog.albums.map { $0.albumId })
+        let downloadedArtistNames = Set(catalog.artists.map { $0.name })
         let favAlbums = libraryStore.starredAlbums.filter { downloadedAlbumIds.contains($0.id) }
         let favArtists = libraryStore.starredArtists.filter { downloadedArtistNames.contains($0.name) }
-        let favSongs = downloadStore.favoriteSongs
+        let favSongs = catalog.favoriteSongs
 
         if favAlbums.isEmpty && favArtists.isEmpty && favSongs.isEmpty {
             emptyState(title: String(localized: "no_favorites_downloaded"),
@@ -203,7 +209,7 @@ struct DownloadsView: View {
                 if !favArtists.isEmpty {
                     Section(String(localized: "artists")) {
                         ForEach(favArtists) { artist in
-                            if let downloaded = downloadStore.artists.first(where: { $0.name == artist.name }) {
+                            if let downloaded = catalog.artists.first(where: { $0.name == artist.name }) {
                                 NavigationLink(value: downloaded) {
                                     DownloadedArtistRow(artist: downloaded)
                                 }
@@ -214,7 +220,7 @@ struct DownloadsView: View {
                 if !favAlbums.isEmpty {
                     Section(String(localized: "albums")) {
                         ForEach(favAlbums) { album in
-                            if let downloaded = downloadStore.albums.first(where: { $0.albumId == album.id }) {
+                            if let downloaded = catalog.albums.first(where: { $0.albumId == album.id }) {
                                 NavigationLink(value: downloaded) {
                                     DownloadedAlbumRow(album: downloaded)
                                 }
@@ -304,16 +310,18 @@ private struct DownloadedArtistRow: View {
 
 struct DownloadedAlbumDetailView: View {
     let album: DownloadedAlbum
-    @ObservedObject var downloadStore = DownloadStore.shared
+    private let downloadStore = DownloadStore.shared
     @Environment(\.dismiss) private var dismiss
     @AppStorage("themeColor") private var themeColorName = "violet"
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
     private let player = AudioPlayerService.shared
 
     @State private var currentToast: ShelveToast?
+    @State private var currentAlbum: DownloadedAlbum?
 
-    private var currentAlbum: DownloadedAlbum? {
-        downloadStore.albums.first(where: { $0.albumId == album.albumId })
+    init(album: DownloadedAlbum) {
+        self.album = album
+        _currentAlbum = State(initialValue: album)
     }
 
     var body: some View {
@@ -382,20 +390,23 @@ struct DownloadedAlbumDetailView: View {
         .navigationTitle(album.title)
         .navigationBarTitleDisplayMode(.inline)
         .shelveToast($currentToast)
-        .onChange(of: downloadStore.albums.contains(where: { $0.albumId == album.albumId })) { _, exists in
-            if !exists { dismiss() }
+        .onReceive(downloadStore.downloadedAlbumPublisher(id: album.id)) { album in
+            currentAlbum = album
+            if album == nil { dismiss() }
         }
     }
 }
 
 struct DownloadedArtistDetailView: View {
     let artist: DownloadedArtist
-    @ObservedObject var downloadStore = DownloadStore.shared
+    private let downloadStore = DownloadStore.shared
     @Environment(\.dismiss) private var dismiss
     @State private var albumToDeleteDownloads: DownloadedAlbum?
+    @State private var currentArtist: DownloadedArtist?
 
-    private var currentArtist: DownloadedArtist? {
-        downloadStore.artists.first(where: { $0.artistId == artist.artistId })
+    init(artist: DownloadedArtist) {
+        self.artist = artist
+        _currentArtist = State(initialValue: artist)
     }
 
     var body: some View {
@@ -421,8 +432,9 @@ struct DownloadedArtistDetailView: View {
         .listStyle(.plain)
         .navigationTitle(artist.name)
         .navigationBarTitleDisplayMode(.inline)
-        .onChange(of: downloadStore.artists.contains(where: { $0.artistId == artist.artistId })) { _, exists in
-            if !exists { dismiss() }
+        .onReceive(downloadStore.downloadedArtistPublisher(id: artist.id)) { artist in
+            currentArtist = artist
+            if artist == nil { dismiss() }
         }
         .alert(
             String(localized: "delete_downloads"),

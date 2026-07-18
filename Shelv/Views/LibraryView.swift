@@ -256,7 +256,7 @@ struct LibraryView: View {
     @State private var navigateToArtist: Artist?
     @State private var currentToast: ShelveToast?
     @State private var derivedState = LibraryDerivedState()
-    @ObservedObject private var downloadStore = DownloadStore.shared
+    private let downloadStore = DownloadStore.shared
     @State private var albumToDeleteDownloads: Album?
     @State private var artistToDeleteDownloads: Artist?
     @State private var rebuildTask: Task<Void, Never>?
@@ -324,8 +324,7 @@ struct LibraryView: View {
                 favoritesContent(
                     songs: starredSongs,
                     albums: starredAlbums,
-                    artists: starredArtists,
-                    snapshot: snapshot
+                    artists: starredArtists
                 )
             }
         }
@@ -483,37 +482,13 @@ struct LibraryView: View {
     }
 
     private var downloadedLibrarySnapshot: DownloadedLibrarySnapshot {
-        let albumIds = Set(downloadStore.albums.map(\.albumId))
-        let artistNames = Set(downloadStore.artists.map(\.name))
-        let songIds = Set(downloadStore.songs.map(\.songId))
-        var artistBadgeNames = artistNames
-        for song in downloadStore.songs {
-            artistBadgeNames.formUnion(splitNavidromeArtist(song.artistName))
-        }
+        let uiState = DownloadUIStateHub.shared.currentSnapshot
         return DownloadedLibrarySnapshot(
-            albumIds: albumIds,
-            artistNames: artistNames,
-            artistBadgeNames: artistBadgeNames,
-            songIds: songIds
+            albumIds: uiState.albumIDs,
+            artistNames: uiState.artistNames,
+            artistBadgeNames: uiState.artistBadgeNames,
+            songIds: uiState.songIDs
         )
-    }
-
-    private func splitNavidromeArtist(_ name: String) -> [String] {
-        let seps = [" feat. ", " feat ", " ft. ", " ft ", " / ", "; "]
-        var parts = [name]
-        for sep in seps {
-            parts = parts.flatMap { part -> [String] in
-                var result: [String] = []
-                var s = part
-                while let range = s.range(of: sep, options: .caseInsensitive) {
-                    result.append(String(s[..<range.lowerBound]))
-                    s = String(s[range.upperBound...])
-                }
-                result.append(s)
-                return result
-            }
-        }
-        return parts.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
     }
 
     private func displayAlbums(using snapshot: DownloadedLibrarySnapshot) -> [Album] {
@@ -708,32 +683,37 @@ struct LibraryView: View {
                                 .listRowBackground(Color.clear)
                         }
                         ForEach(group.items) { album in
-                            Button { navigateToAlbum = album } label: {
-                                LibraryAlbumListRow(album: album)
-                            }
-                            .buttonStyle(.plain)
-                            .contextMenu { albumContextMenuItems(album) }
-                            .personalizedAlbumArtistSwipeActions(
-                                isOffline: offlineMode.isOffline,
-                                isFavorite: libraryStore.isAlbumStarred(album),
-                                downloadState: albumDownloadState(album),
-                                accentColor: accentColor,
-                                onFavorite: {
-                                    haptic(.medium); Task { await libraryStore.toggleStarAlbum(album) }
-                                },
-                                onAddToPlaylist: {
-                                    addAlbumToPlaylist(album)
-                                },
-                                onDownload: {
-                                    handleAlbumDownloadSwipe(album)
-                                },
-                                onPlayNext: {
-                                    haptic(); playNextAlbum(album)
-                                },
-                                onAddToQueue: {
-                                    haptic(); queueAlbum(album)
+                            AlbumDownloadStatusReader(
+                                albumID: album.id,
+                                totalSongs: album.songCount ?? 0
+                            ) { downloadStatus in
+                                Button { navigateToAlbum = album } label: {
+                                    LibraryAlbumListRow(album: album)
                                 }
-                            )
+                                .buttonStyle(.plain)
+                                .contextMenu { albumContextMenuItems(album) }
+                                .personalizedAlbumArtistSwipeActions(
+                                    isOffline: offlineMode.isOffline,
+                                    isFavorite: libraryStore.isAlbumStarred(album),
+                                    downloadState: albumDownloadState(downloadStatus),
+                                    accentColor: accentColor,
+                                    onFavorite: {
+                                        haptic(.medium); Task { await libraryStore.toggleStarAlbum(album) }
+                                    },
+                                    onAddToPlaylist: {
+                                        addAlbumToPlaylist(album)
+                                    },
+                                    onDownload: {
+                                        handleAlbumDownloadSwipe(album)
+                                    },
+                                    onPlayNext: {
+                                        haptic(); playNextAlbum(album)
+                                    },
+                                    onAddToQueue: {
+                                        haptic(); queueAlbum(album)
+                                    }
+                                )
+                            }
                         }
                     }
                     PlayerBottomSpacer()
@@ -766,21 +746,27 @@ struct LibraryView: View {
 
     @ViewBuilder
     private var artistGridContent: some View {
-        let snapshot = downloadedLibrarySnapshot
         LazyVStack(alignment: .leading, spacing: 0, pinnedViews: .sectionHeaders) {
             ForEach(artistGroups, id: \.letter) { group in
                 Section {
                     LazyVGrid(columns: columns, spacing: 14) {
                         ForEach(group.items) { artist in
-                            NavigationLink(destination: ArtistDetailView(artist: artist)) {
-                                LibraryArtistGridCell(
-                                    artist: artist,
-                                    isDownloaded: snapshot.artistBadgeNames.contains(artist.name),
-                                    accentColor: accentColor
-                                )
+                            ArtistDownloadAvailabilityReader(artistName: artist.name) { availability in
+                                NavigationLink(destination: ArtistDetailView(artist: artist)) {
+                                    LibraryArtistGridCell(
+                                        artist: artist,
+                                        isDownloaded: availability.isBadgeDownloaded,
+                                        accentColor: accentColor
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                                .contextMenu {
+                                    artistContextMenuItems(
+                                        artist,
+                                        isDownloaded: availability.isCatalogDownloaded
+                                    )
+                                }
                             }
-                            .buttonStyle(.plain)
-                            .contextMenu { artistContextMenuItems(artist, snapshot: snapshot) }
                         }
                     }
                     .padding(.horizontal)
@@ -798,7 +784,6 @@ struct LibraryView: View {
 
     @ViewBuilder
     private var artistListContent: some View {
-        let snapshot = downloadedLibrarySnapshot
         ScrollViewReader { proxy in
             List {
                 ForEach(artistGroups, id: \.letter) { group in
@@ -812,37 +797,46 @@ struct LibraryView: View {
                             .listRowBackground(Color.clear)
                     }
                     ForEach(group.items) { artist in
-                        Button { navigateToArtist = artist } label: {
-                            LibraryArtistListRow(
-                                artist: artist,
-                                localAlbumCount: albumCountByArtist[artist.id] ?? artist.albumCount ?? 0,
-                                isDownloaded: snapshot.artistBadgeNames.contains(artist.name),
-                                accentColor: accentColor
+                        ArtistDownloadAvailabilityReader(artistName: artist.name) { availability in
+                            Button { navigateToArtist = artist } label: {
+                                LibraryArtistListRow(
+                                    artist: artist,
+                                    localAlbumCount: albumCountByArtist[artist.id] ?? artist.albumCount ?? 0,
+                                    isDownloaded: availability.isBadgeDownloaded,
+                                    accentColor: accentColor
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .contextMenu {
+                                artistContextMenuItems(
+                                    artist,
+                                    isDownloaded: availability.isCatalogDownloaded
+                                )
+                            }
+                            .personalizedAlbumArtistSwipeActions(
+                                isOffline: offlineMode.isOffline,
+                                isFavorite: libraryStore.isArtistStarred(artist),
+                                downloadState: artistDownloadState(
+                                    isDownloaded: availability.isCatalogDownloaded
+                                ),
+                                accentColor: accentColor,
+                                onFavorite: {
+                                    haptic(.medium); Task { await libraryStore.toggleStarArtist(artist) }
+                                },
+                                onAddToPlaylist: {
+                                    addArtistToPlaylist(artist)
+                                },
+                                onDownload: {
+                                    handleArtistDownloadSwipe(artist)
+                                },
+                                onPlayNext: {
+                                    haptic(); playNextArtist(artist)
+                                },
+                                onAddToQueue: {
+                                    haptic(); queueArtist(artist)
+                                }
                             )
                         }
-                        .buttonStyle(.plain)
-                        .contextMenu { artistContextMenuItems(artist, snapshot: snapshot) }
-                        .personalizedAlbumArtistSwipeActions(
-                            isOffline: offlineMode.isOffline,
-                            isFavorite: libraryStore.isArtistStarred(artist),
-                            downloadState: artistDownloadState(artist, snapshot: snapshot),
-                            accentColor: accentColor,
-                            onFavorite: {
-                                haptic(.medium); Task { await libraryStore.toggleStarArtist(artist) }
-                            },
-                            onAddToPlaylist: {
-                                addArtistToPlaylist(artist)
-                            },
-                            onDownload: {
-                                handleArtistDownloadSwipe(artist)
-                            },
-                            onPlayNext: {
-                                haptic(); playNextArtist(artist)
-                            },
-                            onAddToQueue: {
-                                haptic(); queueArtist(artist)
-                            }
-                        )
                     }
                 }
                 PlayerBottomSpacer()
@@ -891,8 +885,7 @@ struct LibraryView: View {
     private func favoritesContent(
         songs: [Song],
         albums: [Album],
-        artists: [Artist],
-        snapshot: DownloadedLibrarySnapshot
+        artists: [Artist]
     ) -> some View {
         let hasSongs = !songs.isEmpty
         let hasAlbums = !albums.isEmpty
@@ -909,67 +902,76 @@ struct LibraryView: View {
                 if hasArtists {
                     Section(String(localized: "artists")) {
                         ForEach(artists) { artist in
-                            NavigationLink(destination: ArtistDetailView(artist: artist)) {
-                                LibraryFavoriteArtistRow(
-                                    artist: artist,
-                                    isDownloaded: snapshot.artistBadgeNames.contains(artist.name),
-                                    accentColor: accentColor
+                            ArtistDownloadAvailabilityReader(artistName: artist.name) { availability in
+                                NavigationLink(destination: ArtistDetailView(artist: artist)) {
+                                    LibraryFavoriteArtistRow(
+                                        artist: artist,
+                                        isDownloaded: availability.isBadgeDownloaded,
+                                        accentColor: accentColor
+                                    )
+                                }
+                                .personalizedAlbumArtistSwipeActions(
+                                    isOffline: offlineMode.isOffline,
+                                    isFavorite: true,
+                                    downloadState: artistDownloadState(
+                                        isDownloaded: availability.isCatalogDownloaded
+                                    ),
+                                    accentColor: accentColor,
+                                    onFavorite: {
+                                        haptic(.medium); Task { await libraryStore.toggleStarArtist(artist) }
+                                    },
+                                    onAddToPlaylist: {
+                                        addArtistToPlaylist(artist)
+                                    },
+                                    onDownload: {
+                                        handleArtistDownloadSwipe(artist)
+                                    },
+                                    onPlayNext: {
+                                        haptic(); playNextArtist(artist)
+                                    },
+                                    onAddToQueue: {
+                                        haptic(); queueArtist(artist)
+                                    }
                                 )
                             }
-                            .personalizedAlbumArtistSwipeActions(
-                                isOffline: offlineMode.isOffline,
-                                isFavorite: true,
-                                downloadState: artistDownloadState(artist, snapshot: snapshot),
-                                accentColor: accentColor,
-                                onFavorite: {
-                                    haptic(.medium); Task { await libraryStore.toggleStarArtist(artist) }
-                                },
-                                onAddToPlaylist: {
-                                    addArtistToPlaylist(artist)
-                                },
-                                onDownload: {
-                                    handleArtistDownloadSwipe(artist)
-                                },
-                                onPlayNext: {
-                                    haptic(); playNextArtist(artist)
-                                },
-                                onAddToQueue: {
-                                    haptic(); queueArtist(artist)
-                                }
-                            )
                         }
                     }
                 }
                 if hasAlbums {
                     Section(String(localized: "albums")) {
                         ForEach(albums) { album in
-                            NavigationLink(destination: AlbumDetailView(album: album)) {
-                                LibraryFavoriteAlbumRow(album: album)
-                            }
-                            .contextMenu {
-                                albumContextMenuItems(album)
-                            }
-                            .personalizedAlbumArtistSwipeActions(
-                                isOffline: offlineMode.isOffline,
-                                isFavorite: true,
-                                downloadState: albumDownloadState(album),
-                                accentColor: accentColor,
-                                onFavorite: {
-                                    haptic(.medium); Task { await libraryStore.toggleStarAlbum(album) }
-                                },
-                                onAddToPlaylist: {
-                                    addAlbumToPlaylist(album)
-                                },
-                                onDownload: {
-                                    handleAlbumDownloadSwipe(album)
-                                },
-                                onPlayNext: {
-                                    haptic(); playNextAlbum(album)
-                                },
-                                onAddToQueue: {
-                                    haptic(); queueAlbum(album)
+                            AlbumDownloadStatusReader(
+                                albumID: album.id,
+                                totalSongs: album.songCount ?? 0
+                            ) { downloadStatus in
+                                NavigationLink(destination: AlbumDetailView(album: album)) {
+                                    LibraryFavoriteAlbumRow(album: album)
                                 }
-                            )
+                                .contextMenu {
+                                    albumContextMenuItems(album)
+                                }
+                                .personalizedAlbumArtistSwipeActions(
+                                    isOffline: offlineMode.isOffline,
+                                    isFavorite: true,
+                                    downloadState: albumDownloadState(downloadStatus),
+                                    accentColor: accentColor,
+                                    onFavorite: {
+                                        haptic(.medium); Task { await libraryStore.toggleStarAlbum(album) }
+                                    },
+                                    onAddToPlaylist: {
+                                        addAlbumToPlaylist(album)
+                                    },
+                                    onDownload: {
+                                        handleAlbumDownloadSwipe(album)
+                                    },
+                                    onPlayNext: {
+                                        haptic(); playNextAlbum(album)
+                                    },
+                                    onAddToQueue: {
+                                        haptic(); queueAlbum(album)
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -1066,9 +1068,8 @@ struct LibraryView: View {
         }
     }
 
-    private func albumDownloadState(_ album: Album) -> PersonalizedDownloadSwipeState {
+    private func albumDownloadState(_ status: AlbumDownloadStatus) -> PersonalizedDownloadSwipeState {
         guard enableDownloads else { return .hidden }
-        let status = downloadStore.albumDownloadStatus(albumId: album.id, totalSongs: album.songCount ?? 0)
         switch status {
         case .none, .partial:
             return offlineMode.isOffline ? .hidden : .download
@@ -1089,9 +1090,9 @@ struct LibraryView: View {
         }
     }
 
-    private func artistDownloadState(_ artist: Artist, snapshot: DownloadedLibrarySnapshot) -> PersonalizedDownloadSwipeState {
+    private func artistDownloadState(isDownloaded: Bool) -> PersonalizedDownloadSwipeState {
         guard enableDownloads else { return .hidden }
-        if snapshot.artistNames.contains(artist.name) {
+        if isDownloaded {
             return .delete
         }
         return offlineMode.isOffline ? .hidden : .download
@@ -1131,7 +1132,7 @@ struct LibraryView: View {
     }
 
     @ViewBuilder
-    private func artistContextMenuItems(_ artist: Artist, snapshot: DownloadedLibrarySnapshot) -> some View {
+    private func artistContextMenuItems(_ artist: Artist, isDownloaded: Bool) -> some View {
         Button {
             Task {
                 let songs = await libraryStore.fetchAllSongs(for: artist)
@@ -1197,7 +1198,7 @@ struct LibraryView: View {
                     Label(String(localized: "download_artist"), systemImage: "arrow.down.circle")
                 }
             }
-            if snapshot.artistNames.contains(artist.name) {
+            if isDownloaded {
                 Button(role: .destructive) {
                     artistToDeleteDownloads = artist
                 } label: {

@@ -1,9 +1,10 @@
+import Combine
 import SwiftUI
 
 struct ArtistDetailView: View {
     let artist: Artist
     @ObservedObject var libraryStore = LibraryStore.shared
-    @ObservedObject var downloadStore = DownloadStore.shared
+    private let downloadStore = DownloadStore.shared
     @ObservedObject var offlineMode = OfflineModeService.shared
     @EnvironmentObject var serverStore: ServerStore
     private let player = AudioPlayerService.shared
@@ -31,6 +32,7 @@ struct ArtistDetailView: View {
     @State private var loadedSongSearchSourceID: String?
     @State private var albumToDeleteDownloads: Album?
     @State private var showDeleteArtistDownloadConfirm = false
+    @State private var downloadedAlbumCounts = DownloadUIStateHub.shared.currentSnapshot.albumDownloadedCounts
     private let columns = [GridItem(.adaptive(minimum: 150, maximum: 200), spacing: 16)]
 
     private var sortOption: AlbumSortOption {
@@ -57,9 +59,25 @@ struct ArtistDetailView: View {
     private var songSearchSourceID: String {
         [
             offlineMode.isOffline ? "offline" : "online",
-            String(downloadStore.songs.count),
+            offlineMode.isOffline
+                ? sortedAlbums.map {
+                    "\($0.id):\(downloadedAlbumCounts[$0.id, default: 0])"
+                }.joined(separator: ",")
+                : "downloads-ignored",
             sortedAlbums.map(\.id).joined(separator: ",")
         ].joined(separator: "|")
+    }
+
+    private var relevantAlbumDownloadCountsPublisher: AnyPublisher<[String: Int], Never> {
+        let albumIDs = Set(sortedAlbums.map(\.id))
+        return DownloadUIStateHub.shared.snapshots
+            .map { snapshot in
+                Dictionary(uniqueKeysWithValues: albumIDs.compactMap { albumID in
+                    snapshot.albumDownloadedCounts[albumID].map { (albumID, $0) }
+                })
+            }
+            .removeDuplicates()
+            .eraseToAnyPublisher()
     }
 
     private var songSearchLoadID: String {
@@ -145,9 +163,16 @@ struct ArtistDetailView: View {
             }
             Task { await loadDetail() }
         }
-        .onChange(of: downloadStore.songs.count) { _, _ in
-            guard offlineMode.isOffline else { return }
-            populateFromLocal()
+        .onReceive(relevantAlbumDownloadCountsPublisher) { counts in
+            let albumIDs = Set(sortedAlbums.map(\.id))
+            let currentCounts = Dictionary(uniqueKeysWithValues: albumIDs.compactMap { albumID in
+                downloadedAlbumCounts[albumID].map { (albumID, $0) }
+            })
+            guard currentCounts != counts else { return }
+            downloadedAlbumCounts = counts
+            if offlineMode.isOffline {
+                populateFromLocal()
+            }
         }
         .task {
             guard detail == nil else { return }
@@ -457,7 +482,7 @@ struct ArtistDetailView: View {
 
     private func albumDownloadState(_ album: Album) -> PersonalizedDownloadSwipeState {
         guard enableDownloads else { return .hidden }
-        let status = downloadStore.albumDownloadStatus(albumId: album.id, totalSongs: album.songCount ?? 0)
+        let status = albumDownloadStatus(album, counts: downloadedAlbumCounts)
         switch status {
         case .none, .partial:
             return offlineMode.isOffline ? .hidden : .download
@@ -468,7 +493,10 @@ struct ArtistDetailView: View {
 
     private func handleAlbumDownloadSwipe(_ album: Album) {
         guard enableDownloads else { return }
-        let status = downloadStore.albumDownloadStatus(albumId: album.id, totalSongs: album.songCount ?? 0)
+        let status = albumDownloadStatus(
+            album,
+            counts: DownloadUIStateHub.shared.currentSnapshot.albumDownloadedCounts
+        )
         switch status {
         case .none, .partial:
             guard !offlineMode.isOffline else { return }
@@ -658,7 +686,7 @@ struct ArtistDetailView: View {
         var downloadedSongs = 0
         for album in albums {
             let count = album.songCount ?? 0
-            let status = downloadStore.albumDownloadStatus(albumId: album.id, totalSongs: count)
+            let status = albumDownloadStatus(album, counts: downloadedAlbumCounts)
             totalSongs += count
             switch status {
             case .none: break
@@ -670,6 +698,17 @@ struct ArtistDetailView: View {
         if downloadedSongs == 0 { return .none }
         if downloadedSongs >= totalSongs { return .complete }
         return .partial(downloaded: downloadedSongs, total: totalSongs)
+    }
+
+    private func albumDownloadStatus(
+        _ album: Album,
+        counts: [String: Int]
+    ) -> AlbumDownloadStatus {
+        let totalSongs = album.songCount ?? 0
+        let downloaded = counts[album.id, default: 0]
+        if downloaded == 0 { return .none }
+        if downloaded >= totalSongs { return .complete }
+        return .partial(downloaded: downloaded, total: totalSongs)
     }
 
     @ViewBuilder

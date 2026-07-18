@@ -1,4 +1,17 @@
+import Combine
 import SwiftUI
+
+private nonisolated struct OfflineSearchDownloadState: Equatable {
+    let songIDs: Set<String>
+    let albumIDs: Set<String>
+    let artistNames: Set<String>
+
+    init(snapshot: DownloadUIStateSnapshot) {
+        songIDs = snapshot.songIDs
+        albumIDs = snapshot.albumIDs
+        artistNames = snapshot.artistNames
+    }
+}
 
 struct SearchView: View {
     /// Wird von ContentView bei jedem Tab-Wechsel zu Search erhöht → triggert Reset + Fokus.
@@ -15,7 +28,7 @@ struct SearchView: View {
     @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
     @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     @AppStorage("enableDownloads") private var enableDownloads = true
-    @ObservedObject var downloadStore = DownloadStore.shared
+    private let downloadStore = DownloadStore.shared
 
     @State private var query = ""
     @State private var searchFieldActive = false
@@ -31,13 +44,16 @@ struct SearchView: View {
     @State private var currentToast: ShelveToast?
     @State private var artistToDeleteDownloads: Artist?
     @State private var albumToDeleteDownloads: Album?
+    @State private var offlineDownloadState = OfflineSearchDownloadState(
+        snapshot: DownloadUIStateHub.shared.currentSnapshot
+    )
 
     private var matchedFavoriteArtists: [Artist] {
         guard showFavoritesInLibrary, !query.isEmpty else { return [] }
         let q = query.lowercased()
         var base = libraryStore.starredArtists
         if offlineMode.isOffline {
-            base = base.filter { a in downloadStore.artists.contains { $0.name == a.name } }
+            base = base.filter { offlineDownloadState.artistNames.contains($0.name) }
         }
         return base.filter { $0.name.lowercased().contains(q) }
     }
@@ -47,7 +63,7 @@ struct SearchView: View {
         let q = query.lowercased()
         var base = libraryStore.starredAlbums
         if offlineMode.isOffline {
-            base = base.filter { a in downloadStore.albums.contains { $0.albumId == a.id } }
+            base = base.filter { offlineDownloadState.albumIDs.contains($0.id) }
         }
         return base.filter {
             $0.name.lowercased().contains(q) || ($0.artist?.lowercased().contains(q) ?? false)
@@ -59,7 +75,7 @@ struct SearchView: View {
         let q = query.lowercased()
         var base = libraryStore.starredSongs
         if offlineMode.isOffline {
-            base = base.filter { downloadStore.isDownloaded(songId: $0.id) }
+            base = base.filter { offlineDownloadState.songIDs.contains($0.id) }
         }
         return base.filter {
             $0.title.lowercased().contains(q) || ($0.artist?.lowercased().contains(q) ?? false)
@@ -125,47 +141,51 @@ struct SearchView: View {
                         if let artists = result?.artist.map({ $0.filter { ($0.albumCount ?? 0) > 0 } }), !artists.isEmpty {
                             Section(String(localized: "artists")) {
                                 ForEach(artists) { artist in
-                                    NavigationLink(destination: ArtistDetailView(artist: artist)) {
-                                        HStack(spacing: 12) {
-                                            AlbumArtView(coverArtId: artist.coverArt, size: 100, isCircle: true)
-                                                .frame(width: 44, height: 44)
-                                            Text(artist.name)
-                                                .font(.body)
-                                            Spacer()
-                                            if enableDownloads && downloadStore.artists.contains(where: { $0.name == artist.name }) {
-                                                Image(systemName: "arrow.down.circle.fill")
-                                                    .font(.caption)
-                                                    .foregroundStyle(.white)
-                                                    .padding(4)
-                                                    .background(accentColor, in: Circle())
-                                                    .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
+                                    ArtistDownloadAvailabilityReader(artistName: artist.name) { availability in
+                                        NavigationLink(destination: ArtistDetailView(artist: artist)) {
+                                            HStack(spacing: 12) {
+                                                AlbumArtView(coverArtId: artist.coverArt, size: 100, isCircle: true)
+                                                    .frame(width: 44, height: 44)
+                                                Text(artist.name)
+                                                    .font(.body)
+                                                Spacer()
+                                                if enableDownloads && availability.isCatalogDownloaded {
+                                                    Image(systemName: "arrow.down.circle.fill")
+                                                        .font(.caption)
+                                                        .foregroundStyle(.white)
+                                                        .padding(4)
+                                                        .background(accentColor, in: Circle())
+                                                        .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
+                                                }
                                             }
                                         }
-                                    }
-                                    .contextMenu {
-                                        artistInstantMixMenuItem(artist)
-                                    }
-                                    .personalizedAlbumArtistSwipeActions(
-                                        isOffline: offlineMode.isOffline,
-                                        isFavorite: libraryStore.isArtistStarred(artist),
-                                        downloadState: artistDownloadState(artist),
-                                        accentColor: accentColor,
-                                        onFavorite: {
-                                            haptic(.medium); Task { await libraryStore.toggleStarArtist(artist) }
-                                        },
-                                        onAddToPlaylist: {
-                                            addArtistToPlaylist(artist)
-                                        },
-                                        onDownload: {
-                                            handleArtistDownloadSwipe(artist)
-                                        },
-                                        onPlayNext: {
-                                            haptic(); playNextArtist(artist)
-                                        },
-                                        onAddToQueue: {
-                                            haptic(); queueArtist(artist)
+                                        .contextMenu {
+                                            artistInstantMixMenuItem(artist)
                                         }
-                                    )
+                                        .personalizedAlbumArtistSwipeActions(
+                                            isOffline: offlineMode.isOffline,
+                                            isFavorite: libraryStore.isArtistStarred(artist),
+                                            downloadState: artistDownloadState(
+                                                isDownloaded: availability.isCatalogDownloaded
+                                            ),
+                                            accentColor: accentColor,
+                                            onFavorite: {
+                                                haptic(.medium); Task { await libraryStore.toggleStarArtist(artist) }
+                                            },
+                                            onAddToPlaylist: {
+                                                addArtistToPlaylist(artist)
+                                            },
+                                            onDownload: {
+                                                handleArtistDownloadSwipe(artist)
+                                            },
+                                            onPlayNext: {
+                                                haptic(); playNextArtist(artist)
+                                            },
+                                            onAddToQueue: {
+                                                haptic(); queueArtist(artist)
+                                            }
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -173,44 +193,49 @@ struct SearchView: View {
                         if let albums = result?.album, !albums.isEmpty {
                             Section(String(localized: "albums")) {
                                 ForEach(albums) { album in
-                                    NavigationLink(destination: AlbumDetailView(album: album)) {
-                                        HStack(spacing: 12) {
-                                            AlbumArtView(coverArtId: album.coverArt, size: 100, cornerRadius: 8)
-                                                .frame(width: 44, height: 44)
-                                            VStack(alignment: .leading, spacing: 2) {
-                                                Text(album.name).font(.body)
-                                                if let artist = album.artist {
-                                                    Text(artist)
-                                                        .font(.caption)
-                                                        .foregroundStyle(.secondary)
+                                    AlbumDownloadStatusReader(
+                                        albumID: album.id,
+                                        totalSongs: album.songCount ?? 0
+                                    ) { downloadStatus in
+                                        NavigationLink(destination: AlbumDetailView(album: album)) {
+                                            HStack(spacing: 12) {
+                                                AlbumArtView(coverArtId: album.coverArt, size: 100, cornerRadius: 8)
+                                                    .frame(width: 44, height: 44)
+                                                VStack(alignment: .leading, spacing: 2) {
+                                                    Text(album.name).font(.body)
+                                                    if let artist = album.artist {
+                                                        Text(artist)
+                                                            .font(.caption)
+                                                            .foregroundStyle(.secondary)
+                                                    }
                                                 }
+                                                Spacer()
+                                                AlbumDownloadBadge(albumId: album.id)
                                             }
-                                            Spacer()
-                                            AlbumDownloadBadge(albumId: album.id)
                                         }
+                                        .albumContextMenu(album, showPreview: false)
+                                        .personalizedAlbumArtistSwipeActions(
+                                            isOffline: offlineMode.isOffline,
+                                            isFavorite: libraryStore.isAlbumStarred(album),
+                                            downloadState: albumDownloadState(downloadStatus),
+                                            accentColor: accentColor,
+                                            onFavorite: {
+                                                haptic(.medium); Task { await libraryStore.toggleStarAlbum(album) }
+                                            },
+                                            onAddToPlaylist: {
+                                                addAlbumToPlaylist(album)
+                                            },
+                                            onDownload: {
+                                                handleAlbumDownloadSwipe(album)
+                                            },
+                                            onPlayNext: {
+                                                haptic(); playNextAlbum(album)
+                                            },
+                                            onAddToQueue: {
+                                                haptic(); queueAlbum(album)
+                                            }
+                                        )
                                     }
-                                    .albumContextMenu(album, showPreview: false)
-                                    .personalizedAlbumArtistSwipeActions(
-                                        isOffline: offlineMode.isOffline,
-                                        isFavorite: libraryStore.isAlbumStarred(album),
-                                        downloadState: albumDownloadState(album),
-                                        accentColor: accentColor,
-                                        onFavorite: {
-                                            haptic(.medium); Task { await libraryStore.toggleStarAlbum(album) }
-                                        },
-                                        onAddToPlaylist: {
-                                            addAlbumToPlaylist(album)
-                                        },
-                                        onDownload: {
-                                            handleAlbumDownloadSwipe(album)
-                                        },
-                                        onPlayNext: {
-                                            haptic(); playNextAlbum(album)
-                                        },
-                                        onAddToQueue: {
-                                            haptic(); queueAlbum(album)
-                                        }
-                                    )
                                 }
                             }
                         }
@@ -369,88 +394,97 @@ struct SearchView: View {
                         if hasFavoriteResults {
                             Section(String(localized: "favorites")) {
                                 ForEach(matchedFavoriteArtists) { artist in
-                                    NavigationLink(destination: ArtistDetailView(artist: artist)) {
-                                        HStack(spacing: 12) {
-                                            AlbumArtView(coverArtId: artist.coverArt, size: 100, isCircle: true)
-                                                .frame(width: 44, height: 44)
-                                            Text(artist.name).font(.body)
-                                            Spacer()
-                                            if enableDownloads && downloadStore.artists.contains(where: { $0.name == artist.name }) {
-                                                Image(systemName: "arrow.down.circle.fill")
-                                                    .font(.caption)
-                                                    .foregroundStyle(.white)
-                                                    .padding(4)
-                                                    .background(accentColor, in: Circle())
-                                                    .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
+                                    ArtistDownloadAvailabilityReader(artistName: artist.name) { availability in
+                                        NavigationLink(destination: ArtistDetailView(artist: artist)) {
+                                            HStack(spacing: 12) {
+                                                AlbumArtView(coverArtId: artist.coverArt, size: 100, isCircle: true)
+                                                    .frame(width: 44, height: 44)
+                                                Text(artist.name).font(.body)
+                                                Spacer()
+                                                if enableDownloads && availability.isCatalogDownloaded {
+                                                    Image(systemName: "arrow.down.circle.fill")
+                                                        .font(.caption)
+                                                        .foregroundStyle(.white)
+                                                        .padding(4)
+                                                        .background(accentColor, in: Circle())
+                                                        .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
+                                                }
+                                                Image(systemName: "heart.fill")
+                                                    .font(.caption2).foregroundStyle(.pink)
                                             }
-                                            Image(systemName: "heart.fill")
-                                                .font(.caption2).foregroundStyle(.pink)
                                         }
-                                    }
-                                    .contextMenu {
-                                        artistInstantMixMenuItem(artist)
-                                    }
-                                    .personalizedAlbumArtistSwipeActions(
-                                        isOffline: offlineMode.isOffline,
-                                        isFavorite: true,
-                                        downloadState: artistDownloadState(artist),
-                                        accentColor: accentColor,
-                                        onFavorite: {
-                                            haptic(.medium); Task { await libraryStore.toggleStarArtist(artist) }
-                                        },
-                                        onAddToPlaylist: {
-                                            addArtistToPlaylist(artist)
-                                        },
-                                        onDownload: {
-                                            handleArtistDownloadSwipe(artist)
-                                        },
-                                        onPlayNext: {
-                                            haptic(); playNextArtist(artist)
-                                        },
-                                        onAddToQueue: {
-                                            haptic(); queueArtist(artist)
+                                        .contextMenu {
+                                            artistInstantMixMenuItem(artist)
                                         }
-                                    )
+                                        .personalizedAlbumArtistSwipeActions(
+                                            isOffline: offlineMode.isOffline,
+                                            isFavorite: true,
+                                            downloadState: artistDownloadState(
+                                                isDownloaded: availability.isCatalogDownloaded
+                                            ),
+                                            accentColor: accentColor,
+                                            onFavorite: {
+                                                haptic(.medium); Task { await libraryStore.toggleStarArtist(artist) }
+                                            },
+                                            onAddToPlaylist: {
+                                                addArtistToPlaylist(artist)
+                                            },
+                                            onDownload: {
+                                                handleArtistDownloadSwipe(artist)
+                                            },
+                                            onPlayNext: {
+                                                haptic(); playNextArtist(artist)
+                                            },
+                                            onAddToQueue: {
+                                                haptic(); queueArtist(artist)
+                                            }
+                                        )
+                                    }
                                 }
                                 ForEach(matchedFavoriteAlbums) { album in
-                                    NavigationLink(destination: AlbumDetailView(album: album)) {
-                                        HStack(spacing: 12) {
-                                            AlbumArtView(coverArtId: album.coverArt, size: 100, cornerRadius: 8)
-                                                .frame(width: 44, height: 44)
-                                            VStack(alignment: .leading, spacing: 2) {
-                                                Text(album.name).font(.body)
-                                                if let artist = album.artist {
-                                                    Text(artist).font(.caption).foregroundStyle(.secondary)
+                                    AlbumDownloadStatusReader(
+                                        albumID: album.id,
+                                        totalSongs: album.songCount ?? 0
+                                    ) { downloadStatus in
+                                        NavigationLink(destination: AlbumDetailView(album: album)) {
+                                            HStack(spacing: 12) {
+                                                AlbumArtView(coverArtId: album.coverArt, size: 100, cornerRadius: 8)
+                                                    .frame(width: 44, height: 44)
+                                                VStack(alignment: .leading, spacing: 2) {
+                                                    Text(album.name).font(.body)
+                                                    if let artist = album.artist {
+                                                        Text(artist).font(.caption).foregroundStyle(.secondary)
+                                                    }
                                                 }
+                                                Spacer()
+                                                AlbumDownloadBadge(albumId: album.id)
+                                                Image(systemName: "heart.fill")
+                                                    .font(.caption2).foregroundStyle(.pink)
                                             }
-                                            Spacer()
-                                            AlbumDownloadBadge(albumId: album.id)
-                                            Image(systemName: "heart.fill")
-                                                .font(.caption2).foregroundStyle(.pink)
                                         }
+                                        .albumContextMenu(album, showPreview: false)
+                                        .personalizedAlbumArtistSwipeActions(
+                                            isOffline: offlineMode.isOffline,
+                                            isFavorite: true,
+                                            downloadState: albumDownloadState(downloadStatus),
+                                            accentColor: accentColor,
+                                            onFavorite: {
+                                                haptic(.medium); Task { await libraryStore.toggleStarAlbum(album) }
+                                            },
+                                            onAddToPlaylist: {
+                                                addAlbumToPlaylist(album)
+                                            },
+                                            onDownload: {
+                                                handleAlbumDownloadSwipe(album)
+                                            },
+                                            onPlayNext: {
+                                                haptic(); playNextAlbum(album)
+                                            },
+                                            onAddToQueue: {
+                                                haptic(); queueAlbum(album)
+                                            }
+                                        )
                                     }
-                                    .albumContextMenu(album, showPreview: false)
-                                    .personalizedAlbumArtistSwipeActions(
-                                        isOffline: offlineMode.isOffline,
-                                        isFavorite: true,
-                                        downloadState: albumDownloadState(album),
-                                        accentColor: accentColor,
-                                        onFavorite: {
-                                            haptic(.medium); Task { await libraryStore.toggleStarAlbum(album) }
-                                        },
-                                        onAddToPlaylist: {
-                                            addAlbumToPlaylist(album)
-                                        },
-                                        onDownload: {
-                                            handleAlbumDownloadSwipe(album)
-                                        },
-                                        onPlayNext: {
-                                            haptic(); playNextAlbum(album)
-                                        },
-                                        onAddToQueue: {
-                                            haptic(); queueAlbum(album)
-                                        }
-                                    )
                                 }
                                 ForEach(matchedFavoriteSongs) { song in
                                     Button { player.playSong(song) } label: {
@@ -530,6 +564,20 @@ struct SearchView: View {
             }
             .onChange(of: resetToken) { _, newValue in
                 applyResetTokenIfNeeded(newValue)
+            }
+            .onChange(of: offlineMode.isOffline) { _, isOffline in
+                guard isOffline else { return }
+                offlineDownloadState = OfflineSearchDownloadState(
+                    snapshot: DownloadUIStateHub.shared.currentSnapshot
+                )
+            }
+            .onReceive(
+                DownloadUIStateHub.shared.snapshots
+                    .map(OfflineSearchDownloadState.init(snapshot:))
+                    .removeDuplicates()
+            ) { state in
+                guard offlineMode.isOffline else { return }
+                offlineDownloadState = state
             }
             .onChange(of: query) { _, newValue in
                 searchTask?.cancel()
@@ -613,9 +661,9 @@ struct SearchView: View {
         }
     }
 
-    private func artistDownloadState(_ artist: Artist) -> PersonalizedDownloadSwipeState {
+    private func artistDownloadState(isDownloaded: Bool) -> PersonalizedDownloadSwipeState {
         guard enableDownloads else { return .hidden }
-        if downloadStore.artists.contains(where: { $0.name == artist.name }) {
+        if isDownloaded {
             return .delete
         }
         return offlineMode.isOffline ? .hidden : .download
@@ -623,7 +671,7 @@ struct SearchView: View {
 
     private func handleArtistDownloadSwipe(_ artist: Artist) {
         guard enableDownloads else { return }
-        if downloadStore.artists.contains(where: { $0.name == artist.name }) {
+        if DownloadUIStateHub.shared.currentSnapshot.artistNames.contains(artist.name) {
             haptic(); artistToDeleteDownloads = artist
         } else if !offlineMode.isOffline {
             haptic()
@@ -689,9 +737,9 @@ struct SearchView: View {
         }
     }
 
-    private func albumDownloadState(_ album: Album) -> PersonalizedDownloadSwipeState {
+    private func albumDownloadState(_ status: AlbumDownloadStatus) -> PersonalizedDownloadSwipeState {
         guard enableDownloads else { return .hidden }
-        if downloadStore.albums.contains(where: { $0.albumId == album.id }) {
+        if status != .none {
             return .delete
         }
         return offlineMode.isOffline ? .hidden : .download
@@ -699,7 +747,7 @@ struct SearchView: View {
 
     private func handleAlbumDownloadSwipe(_ album: Album) {
         guard enableDownloads else { return }
-        if downloadStore.albums.contains(where: { $0.albumId == album.id }) {
+        if DownloadUIStateHub.shared.currentSnapshot.albumDownloadedCounts[album.id, default: 0] > 0 {
             haptic(); albumToDeleteDownloads = album
         } else if !offlineMode.isOffline {
             haptic()

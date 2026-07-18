@@ -2,86 +2,6 @@ import Foundation
 import SwiftUI
 @preconcurrency import Combine
 
-private nonisolated struct DownloadCatalogSnapshot: Sendable {
-    let songs: [DownloadedSong]
-    let songById: [String: DownloadedSong]
-    let recordsByAlbumId: [String: [DownloadedSong]]
-    let albums: [DownloadedAlbum]
-    let artists: [DownloadedArtist]
-    let favoriteSongs: [DownloadedSong]
-    let totalBytes: Int64
-}
-
-private nonisolated enum DownloadCatalogBuilder {
-    static func applying(
-        _ records: [DownloadRecord],
-        to currentSongs: [DownloadedSong],
-        serverId: String,
-        artistCoverByName: [String: String]
-    ) -> DownloadCatalogSnapshot {
-        var songs = currentSongs
-        var songIndexById = Dictionary(
-            uniqueKeysWithValues: songs.enumerated().map { ($0.element.songId, $0.offset) }
-        )
-        for record in records where record.serverId == serverId {
-            let song = record.toDownloadedSong()
-            if let index = songIndexById[song.songId] {
-                songs[index] = song
-            } else {
-                songIndexById[song.songId] = songs.count
-                songs.append(song)
-            }
-        }
-
-        var recordsByAlbumId = Dictionary(grouping: songs, by: \.albumId)
-        for key in recordsByAlbumId.keys {
-            recordsByAlbumId[key]?.sort {
-                ($0.disc ?? 0, $0.track ?? 0) < ($1.disc ?? 0, $1.track ?? 0)
-            }
-        }
-
-        let albums = recordsByAlbumId.compactMap { albumId, group -> DownloadedAlbum? in
-            guard let first = group.first else { return nil }
-            return DownloadedAlbum(
-                albumId: albumId,
-                serverId: serverId,
-                title: first.albumTitle,
-                artistName: first.albumArtistName ?? first.artistName,
-                artistId: first.artistId,
-                coverArtId: first.albumCoverArtId ?? first.coverArtId,
-                songs: group
-            )
-        }.sorted {
-            let leftArtist = $0.artistName.lowercased()
-            let rightArtist = $1.artistName.lowercased()
-            return leftArtist == rightArtist
-                ? $0.title.lowercased() < $1.title.lowercased()
-                : leftArtist < rightArtist
-        }
-
-        let artists = Dictionary(grouping: albums, by: \.artistName).compactMap {
-            artistName, artistAlbums -> DownloadedArtist? in
-            guard let first = artistAlbums.first else { return nil }
-            return DownloadedArtist(
-                artistId: first.artistId ?? "name:\(artistName)",
-                serverId: serverId,
-                name: artistName,
-                coverArtId: first.songs.first?.artistCoverArtId ?? artistCoverByName[artistName],
-                albums: artistAlbums
-            )
-        }.sorted { $0.name.lowercased() < $1.name.lowercased() }
-
-        return DownloadCatalogSnapshot(
-            songs: songs,
-            songById: Dictionary(uniqueKeysWithValues: songs.map { ($0.songId, $0) }),
-            recordsByAlbumId: recordsByAlbumId,
-            albums: albums,
-            artists: artists,
-            favoriteSongs: songs.filter(\.isFavorite),
-            totalBytes: songs.reduce(0) { $0 + $1.bytes }
-        )
-    }
-}
 
 @MainActor
 final class DownloadActivityStore: ObservableObject {
@@ -109,6 +29,10 @@ final class DownloadStore: ObservableObject {
     private(set) var inFlightProgress: [String: Double] = [:]
     private(set) var inFlightStates: [String: DownloadState] = [:]
     nonisolated(unsafe) let progressPublisher = PassthroughSubject<Set<String>, Never>()
+    private let hasActiveDownloadsSubject = CurrentValueSubject<Bool, Never>(false)
+    var hasActiveDownloadsPublisher: AnyPublisher<Bool, Never> {
+        hasActiveDownloadsSubject.eraseToAnyPublisher()
+    }
     var batchProgress: BatchProgress? { DownloadActivityStore.shared.batchProgress }
     @Published private(set) var isLoading: Bool = false
     @Published private(set) var offlinePlaylistIds: Set<String> = []
@@ -116,6 +40,12 @@ final class DownloadStore: ObservableObject {
 
     private var songById: [String: DownloadedSong] = [:]
     private var recordsByAlbumId: [String: [DownloadedSong]] = [:]
+    private var catalogUIState: DownloadUIStateSnapshot = .empty
+    private let catalogSubject = CurrentValueSubject<DownloadCatalogSnapshot, Never>(.empty)
+
+    var catalogPublisher: AnyPublisher<DownloadCatalogSnapshot, Never> {
+        catalogSubject.removeDuplicates().eraseToAnyPublisher()
+    }
 
     private var serverId: String = ""
     private var cancellables = Set<AnyCancellable>()
@@ -139,6 +69,7 @@ final class DownloadStore: ObservableObject {
                     .filter { oldProgress[$0] != progress[$0] }
                 guard !changedKeys.isEmpty else { return }
                 self.inFlightProgress = progress
+                self.publishActiveDownloadAvailabilityIfNeeded()
                 self.publishStatusChanges(forKeys: changedKeys)
             }
             .store(in: &cancellables)
@@ -178,6 +109,7 @@ final class DownloadStore: ObservableObject {
                     }
                 }
                 if !changedKeys.isEmpty {
+                    self.publishActiveDownloadAvailabilityIfNeeded()
                     self.publishStatusChanges(forKeys: changedKeys)
                 }
             }
@@ -211,6 +143,76 @@ final class DownloadStore: ObservableObject {
         let songIds = Set(keys.compactMap(activeSongId(forKey:)))
         guard !songIds.isEmpty else { return }
         progressPublisher.send(songIds)
+    }
+
+    private func publishActiveDownloadAvailabilityIfNeeded() {
+        let hasActiveDownloads = !inFlightProgress.isEmpty || !inFlightStates.isEmpty
+        guard hasActiveDownloadsSubject.value != hasActiveDownloads else { return }
+        hasActiveDownloadsSubject.send(hasActiveDownloads)
+    }
+
+    var currentCatalogSnapshot: DownloadCatalogSnapshot {
+        DownloadCatalogSnapshot(
+            songs: songs,
+            songById: songById,
+            recordsByAlbumId: recordsByAlbumId,
+            albums: albums,
+            artists: artists,
+            favoriteSongs: favoriteSongs,
+            totalBytes: totalBytes,
+            uiState: catalogUIState
+        )
+    }
+
+    private func applyCatalogSnapshot(
+        _ snapshot: DownloadCatalogSnapshot,
+        replacingOptimisticState: Bool = false
+    ) {
+        songById = snapshot.songById
+        recordsByAlbumId = snapshot.recordsByAlbumId
+        songs = snapshot.songs
+        albums = snapshot.albums
+        artists = snapshot.artists
+        favoriteSongs = snapshot.favoriteSongs
+        totalBytes = snapshot.totalBytes
+        catalogUIState = snapshot.uiState
+
+        if replacingOptimisticState {
+            DownloadUIStateHub.shared.replace(with: snapshot.uiState)
+        } else {
+            DownloadUIStateHub.shared.commit(snapshot.uiState)
+        }
+        catalogSubject.send(snapshot)
+    }
+
+    private func commitCurrentCatalogUIState() {
+        let uiState = DownloadUIStateSnapshot(
+            songIDs: Set(songById.keys),
+            albumDownloadedCounts: recordsByAlbumId.mapValues(\.count),
+            artistNames: Set(artists.map(\.name)),
+            artistBadgeNames: DownloadCatalogBuilder.makeArtistBadgeNames(
+                songs: songs,
+                artists: artists
+            ),
+            totalBytes: totalBytes
+        )
+        catalogUIState = uiState
+        DownloadUIStateHub.shared.commit(uiState)
+        catalogSubject.send(currentCatalogSnapshot)
+    }
+
+    func downloadedAlbumPublisher(id: DownloadedAlbum.ID) -> AnyPublisher<DownloadedAlbum?, Never> {
+        catalogSubject
+            .map { $0.albums.first(where: { $0.id == id }) }
+            .removeDuplicates()
+            .eraseToAnyPublisher()
+    }
+
+    func downloadedArtistPublisher(id: DownloadedArtist.ID) -> AnyPublisher<DownloadedArtist?, Never> {
+        catalogSubject
+            .map { $0.artists.first(where: { $0.id == id }) }
+            .removeDuplicates()
+            .eraseToAnyPublisher()
     }
 
     func setActiveServer(_ serverId: String) async {
@@ -260,9 +262,7 @@ final class DownloadStore: ObservableObject {
         guard !isDeletingAll else { pendingReload = true; return }
         guard !serverId.isEmpty else {
             catalogRevision &+= 1
-            songs = []; albums = []; artists = []; favoriteSongs = []; totalBytes = 0
-            songById = [:]; recordsByAlbumId = [:]
-            DownloadStatusCache.shared.rebuild(albumIds: [])
+            applyCatalogSnapshot(.empty, replacingOptimisticState: true)
             return
         }
         guard !isLoading else { pendingReload = true; return }
@@ -309,9 +309,8 @@ final class DownloadStore: ObservableObject {
         let records = healResult.records
         let covers = artistCoverByName
         let snapshot = await Task.detached(priority: .utility) {
-            DownloadCatalogBuilder.applying(
+            DownloadCatalogBuilder.rebuilding(
                 records,
-                to: [],
                 serverId: sid,
                 artistCoverByName: covers
             )
@@ -326,14 +325,7 @@ final class DownloadStore: ObservableObject {
 
         let mappedSongs = snapshot.songs
         let newSongById = snapshot.songById
-        let newRecordsByAlbumId = snapshot.recordsByAlbumId
-        songById = newSongById
-        recordsByAlbumId = newRecordsByAlbumId
-        songs = mappedSongs
-        albums = snapshot.albums
-        artists = snapshot.artists
-        favoriteSongs = snapshot.favoriteSongs
-        totalBytes = snapshot.totalBytes
+        applyCatalogSnapshot(snapshot, replacingOptimisticState: true)
 
         var paths: [String: String] = [:]
         for song in mappedSongs {
@@ -363,8 +355,6 @@ final class DownloadStore: ObservableObject {
         }.value
         LocalArtworkIndex.shared.update(paths: artPaths)
         NotificationCenter.default.post(name: .artworkIndexReady, object: nil)
-        DownloadStatusCache.shared.rebuild(albumIds: Set(newRecordsByAlbumId.keys))
-
         // Sobald der erste Song einer geschützten Playlist heruntergeladen ist, Schutz aufheben.
         protectedPlaylistIds = protectedPlaylistIds.filter { id in
             guard let ids = playlistSongIds[id] else { return false }
@@ -391,6 +381,7 @@ final class DownloadStore: ObservableObject {
             inFlightProgress.removeValue(forKey: key)
         }
         if !completedKeys.isEmpty {
+            publishActiveDownloadAvailabilityIfNeeded()
             publishStatusChanges(forKeys: completedKeys)
         }
 
@@ -421,6 +412,10 @@ final class DownloadStore: ObservableObject {
             if FileManager.default.fileExists(atPath: p) { LocalArtworkIndex.shared.set(artId: artId, path: p) }
         }
 
+        // Keep the exact existing visual timing: completed songs and albums are
+        // visible immediately while the catalog projection stays batched.
+        DownloadUIStateHub.shared.applyCompletedRecord(record)
+
         pendingInserts.append(record)
         if flushTask == nil {
             flushTask = Task { @MainActor [weak self] in
@@ -446,12 +441,12 @@ final class DownloadStore: ObservableObject {
             pendingInserts = []
             let sid = serverId
             let revision = catalogRevision
-            let currentSongs = songs
+            let current = currentCatalogSnapshot
             let covers = artistCoverByName
             let snapshot = await Task.detached(priority: .utility) {
                 DownloadCatalogBuilder.applying(
                     records,
-                    to: currentSongs,
+                    to: current,
                     serverId: sid,
                     artistCoverByName: covers
                 )
@@ -467,14 +462,8 @@ final class DownloadStore: ObservableObject {
                 inFlightStates.removeValue(forKey: key)
                 inFlightProgress.removeValue(forKey: key)
             }
-            songById = snapshot.songById
-            recordsByAlbumId = snapshot.recordsByAlbumId
-            songs = snapshot.songs
-            albums = snapshot.albums
-            artists = snapshot.artists
-            favoriteSongs = snapshot.favoriteSongs
-            totalBytes = snapshot.totalBytes
-            DownloadStatusCache.shared.rebuild(albumIds: Set(snapshot.recordsByAlbumId.keys))
+            publishActiveDownloadAvailabilityIfNeeded()
+            applyCatalogSnapshot(snapshot)
         }
         isFlushingCatalog = false
 
@@ -491,6 +480,7 @@ final class DownloadStore: ObservableObject {
         // Song könnte noch im 800ms-Debounce-Buffer stecken (nach insertRecord, vor flushPendingInserts).
         // Hier rausnehmen, sonst erscheint er nach dem Flush doch noch in der UI.
         pendingInserts.removeAll { $0.songId == songId }
+        DownloadUIStateHub.shared.removeOptimisticRecord(songID: songId)
         // LocalDownloadIndex wird in insertRecord sofort (vor dem Debounce) gesetzt — direkt löschen.
         LocalDownloadIndex.shared.setPath(songId: songId, serverId: serverId, path: nil)
         guard let song = songById[songId] else { return }
@@ -511,7 +501,6 @@ final class DownloadStore: ObservableObject {
         if let albumIdx = albums.firstIndex(where: { $0.albumId == albumId }) {
             if albumNowEmpty {
                 albums.remove(at: albumIdx)
-                DownloadStatusCache.shared.removeAlbum(albumId)
             } else {
                 let old = albums[albumIdx]
                 if let albumSongs = recordsByAlbumId[albumId], !albumSongs.isEmpty {
@@ -549,6 +538,7 @@ final class DownloadStore: ObservableObject {
         for playlistId in affectedPlaylists where downloadedCount(for: playlistId) == 0 {
             removeOfflinePlaylist(playlistId)
         }
+        commitCurrentCatalogUIState()
     }
 
     // MARK: - Lookups
@@ -650,12 +640,15 @@ final class DownloadStore: ObservableObject {
         totalBytes = 0
         songById = [:]
         recordsByAlbumId = [:]
+        catalogUIState = .empty
         inFlightProgress = [:]
         inFlightStates = [:]
+        publishActiveDownloadAvailabilityIfNeeded()
         DownloadActivityStore.shared.update(nil)
         pendingReload = false
         protectedPlaylistIds = []
-        DownloadStatusCache.shared.rebuild(albumIds: [])
+        DownloadUIStateHub.shared.replace(with: .empty)
+        catalogSubject.send(.empty)
         LocalDownloadIndex.shared.update(paths: [:])
         LocalArtworkIndex.shared.update(paths: [:])
         if !affectedSongIds.isEmpty {

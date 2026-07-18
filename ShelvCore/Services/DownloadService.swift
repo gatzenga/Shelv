@@ -1404,9 +1404,23 @@ private final class DownloadSessionCoordinator: NSObject, URLSessionDownloadDele
         let safeURL = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("shelv-dl-\(id)-\(UUID().uuidString)")
         do {
-            try FileManager.default.copyItem(at: location, to: safeURL)
+            // The URLSession file already lives on the same local volume in the
+            // common case. Renaming avoids copying the whole song while the user scrolls.
+            try FileManager.default.moveItem(at: location, to: safeURL)
         } catch {
-            return
+            do {
+                try FileManager.default.copyItem(at: location, to: safeURL)
+            } catch let stagingError {
+                let desc = downloadTask.taskDescription
+                Task { [weak service] in
+                    await service?.handleError(
+                        taskIdentifier: id,
+                        error: stagingError,
+                        taskDescription: desc
+                    )
+                }
+                return
+            }
         }
         let bytes = (try? FileManager.default.attributesOfItem(atPath: safeURL.path)[.size] as? NSNumber)?.int64Value ?? 0
         let http = downloadTask.response as? HTTPURLResponse

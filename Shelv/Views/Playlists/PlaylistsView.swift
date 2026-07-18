@@ -1,9 +1,38 @@
+import Combine
 import SwiftUI
+
+struct OfflinePlaylistAvailabilityReader<Content: View>: View {
+    let playlistID: String
+    private let downloadStore = DownloadStore.shared
+    private let content: (Bool) -> Content
+
+    @State private var isMarkedForOffline: Bool
+
+    init(
+        playlistID: String,
+        @ViewBuilder content: @escaping (Bool) -> Content
+    ) {
+        self.playlistID = playlistID
+        self.content = content
+        _isMarkedForOffline = State(
+            initialValue: DownloadStore.shared.offlinePlaylistIds.contains(playlistID)
+        )
+    }
+
+    var body: some View {
+        content(isMarkedForOffline)
+            .onReceive(
+                downloadStore.$offlinePlaylistIds
+                    .map { $0.contains(playlistID) }
+                    .removeDuplicates()
+            ) { isMarkedForOffline = $0 }
+    }
+}
 
 struct PlaylistsView: View {
     @ObservedObject var libraryStore = LibraryStore.shared
     @EnvironmentObject var recapStore: RecapStore
-    @ObservedObject var downloadStore = DownloadStore.shared
+    private let downloadStore = DownloadStore.shared
     @ObservedObject var offlineMode = OfflineModeService.shared
     @ObservedObject var pinStore = PinnedPlaylistStore.shared
     private let player = AudioPlayerService.shared
@@ -22,7 +51,7 @@ struct PlaylistsView: View {
             ? libraryStore.playlists.filter { !recapStore.recapPlaylistIds.contains($0.id) }
             : libraryStore.playlists
         if offlineMode.isOffline {
-            noRecap = noRecap.filter { downloadStore.offlinePlaylistIds.contains($0.id) }
+            noRecap = noRecap.filter { offlinePlaylistIDs.contains($0.id) }
         }
         return sortedPlaylists(noRecap)
     }
@@ -59,6 +88,7 @@ struct PlaylistsView: View {
     @State private var playlistToDelete: Playlist?
     @State private var currentToast: ShelveToast?
     @State private var playlistToDeleteDownloads: Playlist?
+    @State private var offlinePlaylistIDs = DownloadStore.shared.offlinePlaylistIds
 
     var body: some View {
         NavigationStack {
@@ -84,33 +114,43 @@ struct PlaylistsView: View {
                     List {
                         Section {
                             ForEach(visiblePlaylists) { playlist in
-                                NavigationLink(value: playlist) {
-                                    playlistRow(playlist)
-                                }
-                                .contextMenu { playlistContextMenu(playlist) }
-                                .personalizedPlaylistSwipeActions(
-                                    isPinned: pinStore.isPinned(playlist.id),
-                                    canDelete: !offlineMode.isOffline,
-                                    downloadState: playlistDownloadState(playlist),
-                                    accentColor: accentColor,
-                                    onPin: {
-                                        haptic()
-                                        pinStore.togglePin(playlist.id)
-                                    },
-                                    onDelete: {
-                                        playlistToDelete = playlist
-                                        showDeleteConfirm = true
-                                    },
-                                    onDownload: {
-                                        handlePlaylistDownloadSwipe(playlist)
-                                    },
-                                    onPlayNext: {
-                                        playNextPlaylist(playlist)
-                                    },
-                                    onAddToQueue: {
-                                        queuePlaylist(playlist)
+                                OfflinePlaylistAvailabilityReader(playlistID: playlist.id) {
+                                    isMarkedForOffline in
+                                    NavigationLink(value: playlist) {
+                                        playlistRow(playlist)
                                     }
-                                )
+                                    .contextMenu {
+                                        playlistContextMenu(
+                                            playlist,
+                                            isMarkedForOffline: isMarkedForOffline
+                                        )
+                                    }
+                                    .personalizedPlaylistSwipeActions(
+                                        isPinned: pinStore.isPinned(playlist.id),
+                                        canDelete: !offlineMode.isOffline,
+                                        downloadState: playlistDownloadState(
+                                            isMarkedForOffline: isMarkedForOffline
+                                        ),
+                                        accentColor: accentColor,
+                                        onPin: {
+                                            haptic()
+                                            pinStore.togglePin(playlist.id)
+                                        },
+                                        onDelete: {
+                                            playlistToDelete = playlist
+                                            showDeleteConfirm = true
+                                        },
+                                        onDownload: {
+                                            handlePlaylistDownloadSwipe(playlist)
+                                        },
+                                        onPlayNext: {
+                                            playNextPlaylist(playlist)
+                                        },
+                                        onAddToQueue: {
+                                            queuePlaylist(playlist)
+                                        }
+                                    )
+                                }
                             }
                         }
                         .listSectionSeparator(.hidden, edges: .top)
@@ -147,6 +187,14 @@ struct PlaylistsView: View {
             }
             .task(id: libraryStore.reloadID) {
                 await libraryStore.loadPlaylists()
+            }
+            .onReceive(downloadStore.$offlinePlaylistIds.removeDuplicates()) { playlistIDs in
+                guard offlineMode.isOffline else { return }
+                offlinePlaylistIDs = playlistIDs
+            }
+            .onChange(of: offlineMode.isOffline) { _, isOffline in
+                guard isOffline else { return }
+                offlinePlaylistIDs = downloadStore.offlinePlaylistIds
             }
             .refreshable {
                 if await offlineMode.beginUserInitiatedServerRefresh() { return }
@@ -220,7 +268,10 @@ struct PlaylistsView: View {
     }
 
     @ViewBuilder
-    private func playlistContextMenu(_ playlist: Playlist) -> some View {
+    private func playlistContextMenu(
+        _ playlist: Playlist,
+        isMarkedForOffline: Bool
+    ) -> some View {
         Button {
             Task {
                 if let loaded = await libraryStore.loadPlaylistDetail(id: playlist.id),
@@ -278,7 +329,7 @@ struct PlaylistsView: View {
 
         if enableDownloads {
             Divider()
-            if !offlineMode.isOffline && !downloadStore.offlinePlaylistIds.contains(playlist.id) {
+            if !offlineMode.isOffline && !isMarkedForOffline {
                 Button {
                     Task {
                         let loaded = await libraryStore.loadPlaylistDetail(id: playlist.id)
@@ -293,7 +344,7 @@ struct PlaylistsView: View {
                 } label: { Label(String(localized: "download_playlist"), systemImage: "arrow.down.circle") }
             }
 
-            if downloadStore.offlinePlaylistIds.contains(playlist.id) {
+            if isMarkedForOffline {
                 Button(role: .destructive) {
                     playlistToDeleteDownloads = playlist
                 } label: {
@@ -312,9 +363,11 @@ struct PlaylistsView: View {
         }
     }
 
-    private func playlistDownloadState(_ playlist: Playlist) -> PersonalizedDownloadSwipeState {
+    private func playlistDownloadState(
+        isMarkedForOffline: Bool
+    ) -> PersonalizedDownloadSwipeState {
         guard enableDownloads else { return .hidden }
-        if downloadStore.offlinePlaylistIds.contains(playlist.id) {
+        if isMarkedForOffline {
             return .delete
         }
         return offlineMode.isOffline ? .hidden : .download

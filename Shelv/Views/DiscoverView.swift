@@ -1,11 +1,12 @@
-import SwiftUI
 import AVFoundation
+import Combine
+import SwiftUI
 import UIKit
 
 struct DiscoverView: View {
     @ObservedObject var libraryStore = LibraryStore.shared
     @ObservedObject var offlineMode = OfflineModeService.shared
-    @ObservedObject var downloadStore = DownloadStore.shared
+    private let downloadStore = DownloadStore.shared
     @EnvironmentObject var serverStore: ServerStore
     @EnvironmentObject var recapStore: RecapStore
     private let player = AudioPlayerService.shared
@@ -27,7 +28,7 @@ struct DiscoverView: View {
         guard recapEnabled else { return false }
         if !offlineMode.isOffline { return true }
         // Offline: nur wenn mindestens eine Recap-Playlist heruntergeladen ist.
-        return !recapStore.recapPlaylistIds.isDisjoint(with: downloadStore.offlinePlaylistIds)
+        return !recapStore.recapPlaylistIds.isDisjoint(with: offlinePlaylistIDs)
     }
 
     private var visibleSmartMixes: [PersonalizationSmartMix] {
@@ -56,6 +57,8 @@ struct DiscoverView: View {
     @State private var serverURLSwitchTask: Task<Void, Never>?
     @State private var locallyInitiatedURLSwitchSignature: String?
     @State private var discoverAirPlayRouteIsActive = false
+    @State private var hasDownloads = !DownloadUIStateHub.shared.currentSnapshot.songIDs.isEmpty
+    @State private var offlinePlaylistIDs = DownloadStore.shared.offlinePlaylistIds
 
     private var activeServer: SubsonicServer? {
         serverStore.activeServer
@@ -101,7 +104,7 @@ struct DiscoverView: View {
                     discoverHeader
 
                     if offlineMode.isOffline {
-                        if downloadStore.songs.isEmpty {
+                        if !hasDownloads {
                             offlineEmptyState
                         } else {
                             offlineMixState
@@ -192,6 +195,14 @@ struct DiscoverView: View {
             .onReceive(NotificationCenter.default.publisher(for: .networkStatusChanged)) { _ in
                 Task { await handleNetworkStatusChanged() }
             }
+            .onReceive(DownloadUIStateHub.shared.hasDownloadsPublisher) { value in
+                guard offlineMode.isOffline else { return }
+                hasDownloads = value
+            }
+            .onReceive(downloadStore.$offlinePlaylistIds.removeDuplicates()) { playlistIDs in
+                guard offlineMode.isOffline else { return }
+                offlinePlaylistIDs = playlistIDs
+            }
             .onReceive(NotificationCenter.default.publisher(for: AVAudioSession.routeChangeNotification)) { _ in
                 updateDiscoverAirPlayRouteState()
             }
@@ -201,6 +212,8 @@ struct DiscoverView: View {
             }
             .onChange(of: offlineMode.isOffline) { _, isOffline in
                 if isOffline {
+                    hasDownloads = !DownloadUIStateHub.shared.currentSnapshot.songIDs.isEmpty
+                    offlinePlaylistIDs = downloadStore.offlinePlaylistIds
                     showRadioSheet = false
                     showConnectionRecoveryState = false
                 } else {
