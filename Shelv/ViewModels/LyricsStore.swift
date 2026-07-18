@@ -16,7 +16,7 @@ class LyricsStore: ObservableObject {
 
     private var loadTask: Task<Void, Never>?
     private var downloadTask: Task<Void, Never>?
-    private var progressPollTask: Task<Void, Never>?
+    private var downloadGeneration: UUID?
     private var currentDownloadServerId: String?
     private var progressCancellable: AnyCancellable?
 
@@ -35,13 +35,20 @@ class LyricsStore: ObservableObject {
             .sink { [weak self] update in
                 guard let self else { return }
                 if let update {
-                    self.downloadFetched = update.completed
-                    self.downloadTotal = update.total
-                    self.isDownloading = update.completed < update.total
+                    if self.downloadFetched != update.completed {
+                        self.downloadFetched = update.completed
+                    }
+                    if self.downloadTotal != update.total {
+                        self.downloadTotal = update.total
+                    }
+                    let downloading = update.completed < update.total
+                    if self.isDownloading != downloading {
+                        self.isDownloading = downloading
+                    }
                 } else {
-                    self.downloadFetched = 0
-                    self.downloadTotal = 0
-                    self.isDownloading = false
+                    if self.downloadFetched != 0 { self.downloadFetched = 0 }
+                    if self.downloadTotal != 0 { self.downloadTotal = 0 }
+                    if self.isDownloading { self.isDownloading = false }
                     if let sid = self.currentDownloadServerId {
                         Task { await self.refreshFetchedCount(serverId: sid) }
                     }
@@ -72,25 +79,29 @@ class LyricsStore: ObservableObject {
         downloadFetched = 0
         downloadTotal = 0
         currentDownloadServerId = serverId
-        startProgressPolling()
+        let generation = UUID()
+        downloadGeneration = generation
 
-        downloadTask = Task { [weak self] in
+        downloadTask = Task.detached(priority: .utility) { [serverId, generation] in
             defer {
-                Task { @MainActor [weak self] in
-                    self?.refreshDbSize()
-                    if let sid = self?.currentDownloadServerId {
-                        await self?.refreshFetchedCount(serverId: sid)
+                Task { @MainActor in
+                    let store = LyricsStore.shared
+                    guard store.downloadGeneration == generation else { return }
+                    store.refreshDbSize()
+                    if let sid = store.currentDownloadServerId {
+                        await store.refreshFetchedCount(serverId: sid)
+                        guard store.downloadGeneration == generation else { return }
                     }
                     // Safety: falls die BG-Session nichts enqueued hat (z.B. weil keine
                     // Songs vorhanden oder Task früh gecancelt), isDownloading manuell resetten
                     let running = await LyricsBackgroundService.shared.isRunning()
+                    guard store.downloadGeneration == generation else { return }
                     if !running {
-                        self?.isDownloading = false
-                        if self?.downloadTotal == 0 {
-                            self?.downloadFetched = 0
-                            self?.downloadTotal = 0
+                        store.isDownloading = false
+                        if store.downloadTotal == 0 {
+                            store.downloadFetched = 0
+                            store.downloadTotal = 0
                         }
-                        self?.stopProgressPolling()
                     }
                 }
             }
@@ -133,53 +144,29 @@ class LyricsStore: ObservableObject {
                 "Bulk scan → library \(allSongs.count), local DB \(cachedSongIds.count), queue \(songsToDownload.count)"
             )
 
-            await MainActor.run { [weak self] in
-                self?.downloadTotal = songsToDownload.count
+            let isCurrent = await MainActor.run {
+                let store = LyricsStore.shared
+                guard store.downloadGeneration == generation else { return false }
+                store.downloadTotal = songsToDownload.count
+                return true
             }
+            guard isCurrent, !Task.isCancelled else { return }
             if !songsToDownload.isEmpty {
                 await LyricsBackgroundService.shared.enqueueSongs(songsToDownload, serverId: serverId)
             } else {
-                await MainActor.run { [weak self] in
-                    self?.isDownloading = false
-                    self?.stopProgressPolling()
+                await MainActor.run {
+                    let store = LyricsStore.shared
+                    guard store.downloadGeneration == generation else { return }
+                    store.isDownloading = false
                 }
             }
         }
-    }
-
-    private func startProgressPolling() {
-        progressPollTask?.cancel()
-        progressPollTask = Task { [weak self] in
-            while !Task.isCancelled {
-                let snapshot = await LyricsBackgroundService.shared.progressSnapshot()
-                let running = await LyricsBackgroundService.shared.isRunning()
-                await MainActor.run { [weak self] in
-                    guard let self else { return }
-                    if let snapshot {
-                        self.downloadFetched = snapshot.completed
-                        self.downloadTotal = snapshot.total
-                    }
-                    if !running, self.downloadTotal > 0, self.downloadFetched >= self.downloadTotal {
-                        self.isDownloading = false
-                    }
-                }
-                if await MainActor.run(body: { [weak self] in self?.isDownloading == false }) {
-                    break
-                }
-                try? await Task.sleep(for: .milliseconds(500))
-            }
-        }
-    }
-
-    private func stopProgressPolling() {
-        progressPollTask?.cancel()
-        progressPollTask = nil
     }
 
     func cancelBulkDownload() {
+        downloadGeneration = nil
         downloadTask?.cancel()
         downloadTask = nil
-        stopProgressPolling()
         Task {
             await LyricsBackgroundService.shared.cancelAll()
         }
@@ -194,9 +181,9 @@ class LyricsStore: ObservableObject {
     // MARK: - Reset
 
     func reset(serverId: String) async {
+        downloadGeneration = nil
         downloadTask?.cancel()
         downloadTask = nil
-        stopProgressPolling()
         await LyricsBackgroundService.shared.cancelAll()
         await LyricsService.shared.resetAll()
         currentLyrics = nil

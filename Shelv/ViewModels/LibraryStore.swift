@@ -72,10 +72,10 @@ class LibraryStore: ObservableObject {
             + FileManager.default.directorySize(at: LibraryDatabase.defaultDBURL.deletingLastPathComponent())
     }
 
-    private func save<T: Encodable>(_ value: T, name: String, serverID: UUID) {
+    private func save<T: Encodable & Sendable>(_ value: T, name: String, serverID: UUID) {
         let url = Self.diskURL(name: name, serverID: serverID)
-        guard let data = try? JSONEncoder().encode(value) else { return }
         Task.detached(priority: .utility) {
+            guard let data = try? JSONEncoder().encode(value) else { return }
             try? FileManager.default.createDirectory(at: Self.libraryDir, withIntermediateDirectories: true)
             try? data.write(to: url, options: .atomic)
         }
@@ -280,7 +280,7 @@ class LibraryStore: ObservableObject {
                 albums = cached
             } else {
                 let serverID = identity.id
-                let legacyCached: [Album]? = await Task.detached(priority: .userInitiated) {
+                let legacyCached: [Album]? = await Task.detached(priority: .utility) {
                     Self.readFromDisk([Album].self, name: "albums", serverID: serverID)
                 }.value
                 guard isCurrentAlbumLoad(generation, identity: identity) else { return }
@@ -388,7 +388,7 @@ class LibraryStore: ObservableObject {
                 artists = cached
             } else {
                 let serverID = identity.id
-                let legacyCached: [Artist]? = await Task.detached(priority: .userInitiated) {
+                let legacyCached: [Artist]? = await Task.detached(priority: .utility) {
                     Self.readFromDisk([Artist].self, name: "artists", serverID: serverID)
                 }.value
                 guard isCurrentArtistLoad(generation, identity: identity) else { return }
@@ -459,28 +459,28 @@ class LibraryStore: ObservableObject {
         starredRefreshWaiters.removeAll()
         playlistRefreshWaiters.removeAll()
         waiters.forEach { $0.resume() }
-        isLoadingAlbums = false
-        isLoadingArtists = false
-        isLoadingStarred = false
-        isLoadingPlaylists = false
+        if isLoadingAlbums { isLoadingAlbums = false }
+        if isLoadingArtists { isLoadingArtists = false }
+        if isLoadingStarred { isLoadingStarred = false }
+        if isLoadingPlaylists { isLoadingPlaylists = false }
         resetDiscoverInMemory()
-        albums = []
-        artists = []
-        starredSongs = []
-        starredAlbums = []
-        starredArtists = []
-        playlists = []
+        if !albums.isEmpty { albums = [] }
+        if !artists.isEmpty { artists = [] }
+        if !starredSongs.isEmpty { starredSongs = [] }
+        if !starredAlbums.isEmpty { starredAlbums = [] }
+        if !starredArtists.isEmpty { starredArtists = [] }
+        if !playlists.isEmpty { playlists = [] }
         reloadID = UUID()
     }
 
     func resetDiscoverInMemory() {
         discoverLoadGeneration += 1
-        recentlyAdded = []
-        recentlyPlayed = []
-        frequentlyPlayed = []
-        randomAlbums = []
-        errorMessage = nil
-        isLoadingDiscover = false
+        if !recentlyAdded.isEmpty { recentlyAdded = [] }
+        if !recentlyPlayed.isEmpty { recentlyPlayed = [] }
+        if !frequentlyPlayed.isEmpty { frequentlyPlayed = [] }
+        if !randomAlbums.isEmpty { randomAlbums = [] }
+        if errorMessage != nil { errorMessage = nil }
+        if isLoadingDiscover { isLoadingDiscover = false }
     }
 
     func stopDiscoverLoadingForConnectionRecovery() {
@@ -570,7 +570,7 @@ class LibraryStore: ObservableObject {
         else { return }
 
         let serverID = identity.id
-        let cached: StarredResult? = await Task.detached(priority: .userInitiated) {
+        let cached: StarredResult? = await Task.detached(priority: .utility) {
             guard let songs = Self.readFromDisk([Song].self, name: "starred_songs", serverID: serverID),
                   let albums = Self.readFromDisk([Album].self, name: "starred_albums", serverID: serverID),
                   let artists = Self.readFromDisk([Artist].self, name: "starred_artists", serverID: serverID) else { return nil }
@@ -731,7 +731,7 @@ class LibraryStore: ObservableObject {
         else { return }
 
         let serverID = identity.id
-        let cached: [Playlist]? = await Task.detached(priority: .userInitiated) {
+        let cached: [Playlist]? = await Task.detached(priority: .utility) {
             Self.readFromDisk([Playlist].self, name: "playlists", serverID: serverID)
         }.value
         guard isCurrentPlaylistLoad(generation, identity: identity) else { return }

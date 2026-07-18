@@ -31,7 +31,6 @@ final class DownloadStore: ObservableObject {
 
     init() {
         DownloadService.shared.progressUpdates
-            .throttle(for: .milliseconds(200), scheduler: DispatchQueue.global(qos: .userInteractive), latest: true)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] progress in
                 guard let self else { return }
@@ -41,21 +40,30 @@ final class DownloadStore: ObservableObject {
             .store(in: &cancellables)
 
         DownloadService.shared.stateUpdates
-            .sink { [weak self] update in
-                Task { @MainActor [weak self] in
-                    guard let self else { return }
+            .collect(.byTimeOrCount(DispatchQueue.global(qos: .utility), .milliseconds(50), 500))
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] updates in
+                guard let self else { return }
+                var didChange = false
+                for update in updates {
                     let isDl: Bool
                     if case .downloading = update.state { isDl = true } else { isDl = false }
                     if case .none = update.state {
-                        self.inFlightStates.removeValue(forKey: update.key)
-                        self.inFlightProgress.removeValue(forKey: update.key)
+                        didChange = self.inFlightStates.removeValue(forKey: update.key) != nil || didChange
+                        didChange = self.inFlightProgress.removeValue(forKey: update.key) != nil || didChange
                     } else if case .completed = update.state {
-                        self.inFlightStates.removeValue(forKey: update.key)
-                        self.inFlightProgress.removeValue(forKey: update.key)
+                        didChange = self.inFlightStates.removeValue(forKey: update.key) != nil || didChange
+                        didChange = self.inFlightProgress.removeValue(forKey: update.key) != nil || didChange
                     } else {
-                        self.inFlightStates[update.key] = update.state
+                        if self.inFlightStates[update.key] != update.state {
+                            self.inFlightStates[update.key] = update.state
+                            didChange = true
+                        }
                     }
-                    if !isDl { self.progressPublisher.send(()) }
+                    if !isDl { didChange = true }
+                }
+                if didChange {
+                    self.progressPublisher.send(())
                 }
             }
             .store(in: &cancellables)
@@ -82,6 +90,7 @@ final class DownloadStore: ObservableObject {
     func setActiveServer(_ serverId: String) async {
         guard self.serverId != serverId else { return }
         self.serverId = serverId
+        KeepLibraryOfflineService.shared.prepare(serverId: serverId)
         let key = "shelv_artist_cover_by_name_\(serverId)"
         if let saved = UserDefaults.standard.dictionary(forKey: key) as? [String: String] {
             artistCoverByName = saved
@@ -363,7 +372,8 @@ final class DownloadStore: ObservableObject {
         }
     }
 
-    func removeRecord(songId: String) {
+    func removeRecord(songId: String, serverId recordServerId: String) {
+        guard recordServerId == serverId else { return }
         if isLoading { pendingReload = true; return }
         guard let song = songById[songId] else { return }
         let albumId = song.albumId
@@ -434,8 +444,8 @@ final class DownloadStore: ObservableObject {
 
     func downloadState(songId: String) -> DownloadState {
         let key = DownloadService.key(songId: songId, serverId: serverId)
-        if let s = inFlightStates[key] { return s }
         if let p = inFlightProgress[key] { return .downloading(progress: p) }
+        if let s = inFlightStates[key] { return s }
         return isDownloaded(songId: songId) ? .completed : .none
     }
 

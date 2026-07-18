@@ -214,3 +214,28 @@ nonisolated struct Song: Identifiable, Codable, Hashable, Sendable {
         replayGain = try c.decodeIfPresent(ReplayGain.self, forKey: .replayGain)
     }
 }
+
+/// Identifies a song occurrence as well as its server ID.
+/// Playlists may contain the same song more than once, so `Song.id` alone is
+/// not a stable identity for an individual list row.
+nonisolated struct IndexedSongOccurrence: Identifiable, Hashable, Sendable {
+    nonisolated struct ID: Hashable, Sendable {
+        let songID: String
+        let occurrence: Int
+    }
+
+    let index: Int
+    let song: Song
+    let occurrence: Int
+
+    var id: ID { ID(songID: song.id, occurrence: occurrence) }
+
+    static func rows(for songs: [Song]) -> [IndexedSongOccurrence] {
+        var occurrences: [String: Int] = [:]
+        return songs.enumerated().map { index, song in
+            let occurrence = occurrences[song.id, default: 0]
+            occurrences[song.id] = occurrence + 1
+            return IndexedSongOccurrence(index: index, song: song, occurrence: occurrence)
+        }
+    }
+}

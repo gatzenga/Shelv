@@ -22,9 +22,40 @@ final class QueueSyncService: ObservableObject {
     @Published var logEntries: [String] = []
 
     private let modeKey = "queueSyncMode"
-    private var uploadTask: Task<Void, Never>?
-    private var isChecking = false
+    private var uploadDebounceTask: Task<Void, Never>?
+    private var uploadWorkerTask: Task<Void, Never>?
+    private var pendingUploadRequest: UploadRequest?
+    private var uploadGeneration: UInt64 = 0
+    private var contextRevision: UInt64 = 0
+    private var checkGeneration: UInt64 = 0
+    private var activeCheck: RemoteCheckToken?
+    private var activeCheckWaiters: [CheckedContinuation<Void, Never>] = []
+    private var lastCheckContext: QueueSyncContext?
+    private var lastCheckContextRevision: UInt64?
     private var lastCheckAt: Date?
+    private var isRemoteOperationRunning = false
+    private var remoteOperationWaiters: [CheckedContinuation<Void, Never>] = []
+
+    private struct QueueSyncContext: Sendable {
+        let mode: QueueSyncMode
+        let serverId: String
+
+        func matches(_ other: QueueSyncContext) -> Bool {
+            mode.rawValue == other.mode.rawValue && serverId == other.serverId
+        }
+    }
+
+    private struct UploadRequest: Sendable {
+        let generation: UInt64
+        let contextRevision: UInt64
+        let context: QueueSyncContext
+    }
+
+    private struct RemoteCheckToken: Sendable {
+        let generation: UInt64
+        let contextRevision: UInt64
+        let context: QueueSyncContext
+    }
 
     private static let logTimeFormatter: DateFormatter = {
         let f = DateFormatter()
@@ -81,50 +112,92 @@ final class QueueSyncService: ObservableObject {
 
     /// Debounced Upload (bei Queue-Mutationen). Mehrere schnelle Änderungen → ein Upload.
     func scheduleUpload() {
-        guard mode != .off else { return }
-        uploadTask?.cancel()
-        uploadTask = Task { [weak self] in
+        guard let context = currentContext else { return }
+        uploadDebounceTask?.cancel()
+        uploadGeneration &+= 1
+        let request = UploadRequest(
+            generation: uploadGeneration,
+            contextRevision: contextRevision,
+            context: context
+        )
+        uploadDebounceTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(2.5))
             guard !Task.isCancelled else { return }
-            await self?.performUpload()
+            self?.enqueueUpload(request)
         }
     }
 
     /// Sofortiger Upload (an Endpunkten: Pause, Background, Songwechsel) — nimmt die
     /// aktuelle Position mit.
     func flushUpload() {
-        guard mode != .off else { return }
-        uploadTask?.cancel()
-        Task { [weak self] in await self?.performUpload() }
+        guard let context = currentContext else { return }
+        uploadDebounceTask?.cancel()
+        uploadDebounceTask = nil
+        uploadGeneration &+= 1
+        enqueueUpload(UploadRequest(
+            generation: uploadGeneration,
+            contextRevision: contextRevision,
+            context: context
+        ))
     }
 
-    private func performUpload() async {
-        let m = mode
-        guard m != .off else { return }
-        guard let serverId = activeServerId else { return }
+    private func enqueueUpload(_ request: UploadRequest) {
+        guard isCurrent(request) else { return }
+        pendingUploadRequest = request
+        guard uploadWorkerTask == nil else { return }
+        uploadWorkerTask = Task { [weak self] in
+            await self?.drainUploads()
+        }
+    }
+
+    private func drainUploads() async {
+        while let request = pendingUploadRequest {
+            pendingUploadRequest = nil
+            await performUpload(request)
+        }
+        uploadWorkerTask = nil
+    }
+
+    private func performUpload(_ request: UploadRequest) async {
+        guard isCurrent(request) else { return }
+        await acquireRemoteOperation()
+        defer { releaseRemoteOperation() }
+        guard isCurrent(request) else { return }
+        let m = request.context.mode
+        let serverId = request.context.serverId
         // Solange eine fremde Queue auf Entscheidung wartet, NICHT hochladen — sonst würde
         // der lokale Stand genau die Queue überschreiben, die gerade angeboten wird.
         guard pendingRemote == nil else { return }
         guard let snapshot = AudioPlayerService.shared.makeSnapshot(serverId: serverId) else { return }
 
-        // Fingerprint, die hochgeladen würde. iCloud berücksichtigt zusätzlich Metadata
-        // (Repeat/Shuffle/Truth-Queues), Subsonic bleibt bei der flachen Signatur.
-        // Verhindert spurious Uploads (z.B. beim Foreground/Resume, wo saveState ebenfalls feuert).
-        let outgoingSig = (m == .subsonic) ? snapshot.flattenedForSubsonic().signature : snapshot.signature
-        let outgoingFingerprint = (m == .icloud) ? snapshot.uploadFingerprint : outgoingSig
+        // Hashing, flattening and JSON encoding can scale with the complete queue.
+        // Keep that work away from the MainActor; only the player snapshot itself
+        // must be captured there.
+        let preparation = await Task.detached(priority: .utility) {
+            let flat = snapshot.flattenedForSubsonic()
+            let outgoingSignature = (m == .subsonic) ? flat.signature : snapshot.signature
+            return QueueUploadPreparation(
+                outgoingFingerprint: (m == .icloud) ? snapshot.uploadFingerprint : outgoingSignature,
+                flatSnapshot: flat,
+                cloudPayload: m == .icloud ? try? JSONEncoder().encode(snapshot) : nil
+            )
+        }.value
+        guard isCurrent(request) else { return }
+        let outgoingFingerprint = preparation.outgoingFingerprint
         if outgoingFingerprint == lastUploadFingerprint(serverId) { return }
 
         switch m {
         case .off:
             return
         case .icloud:
-            guard let payload = try? JSONEncoder().encode(snapshot) else { return }
+            guard let payload = preparation.cloudPayload else { return }
             let ok = await CloudKitSyncService.shared.savePlayQueue(
                 serverId: serverId,
                 payload: payload,
                 changedAt: snapshot.changedAt,
                 signature: snapshot.signature
             )
+            guard isCurrentContext(request) else { return }
             // Signatur nur bei bestätigtem Upload merken — sonst hielten wir einen Stand für
             // „eigen", der nie in iCloud landete.
             if ok {
@@ -135,16 +208,22 @@ final class QueueSyncService: ObservableObject {
                 appendLog("iCloud upload failed")
             }
         case .subsonic:
-            let flat = snapshot.flattenedForSubsonic()
+            let flat = preparation.flatSnapshot
             // Niemals eine leere Liste hochladen — das würde die serverseitige Queue (auch die
             // eines anderen Geräts) löschen.
             guard !flat.queue.isEmpty else { return }
             do {
+                let serverContext = try await SubsonicAPIService.shared.resolvedActiveRequestContext(
+                    expectedServerId: serverId
+                )
+                guard isCurrent(request) else { return }
                 try await SubsonicAPIService.shared.savePlayQueue(
                     songIds: flat.queue.map(\.id),
                     current: flat.currentSongId,
-                    positionMs: 0
+                    positionMs: 0,
+                    context: serverContext
                 )
+                guard isCurrentContext(request) else { return }
                 setLastKnownSignature(flat.signature, serverId: serverId)
                 setLastUploadFingerprint(flat.signature, serverId: serverId)
                 appendLog("Uploaded to Subsonic (\(flat.queue.count) songs)")
@@ -171,18 +250,45 @@ final class QueueSyncService: ObservableObject {
             appendLog("Check skipped — offline mode")
             return
         }
-        // Überlappende Checks vermeiden (syncNow kann von mehreren Auslösern gleichzeitig kommen).
-        guard !isChecking else { return }
-        // Trigger-Bursts (z.B. Netz-Flapping) zusammenfassen — nicht öfter als alle 2 s prüfen.
-        if let last = lastCheckAt, Date().timeIntervalSince(last) < 2 { return }
+        let context = QueueSyncContext(mode: m, serverId: serverId)
+        if let activeCheck {
+            if activeCheck.contextRevision == contextRevision,
+               activeCheck.context.matches(context) {
+                await withCheckedContinuation { continuation in
+                    activeCheckWaiters.append(continuation)
+                }
+                return
+            }
+            invalidateContext()
+        }
+        // Trigger-Bursts (z.B. Netz-Flapping) nur im unveränderten Kontext zusammenfassen.
+        if let last = lastCheckAt,
+           lastCheckContextRevision == contextRevision,
+           lastCheckContext?.matches(context) == true,
+           Date().timeIntervalSince(last) < 2 {
+            return
+        }
         lastCheckAt = Date()
-        isChecking = true
-        defer { isChecking = false }
+        lastCheckContext = context
+        lastCheckContextRevision = contextRevision
+        checkGeneration &+= 1
+        let token = RemoteCheckToken(
+            generation: checkGeneration,
+            contextRevision: contextRevision,
+            context: context
+        )
+        activeCheck = token
+        defer { finishRemoteCheck(token) }
+        await acquireRemoteOperation()
+        defer { releaseRemoteOperation() }
+        guard isCurrent(token) else { return }
         guard await serverIsReachableForRemoteQueueCheck() else {
+            guard isCurrent(token) else { return }
             pendingRemote = nil
             appendLog("Check skipped — server unreachable")
             return
         }
+        guard isCurrent(token) else { return }
 
         let remote: QueueSnapshot?
         switch m {
@@ -190,24 +296,33 @@ final class QueueSyncService: ObservableObject {
             return
         case .icloud:
             if let payload = await CloudKitSyncService.shared.fetchPlayQueuePayload(serverId: serverId) {
-                remote = try? JSONDecoder().decode(QueueSnapshot.self, from: payload)
+                guard isCurrent(token) else { return }
+                remote = await Task.detached(priority: .utility) {
+                    try? JSONDecoder().decode(QueueSnapshot.self, from: payload)
+                }.value
+                guard isCurrent(token) else { return }
             } else {
+                guard isCurrent(token) else { return }
                 remote = nil
             }
         case .subsonic:
             if let pq = try? await SubsonicAPIService.shared.getPlayQueue() {
+                guard isCurrent(token) else { return }
                 remote = Self.snapshot(fromSubsonic: pq, serverId: serverId)
             } else {
+                guard isCurrent(token) else { return }
                 remote = nil
             }
         }
 
+        guard isCurrent(token) else { return }
         let source = (m == .icloud) ? "iCloud" : "Subsonic"
         guard let remote, !remote.isEmpty else {
             appendLog("Checked \(source) — no remote queue")
             return
         }
-        let sig = remote.signature
+        let sig = await Task.detached(priority: .utility) { remote.signature }.value
+        guard isCurrent(token) else { return }
 
         // Eigener Stand (zuletzt hochgeladen/übernommen) oder bereits abgelehnt?
         if sig == lastKnownSignature(serverId) {
@@ -221,7 +336,10 @@ final class QueueSyncService: ObservableObject {
 
         // Belt-and-suspenders: identisch zur aktuellen lokalen Queue → kein Prompt.
         if let local = AudioPlayerService.shared.makeSnapshot(serverId: serverId) {
-            let localSig = (m == .subsonic) ? local.flattenedForSubsonic().signature : local.signature
+            let localSig = await Task.detached(priority: .utility) {
+                (m == .subsonic) ? local.flattenedForSubsonic().signature : local.signature
+            }.value
+            guard isCurrent(token) else { return }
             if localSig == sig {
                 setLastKnownSignature(sig, serverId: serverId)
                 appendLog("Downloaded from \(source) — identical to local queue, no prompt")
@@ -273,11 +391,94 @@ final class QueueSyncService: ObservableObject {
         pendingRemote = nil
     }
 
-    /// Beim Server-Wechsel: laufenden Upload abbrechen und einen evtl. offenen Banner
-    /// (der den alten Server betraf) verwerfen. Der neue Server wird separat geprüft.
+    /// Beim Server-Wechsel ausstehende Arbeit und einen alten Banner verwerfen.
+    /// Ein bereits gesendeter Netzwerk-Request darf seriell fertiglaufen, damit ihn
+    /// der nächste Upload nicht überholen und den Remote-Stand zurückdrehen kann.
     func handleServerChange() {
-        uploadTask?.cancel()
+        invalidateContext()
+    }
+
+    func handleModeChange() {
+        invalidateContext()
+    }
+
+    func handleOfflineModeChange() {
+        invalidateContext()
+    }
+
+    private var currentContext: QueueSyncContext? {
+        let m = mode
+        guard m != .off,
+              !OfflineModeService.shared.isOffline,
+              let serverId = activeServerId else { return nil }
+        return QueueSyncContext(mode: m, serverId: serverId)
+    }
+
+    private func isCurrent(_ request: UploadRequest) -> Bool {
+        guard !Task.isCancelled,
+              request.generation == uploadGeneration,
+              isCurrentContext(request)
+        else { return false }
+        return true
+    }
+
+    private func isCurrentContext(_ request: UploadRequest) -> Bool {
+        guard request.contextRevision == contextRevision,
+              let currentContext else { return false }
+        return request.context.matches(currentContext)
+    }
+
+    private func isCurrent(_ token: RemoteCheckToken) -> Bool {
+        guard !Task.isCancelled,
+              activeCheck?.generation == token.generation,
+              token.contextRevision == contextRevision,
+              let currentContext
+        else { return false }
+        return token.context.matches(currentContext)
+    }
+
+    private func invalidateContext() {
+        contextRevision &+= 1
+        uploadGeneration &+= 1
+        uploadDebounceTask?.cancel()
+        uploadDebounceTask = nil
+        pendingUploadRequest = nil
+        checkGeneration &+= 1
+        activeCheck = nil
+        let checkWaiters = activeCheckWaiters
+        activeCheckWaiters.removeAll(keepingCapacity: true)
+        checkWaiters.forEach { $0.resume() }
+        lastCheckAt = nil
+        lastCheckContext = nil
+        lastCheckContextRevision = nil
         pendingRemote = nil
+    }
+
+    private func finishRemoteCheck(_ token: RemoteCheckToken) {
+        guard activeCheck?.generation == token.generation else { return }
+        activeCheck = nil
+        let waiters = activeCheckWaiters
+        activeCheckWaiters.removeAll(keepingCapacity: true)
+        waiters.forEach { $0.resume() }
+    }
+
+    private func acquireRemoteOperation() async {
+        guard isRemoteOperationRunning else {
+            isRemoteOperationRunning = true
+            return
+        }
+        await withCheckedContinuation { continuation in
+            remoteOperationWaiters.append(continuation)
+        }
+    }
+
+    private func releaseRemoteOperation() {
+        guard !remoteOperationWaiters.isEmpty else {
+            isRemoteOperationRunning = false
+            return
+        }
+        let next = remoteOperationWaiters.removeFirst()
+        next.resume()
     }
 
     private func serverIsReachableForRemoteQueueCheck() async -> Bool {
@@ -288,4 +489,10 @@ final class QueueSyncService: ObservableObject {
             return false
         }
     }
+}
+
+private nonisolated struct QueueUploadPreparation: Sendable {
+    let outgoingFingerprint: String
+    let flatSnapshot: QueueSnapshot
+    let cloudPayload: Data?
 }

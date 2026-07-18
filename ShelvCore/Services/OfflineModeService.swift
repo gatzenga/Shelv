@@ -70,6 +70,7 @@ final class OfflineModeService: ObservableObject {
             .sink { [weak self] new in
                 guard let self else { return }
                 self.storedOffline = new
+                QueueSyncService.shared.handleOfflineModeChange()
                 if new {
                     self.publishServerErrorState(.init(isVisible: false, message: nil, wasDeviceOffline: false))
                 }

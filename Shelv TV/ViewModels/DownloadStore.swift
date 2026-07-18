@@ -14,5 +14,5 @@ final class DownloadStore {
 
     func enqueueSongs(_ songs: [Song]) {}
     func insertRecord(_ record: DownloadRecord) {}
-    func removeRecord(songId: String) {}
+    func removeRecord(songId: String, serverId: String) {}
 }

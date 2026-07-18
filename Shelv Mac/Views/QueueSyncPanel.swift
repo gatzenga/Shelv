@@ -18,6 +18,9 @@ struct QueueSyncPanel: View {
                     Label(String(localized: "queue_sync"), systemImage: "arrow.triangle.2.circlepath")
                 }
                 .tint(themeColor)
+                .onChange(of: queueSyncMode) { _, _ in
+                    QueueSyncService.shared.handleModeChange()
+                }
             }
 
             Section(String(localized: "about")) {

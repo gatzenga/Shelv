@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 import UIKit
 
@@ -8,9 +9,8 @@ extension Notification.Name {
 
 struct ContentView: View {
     @EnvironmentObject var serverStore: ServerStore
-    @ObservedObject var libraryStore = LibraryStore.shared
+    private let libraryStore = LibraryStore.shared
     @ObservedObject var offlineMode = OfflineModeService.shared
-    @ObservedObject var queueSync = QueueSyncService.shared
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedTab = 0
     @State private var searchResetToken = 0
@@ -63,8 +63,7 @@ struct ContentView: View {
         rootContent
             .background(ServerErrorBannerWindowPresenter())
             .ignoresSafeArea(.keyboard)
-            .onChange(of: libraryStore.errorMessage) { _, msg in
-                guard let msg else { return }
+            .onReceive(libraryStore.$errorMessage.removeDuplicates().compactMap { $0 }) { msg in
                 Task { @MainActor in
                     await Task.yield()
                     if libraryStore.errorMessage == msg {

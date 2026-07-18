@@ -14,7 +14,7 @@ struct PlayLogRecord: Codable, FetchableRecord, PersistableRecord {
     static let databaseTableName = "play_log"
 }
 
-struct RecapRegistryRecord: Codable, FetchableRecord, PersistableRecord, Hashable {
+nonisolated struct RecapRegistryRecord: Codable, FetchableRecord, PersistableRecord, Hashable, Sendable {
     var playlistId: String
     var serverId: String
     var periodType: String     // "week" | "month" | "year"

@@ -3,7 +3,7 @@ import GRDB
 
 // MARK: - Records
 
-struct DownloadRecord: Codable, FetchableRecord, PersistableRecord, Sendable {
+nonisolated struct DownloadRecord: Codable, FetchableRecord, PersistableRecord, Sendable {
     var songId: String
     var serverId: String
     var albumId: String
@@ -166,7 +166,9 @@ actor DownloadDatabase {
     private func openAndMigrate(at url: URL) throws -> DatabasePool {
         var config = Configuration()
         config.label = "shelv.db.downloads"
-        config.qos = .userInitiated
+        // Download persistence is maintenance work.  Keeping it below interactive
+        // UI work lets scrolling win when a batch completes in the background.
+        config.qos = .utility
         let p = try DatabasePool(path: url.path, configuration: config)
         var m = DatabaseMigrator()
         m.registerMigration("v1_create") { db in

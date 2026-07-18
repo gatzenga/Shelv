@@ -133,7 +133,9 @@ struct PlaybackSettingsView: View {
                     title: String(localized: "queue_sync"),
                     selection: $queueSyncMode,
                     options: queueSyncOptions
-                )
+                ) { _ in
+                    QueueSyncService.shared.handleModeChange()
+                }
                 NavigationLink(String(localized: "about")) {
                     QueueSyncAboutView()
                 }

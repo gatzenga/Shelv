@@ -15,7 +15,7 @@ extension Notification.Name {
 
 // MARK: - DownloadJob
 
-private nonisolated struct DownloadJob: Codable {
+private nonisolated struct DownloadJob: Codable, Sendable {
     let song: Song
     let serverId: String
     var downloadURL: URL
@@ -81,10 +81,21 @@ actor DownloadService {
     // Songs die gerade in handleCompletion laufen (aus inflightJobs entfernt, aber noch nicht committed).
     // jobSongIds prüft auch diese Map, damit deleteAlbum/deleteArtist auch in-completion Songs canceln kann.
     private var inCompletionJobs: [String: DownloadJob] = [:]  // key -> Job
+    // Fehlgeschlagene Jobs bleiben auch während Retry-Backoff und asynchroner
+    // Fallback-Vorbereitung sichtbar und zuverlässig abbrechbar.
+    private var retryingJobs = DownloadRetryRegistry<DownloadJob>()
 
     nonisolated(unsafe) private let progressSubject = CurrentValueSubject<[String: Double], Never>([:])
     nonisolated(unsafe) private let stateSubject = PassthroughSubject<(key: String, state: DownloadState), Never>()
     nonisolated(unsafe) private let batchSubject = CurrentValueSubject<BatchProgress?, Never>(nil)
+
+    // URLSession may report progress many times per second. Keep live values actor-owned,
+    // then publish one changed snapshot per UI interval instead of every callback.
+    private let progressPublishIntervalNanoseconds: UInt64 = 200_000_000
+    private var currentProgress: [String: Double] = [:]
+    private var lastPublishedProgress: [String: Double] = [:]
+    private var progressPublishTask: Task<Void, Never>?
+    private var progressPublishGeneration: UInt64 = 0
 
     nonisolated var progressUpdates: AnyPublisher<[String: Double], Never> {
         progressSubject.eraseToAnyPublisher()
@@ -117,6 +128,13 @@ actor DownloadService {
     private var activePendingJobs: ArraySlice<DownloadJob> {
         guard hasPendingJobs else { return [] }
         return pendingJobs[pendingJobStartIndex...]
+    }
+
+    private var hasTrackedJobs: Bool {
+        hasPendingJobs
+            || !inflightJobs.isEmpty
+            || !inCompletionJobs.isEmpty
+            || !retryingJobs.isEmpty
     }
 
     private func appendPendingJob(_ job: DownloadJob) {
@@ -237,7 +255,13 @@ actor DownloadService {
 
     // MARK: - Enqueueing
 
-    func enqueue(songs: [Song], serverId: String, albumArtistOverride: String? = nil, albumCoverArtIdOverride: String? = nil) async {
+    func enqueue(
+        songs: [Song],
+        serverId: String,
+        albumArtistOverride: String? = nil,
+        albumCoverArtIdOverride: String? = nil,
+        requiresKeepLibraryOfflineEnabled: Bool = false
+    ) async {
         guard await canStartDownloads() else { return }
         guard !songs.isEmpty else { return }
         guard let api = await currentAPI(for: serverId) else { return }
@@ -274,6 +298,13 @@ actor DownloadService {
             }
         }
 
+        if requiresKeepLibraryOfflineEnabled {
+            let canContinue = await MainActor.run {
+                KeepLibraryOfflineService.shared.isEnqueueAuthorized(serverId: serverId)
+            }
+            guard canContinue else { return }
+        }
+
         let transcoding = TranscodingPolicy.currentDownloadFormat()
         let shouldPublishQueuedStates = songs.count <= queuedStatePublishLimit
         var added = 0
@@ -282,6 +313,7 @@ actor DownloadService {
             if downloadedIds.contains(song.id) { continue }
             if inflightJobs.values.contains(where: { Self.key(songId: $0.song.id, serverId: $0.serverId) == key }) { continue }
             if pendingJobKeys.contains(key) { continue }
+            if retryingJobs.contains(key) { continue }
             // Stale Cancel-Marker beim Neu-Enqueue entfernen — sonst würde eine spätere
             // Completion fälschlich als "cancelled" interpretiert.
             cancelledKeys.remove(key)
@@ -394,7 +426,7 @@ actor DownloadService {
         let key = Self.key(songId: songId, serverId: serverId)
         // Markieren: falls eine `handleCompletion` parallel läuft und an einem await suspendiert ist,
         // bricht sie nach Resume ab und räumt die geschriebene Datei wieder auf.
-        cancelledKeys.insert(key)
+        let isFirstCancellation = cancelledKeys.insert(key).inserted
         let removedPending = removePendingJobs { Self.key(songId: $0.song.id, serverId: $0.serverId) == key }
         if removedPending > 0 { pendingJobKeys.remove(key) }
         var removedInflight = 0
@@ -412,12 +444,14 @@ actor DownloadService {
         publishProgress(key: key, value: nil)
         stateSubject.send((key, .none))
         let inCompletion = inCompletionJobs.values.contains { Self.key(songId: $0.song.id, serverId: $0.serverId) == key } ? 1 : 0
-        let removed = removedPending + removedInflight + inCompletion
-        if removed > 0 {
-            batchTotal = max(0, batchTotal - removed)
+        let removedRetrying = retryingJobs.removeValue(forKey: key) != nil
+        let wasTracked = removedPending > 0 || removedInflight > 0 || inCompletion > 0 || removedRetrying
+        if wasTracked && isFirstCancellation {
+            batchTotal = max(0, batchTotal - 1)
             publishBatch()
             resetBatchIfDone()
         }
+        if removedRetrying { startNextJobs() }
     }
 
     func delete(songId: String, serverId: String) async {
@@ -429,7 +463,7 @@ actor DownloadService {
         await DownloadDatabase.shared.delete(songId: songId, serverId: serverId)
         let key = Self.key(songId: songId, serverId: serverId)
         stateSubject.send((key, .none))
-        await DownloadStore.shared.removeRecord(songId: songId)
+        await DownloadStore.shared.removeRecord(songId: songId, serverId: serverId)
     }
 
     func deleteAlbum(albumId: String, serverId: String) async {
@@ -444,7 +478,7 @@ actor DownloadService {
             try? FileManager.default.removeItem(atPath: Self.coverPath(forFilePath: r.filePath))
             await DownloadDatabase.shared.delete(songId: r.songId, serverId: serverId)
             stateSubject.send((Self.key(songId: r.songId, serverId: serverId), .none))
-            await DownloadStore.shared.removeRecord(songId: r.songId)
+            await DownloadStore.shared.removeRecord(songId: r.songId, serverId: serverId)
         }
     }
 
@@ -472,16 +506,17 @@ actor DownloadService {
             try? FileManager.default.removeItem(atPath: Self.coverPath(forFilePath: r.filePath))
             await DownloadDatabase.shared.delete(songId: r.songId, serverId: serverId)
             stateSubject.send((Self.key(songId: r.songId, serverId: serverId), .none))
-            await DownloadStore.shared.removeRecord(songId: r.songId)
+            await DownloadStore.shared.removeRecord(songId: r.songId, serverId: serverId)
         }
     }
 
     private func jobSongIds(matching predicate: (DownloadJob) -> Bool) -> [String] {
-        var ids: [String] = []
-        ids.append(contentsOf: activePendingJobs.filter(predicate).map { $0.song.id })
-        ids.append(contentsOf: inflightJobs.values.filter(predicate).map { $0.song.id })
-        ids.append(contentsOf: inCompletionJobs.values.filter(predicate).map { $0.song.id })
-        return ids
+        var ids = Set<String>()
+        ids.formUnion(activePendingJobs.filter(predicate).map { $0.song.id })
+        ids.formUnion(inflightJobs.values.filter(predicate).map { $0.song.id })
+        ids.formUnion(inCompletionJobs.values.filter(predicate).map { $0.song.id })
+        ids.formUnion(retryingJobs.jobs.filter(predicate).map { $0.song.id })
+        return Array(ids)
     }
 
     func cancelBatch() {
@@ -494,9 +529,12 @@ actor DownloadService {
             jobKeyByTask.removeValue(forKey: taskId)
         }
         let completionKeys = Array(inCompletionJobs.keys)
-        for key in pendingKeys + inflightKeys + completionKeys { cancelledKeys.insert(key) }
+        let retryingKeys = retryingJobs.keys
+        retryingJobs.removeAll(keepingCapacity: true)
+        let activeKeys = Set(pendingKeys + inflightKeys + completionKeys + retryingKeys)
+        for key in activeKeys { cancelledKeys.insert(key) }
         session?.getAllTasks { tasks in tasks.forEach { $0.cancel() } }
-        for key in pendingKeys + inflightKeys + completionKeys {
+        for key in activeKeys {
             publishProgress(key: key, value: nil)
             stateSubject.send((key, .none))
         }
@@ -543,7 +581,7 @@ actor DownloadService {
             }
         }
 
-        progressSubject.send([:])
+        clearProgress()
         batchTotal = 0; batchCompleted = 0; batchFailed = 0
         batchSubject.send(nil)
         notifyLibraryChanged()
@@ -845,8 +883,11 @@ actor DownloadService {
 
     func currentState(songId: String, serverId: String) -> DownloadState {
         let key = Self.key(songId: songId, serverId: serverId)
-        if let p = progressSubject.value[key] { return .downloading(progress: p) }
+        if let p = currentProgress[key] { return .downloading(progress: p) }
         if pendingJobKeys.contains(key) {
+            return .queued
+        }
+        if retryingJobs.contains(key) {
             return .queued
         }
         return .none
@@ -875,7 +916,6 @@ actor DownloadService {
         guard let key = jobKeyByTask[taskIdentifier] else { return }
         let p = total > 0 ? Double(written) / Double(total) : -1
         publishProgress(key: key, value: p)
-        stateSubject.send((key, .downloading(progress: p)))
     }
 
     func handleCompletion(taskIdentifier: Int, tempURL: URL, byteSize: Int64, statusCode: Int?, mimeType: String?, taskDescription: String?) async {
@@ -893,7 +933,10 @@ actor DownloadService {
 
         let key = Self.key(songId: job.song.id, serverId: job.serverId)
         inCompletionJobs[key] = job
-        defer { inCompletionJobs.removeValue(forKey: key) }
+        defer {
+            inCompletionJobs.removeValue(forKey: key)
+            resetBatchIfDone()
+        }
 
         // Race-Window 1: User cancel-te zwischen erstem `await` und jetzt.
         if cancelledKeys.contains(key) {
@@ -1018,7 +1061,7 @@ actor DownloadService {
             try? FileManager.default.removeItem(atPath: finalURL.path)
             try? FileManager.default.removeItem(atPath: Self.coverPath(forFilePath: finalURL.path))
             await DownloadDatabase.shared.delete(songId: job.song.id, serverId: job.serverId)
-            await DownloadStore.shared.removeRecord(songId: job.song.id)
+            await DownloadStore.shared.removeRecord(songId: job.song.id, serverId: job.serverId)
             stateSubject.send((key, .none))
             return
         }
@@ -1060,8 +1103,21 @@ actor DownloadService {
         var next = job
         next.attempt += 1
         if next.attempt < maxAttempts {
+            let retryToken = retryingJobs.register(next, forKey: key)
+            publishProgress(key: key, value: nil)
+            stateSubject.send((key, .queued))
+            startNextJobs()
             let backoff = pow(2.0, Double(next.attempt))
             try? await Task.sleep(nanoseconds: UInt64(backoff * 1_000_000_000))
+            guard let retryJob = retryingJobs.takeValue(forKey: key, token: retryToken) else {
+                if cancelledKeys.remove(key) != nil {
+                    publishProgress(key: key, value: nil)
+                    stateSubject.send((key, .none))
+                }
+                startNextJobs()
+                resetBatchIfDone()
+                return
+            }
             if cancelledKeys.contains(key) {
                 cancelledKeys.remove(key)
                 publishProgress(key: key, value: nil)
@@ -1069,17 +1125,26 @@ actor DownloadService {
                 startNextJobs()
                 return
             }
-            appendPendingJob(next)
+            appendPendingJob(retryJob)
             pendingJobKeys.insert(key)
             stateSubject.send((key, .queued))
             startNextJobs()
             return
         }
         // Letzter Versuch ohne Transcoding (Original) — wenn wir bisher mit Format gefragt haben.
-        if job.requestedFormat != nil, !job.fellBackToRaw,
-           let api = await currentAPI(for: job.serverId),
-           let rawURL = api.api.downloadURL(for: job.song.id, server: api.server, password: api.password,
-                                            transcoding: nil) {
+        if job.requestedFormat != nil, !job.fellBackToRaw {
+            let retryToken = retryingJobs.register(job, forKey: key)
+            startNextJobs()
+            let api = await currentAPI(for: job.serverId)
+            guard let retryJob = retryingJobs.takeValue(forKey: key, token: retryToken) else {
+                if cancelledKeys.remove(key) != nil {
+                    publishProgress(key: key, value: nil)
+                    stateSubject.send((key, .none))
+                }
+                startNextJobs()
+                resetBatchIfDone()
+                return
+            }
             if cancelledKeys.contains(key) {
                 cancelledKeys.remove(key)
                 publishProgress(key: key, value: nil)
@@ -1087,16 +1152,25 @@ actor DownloadService {
                 startNextJobs()
                 return
             }
-            var raw = job
-            raw.attempt = 0
-            raw.fellBackToRaw = true
-            raw.downloadURL = rawURL
-            raw.fileExtension = job.song.suffix?.pathSafeFileExtension() ?? "mp3"
-            appendPendingJob(raw)
-            pendingJobKeys.insert(key)
-            stateSubject.send((key, .queued))
-            startNextJobs()
-            return
+            if let api,
+               let rawURL = api.api.downloadURL(
+                   for: retryJob.song.id,
+                   server: api.server,
+                   password: api.password,
+                   transcoding: nil
+               ) {
+                var raw = retryJob
+                raw.attempt = 0
+                raw.fellBackToRaw = true
+                raw.downloadURL = rawURL
+                raw.fileExtension = retryJob.song.suffix?.pathSafeFileExtension() ?? "mp3"
+                publishProgress(key: key, value: nil)
+                appendPendingJob(raw)
+                pendingJobKeys.insert(key)
+                stateSubject.send((key, .queued))
+                startNextJobs()
+                return
+            }
         }
         publishProgress(key: key, value: nil)
         stateSubject.send((key, .failed(message: error.localizedDescription)))
@@ -1157,7 +1231,7 @@ actor DownloadService {
     }
 
     private func resetBatchIfDone() {
-        guard !hasPendingJobs, inflightJobs.isEmpty else { return }
+        guard !hasTrackedJobs else { return }
         Task { [weak self] in
             try? await Task.sleep(nanoseconds: 1_500_000_000)
             await self?.flushBatchIfStillIdle()
@@ -1165,7 +1239,7 @@ actor DownloadService {
     }
 
     private func flushBatchIfStillIdle() {
-        guard !hasPendingJobs, inflightJobs.isEmpty else { return }
+        guard !hasTrackedJobs else { return }
         batchTotal = 0
         batchCompleted = 0
         batchFailed = 0
@@ -1209,9 +1283,50 @@ actor DownloadService {
     }
 
     private func publishProgress(key: String, value: Double?) {
-        var current = progressSubject.value
-        if let value { current[key] = value } else { current.removeValue(forKey: key) }
-        progressSubject.send(current)
+        if let value {
+            guard currentProgress[key] != value else { return }
+            currentProgress[key] = value
+            scheduleProgressPublish()
+        } else {
+            guard currentProgress.removeValue(forKey: key) != nil else { return }
+            publishProgressImmediately()
+        }
+    }
+
+    private func scheduleProgressPublish() {
+        guard progressPublishTask == nil else { return }
+        let delay = progressPublishIntervalNanoseconds
+        progressPublishGeneration &+= 1
+        let generation = progressPublishGeneration
+        progressPublishTask = Task.detached(priority: .utility) { [weak self] in
+            try? await Task.sleep(nanoseconds: delay)
+            guard !Task.isCancelled else { return }
+            await self?.publishScheduledProgress(generation: generation)
+        }
+    }
+
+    private func publishScheduledProgress(generation: UInt64) {
+        guard generation == progressPublishGeneration else { return }
+        progressPublishTask = nil
+        publishProgressSnapshotIfChanged()
+    }
+
+    private func publishProgressImmediately() {
+        progressPublishGeneration &+= 1
+        progressPublishTask?.cancel()
+        progressPublishTask = nil
+        publishProgressSnapshotIfChanged()
+    }
+
+    private func publishProgressSnapshotIfChanged() {
+        guard currentProgress != lastPublishedProgress else { return }
+        lastPublishedProgress = currentProgress
+        progressSubject.send(currentProgress)
+    }
+
+    private func clearProgress() {
+        currentProgress.removeAll()
+        publishProgressImmediately()
     }
 
     private func notifyLibraryChanged() {

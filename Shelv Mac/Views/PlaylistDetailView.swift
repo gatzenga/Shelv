@@ -115,7 +115,7 @@ struct PlaylistDetailView: View {
     @State private var isLoading = true
     @State private var showDeleteConfirm = false
     @State private var showDeleteDownloadConfirm = false
-    @State private var isSyncingOrder = false
+    @State private var isMutatingSongs = false
     @State private var isEditMode = false
     @State private var editName: String = ""
     @State private var editComment: String = ""
@@ -123,13 +123,18 @@ struct PlaylistDetailView: View {
     @State private var displayComment: String = ""
     @State private var searchQuery = ""
 
-    private var displayedSongs: [Song] {
-        guard !searchQuery.isEmpty, !isEditMode else { return songs }
-        return songs.filter {
-            $0.title.localizedCaseInsensitiveContains(searchQuery)
-                || ($0.artist?.localizedCaseInsensitiveContains(searchQuery) ?? false)
-                || ($0.album?.localizedCaseInsensitiveContains(searchQuery) ?? false)
+    private var displayedSongRows: [IndexedSongOccurrence] {
+        let rows = IndexedSongOccurrence.rows(for: songs)
+        guard !searchQuery.isEmpty, !isEditMode else { return rows }
+        return rows.filter { row in
+            row.song.title.localizedCaseInsensitiveContains(searchQuery)
+                || (row.song.artist?.localizedCaseInsensitiveContains(searchQuery) ?? false)
+                || (row.song.album?.localizedCaseInsensitiveContains(searchQuery) ?? false)
         }
+    }
+
+    private var displayedSongs: [Song] {
+        displayedSongRows.map(\.song)
     }
 
     private var currentRawName: String {
@@ -154,9 +159,10 @@ struct PlaylistDetailView: View {
             PlaylistTracksList(
                 playlist: playlist,
                 songs: $songs,
-                displaySongs: displayedSongs,
+                displayRows: displayedSongRows,
                 isLoading: isLoading,
                 isEditMode: isEditMode,
+                isMutationDisabled: isMutatingSongs,
                 enableFavorites: showFavoriteActions,
                 enablePlaylists: showPlaylistActions,
                 themeColor: themeColor,
@@ -254,7 +260,7 @@ struct PlaylistDetailView: View {
                 )
             }
             .help(isEditMode ? String(localized: "finish_editing") : String(localized: "edit_playlist"))
-            .disabled(isLoading)
+            .disabled(isLoading || isMutatingSongs)
         }
         ToolbarItem(placement: .primaryAction) {
             Button(role: .destructive) {
@@ -343,24 +349,46 @@ struct PlaylistDetailView: View {
     }
 
     private func moveSongs(from: IndexSet, to: Int) {
+        guard !isMutatingSongs else { return }
+        let previousSongs = songs
+        isMutatingSongs = true
         songs.move(fromOffsets: from, toOffset: to)
-        Task { await syncOrder() }
+        Task {
+            await syncOrder(previousSongs: previousSongs)
+            isMutatingSongs = false
+        }
     }
 
     private func deleteSongs(at offsets: IndexSet) {
+        guard !isMutatingSongs else { return }
+        let validOffsets = IndexSet(offsets.filter { songs.indices.contains($0) })
+        guard !validOffsets.isEmpty else { return }
+        let previousSongs = songs
+        let indices = Array(validOffsets)
+        isMutatingSongs = true
+        songs.remove(atOffsets: validOffsets)
         Task {
-            let indices = Array(offsets)
-            await libraryStore.removeSongsFromPlaylist(playlist, indices: indices)
-            songs.remove(atOffsets: offsets)
+            if await libraryStore.removeSongsFromPlaylist(playlist, indices: indices) {
+                await loadDetail()
+            } else {
+                songs = previousSongs
+            }
+            isMutatingSongs = false
         }
     }
 
     private func removeSong(at index: Int) {
-        guard songs.indices.contains(index) else { return }
-        let songId = songs[index].id
+        guard !isMutatingSongs, songs.indices.contains(index) else { return }
+        let previousSongs = songs
+        isMutatingSongs = true
+        songs.remove(at: index)
         Task {
-            await libraryStore.removeSongsFromPlaylist(playlist, indices: [index])
-            songs.removeAll { $0.id == songId }
+            if await libraryStore.removeSongsFromPlaylist(playlist, indices: [index]) {
+                await loadDetail()
+            } else {
+                songs = previousSongs
+            }
+            isMutatingSongs = false
         }
     }
 
@@ -396,9 +424,7 @@ struct PlaylistDetailView: View {
         }
     }
 
-    private func syncOrder() async {
-        guard !isSyncingOrder else { return }
-        isSyncingOrder = true
+    private func syncOrder(previousSongs: [Song]) async {
         let newIds = songs.map(\.id)
         let allOldIndices = Array(0..<newIds.count)
         do {
@@ -407,16 +433,16 @@ struct PlaylistDetailView: View {
                 songIdsToAdd: newIds,
                 songIndicesToRemove: allOldIndices
             )
+            await loadDetail()
         } catch {
             if !OfflineModeService.shared.presentConnectivityErrorIfNeeded(error, userInitiated: true) {
                 NotificationCenter.default.post(
                     name: .showToast,
                     object: String(localized: "order_could_not_be_saved")
                 )
-                await loadDetail()
             }
+            songs = previousSongs
         }
-        isSyncingOrder = false
     }
 
 }

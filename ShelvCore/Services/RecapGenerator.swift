@@ -2,8 +2,8 @@ import Foundation
 
 // MARK: - RecapPeriod
 
-struct RecapPeriod {
-    enum PeriodType: String {
+nonisolated struct RecapPeriod: Sendable {
+    enum PeriodType: String, Sendable {
         case week, month, year
 
         nonisolated var songLimit: Int {

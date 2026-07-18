@@ -400,7 +400,7 @@ final class ShelvIntentCatalog {
     }
 
     private func remoteRadios() async -> [RadioStationDisplayItem] {
-        RadioStationStore.shared.publishShortcutCacheIfNeeded()
+        await RadioStationStore.shared.publishShortcutCacheIfNeeded()
         let refreshed: [RadioStationDisplayItem]? = await Self.valueBeforeDeadline(
             named: "refreshRadios"
         ) {
@@ -527,7 +527,7 @@ final class ShelvIntentCatalog {
             if RadioStationStore.shared.items.isEmpty, mayLoadRemote {
                 await RadioStationStore.shared.refresh(waitForCloudMetadata: false)
             } else {
-                RadioStationStore.shared.publishShortcutCacheIfNeeded()
+                await RadioStationStore.shared.publishShortcutCacheIfNeeded()
             }
             guard let radio = RadioStationStore.shared.items.first(where: { $0.id == reference.contentID }) else {
                 return nil

@@ -1,5 +1,230 @@
 import SwiftUI
 
+private struct LibraryDerivedState {
+    var albumGroups: [(letter: String, items: [Album])] = []
+    var albumGenreOptions: [AlbumGenreFilterOption] = []
+    var artistGroups: [(letter: String, items: [Artist])] = []
+    var albumCountByArtist: [String: Int] = [:]
+}
+
+private struct LibraryDerivedStateInput {
+    let isOffline: Bool
+    let libraryAlbums: [Album]
+    let libraryArtists: [Artist]
+    let downloadedAlbums: [DownloadedAlbum]
+    let downloadedArtists: [DownloadedArtist]
+    let albumSort: AlbumSortOption
+    let albumDirection: SortDirection
+    let selectedAlbumGenre: String?
+    let artistSort: ArtistSortOption
+    let artistDirection: SortDirection
+}
+
+/// Serializes derived-library work so a cancelled rebuild never competes with its replacement.
+private actor LibraryDerivedStateWorker {
+    func rebuild(from input: LibraryDerivedStateInput) -> LibraryDerivedState? {
+        guard !Task.isCancelled else { return nil }
+        guard let sources = sources(from: input) else { return nil }
+        let albumsSource = sources.albums
+        let artistsSource = sources.artists
+        let albumGenreOptions = AlbumGenreFilterOption.options(from: albumsSource)
+        guard !Task.isCancelled else { return nil }
+        let effectiveSelectedAlbumGenre = AlbumGenreFilterOption.selectedGenre(
+            input.selectedAlbumGenre,
+            in: albumGenreOptions
+        )
+        guard let filteredAlbums = filteredAlbums(
+            albumsSource,
+            selectedGenre: effectiveSelectedAlbumGenre
+        ) else { return nil }
+
+        guard !Task.isCancelled else { return nil }
+        let albumCacheSort = LibraryRepository.albumCacheSort(for: input.albumSort.rawValue)
+        let requestedAlbumDirection: LibraryDatabaseSortDirection = !input.albumSort.allowsDirection
+            ? .ascending
+            : (input.albumDirection == .ascending ? .ascending : .descending)
+        let sortedAlbums = LibraryRepository.locallySortedAlbums(
+            filteredAlbums,
+            sort: albumCacheSort.0,
+            direction: requestedAlbumDirection
+        )
+        guard !Task.isCancelled else { return nil }
+
+        let albumGroups: [(letter: String, items: [Album])]
+        switch input.albumSort {
+        case .alphabetical:
+            albumGroups = LibraryGrouping.groupByFirstLetter(
+                sortedAlbums,
+                name: \.name,
+                sortName: \.sortName
+            )
+        case .artist:
+            albumGroups = LibraryGrouping.groupAlbumsByArtistFirstLetter(sortedAlbums)
+        default:
+            albumGroups = sortedAlbums.isEmpty ? [] : [(letter: "", items: sortedAlbums)]
+        }
+        guard !Task.isCancelled else { return nil }
+
+        guard let albumCountByArtist = albumCountsByArtist(
+            in: albumsSource,
+            artistCount: artistsSource.count
+        ) else { return nil }
+
+        let sortedArtists: [Artist]
+        switch input.artistSort {
+        case .alphabetical:
+            guard !Task.isCancelled else { return nil }
+            sortedArtists = LibraryRepository.locallySortedArtists(artistsSource)
+            guard !Task.isCancelled else { return nil }
+        case .frequent:
+            guard let playCounts = playCountsByArtist(
+                in: input.libraryAlbums,
+                artistCount: artistsSource.count
+            ) else { return nil }
+            sortedArtists = artistsSource.sorted {
+                (playCounts[$0.id] ?? 0) > (playCounts[$1.id] ?? 0)
+            }
+            guard !Task.isCancelled else { return nil }
+        }
+
+        let artistGroups: [(letter: String, items: [Artist])]
+        if input.artistSort == .alphabetical {
+            artistGroups = LibraryGrouping.groupByFirstLetter(
+                sortedArtists,
+                name: \.name,
+                sortName: \.sortName
+            )
+            guard !Task.isCancelled else { return nil }
+        } else {
+            let items = input.artistDirection == .descending
+                ? sortedArtists
+                : Array(sortedArtists.reversed())
+            artistGroups = items.isEmpty ? [] : [(letter: "", items: items)]
+        }
+
+        guard !Task.isCancelled else { return nil }
+        return LibraryDerivedState(
+            albumGroups: albumGroups,
+            albumGenreOptions: albumGenreOptions,
+            artistGroups: artistGroups,
+            albumCountByArtist: albumCountByArtist
+        )
+    }
+
+    private func sources(from input: LibraryDerivedStateInput) -> (albums: [Album], artists: [Artist])? {
+        guard input.isOffline else {
+            return Task.isCancelled ? nil : (input.libraryAlbums, input.libraryArtists)
+        }
+
+        var downloadedAlbumIds: Set<String> = []
+        downloadedAlbumIds.reserveCapacity(input.downloadedAlbums.count)
+        for (index, album) in input.downloadedAlbums.enumerated() {
+            if index.isMultiple(of: 64), Task.isCancelled { return nil }
+            downloadedAlbumIds.insert(album.albumId)
+        }
+
+        let albums: [Album]
+        if input.libraryAlbums.isEmpty {
+            var converted: [Album] = []
+            converted.reserveCapacity(input.downloadedAlbums.count)
+            for (index, album) in input.downloadedAlbums.enumerated() {
+                if index.isMultiple(of: 16), Task.isCancelled { return nil }
+                converted.append(album.asAlbum())
+            }
+            albums = converted
+        } else {
+            var available: [Album] = []
+            available.reserveCapacity(input.downloadedAlbums.count)
+            var coveredIds: Set<String> = []
+            coveredIds.reserveCapacity(input.downloadedAlbums.count)
+            for (index, album) in input.libraryAlbums.enumerated() {
+                if index.isMultiple(of: 64), Task.isCancelled { return nil }
+                guard downloadedAlbumIds.contains(album.id) else { continue }
+                available.append(album)
+                coveredIds.insert(album.id)
+            }
+            for (index, album) in input.downloadedAlbums.enumerated() {
+                if index.isMultiple(of: 16), Task.isCancelled { return nil }
+                guard !coveredIds.contains(album.albumId) else { continue }
+                available.append(album.asAlbum())
+            }
+            albums = available
+        }
+
+        var downloadedArtistNames: Set<String> = []
+        downloadedArtistNames.reserveCapacity(input.downloadedArtists.count)
+        for (index, artist) in input.downloadedArtists.enumerated() {
+            if index.isMultiple(of: 64), Task.isCancelled { return nil }
+            downloadedArtistNames.insert(artist.name)
+        }
+
+        let artists: [Artist]
+        if input.libraryArtists.isEmpty {
+            var converted: [Artist] = []
+            converted.reserveCapacity(input.downloadedArtists.count)
+            for (index, artist) in input.downloadedArtists.enumerated() {
+                if index.isMultiple(of: 64), Task.isCancelled { return nil }
+                converted.append(artist.asArtist())
+            }
+            artists = converted
+        } else {
+            var available: [Artist] = []
+            available.reserveCapacity(input.downloadedArtists.count)
+            var coveredNames: Set<String> = []
+            coveredNames.reserveCapacity(input.downloadedArtists.count)
+            for (index, artist) in input.libraryArtists.enumerated() {
+                if index.isMultiple(of: 64), Task.isCancelled { return nil }
+                guard downloadedArtistNames.contains(artist.name) else { continue }
+                available.append(artist)
+                coveredNames.insert(artist.name)
+            }
+            for (index, artist) in input.downloadedArtists.enumerated() {
+                if index.isMultiple(of: 64), Task.isCancelled { return nil }
+                guard !coveredNames.contains(artist.name) else { continue }
+                available.append(artist.asArtist())
+            }
+            artists = available
+        }
+
+        return Task.isCancelled ? nil : (albums, artists)
+    }
+
+    private func filteredAlbums(_ albums: [Album], selectedGenre: String?) -> [Album]? {
+        guard let selectedGenre else { return Task.isCancelled ? nil : albums }
+        var filtered: [Album] = []
+        filtered.reserveCapacity(albums.count)
+        for (index, album) in albums.enumerated() {
+            if index.isMultiple(of: 64), Task.isCancelled { return nil }
+            if AlbumGenreFilterOption.matches(album, selectedGenre: selectedGenre) {
+                filtered.append(album)
+            }
+        }
+        return Task.isCancelled ? nil : filtered
+    }
+
+    private func albumCountsByArtist(in albums: [Album], artistCount: Int) -> [String: Int]? {
+        var counts: [String: Int] = [:]
+        counts.reserveCapacity(min(albums.count, artistCount))
+        for (index, album) in albums.enumerated() {
+            if index.isMultiple(of: 64), Task.isCancelled { return nil }
+            guard let artistId = album.artistId, !artistId.isEmpty else { continue }
+            counts[artistId, default: 0] += 1
+        }
+        return Task.isCancelled ? nil : counts
+    }
+
+    private func playCountsByArtist(in albums: [Album], artistCount: Int) -> [String: Int]? {
+        var counts: [String: Int] = [:]
+        counts.reserveCapacity(artistCount)
+        for (index, album) in albums.enumerated() {
+            if index.isMultiple(of: 64), Task.isCancelled { return nil }
+            guard let artistId = album.artistId, !artistId.isEmpty else { continue }
+            counts[artistId, default: 0] += album.playCount ?? 0
+        }
+        return Task.isCancelled ? nil : counts
+    }
+}
+
 struct LibraryView: View {
     @ObservedObject var libraryStore = LibraryStore.shared
     @ObservedObject var offlineMode = OfflineModeService.shared
@@ -33,14 +258,12 @@ struct LibraryView: View {
     @State private var navigateToAlbum: Album?
     @State private var navigateToArtist: Artist?
     @State private var currentToast: ShelveToast?
-    @State private var albumGroups: [(letter: String, items: [Album])] = []
-    @State private var albumGenreOptions: [AlbumGenreFilterOption] = []
-    @State private var artistGroups: [(letter: String, items: [Artist])] = []
-    @State private var albumCountByArtist: [String: Int] = [:]
+    @State private var derivedState = LibraryDerivedState()
     @ObservedObject private var downloadStore = DownloadStore.shared
     @State private var albumToDeleteDownloads: Album?
     @State private var artistToDeleteDownloads: Artist?
     @State private var rebuildTask: Task<Void, Never>?
+    @State private var rebuildWorker = LibraryDerivedStateWorker()
     @State private var playbackTask: Task<Void, Never>?
     @State private var isPreparingPlayback = false
 
@@ -52,6 +275,11 @@ struct LibraryView: View {
         let artistBadgeNames: Set<String>
         let songIds: Set<String>
     }
+
+    private var albumGroups: [(letter: String, items: [Album])] { derivedState.albumGroups }
+    private var albumGenreOptions: [AlbumGenreFilterOption] { derivedState.albumGenreOptions }
+    private var artistGroups: [(letter: String, items: [Artist])] { derivedState.artistGroups }
+    private var albumCountByArtist: [String: Int] { derivedState.albumCountByArtist }
 
     @ViewBuilder
     private var segmentContent: some View {
@@ -194,10 +422,16 @@ struct LibraryView: View {
     private var stackContent: some View {
         stackBase
         .onAppear { rebuildGroups() }
-        .onReceive(libraryStore.$albums) { _ in Task { @MainActor in rebuildGroups() } }
-        .onReceive(libraryStore.$artists) { _ in Task { @MainActor in rebuildGroups() } }
-        .onReceive(downloadStore.$albums) { _ in Task { @MainActor in rebuildGroups() } }
-        .onReceive(downloadStore.$artists) { _ in Task { @MainActor in rebuildGroups() } }
+        .onReceive(libraryStore.$albums) { _ in rebuildGroups(coalescingBackgroundUpdates: true) }
+        .onReceive(libraryStore.$artists) { _ in rebuildGroups(coalescingBackgroundUpdates: true) }
+        .onReceive(downloadStore.$albums) { _ in
+            guard offlineMode.isOffline else { return }
+            rebuildGroups(coalescingBackgroundUpdates: true)
+        }
+        .onReceive(downloadStore.$artists) { _ in
+            guard offlineMode.isOffline else { return }
+            rebuildGroups(coalescingBackgroundUpdates: true)
+        }
         .onChange(of: offlineMode.isOffline) { _, isOffline in
             if isOffline {
                 if sortOption.requiresServer { sortOptionRaw = AlbumSortOption.alphabetical.rawValue }
@@ -206,7 +440,8 @@ struct LibraryView: View {
             rebuildGroups()
         }
         .onReceive(NotificationCenter.default.publisher(for: .downloadsLibraryChanged)) { _ in
-            rebuildGroups()
+            guard offlineMode.isOffline else { return }
+            rebuildGroups(coalescingBackgroundUpdates: true)
         }
         .onChange(of: albumDirectionRaw) { _, _ in rebuildGroups() }
         .onChange(of: albumGenreFilterRaw) { _, _ in rebuildGroups() }
@@ -227,114 +462,41 @@ struct LibraryView: View {
         }
     }
 
-    private func rebuildGroups() {
+    private func rebuildGroups(coalescingBackgroundUpdates: Bool = false) {
         rebuildTask?.cancel()
 
-        let albumsSource: [Album]
-        let artistsSource: [Artist]
-        if offlineMode.isOffline {
-            let snapshot = downloadedLibrarySnapshot
-            albumsSource = displayAlbums(using: snapshot)
-            artistsSource = displayArtists(using: snapshot)
-        } else {
-            albumsSource = libraryStore.albums
-            artistsSource = libraryStore.artists
-        }
-        let libraryAlbums = libraryStore.albums
-        let sortOpt = sortOption
-        let albumDir = albumDirection
-        let selectedAlbumGenre = showGenreFilter
-            ? AlbumGenreFilterOption.normalizedGenre(albumGenreFilterRaw)
-            : nil
-        let artistSort = artistSortOption
-        let artistDir = artistDirection
+        let input = LibraryDerivedStateInput(
+            isOffline: offlineMode.isOffline,
+            libraryAlbums: libraryStore.albums,
+            libraryArtists: libraryStore.artists,
+            downloadedAlbums: downloadStore.albums,
+            downloadedArtists: downloadStore.artists,
+            albumSort: sortOption,
+            albumDirection: albumDirection,
+            selectedAlbumGenre: showGenreFilter
+                ? AlbumGenreFilterOption.normalizedGenre(albumGenreFilterRaw)
+                : nil,
+            artistSort: artistSortOption,
+            artistDirection: artistDirection
+        )
+        let worker = rebuildWorker
 
-        rebuildTask = Task.detached(priority: .userInitiated) {
-            let calculatedAlbumGenreOptions = AlbumGenreFilterOption.options(from: albumsSource)
-            let effectiveSelectedAlbumGenre = AlbumGenreFilterOption.selectedGenre(
-                selectedAlbumGenre,
-                in: calculatedAlbumGenreOptions
-            )
-            let filteredAlbums: [Album]
-            if let effectiveSelectedAlbumGenre {
-                filteredAlbums = albumsSource.filter {
-                    AlbumGenreFilterOption.matches($0, selectedGenre: effectiveSelectedAlbumGenre)
+        rebuildTask = Task.detached(priority: .utility) {
+            if coalescingBackgroundUpdates {
+                do {
+                    try await Task.sleep(nanoseconds: 120_000_000)
+                } catch {
+                    return
                 }
-            } else {
-                filteredAlbums = albumsSource
             }
-
-            // 1. Alben im Hintergrund gruppieren
-            let albumCacheSort = LibraryRepository.albumCacheSort(for: sortOpt.rawValue)
-            let requestedAlbumDirection: LibraryDatabaseSortDirection = !sortOpt.allowsDirection
-                ? .ascending
-                : (albumDir == .ascending ? .ascending : .descending)
-            let sortedAlbums = LibraryRepository.locallySortedAlbums(
-                filteredAlbums,
-                sort: albumCacheSort.0,
-                direction: requestedAlbumDirection
-            )
-            let calculatedAlbumGroups: [(letter: String, items: [Album])]
-            switch sortOpt {
-            case .alphabetical:
-                calculatedAlbumGroups = LibraryGrouping.groupByFirstLetter(
-                    sortedAlbums,
-                    name: \.name,
-                    sortName: \.sortName
-                )
-            case .artist:
-                calculatedAlbumGroups = LibraryGrouping.groupAlbumsByArtistFirstLetter(sortedAlbums)
-            default:
-                calculatedAlbumGroups = sortedAlbums.isEmpty ? [] : [(letter: "", items: sortedAlbums)]
-            }
-
-            let calculatedAlbumCountByArtist: [String: Int] = {
-                var counts: [String: Int] = [:]
-                counts.reserveCapacity(min(albumsSource.count, artistsSource.count))
-                for album in albumsSource {
-                    guard let artistId = album.artistId, !artistId.isEmpty else { continue }
-                    counts[artistId, default: 0] += 1
-                }
-                return counts
-            }()
-
-            // 2. Künstler im Hintergrund sortieren
-            let sortedArtists: [Artist]
-            switch artistSort {
-            case .alphabetical:
-                sortedArtists = LibraryRepository.locallySortedArtists(artistsSource)
-            case .frequent:
-                var counts: [String: Int] = [:]
-                counts.reserveCapacity(artistsSource.count)
-                for album in libraryAlbums {
-                    guard let artistId = album.artistId, !artistId.isEmpty else { continue }
-                    counts[artistId, default: 0] += album.playCount ?? 0
-                }
-                sortedArtists = artistsSource.sorted { (counts[$0.id] ?? 0) > (counts[$1.id] ?? 0) }
-            }
-
-            // 3. Künstler im Hintergrund gruppieren
-            let calculatedArtistGroups: [(letter: String, items: [Artist])]
-            if artistSort == .alphabetical {
-                calculatedArtistGroups = LibraryGrouping.groupByFirstLetter(
-                    sortedArtists,
-                    name: \.name,
-                    sortName: \.sortName
-                )
-            } else {
-                let items = artistDir == .descending
-                    ? sortedArtists
-                    : Array(sortedArtists.reversed())
-                calculatedArtistGroups = items.isEmpty ? [] : [(letter: "", items: items)]
-            }
-
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled,
+                  let result = await worker.rebuild(from: input),
+                  !Task.isCancelled
+            else { return }
 
             await MainActor.run {
-                self.albumGroups = calculatedAlbumGroups
-                self.albumGenreOptions = calculatedAlbumGenreOptions
-                self.artistGroups = calculatedArtistGroups
-                self.albumCountByArtist = calculatedAlbumCountByArtist
+                guard !Task.isCancelled else { return }
+                self.derivedState = result
             }
         }
     }
