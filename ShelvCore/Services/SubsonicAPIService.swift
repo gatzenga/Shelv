@@ -1209,7 +1209,27 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         return Array(songs.sorted { ($0.playCount ?? 0) > ($1.playCount ?? 0) }.prefix(50))
     }
 
-    func authLogin(server: SubsonicServer, password: String) async throws -> String {
+    /// Validates credentials through the standard Subsonic API. Navidrome's
+    /// native login is used only as an optional source for its stable user UUID.
+    /// Every other server receives a deterministic account identity derived
+    /// from its canonical primary URL and username.
+    func validatedStableId(server: SubsonicServer, password: String) async throws -> String {
+        let info = try await ping(server: server, password: password)
+        if Self.isNavidrome(serverType: info.serverType),
+           let nativeId = try? await navidromeUserId(server: server, password: password),
+           !nativeId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return nativeId
+        }
+        return server.derivedStableId
+    }
+
+    nonisolated private static func isNavidrome(serverType: String?) -> Bool {
+        serverType?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .localizedCaseInsensitiveContains("navidrome") == true
+    }
+
+    private func navidromeUserId(server: SubsonicServer, password: String) async throws -> String {
         var base = server.activeBaseURL
         if base.hasSuffix("/") { base.removeLast() }
         guard let url = URL(string: "\(base)/auth/login") else { throw SubsonicAPIError.invalidURL }
@@ -1217,7 +1237,11 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(["username": server.username, "password": password])
-        let (data, _) = try await session.data(for: request)
+        let (data, response) = try await session.data(for: request)
+        if let http = response as? HTTPURLResponse,
+           !(200...299).contains(http.statusCode) {
+            throw SubsonicAPIError.httpError(http.statusCode)
+        }
         struct AuthResponse: Decodable { let id: String }
         return try decoder.decode(AuthResponse.self, from: data).id
     }

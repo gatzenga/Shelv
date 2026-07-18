@@ -59,7 +59,7 @@ struct Shelv_DesktopApp: App {
                     for server in serverStore.servers where server.remoteUserId == nil {
                         guard let pw = await serverStore.loadPassword(for: server) else { continue }
                         do {
-                            let uid = try await api.authLogin(server: server, password: pw)
+                            let uid = try await api.validatedStableId(server: server, password: pw)
                             var updated = server
                             updated.remoteUserId = uid
                             _ = await serverStore.update(server: updated, password: nil)

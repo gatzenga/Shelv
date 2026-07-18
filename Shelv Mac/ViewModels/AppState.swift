@@ -93,8 +93,10 @@ class AppState: ObservableObject {
             secondaryBaseURL: trimmedSecondary.isEmpty ? nil : trimmedSecondary
         )
         do {
-            _ = try await api.ping(server: server, password: password)
-            server.remoteUserId = try await api.authLogin(server: server, password: password)
+            server.remoteUserId = try await api.validatedStableId(
+                server: server,
+                password: password
+            )
             guard await serverStore.add(server: server, password: password) else {
                 errorMessage = String(localized: "credential_storage_failed")
                 return false

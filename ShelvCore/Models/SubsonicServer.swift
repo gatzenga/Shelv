@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 nonisolated enum ServerURLSlot: String, Codable, Sendable {
     case primary
@@ -19,6 +20,13 @@ nonisolated struct SubsonicServer: Identifiable, Codable, Sendable {
     }
 
     var stableId: String { remoteUserId ?? "" }
+
+    /// Stable account identity for standard Subsonic servers that do not expose
+    /// Navidrome's native user UUID. The password is deliberately excluded so a
+    /// credential change does not detach downloads, play history, or sync data.
+    var derivedStableId: String {
+        Self.derivedStableId(baseURL: baseURL, username: username)
+    }
 
     var secondaryURL: String? {
         let trimmed = secondaryBaseURL?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -69,6 +77,38 @@ nonisolated struct SubsonicServer: Identifiable, Codable, Sendable {
         guard !trimmed.isEmpty else { return "" }
         guard !trimmed.contains("://") else { return trimmed }
         return "https://\(trimmed)"
+    }
+
+    static func derivedStableId(baseURL: String, username: String) -> String {
+        let canonicalURL = canonicalIdentityURL(baseURL)
+        let canonicalUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
+        let source = "\(canonicalURL)\n\(canonicalUsername)"
+        let digest = SHA256.hash(data: Data(source.utf8))
+        return "subsonic-" + digest.map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func canonicalIdentityURL(_ value: String) -> String {
+        let normalized = normalizedServerURL(value)
+        guard var components = URLComponents(string: normalized) else {
+            return normalized.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        }
+
+        components.scheme = components.scheme?.lowercased()
+        components.host = components.host?.lowercased()
+        if (components.scheme == "https" && components.port == 443)
+            || (components.scheme == "http" && components.port == 80) {
+            components.port = nil
+        }
+        components.query = nil
+        components.fragment = nil
+
+        var path = components.percentEncodedPath
+        while path.count > 1 && path.hasSuffix("/") {
+            path.removeLast()
+        }
+        if path == "/" { path = "" }
+        components.percentEncodedPath = path
+        return components.string ?? normalized
     }
 
     enum CodingKeys: String, CodingKey {
