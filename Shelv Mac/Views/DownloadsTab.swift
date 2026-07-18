@@ -116,6 +116,7 @@ struct DownloadsTab: View {
     @ObservedObject var offlineMode = OfflineModeService.shared
     @ObservedObject private var keepOffline = KeepLibraryOfflineService.shared
     @ObservedObject private var downloadStore = DownloadStore.shared
+    @ObservedObject private var downloadActivity = DownloadActivityStore.shared
     @AppStorage("enableDownloads") private var enableDownloads = true
     @AppStorage("offlineModeEnabled") private var offlineModeEnabled = false
     @AppStorage("maxBulkDownloadStorageGB") private var maxBulkStorageGB = 10
@@ -127,7 +128,7 @@ struct DownloadsTab: View {
 
     private var hasDownloadsToClear: Bool {
         !downloadStore.songs.isEmpty
-        || downloadStore.batchProgress != nil
+        || downloadActivity.batchProgress != nil
         || !downloadStore.inFlightProgress.isEmpty
         || !downloadStore.inFlightStates.isEmpty
     }

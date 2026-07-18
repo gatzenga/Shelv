@@ -5,9 +5,9 @@ struct DownloadedArtistAvailability: Equatable {
     let isCatalogDownloaded: Bool
     let isBadgeDownloaded: Bool
 
-    fileprivate init(snapshot: DownloadUIStateSnapshot, artistName: String) {
-        isCatalogDownloaded = snapshot.artistNames.contains(artistName)
-        isBadgeDownloaded = snapshot.artistBadgeNames.contains(artistName)
+    fileprivate init(isCatalogDownloaded: Bool, isBadgeDownloaded: Bool) {
+        self.isCatalogDownloaded = isCatalogDownloaded
+        self.isBadgeDownloaded = isBadgeDownloaded
     }
 }
 
@@ -27,7 +27,7 @@ struct AlbumDownloadStatusReader<Content: View>: View {
         self.totalSongs = totalSongs
         self.content = content
         _downloadedCount = State(
-            initialValue: DownloadUIStateHub.shared.currentSnapshot.albumDownloadedCounts[albumID] ?? 0
+            initialValue: DownloadUIStateHub.shared.albumDownloadedCount(albumID)
         )
     }
 
@@ -59,8 +59,10 @@ struct ArtistDownloadAvailabilityReader<Content: View>: View {
         self.content = content
         _availability = State(
             initialValue: DownloadedArtistAvailability(
-                snapshot: DownloadUIStateHub.shared.currentSnapshot,
-                artistName: artistName
+                isCatalogDownloaded: DownloadUIStateHub.shared
+                    .isCatalogArtistDownloaded(artistName),
+                isBadgeDownloaded: DownloadUIStateHub.shared
+                    .isArtistBadgeDownloaded(artistName)
             )
         )
     }
@@ -68,8 +70,18 @@ struct ArtistDownloadAvailabilityReader<Content: View>: View {
     var body: some View {
         content(availability)
             .onReceive(
-                DownloadUIStateHub.shared.snapshots
-                    .map { DownloadedArtistAvailability(snapshot: $0, artistName: artistName) }
+                Publishers.CombineLatest(
+                    DownloadUIStateHub.shared
+                        .catalogArtistAvailabilityPublisher(name: artistName),
+                    DownloadUIStateHub.shared
+                        .artistAvailabilityPublisher(name: artistName)
+                )
+                    .map { values in
+                        DownloadedArtistAvailability(
+                            isCatalogDownloaded: values.0,
+                            isBadgeDownloaded: values.1
+                        )
+                    }
                     .removeDuplicates()
             ) { availability = $0 }
     }

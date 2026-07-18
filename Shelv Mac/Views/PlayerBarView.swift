@@ -181,7 +181,6 @@ private struct NativeMacLinearSlider: View {
 struct PlayerBarView: View {
     @EnvironmentObject var appState: AppState
     @ObservedObject var libraryStore = LibraryViewModel.shared
-    @ObservedObject var downloadStore = DownloadStore.shared
     @ObservedObject private var player = AudioPlayerService.shared
     @ObservedObject private var radioStore = RadioStationStore.shared
 

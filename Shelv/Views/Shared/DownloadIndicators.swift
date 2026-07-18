@@ -120,7 +120,7 @@ struct AlbumDownloadBadge: View {
     init(albumId: String) {
         self.albumId = albumId
         _isDownloaded = State(
-            initialValue: DownloadUIStateHub.shared.currentSnapshot.albumIDs.contains(albumId)
+            initialValue: DownloadUIStateHub.shared.isAlbumDownloaded(albumId)
         )
     }
 

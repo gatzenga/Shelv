@@ -1,6 +1,6 @@
 import Foundation
 
-final class LocalArtworkIndex {
+nonisolated final class LocalArtworkIndex: @unchecked Sendable {
     static let shared = LocalArtworkIndex()
     private let lock = NSLock()
     private var index: [String: String] = [:]
@@ -19,11 +19,16 @@ final class LocalArtworkIndex {
         lock.unlock()
     }
 
+    func remove(path: String) {
+        lock.lock()
+        index = index.filter { $0.value != path }
+        lock.unlock()
+    }
+
     func localPath(for artId: String) -> String? {
         lock.lock()
-        let p = index[artId]
+        let path = index[artId]
         lock.unlock()
-        guard let p, FileManager.default.fileExists(atPath: p) else { return nil }
-        return p
+        return path
     }
 }

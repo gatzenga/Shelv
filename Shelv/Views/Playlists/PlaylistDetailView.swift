@@ -43,7 +43,7 @@ struct PlaylistDetailView: View {
         )
         _trackedPlaylistSongIDs = State(initialValue: trackedSongIDs)
         _downloadedSongIDs = State(
-            initialValue: DownloadUIStateHub.shared.currentSnapshot.songIDs.intersection(trackedSongIDs)
+            initialValue: DownloadUIStateHub.shared.downloadedSongIDs(in: trackedSongIDs)
         )
     }
 
@@ -419,8 +419,9 @@ struct PlaylistDetailView: View {
             if !isMarked && !offlineMode.isOffline {
                 Button {
                     haptic()
-                    let downloadedSongIDs = DownloadUIStateHub.shared.currentSnapshot.songIDs
-                    let missing = songs.filter { !downloadedSongIDs.contains($0.id) }
+                    let missing = songs.filter {
+                        !DownloadUIStateHub.shared.isSongDownloaded($0.id)
+                    }
                     if !missing.isEmpty { downloadStore.enqueueSongs(missing) }
                     downloadStore.addOfflinePlaylist(playlist.id, songIds: songs.map(\.id))
                     currentToast = ShelveToast(message: String(localized: "download_started"))
@@ -441,8 +442,9 @@ struct PlaylistDetailView: View {
             if isMarked && remaining > 0 && !offlineMode.isOffline {
                 Button {
                     haptic()
-                    let downloadedSongIDs = DownloadUIStateHub.shared.currentSnapshot.songIDs
-                    let missing = songs.filter { !downloadedSongIDs.contains($0.id) }
+                    let missing = songs.filter {
+                        !DownloadUIStateHub.shared.isSongDownloaded($0.id)
+                    }
                     if !missing.isEmpty { downloadStore.enqueueSongs(missing) }
                     downloadStore.syncPlaylistSongIds(playlist.id, songIds: songs.map(\.id))
                     currentToast = ShelveToast(message: String(localized: "download_started"))
@@ -487,7 +489,7 @@ struct PlaylistDetailView: View {
             let allSongs = loaded.songs ?? []
             originalRanks = Dictionary(allSongs.enumerated().map { ($1.id, $0 + 1) }, uniquingKeysWith: { first, _ in first })
             songs = offlineMode.isOffline
-                ? allSongs.filter { DownloadUIStateHub.shared.currentSnapshot.songIDs.contains($0.id) }
+                ? allSongs.filter { DownloadUIStateHub.shared.isSongDownloaded($0.id) }
                 : allSongs
             if !offlineMode.isOffline {
                 downloadStore.syncPlaylistSongIds(playlist.id, songIds: allSongs.map(\.id))
@@ -503,7 +505,7 @@ struct PlaylistDetailView: View {
         }
         let currentTrackedSongIDs = Set(downloadStore.playlistSongIds[playlist.id] ?? songs.map(\.id))
         trackedPlaylistSongIDs = currentTrackedSongIDs
-        downloadedSongIDs = DownloadUIStateHub.shared.currentSnapshot.songIDs.intersection(currentTrackedSongIDs)
+        downloadedSongIDs = DownloadUIStateHub.shared.downloadedSongIDs(in: currentTrackedSongIDs)
         isLoading = false
     }
 
