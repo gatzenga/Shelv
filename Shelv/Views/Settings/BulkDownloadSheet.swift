@@ -22,7 +22,7 @@ struct BulkDownloadSheet: View {
     @ObservedObject var libraryStore = LibraryStore.shared
     @EnvironmentObject var serverStore: ServerStore
     @EnvironmentObject var recapStore: RecapStore
-    @ObservedObject var downloadStore = DownloadStore.shared
+    private let downloadStore = DownloadStore.shared
     @ObservedObject private var keepOffline = KeepLibraryOfflineService.shared
     @ObservedObject private var offlineMode = OfflineModeService.shared
     @Environment(\.dismiss) private var dismiss

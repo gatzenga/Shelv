@@ -8,21 +8,20 @@ struct DownloadsSettingsView: View {
     @AppStorage("preventSleepDuringDownloads") private var preventSleepDuringDownloads = false
     @ObservedObject var offlineMode = OfflineModeService.shared
     @ObservedObject private var keepOffline = KeepLibraryOfflineService.shared
-    @ObservedObject private var downloadStore = DownloadStore.shared
+    private let downloadStore = DownloadStore.shared
     @ObservedObject private var downloadActivity = DownloadActivityStore.shared
 
     @State private var showBulkDownloadSheet = false
     @State private var showKeepLibraryOfflineSheet = false
     @State private var showDeleteAllDownloadsConfirm = false
     @State private var showDisableDownloadsConfirm = false
+    @State private var hasDownloads = !DownloadUIStateHub.shared.currentSnapshot.songIDs.isEmpty
+    @State private var hasActiveDownloads = false
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
     private var activeServerId: String? { serverStore.activeServer?.stableId }
     private var hasDownloadsToClear: Bool {
-        !downloadStore.songs.isEmpty
-        || downloadActivity.batchProgress != nil
-        || !downloadStore.inFlightProgress.isEmpty
-        || !downloadStore.inFlightStates.isEmpty
+        hasDownloads || hasActiveDownloads || downloadActivity.batchProgress != nil
     }
 
     private var maxAllowedStorageGB: Int {
@@ -162,7 +161,7 @@ struct DownloadsSettingsView: View {
             isPresented: $showDeleteAllDownloadsConfirm
         ) {
             Button(String(localized: "delete"), role: .destructive) {
-                DownloadStore.shared.deleteAll()
+                downloadStore.deleteAll()
             }
             Button(String(localized: "cancel"), role: .cancel) {}
         } message: {
@@ -187,6 +186,12 @@ struct DownloadsSettingsView: View {
             if let activeServerId {
                 keepOffline.prepare(serverId: activeServerId)
             }
+        }
+        .onReceive(DownloadUIStateHub.shared.hasDownloadsPublisher) { hasDownloads in
+            self.hasDownloads = hasDownloads
+        }
+        .onReceive(downloadStore.hasActiveDownloadsPublisher) { hasActiveDownloads in
+            self.hasActiveDownloads = hasActiveDownloads
         }
     }
 
@@ -298,8 +303,9 @@ private struct DownloadFormatRows: View {
 }
 
 private struct DownloadStatsCell: View {
-    @ObservedObject private var downloadStore = DownloadStore.shared
+    private let downloadStore = DownloadStore.shared
     @State private var stats: DownloadStorageStats?
+    @State private var storageState = DownloadUIStorageState(totalBytes: 0, songCount: 0)
 
     var body: some View {
         Section {
@@ -342,9 +348,10 @@ private struct DownloadStatsCell: View {
                 ProgressView()
             }
         }
-        .task { await refresh() }
-        .onChange(of: downloadStore.totalBytes) { _, _ in Task { await refresh() } }
-        .onChange(of: downloadStore.songs.count) { _, _ in Task { await refresh() } }
+        .task(id: storageState) { await refresh() }
+        .onReceive(DownloadUIStateHub.shared.authoritativeStorageStatePublisher) { state in
+            storageState = state
+        }
     }
 
     @MainActor private func refresh() async {
@@ -360,8 +367,12 @@ private struct DownloadStatsCell: View {
             },
             by: { $0.0 }
         ).mapValues { Set($0.map(\.1)) }
-        stats = await DownloadStore.shared.computeStats(albumSongCounts: counts,
-                                                       artistAlbumIds: artistAlbums)
+        let refreshedStats = await downloadStore.computeStats(
+            albumSongCounts: counts,
+            artistAlbumIds: artistAlbums
+        )
+        guard !Task.isCancelled else { return }
+        stats = refreshedStats
     }
 }
 

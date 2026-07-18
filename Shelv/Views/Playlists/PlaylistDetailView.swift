@@ -1,10 +1,11 @@
+import Combine
 import SwiftUI
 
 struct PlaylistDetailView: View {
     let playlist: Playlist
 
     @ObservedObject var libraryStore = LibraryStore.shared
-    @ObservedObject var downloadStore = DownloadStore.shared
+    private let downloadStore = DownloadStore.shared
     @ObservedObject var offlineMode = OfflineModeService.shared
     private let player = AudioPlayerService.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
@@ -28,7 +29,23 @@ struct PlaylistDetailView: View {
     @State private var currentToast: ShelveToast?
     @State private var isSyncing = false
     @State private var originalRanks: [String: Int] = [:]
+    @State private var isMarkedForOffline: Bool
+    @State private var trackedPlaylistSongIDs: Set<String>
+    @State private var downloadedSongIDs: Set<String>
     @Environment(\.dismiss) private var dismiss
+
+    init(playlist: Playlist) {
+        self.playlist = playlist
+        let downloadStore = DownloadStore.shared
+        let trackedSongIDs = Set(downloadStore.playlistSongIds[playlist.id] ?? [])
+        _isMarkedForOffline = State(
+            initialValue: downloadStore.offlinePlaylistIds.contains(playlist.id)
+        )
+        _trackedPlaylistSongIDs = State(initialValue: trackedSongIDs)
+        _downloadedSongIDs = State(
+            initialValue: DownloadUIStateHub.shared.currentSnapshot.songIDs.intersection(trackedSongIDs)
+        )
+    }
 
     private var displayedSongRows: [IndexedSongOccurrence] {
         let rows = IndexedSongOccurrence.rows(for: songs)
@@ -46,6 +63,13 @@ struct PlaylistDetailView: View {
 
     private var visiblePlaylistName: String {
         PlaylistNamePath(currentRawName).displayName
+    }
+
+    private var relevantDownloadedSongIDsPublisher: AnyPublisher<Set<String>, Never> {
+        let songIDs = trackedPlaylistSongIDs.isEmpty
+            ? Set(songs.map(\.id))
+            : trackedPlaylistSongIDs
+        return DownloadUIStateHub.shared.downloadedSongSubsetPublisher(songIDs: songIDs)
     }
 
     var body: some View {
@@ -314,9 +338,22 @@ struct PlaylistDetailView: View {
             songs = []
             Task { await loadSongs() }
         }
-        .onChange(of: downloadStore.songs.count) { _, _ in
-            guard offlineMode.isOffline else { return }
-            Task { await loadSongs() }
+        .onReceive(
+            downloadStore.$offlinePlaylistIds
+                .map { $0.contains(playlist.id) }
+                .removeDuplicates()
+        ) { isMarkedForOffline = $0 }
+        .onReceive(
+            downloadStore.$playlistSongIds
+                .map { Set($0[playlist.id] ?? []) }
+                .removeDuplicates()
+        ) { trackedPlaylistSongIDs = $0 }
+        .onReceive(relevantDownloadedSongIDsPublisher) { songIDs in
+            guard downloadedSongIDs != songIDs else { return }
+            downloadedSongIDs = songIDs
+            if offlineMode.isOffline {
+                Task { await loadSongs() }
+            }
         }
     }
 
@@ -384,13 +421,14 @@ struct PlaylistDetailView: View {
 
     @ViewBuilder
     private func downloadHeaderButtons() -> some View {
-        let isMarked = downloadStore.offlinePlaylistIds.contains(playlist.id)
-        let remaining = isMarked ? songs.filter { !downloadStore.isDownloaded(songId: $0.id) }.count : 0
+        let isMarked = isMarkedForOffline
+        let remaining = isMarked ? songs.filter { !downloadedSongIDs.contains($0.id) }.count : 0
         HStack(spacing: 10) {
             if !isMarked && !offlineMode.isOffline {
                 Button {
                     haptic()
-                    let missing = songs.filter { !downloadStore.isDownloaded(songId: $0.id) }
+                    let downloadedSongIDs = DownloadUIStateHub.shared.currentSnapshot.songIDs
+                    let missing = songs.filter { !downloadedSongIDs.contains($0.id) }
                     if !missing.isEmpty { downloadStore.enqueueSongs(missing) }
                     downloadStore.addOfflinePlaylist(
                         playlist.id,
@@ -415,7 +453,8 @@ struct PlaylistDetailView: View {
             if isMarked && remaining > 0 && !offlineMode.isOffline {
                 Button {
                     haptic()
-                    let missing = songs.filter { !downloadStore.isDownloaded(songId: $0.id) }
+                    let downloadedSongIDs = DownloadUIStateHub.shared.currentSnapshot.songIDs
+                    let missing = songs.filter { !downloadedSongIDs.contains($0.id) }
                     if !missing.isEmpty { downloadStore.enqueueSongs(missing) }
                     downloadStore.syncPlaylistSongIds(playlist.id, songIds: songs.map(\.id))
                     currentToast = ShelveToast(message: String(localized: "download_started"))
@@ -460,7 +499,7 @@ struct PlaylistDetailView: View {
             let allSongs = loaded.songs ?? []
             originalRanks = Dictionary(allSongs.enumerated().map { ($1.id, $0 + 1) }, uniquingKeysWith: { first, _ in first })
             songs = offlineMode.isOffline
-                ? allSongs.filter { downloadStore.isDownloaded(songId: $0.id) }
+                ? allSongs.filter { DownloadUIStateHub.shared.currentSnapshot.songIDs.contains($0.id) }
                 : allSongs
             if !offlineMode.isOffline {
                 downloadStore.syncPlaylistSongIds(playlist.id, songIds: allSongs.map(\.id))
@@ -474,6 +513,9 @@ struct PlaylistDetailView: View {
             }
             songs = ids.compactMap { id in downloadStore.songs.first { $0.songId == id }?.asSong() }
         }
+        let currentTrackedSongIDs = Set(downloadStore.playlistSongIds[playlist.id] ?? songs.map(\.id))
+        trackedPlaylistSongIDs = currentTrackedSongIDs
+        downloadedSongIDs = DownloadUIStateHub.shared.currentSnapshot.songIDs.intersection(currentTrackedSongIDs)
         isLoading = false
     }
 

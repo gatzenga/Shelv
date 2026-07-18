@@ -20,15 +20,19 @@ enum DownloadActionSymbols {
 /// Kompakter Status-Indikator für einen einzelnen Song: Ring während Download, Häkchen wenn fertig.
 struct DownloadStatusIcon: View {
     let songId: String
-    @ObservedObject private var downloadStore = DownloadStore.shared
-    @State private var progressTick = 0
+    private let downloadStore = DownloadStore.shared
+    @State private var state: DownloadState
     @State private var isSpinning = false
     @AppStorage("themeColor") private var themeColorName = "violet"
+
+    init(songId: String) {
+        self.songId = songId
+        _state = State(initialValue: DownloadStore.shared.downloadState(songId: songId))
+    }
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
     var body: some View {
-        let state = downloadStore.downloadState(songId: songId)
         Group {
             switch state {
             case .none:
@@ -60,10 +64,15 @@ struct DownloadStatusIcon: View {
             }
         }
         .onReceive(
-            DownloadStore.shared.progressPublisher
+            downloadStore.progressPublisher
                 .filter { $0.contains(songId) }
         ) { _ in
-            progressTick &+= 1
+            state = downloadStore.downloadState(songId: songId)
+        }
+        .onReceive(
+            DownloadUIStateHub.shared.songAvailabilityPublisher(songID: songId)
+        ) { _ in
+            state = downloadStore.downloadState(songId: songId)
         }
     }
 }
@@ -105,37 +114,64 @@ struct DeleteDownloadIcon: View {
 /// wenn mindestens ein Song lokal verfügbar ist.
 struct AlbumDownloadBadge: View {
     let albumId: String
-    @ObservedObject private var statusCache = DownloadStatusCache.shared
+    @State private var isDownloaded: Bool
     @AppStorage("themeColor") private var themeColorName = "violet"
 
+    init(albumId: String) {
+        self.albumId = albumId
+        _isDownloaded = State(
+            initialValue: DownloadUIStateHub.shared.currentSnapshot.albumIDs.contains(albumId)
+        )
+    }
+
     var body: some View {
-        if statusCache.albumIds.contains(albumId) {
-            Image(systemName: "arrow.down.circle.fill")
-                .font(.caption)
-                .foregroundStyle(.white)
-                .padding(4)
-                .background(AppTheme.color(for: themeColorName), in: Circle())
-                .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
+        Group {
+            if isDownloaded {
+                Image(systemName: "arrow.down.circle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.white)
+                    .padding(4)
+                    .background(AppTheme.color(for: themeColorName), in: Circle())
+                    .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
+            }
         }
+        .onReceive(
+            DownloadUIStateHub.shared.albumAvailabilityPublisher(albumID: albumId)
+        ) { isDownloaded = $0 }
     }
 }
 
 /// Badge für Playlist-Rows — zeigt an, dass die Playlist für den Offline-Modus markiert ist.
 struct PlaylistDownloadBadge: View {
     let playlistId: String
-    @ObservedObject private var downloadStore = DownloadStore.shared
+    private let downloadStore = DownloadStore.shared
+    @State private var isMarkedForOffline: Bool
     @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage("enableDownloads") private var enableDownloads = true
 
+    init(playlistId: String) {
+        self.playlistId = playlistId
+        _isMarkedForOffline = State(
+            initialValue: DownloadStore.shared.offlinePlaylistIds.contains(playlistId)
+        )
+    }
+
     var body: some View {
-        if enableDownloads && downloadStore.offlinePlaylistIds.contains(playlistId) {
-            Image(systemName: "arrow.down.circle.fill")
-                .font(.caption)
-                .foregroundStyle(.white)
-                .padding(4)
-                .background(AppTheme.color(for: themeColorName), in: Circle())
-                .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
+        Group {
+            if enableDownloads && isMarkedForOffline {
+                Image(systemName: "arrow.down.circle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.white)
+                    .padding(4)
+                    .background(AppTheme.color(for: themeColorName), in: Circle())
+                    .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
+            }
         }
+        .onReceive(
+            downloadStore.$offlinePlaylistIds
+                .map { $0.contains(playlistId) }
+                .removeDuplicates()
+        ) { isMarkedForOffline = $0 }
     }
 }
 

@@ -1,10 +1,11 @@
+import Combine
 import SwiftUI
 
 struct RecapView: View {
     @EnvironmentObject var recapStore: RecapStore
     @EnvironmentObject var serverStore: ServerStore
     @ObservedObject var libraryStore = LibraryStore.shared
-    @ObservedObject var downloadStore = DownloadStore.shared
+    private let downloadStore = DownloadStore.shared
     @ObservedObject var offlineMode = OfflineModeService.shared
     @Environment(\.dismiss) private var dismiss
     @AppStorage("themeColor") private var themeColorName = "violet"
@@ -20,6 +21,7 @@ struct RecapView: View {
     @State private var showDeleteConfirm = false
     @State private var currentToast: ShelveToast?
     @State private var entryToDeleteDownloads: RecapRegistryRecord?
+    @State private var offlinePlaylistIDs = DownloadStore.shared.offlinePlaylistIds
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
@@ -36,7 +38,7 @@ struct RecapView: View {
         // Im Offline-Modus nur Recap-Playlists anzeigen, die heruntergeladen sind —
         // ungeladene Recaps sind ohne Server unspielbar.
         return offlineMode.isOffline
-            ? typed.filter { downloadStore.offlinePlaylistIds.contains($0.playlistId) }
+            ? typed.filter { offlinePlaylistIDs.contains($0.playlistId) }
             : typed
     }
 
@@ -70,34 +72,39 @@ struct RecapView: View {
                     } else {
                         List {
                             ForEach(filteredEntries, id: \.playlistId) { entry in
-                                Button { selectedEntry = entry } label: {
-                                    recapRow(entry)
-                                }
-                                .buttonStyle(.plain)
-                                .listRowSeparator(.hidden)
-                                .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
-                                .listRowBackground(Color.clear)
-                                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                    Button {
-                                        haptic(); Task { await addRecapToQueue(entry) }
-                                    } label: { Image(systemName: "text.badge.plus") }
-                                    .tint(accentColor)
-                                    Button {
-                                        haptic(); Task { await playRecapNext(entry) }
-                                    } label: { Image(systemName: "text.insert") }
-                                    .tint(.orange)
-                                    if enableDownloads {
-                                        recapDownloadSwipe(entry)
+                                OfflinePlaylistAvailabilityReader(playlistID: entry.playlistId) { isMarkedForOffline in
+                                    Button { selectedEntry = entry } label: {
+                                        recapRow(entry)
                                     }
-                                }
-                                .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                                    Button {
-                                        entryToDelete = entry
-                                        showDeleteConfirm = true
-                                    } label: {
-                                        Image(systemName: "trash")
+                                    .buttonStyle(.plain)
+                                    .listRowSeparator(.hidden)
+                                    .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+                                    .listRowBackground(Color.clear)
+                                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                        Button {
+                                            haptic(); Task { await addRecapToQueue(entry) }
+                                        } label: { Image(systemName: "text.badge.plus") }
+                                        .tint(accentColor)
+                                        Button {
+                                            haptic(); Task { await playRecapNext(entry) }
+                                        } label: { Image(systemName: "text.insert") }
+                                        .tint(.orange)
+                                        if enableDownloads {
+                                            recapDownloadSwipe(
+                                                entry,
+                                                isMarkedForOffline: isMarkedForOffline
+                                            )
+                                        }
                                     }
-                                    .tint(.red)
+                                    .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                                        Button {
+                                            entryToDelete = entry
+                                            showDeleteConfirm = true
+                                        } label: {
+                                            Image(systemName: "trash")
+                                        }
+                                        .tint(.red)
+                                    }
                                 }
                             }
                         }
@@ -178,6 +185,14 @@ struct RecapView: View {
             if let first = enabledTypes.first, !enabledTypes.contains(segment) {
                 segment = first
             }
+        }
+        .onReceive(downloadStore.$offlinePlaylistIds.removeDuplicates()) { playlistIDs in
+            guard offlineMode.isOffline else { return }
+            offlinePlaylistIDs = playlistIDs
+        }
+        .onChange(of: offlineMode.isOffline) { _, isOffline in
+            guard isOffline else { return }
+            offlinePlaylistIDs = downloadStore.offlinePlaylistIds
         }
         .task(id: serverStore.activeServerID) {
             guard let sid = serverStore.activeServer?.stableId else { return }
@@ -293,8 +308,11 @@ struct RecapView: View {
     // MARK: - Swipe-Actions
 
     @ViewBuilder
-    private func recapDownloadSwipe(_ entry: RecapRegistryRecord) -> some View {
-        if downloadStore.offlinePlaylistIds.contains(entry.playlistId) {
+    private func recapDownloadSwipe(
+        _ entry: RecapRegistryRecord,
+        isMarkedForOffline: Bool
+    ) -> some View {
+        if isMarkedForOffline {
             Button {
                 haptic(); entryToDeleteDownloads = entry
             } label: { Image(systemName: DownloadActionSymbols.delete) }

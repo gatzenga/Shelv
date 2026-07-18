@@ -3,7 +3,7 @@ import SwiftUI
 struct AlbumDetailView: View {
     let album: Album
     @ObservedObject var libraryStore = LibraryStore.shared
-    @ObservedObject var downloadStore = DownloadStore.shared
+    private let downloadStore = DownloadStore.shared
     @ObservedObject var offlineMode = OfflineModeService.shared
     private let player = AudioPlayerService.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
@@ -225,7 +225,9 @@ struct AlbumDetailView: View {
         .task {
             await loadDetail()
         }
-        .onChange(of: downloadStore.songs.count) { _, _ in
+        .onReceive(
+            DownloadUIStateHub.shared.albumDownloadedCountPublisher(albumID: album.id)
+        ) { _ in
             guard offlineMode.isOffline else { return }
             populateFromLocal()
         }
@@ -301,7 +303,12 @@ struct AlbumDetailView: View {
                 }
 
                 if enableDownloads {
-                    downloadHeaderButtons()
+                    AlbumDownloadStatusReader(
+                        albumID: album.id,
+                        totalSongs: detail?.song?.count ?? album.songCount ?? 0
+                    ) { status in
+                        downloadHeaderButtons(status: status)
+                    }
                 }
             }
             .padding(.horizontal)
@@ -311,9 +318,7 @@ struct AlbumDetailView: View {
     }
 
     @ViewBuilder
-    private func downloadHeaderButtons() -> some View {
-        let total = detail?.song?.count ?? album.songCount ?? 0
-        let status = downloadStore.albumDownloadStatus(albumId: album.id, totalSongs: total)
+    private func downloadHeaderButtons(status: AlbumDownloadStatus) -> some View {
         HStack(spacing: 10) {
             switch status {
             case .none:
