@@ -131,6 +131,7 @@ struct RadioView: View {
                     MacRadioStationRow(
                         item: item,
                         isActive: player.currentRadioStation?.id == item.id,
+                        isPlaying: player.isPlaying,
                         isEditing: isEditingStations,
                         delete: { deleteItem = item }
                     ) {
@@ -163,12 +164,17 @@ struct RadioView: View {
                                 metadata: nil
                             )
                                 .overlay {
-                                    MacRadioNowPlayingOverlay(stationId: item.id, size: 150, cornerRadius: 10)
+                                    MacRadioNowPlayingOverlay(
+                                        isActive: player.currentRadioStation?.id == item.id,
+                                        isPlaying: player.isPlaying,
+                                        size: 150,
+                                        cornerRadius: 10
+                                    )
                                 }
                             Text(item.name)
                                 .font(.callout.weight(.semibold))
                                 .lineLimit(2)
-                                .frame(width: 150, alignment: .leading)
+                                .frame(width: 150, height: 34, alignment: .topLeading)
                         }
                     }
                     .buttonStyle(.plain)
@@ -202,6 +208,7 @@ struct RadioView: View {
 private struct MacRadioStationRow: View {
     let item: RadioStationDisplayItem
     let isActive: Bool
+    let isPlaying: Bool
     let isEditing: Bool
     let delete: () -> Void
     let play: () -> Void
@@ -211,7 +218,12 @@ private struct MacRadioStationRow: View {
         HStack(spacing: 12) {
             MacRadioStationArtworkView(item: item, size: 52, metadata: nil)
                 .overlay {
-                    MacRadioNowPlayingOverlay(stationId: item.id, size: 52, cornerRadius: 7)
+                    MacRadioNowPlayingOverlay(
+                        isActive: isActive,
+                        isPlaying: isPlaying,
+                        size: 52,
+                        cornerRadius: 7
+                    )
                 }
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.name)
@@ -254,13 +266,10 @@ private struct MacRadioStationRow: View {
 }
 
 private struct MacRadioNowPlayingOverlay: View {
-    let stationId: String
+    let isActive: Bool
+    let isPlaying: Bool
     let size: CGFloat
     let cornerRadius: CGFloat
-
-    @ObservedObject private var player = AudioPlayerService.shared
-
-    private var isActive: Bool { player.currentRadioStation?.id == stationId }
 
     var body: some View {
         if isActive {
@@ -271,7 +280,7 @@ private struct MacRadioNowPlayingOverlay: View {
                 Image(systemName: "speaker.wave.2.fill")
                     .font(.system(size: size * 0.3))
                     .foregroundStyle(.white)
-                    .symbolEffect(.variableColor.iterative.reversing, isActive: player.isPlaying)
+                    .symbolEffect(.variableColor.iterative.reversing, isActive: isPlaying)
             }
         }
     }
@@ -303,9 +312,10 @@ struct MacRadioStationArtworkView: View {
     @ViewBuilder
     private var fallbackArtwork: some View {
         if let coverArt = item.coverArt,
-           let url = SubsonicAPIService.shared.coverArtURL(id: coverArt, size: Int(size * 3)) {
+           !coverArt.isEmpty {
             CoverArtView(
-                url: url,
+                coverArtID: coverArt,
+                requestSize: Int(size * 3),
                 size: size,
                 cornerRadius: size > 80 ? 10 : 7,
                 reloadToken: reloadToken

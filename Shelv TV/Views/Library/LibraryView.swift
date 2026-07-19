@@ -273,7 +273,11 @@ struct LibraryView: View {
         indexLabel: @escaping (T) -> String?,
         @ViewBuilder card: @escaping (T) -> Card
     ) -> some View {
-        let groups = tvSectionIndexGroups(items, indexLabel: indexLabel)
+        let groups = tvRowAlignedSectionIndexGroups(
+            items,
+            columnCount: coverGridColumns.count,
+            indexLabel: indexLabel
+        )
 
         return ScrollView {
             LazyVGrid(columns: coverGridColumns, alignment: .leading, spacing: 50) {
@@ -421,6 +425,47 @@ func tvSectionIndexGroups<Item>(
     }
 
     return groups
+}
+
+func tvRowAlignedSectionIndexGroups<Item>(
+    _ items: [Item],
+    columnCount: Int,
+    rowsPerChunk: Int = 4,
+    indexLabel: (Item) -> String?
+) -> [TVSectionIndexGroup<Item>] {
+    guard !items.isEmpty, columnCount > 0 else { return [] }
+
+    let labels = items.map(indexLabel)
+    let hasIndexLabels = labels.contains { $0 != nil }
+    let chunkSize = columnCount * max(rowsPerChunk, 1)
+    var boundaries: [(offset: Int, label: String)] = [(0, labels[0] ?? "•")]
+
+    if hasIndexLabels {
+        for offset in labels.indices.dropFirst() where labels[offset] != labels[offset - 1] {
+            let rowStart = offset - (offset % columnCount)
+            let label = labels[offset] ?? "•"
+
+            if boundaries[boundaries.count - 1].offset == rowStart {
+                boundaries[boundaries.count - 1].label = label
+            } else {
+                boundaries.append((rowStart, label))
+            }
+        }
+    } else {
+        for offset in stride(from: chunkSize, to: items.count, by: chunkSize) {
+            boundaries.append((offset, "•"))
+        }
+    }
+
+    return boundaries.indices.map { index in
+        let start = boundaries[index].offset
+        let end = index + 1 < boundaries.count ? boundaries[index + 1].offset : items.count
+        return TVSectionIndexGroup(
+            id: index,
+            label: boundaries[index].label,
+            items: Array(items[start..<end])
+        )
+    }
 }
 
 @ViewBuilder

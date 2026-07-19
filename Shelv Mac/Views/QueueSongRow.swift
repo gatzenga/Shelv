@@ -12,7 +12,8 @@ struct QueueSongRow: View {
     var body: some View {
         HStack(spacing: 10) {
             CoverArtView(
-                url: song.coverArt.flatMap { SubsonicAPIService.shared.coverArtURL(id: $0, size: 80) },
+                coverArtID: song.coverArt,
+                requestSize: 80,
                 size: 36,
                 cornerRadius: 4
             )

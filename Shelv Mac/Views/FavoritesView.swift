@@ -55,7 +55,12 @@ struct FavoritesView: View {
                             LazyVGrid(columns: [GridItem(.adaptive(minimum: 130, maximum: 170), spacing: 16)], spacing: 20) {
                                 ForEach(visibleArtists) { artist in
                                     NavigationLink(value: artist) {
-                                        ArtistGridItem(artist: artist)
+                                        ArtistGridItem(
+                                            artist: artist,
+                                            isDownloaded: DownloadUIStateHub.shared
+                                                .isArtistBadgeDownloaded(artist.name)
+                                        )
+                                        .equatable()
                                     }
                                     .buttonStyle(.plain)
                                     .artistContextMenu(artist)
@@ -71,6 +76,7 @@ struct FavoritesView: View {
                                 ForEach(visibleAlbums) { album in
                                     NavigationLink(value: album) {
                                         AlbumGridItem(album: album)
+                                            .equatable()
                                     }
                                     .buttonStyle(.plain)
                                     .albumContextMenu(album)
@@ -82,7 +88,7 @@ struct FavoritesView: View {
 
                     if !visibleSongs.isEmpty {
                         FavoritesSection(title: String(localized: "tracks")) {
-                            VStack(spacing: 0) {
+                            LazyVStack(spacing: 0) {
                                 ForEach(Array(visibleSongs.enumerated()), id: \.element.id) { index, song in
                                     FavoriteSongRow(
                                         song: song,
@@ -139,17 +145,17 @@ struct FavoriteSongRow: View {
     let onRemoveFavorite: () -> Void
     let onAddToPlaylist: () -> Void
 
-    @ObservedObject private var downloadStore = DownloadStore.shared
-    @ObservedObject private var offlineMode = OfflineModeService.shared
-    @EnvironmentObject private var appState: AppState
-    @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
-    @AppStorage("enableDownloads") private var enableDownloads = true
+    private var offlineMode: OfflineModeService { .shared }
+    private var showInstantMixActions: Bool {
+        UserDefaults.standard.object(forKey: PersonalizationPreferenceKey.showInstantMixActions) as? Bool ?? true
+    }
     @State private var isHovered = false
 
     var body: some View {
         HStack(spacing: 12) {
             CoverArtView(
-                url: song.coverArt.flatMap { SubsonicAPIService.shared.coverArtURL(id: $0, size: 80) },
+                coverArtID: song.coverArt,
+                requestSize: 80,
                 size: 40,
                 cornerRadius: 6
             )
@@ -215,7 +221,7 @@ struct FavoriteSongRow: View {
             }
             Divider()
             Button(String(localized: "song_info_details")) {
-                appState.showSongInfo(song)
+                AppState.shared.showSongInfo(song)
             }
         }
     }

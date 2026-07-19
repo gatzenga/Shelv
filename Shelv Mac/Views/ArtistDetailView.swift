@@ -156,6 +156,7 @@ struct ArtistDetailView: View {
                                     ForEach(displayAlbums) { album in
                                         NavigationLink(value: album) {
                                             AlbumGridItem(album: album)
+                                                .equatable()
                                         }
                                         .buttonStyle(.plain)
                                         .albumContextMenu(album)
@@ -167,6 +168,7 @@ struct ArtistDetailView: View {
                                     ForEach(displayAlbums) { album in
                                         NavigationLink(value: album) {
                                             AlbumListRow(album: album)
+                                                .equatable()
                                         }
                                         .buttonStyle(.plain)
                                         .albumContextMenu(album)
@@ -182,6 +184,7 @@ struct ArtistDetailView: View {
                                         ForEach(displayAlbums) { album in
                                             NavigationLink(value: album) {
                                                 AlbumListRow(album: album)
+                                                    .equatable()
                                             }
                                             .buttonStyle(.plain)
                                             .albumContextMenu(album)

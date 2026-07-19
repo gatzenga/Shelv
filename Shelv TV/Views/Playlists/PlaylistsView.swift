@@ -88,7 +88,10 @@ struct PlaylistsView: View {
     }
 
     private var gridBody: some View {
-        let groups = tvSectionIndexGroups(displayPlaylists) { playlist in
+        let groups = tvRowAlignedSectionIndexGroups(
+            displayPlaylists,
+            columnCount: coverGridColumns.count
+        ) { playlist in
             sort == .alphabetical
                 ? LibrarySortKey.sectionLetter(displayName: playlist.name)
                 : nil

@@ -131,6 +131,35 @@ struct AlbumDownloadBadge: View {
     }
 }
 
+struct ArtistDownloadBadge: View {
+    let artistName: String
+    @State private var isDownloaded: Bool
+    @Environment(\.themeColor) private var themeColor
+
+    init(artistName: String) {
+        self.artistName = artistName
+        _isDownloaded = State(
+            initialValue: DownloadUIStateHub.shared.isArtistBadgeDownloaded(artistName)
+        )
+    }
+
+    var body: some View {
+        Group {
+            if isDownloaded {
+                Image(systemName: "arrow.down.circle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.white)
+                    .padding(4)
+                    .background(themeColor, in: Circle())
+                    .shadow(color: .black.opacity(0.3), radius: 2, y: 1)
+            }
+        }
+        .onReceive(
+            DownloadUIStateHub.shared.artistAvailabilityPublisher(name: artistName)
+        ) { isDownloaded = $0 }
+    }
+}
+
 struct PlaylistDownloadBadge: View {
     let playlistId: String
     @ObservedObject private var downloadStore = DownloadStore.shared

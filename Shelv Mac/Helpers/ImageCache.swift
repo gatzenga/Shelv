@@ -5,6 +5,10 @@ import AppKit
 
 struct CoverArtView: View {
     let url: URL?
+    private let coverArtID: String?
+    private let requestSize: Int?
+    private let cacheKey: String
+    private let cacheHost: String
     var size: CGFloat = 180
     var cornerRadius: CGFloat = 8
     var isCircle: Bool = false
@@ -25,14 +29,52 @@ struct CoverArtView: View {
         showsPlaceholder: Bool = true
     ) {
         self.url = url
+        self.coverArtID = Self.coverArtID(from: url)
+        self.requestSize = Self.requestSize(from: url)
+        self.cacheKey = url.map(ImageCacheService.stableCacheKey(for:)) ?? ""
+        self.cacheHost = url?.host ?? "local"
         self.size = size
         self.cornerRadius = cornerRadius
         self.isCircle = isCircle
         self.reloadToken = reloadToken
         self.showsPlaceholder = showsPlaceholder
-        if let url, let cached = ImageCacheService.shared.cachedImage(url: url) {
+        if !cacheKey.isEmpty, let cached = ImageCacheService.shared.cachedImage(key: cacheKey) {
             self._image = State(initialValue: cached)
-            self._loadedImageKey = State(initialValue: ImageCacheService.stableCacheKey(for: url))
+            self._loadedImageKey = State(initialValue: cacheKey)
+        } else {
+            self._image = State(initialValue: nil)
+            self._loadedImageKey = State(initialValue: nil)
+        }
+    }
+
+    init(
+        coverArtID: String?,
+        requestSize: Int,
+        size: CGFloat = 180,
+        cornerRadius: CGFloat = 8,
+        isCircle: Bool = false,
+        reloadToken: UUID? = nil,
+        showsPlaceholder: Bool = true
+    ) {
+        let host = SubsonicAPIService.shared.activeServer
+            .flatMap { URL(string: $0.activeBaseURL)?.host } ?? "local"
+        let cacheKey = coverArtID.map {
+            ImageCacheService.stableCacheKey(coverArtID: $0, size: requestSize, host: host)
+        } ?? ""
+
+        self.url = nil
+        self.coverArtID = coverArtID
+        self.requestSize = requestSize
+        self.cacheKey = cacheKey
+        self.cacheHost = host
+        self.size = size
+        self.cornerRadius = cornerRadius
+        self.isCircle = isCircle
+        self.reloadToken = reloadToken
+        self.showsPlaceholder = showsPlaceholder
+        if !cacheKey.isEmpty, let cached = ImageCacheService.shared.cachedImage(key: cacheKey) {
+            self._image = State(initialValue: cached)
+            self._loadedImageKey = State(initialValue: cacheKey)
         } else {
             self._image = State(initialValue: nil)
             self._loadedImageKey = State(initialValue: nil)
@@ -41,7 +83,7 @@ struct CoverArtView: View {
 
     var body: some View {
         let content = Group {
-            if let img = image, loadedImageKey == stableKey {
+            if let img = image, loadedImageKey == cacheKey {
                 Image(nsImage: img)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
@@ -83,30 +125,24 @@ struct CoverArtView: View {
         }
     }
 
-    // Stabiler Schlüssel aus Cover-ID + Grösse + Host — ohne rotierende Auth-Tokens.
-    private var stableKey: String {
-        guard let url else { return "" }
-        return ImageCacheService.stableCacheKey(for: url)
-    }
-
     private func triggerLoad() {
-        guard url != nil, loadedImageKey != stableKey else { return }
+        guard url != nil || coverArtID != nil, loadedImageKey != cacheKey else { return }
         let requestIdentifier = taskIdentifier
         Task { await loadImage(requestIdentifier: requestIdentifier) }
     }
 
     private func loadImage(requestIdentifier: String) async {
-        guard let url else {
+        guard url != nil || coverArtID != nil else {
             loadRequest.reset()
             image = nil
             loadedImageKey = nil
             return
         }
-        let key = stableKey
+        let key = cacheKey
         guard let attempt = loadRequest.beginIfIdle(requestIdentifier) else { return }
         defer { loadRequest.finish(requestIdentifier, attempt: attempt) }
 
-        if let hit = ImageCacheService.shared.cachedImage(url: url) {
+        if let hit = ImageCacheService.shared.cachedImage(key: key) {
             apply(hit, for: key, requestIdentifier: requestIdentifier, attempt: attempt)
             return
         }
@@ -114,13 +150,12 @@ struct CoverArtView: View {
         // Stale-while-revalidate: altes Bild bleibt sichtbar während neues lädt.
         // image nicht auf nil setzen — neues Bild ersetzt erst wenn fertig.
 
-        let comps = URLComponents(url: url, resolvingAgainstBaseURL: false)
-        let artId = comps?.queryItems?.first(where: { $0.name == "id" })?.value
+        let artId = coverArtID
 
         #if DEBUG
         if let artId, artId.hasPrefix("demo_") {
             if let img = NSImage(named: artId) {
-                ImageCacheService.shared.cache(img, url: url)
+                ImageCacheService.shared.cache(img, key: key)
                 apply(img, for: key, requestIdentifier: requestIdentifier, attempt: attempt)
             }
             return
@@ -133,20 +168,39 @@ struct CoverArtView: View {
                 NSImage(contentsOfFile: localPath)
             }.value
             if let img = loaded {
-                ImageCacheService.shared.cache(img, url: url)
+                ImageCacheService.shared.cache(img, key: key)
                 guard isCurrentLoad(requestIdentifier, attempt: attempt) else { return }
                 apply(img, for: key, requestIdentifier: requestIdentifier, attempt: attempt)
                 return
             }
         }
 
-        if let img = await ImageCacheService.shared.diskOnlyImage(url: url) {
+        let diskImage: NSImage?
+        if let url {
+            diskImage = await ImageCacheService.shared.diskOnlyImage(url: url)
+        } else if let artId, let requestSize {
+            let fallbackKeys = ImageCacheService.coverFallbackSizes(preferred: requestSize).map {
+                ImageCacheService.stableCacheKey(
+                    coverArtID: artId,
+                    size: $0,
+                    host: cacheHost
+                )
+            }.filter { $0 != key }
+            diskImage = await ImageCacheService.shared.diskOnlyImage(key: key, fallbackKeys: fallbackKeys)
+        } else {
+            diskImage = nil
+        }
+        if let img = diskImage {
             guard isCurrentLoad(requestIdentifier, attempt: attempt) else { return }
             apply(img, for: key, requestIdentifier: requestIdentifier, attempt: attempt)
             if UserDefaults.standard.bool(forKey: "offlineModeEnabled") { return }
         }
 
-        if let img = await ImageCacheService.shared.image(url: url) {
+        let requestURL = url ?? artId.flatMap {
+            SubsonicAPIService.shared.coverArtURL(id: $0, size: requestSize)
+        }
+        guard let requestURL else { return }
+        if let img = await ImageCacheService.shared.image(url: requestURL, key: key) {
             guard isCurrentLoad(requestIdentifier, attempt: attempt) else { return }
             apply(img, for: key, requestIdentifier: requestIdentifier, attempt: attempt)
         }
@@ -168,7 +222,20 @@ struct CoverArtView: View {
     }
 
     private var taskIdentifier: String {
-        "\(stableKey)|\(reloadToken?.uuidString ?? "static")|\(connectivityReloadToken.uuidString)"
+        "\(cacheKey)|\(reloadToken?.uuidString ?? "static")|\(connectivityReloadToken.uuidString)"
+    }
+
+    private static func coverArtID(from url: URL?) -> String? {
+        guard let url else { return nil }
+        return URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?.first(where: { $0.name == "id" })?.value
+    }
+
+    private static func requestSize(from url: URL?) -> Int? {
+        guard let url else { return nil }
+        let value = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?.first(where: { $0.name == "size" })?.value
+        return value.flatMap(Int.init)
     }
 }
 
@@ -206,6 +273,10 @@ actor ImageCacheService {
         memory.object(forKey: Self.stableCacheKey(for: url) as NSString)
     }
 
+    nonisolated func cachedImage(key: String) -> NSImage? {
+        memory.object(forKey: key as NSString)
+    }
+
     nonisolated func cachedImage(url: URL, fallbackSizes: [Int]) -> (image: NSImage, key: String)? {
         let key = Self.stableCacheKey(for: url)
         if let hit = memory.object(forKey: key as NSString) {
@@ -224,8 +295,36 @@ actor ImageCacheService {
         memory.setObject(img, forKey: key, cost: cost)
     }
 
+    nonisolated func cache(_ img: NSImage, key: String) {
+        let cost = Int(img.size.width * img.size.height * 4)
+        memory.setObject(img, forKey: key as NSString, cost: cost)
+    }
+
     func diskOnlyImage(url: URL) async -> NSImage? {
         await diskOnlyImageResult(url: url)?.image
+    }
+
+    func diskOnlyImage(key: String, fallbackKeys: [String]) async -> NSImage? {
+        if let hit = memory.object(forKey: key as NSString) { return hit }
+        let dir = cacheDir
+        let keys = [key] + fallbackKeys
+        let result = await Task.detached(priority: .medium) { () -> (NSImage, String)? in
+            for candidateKey in keys {
+                let diskURL = dir.appendingPathComponent(candidateKey)
+                guard let data = try? Data(contentsOf: diskURL),
+                      let image = NSImage(data: data) else { continue }
+                return (image, candidateKey)
+            }
+            return nil
+        }.value
+        if let (image, resolvedKey) = result {
+            let cost = Int(image.size.width * image.size.height * 4)
+            memory.setObject(image, forKey: resolvedKey as NSString, cost: cost)
+            if resolvedKey != key {
+                memory.setObject(image, forKey: key as NSString, cost: cost)
+            }
+        }
+        return result?.0
     }
 
     func diskOnlyImageResult(url: URL, fallbackSizes: [Int]? = nil) async -> (image: NSImage, key: String)? {
@@ -257,6 +356,10 @@ actor ImageCacheService {
 
     func image(url: URL) async -> NSImage? {
         let key = Self.stableCacheKey(for: url)
+        return await image(url: url, key: key)
+    }
+
+    func image(url: URL, key: String) async -> NSImage? {
         let nsKey = key as NSString
 
         // 1. Speicher-Treffer — sofortige Rückgabe
@@ -372,9 +475,26 @@ actor ImageCacheService {
         let id   = components?.queryItems?.first(where: { $0.name == "id"   })?.value ?? ""
         let size = components?.queryItems?.first(where: { $0.name == "size" })?.value ?? "0"
         let host = url.host ?? "local"
-        // Nur alphanumerische Zeichen → sicherer Dateiname
-        let safeId = id.replacingOccurrences(of: "[^a-zA-Z0-9_-]", with: "_", options: .regularExpression)
-        return "\(host)_\(safeId)_\(size)"
+        return stableCacheKey(coverArtID: id, size: Int(size) ?? 0, host: host)
+    }
+
+    static func stableCacheKey(coverArtID: String, size: Int, host: String) -> String {
+        let isAlreadySafe = coverArtID.unicodeScalars.allSatisfy { scalar in
+            let value = scalar.value
+            return (48...57).contains(value)
+                || (65...90).contains(value)
+                || (97...122).contains(value)
+                || value == 45
+                || value == 95
+        }
+        let safeID = isAlreadySafe
+            ? coverArtID
+            : coverArtID.replacingOccurrences(
+                of: "[^a-zA-Z0-9_-]",
+                with: "_",
+                options: .regularExpression
+            )
+        return "\(host)_\(safeID)_\(size)"
     }
 
     // MARK: - Netzwerk mit Retry
