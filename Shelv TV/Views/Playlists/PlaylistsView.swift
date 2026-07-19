@@ -135,7 +135,10 @@ private struct PlaylistTreeGrid: View {
     private var sort: PlaylistSortOption { PlaylistSortOption(rawValue: sortRaw) ?? .alphabetical }
 
     var body: some View {
-        let groups = tvSectionIndexGroups(nodes) { node in
+        let groups = tvRowAlignedSectionIndexGroups(
+            nodes,
+            columnCount: coverGridColumns.count
+        ) { node in
             sort == .alphabetical ? LibrarySortKey.sectionLetter(displayName: node.title) : nil
         }
 

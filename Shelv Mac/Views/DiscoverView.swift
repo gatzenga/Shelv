@@ -873,21 +873,22 @@ struct AlbumShelfSection: View {
                         firstVisible = max(0, firstVisible - cardsPerStep)
                     }
                     ShelfNavButton(icon: "chevron.right", disabled: atEnd) {
-                        firstVisible = min(albums.count - cardsPerStep, firstVisible + cardsPerStep)
+                        firstVisible = min(max(0, albums.count - cardsPerStep), firstVisible + cardsPerStep)
                     }
                 }
             }
 
             ScrollViewReader { proxy in
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: cardSpacing) {
-                        ForEach(Array(albums.enumerated()), id: \.element.id) { index, album in
+                    LazyHStack(spacing: cardSpacing) {
+                        ForEach(albums) { album in
                             NavigationLink(value: album) {
                                 AlbumCard(album: album)
+                                    .equatable()
                             }
                             .buttonStyle(.plain)
                             .albumContextMenu(album)
-                            .id(index)
+                            .id(album.id)
                         }
                     }
                     .padding(.leading, 2)
@@ -896,8 +897,9 @@ struct AlbumShelfSection: View {
                 .frame(height: shelfHeight + 8)
                 .clipped()
                 .onChange(of: firstVisible) { _, newValue in
+                    guard albums.indices.contains(newValue) else { return }
                     withAnimation(.easeInOut(duration: 0.28)) {
-                        proxy.scrollTo(newValue, anchor: .leading)
+                        proxy.scrollTo(albums[newValue].id, anchor: .leading)
                     }
                 }
             }
@@ -925,23 +927,29 @@ struct ShelfNavButton: View {
     }
 }
 
-struct AlbumCard: View {
+struct AlbumCard: View, Equatable {
     let album: Album
     @State private var isHovered = false
 
-    private var coverURL: URL? {
-        guard let id = album.coverArt else { return nil }
-        return SubsonicAPIService.shared.coverArtURL(id: id, size: 200)
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.album == rhs.album
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            CoverArtView(url: coverURL, size: 150, cornerRadius: 8)
+            CoverArtView(
+                coverArtID: album.coverArt,
+                requestSize: 200,
+                size: 150,
+                cornerRadius: 8
+            )
                 .overlay(alignment: .bottomTrailing) {
                     AlbumDownloadBadge(albumId: album.id)
                         .padding(4)
                 }
                 .shadow(color: .black.opacity(isHovered ? 0.25 : 0.1), radius: isHovered ? 8 : 4)
+                .scaleEffect(isHovered ? 1.03 : 1.0)
+                .animation(.easeInOut(duration: 0.15), value: isHovered)
             Text(album.name)
                 .font(.caption.bold())
                 .lineLimit(1)
@@ -954,8 +962,6 @@ struct AlbumCard: View {
                     .frame(width: 150, alignment: .leading)
             }
         }
-        .scaleEffect(isHovered ? 1.03 : 1.0, anchor: .bottom)
-        .animation(.easeInOut(duration: 0.15), value: isHovered)
         .onHover { isHovered = $0 }
     }
 }

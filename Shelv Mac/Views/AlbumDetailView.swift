@@ -412,11 +412,10 @@ struct TrackRow: View {
     var onAddToPlaylist: (() -> Void)? = nil
 
     @Environment(\.themeColor) private var themeColor
-    @EnvironmentObject private var appState: AppState
-    @ObservedObject private var downloadStore = DownloadStore.shared
-    @ObservedObject private var offlineMode = OfflineModeService.shared
-    @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
-    @AppStorage("enableDownloads") private var enableDownloads = true
+    private var offlineMode: OfflineModeService { .shared }
+    private var showInstantMixActions: Bool {
+        UserDefaults.standard.object(forKey: PersonalizationPreferenceKey.showInstantMixActions) as? Bool ?? true
+    }
     @State private var isHovered = false
     @State private var waveformPulse = false
 
@@ -502,7 +501,7 @@ struct TrackRow: View {
             }
             Divider()
             Button(String(localized: "song_info_details")) {
-                appState.showSongInfo(song)
+                AppState.shared.showSongInfo(song)
             }
         }
     }

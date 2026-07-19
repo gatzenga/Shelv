@@ -265,6 +265,7 @@ struct AlbumsView: View {
                         ForEach(displayAlbums) { album in
                             NavigationLink(value: album) {
                                 AlbumGridItem(album: album)
+                                    .equatable()
                             }
                             .buttonStyle(.plain)
                             .albumContextMenu(album)
@@ -283,6 +284,7 @@ struct AlbumsView: View {
                         ForEach(displayAlbums) { album in
                             NavigationLink(value: album) {
                                 AlbumListRow(album: album)
+                                    .equatable()
                             }
                             .buttonStyle(.plain)
                             .albumContextMenu(album)
@@ -334,19 +336,23 @@ struct AlbumsView: View {
     }
 }
 
-struct AlbumGridItem: View {
+struct AlbumGridItem: View, Equatable {
     let album: Album
     @State private var isHovered = false
 
-    private var coverURL: URL? {
-        guard let id = album.coverArt else { return nil }
-        return SubsonicAPIService.shared.coverArtURL(id: id, size: 200)
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.album == rhs.album
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             ZStack(alignment: .bottomTrailing) {
-                CoverArtView(url: coverURL, size: 160, cornerRadius: 8)
+                CoverArtView(
+                    coverArtID: album.coverArt,
+                    requestSize: 200,
+                    size: 160,
+                    cornerRadius: 8
+                )
                     .shadow(color: .black.opacity(isHovered ? 0.3 : 0.12), radius: isHovered ? 10 : 4)
                     .scaleEffect(isHovered ? 1.03 : 1.0)
                     .animation(.easeInOut(duration: 0.15), value: isHovered)
@@ -371,18 +377,22 @@ struct AlbumGridItem: View {
     }
 }
 
-struct AlbumListRow: View {
+struct AlbumListRow: View, Equatable {
     let album: Album
     @State private var isHovered = false
 
-    private var coverURL: URL? {
-        guard let id = album.coverArt else { return nil }
-        return SubsonicAPIService.shared.coverArtURL(id: id, size: 120)
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.album == rhs.album
     }
 
     var body: some View {
         HStack(spacing: 12) {
-            CoverArtView(url: coverURL, size: 52, cornerRadius: 6)
+            CoverArtView(
+                coverArtID: album.coverArt,
+                requestSize: 120,
+                size: 52,
+                cornerRadius: 6
+            )
             VStack(alignment: .leading, spacing: 2) {
                 Text(album.name)
                     .font(.body)

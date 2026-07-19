@@ -8,6 +8,7 @@ struct ArtistsView: View {
     @AppStorage("downloadsOnlyFilter") private var showDownloadsOnly: Bool = false
     @State private var searchText: String = ""
     @State private var displayArtists: [Artist] = []
+    @State private var downloadedArtistNames: Set<String> = []
     @State private var displayRebuildTask: Task<Void, Never>?
 
     private var effectiveShowDownloadsOnly: Bool {
@@ -55,6 +56,7 @@ struct ArtistsView: View {
             guard !Task.isCancelled else { return }
             await MainActor.run {
                 displayArtists = result
+                downloadedArtistNames = Set(downloadedCountByName.keys)
             }
         }
     }
@@ -108,7 +110,11 @@ struct ArtistsView: View {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 140, maximum: 180), spacing: 16)], spacing: 20) {
                         ForEach(displayArtists) { artist in
                             NavigationLink(value: artist) {
-                                ArtistGridItem(artist: artist)
+                                ArtistGridItem(
+                                    artist: artist,
+                                    isDownloaded: downloadedArtistNames.contains(artist.name)
+                                )
+                                .equatable()
                             }
                             .buttonStyle(.plain)
                             .artistContextMenu(artist)
@@ -126,7 +132,11 @@ struct ArtistsView: View {
                     LazyVStack(spacing: 0) {
                         ForEach(displayArtists) { artist in
                             NavigationLink(value: artist) {
-                                ArtistListRow(artist: artist)
+                                ArtistListRow(
+                                    artist: artist,
+                                    isDownloaded: downloadedArtistNames.contains(artist.name)
+                                )
+                                .equatable()
                             }
                             .buttonStyle(.plain)
                             .artistContextMenu(artist)
@@ -170,25 +180,29 @@ struct ArtistsView: View {
     }
 }
 
-struct ArtistGridItem: View {
+struct ArtistGridItem: View, Equatable {
     let artist: Artist
-    @ObservedObject private var downloadStore = DownloadStore.shared
+    let isDownloaded: Bool
     @Environment(\.themeColor) private var themeColor
     @State private var isHovered = false
 
-    private var coverURL: URL? {
-        guard let id = artist.coverArt else { return nil }
-        return SubsonicAPIService.shared.coverArtURL(id: id, size: 160)
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.artist == rhs.artist && lhs.isDownloaded == rhs.isDownloaded
     }
 
     var body: some View {
         VStack(spacing: 6) {
             ZStack(alignment: .bottomTrailing) {
-                CoverArtView(url: coverURL, size: 140, isCircle: true)
+                CoverArtView(
+                    coverArtID: artist.coverArt,
+                    requestSize: 160,
+                    size: 140,
+                    isCircle: true
+                )
                     .shadow(color: .black.opacity(isHovered ? 0.3 : 0.12), radius: isHovered ? 10 : 4)
                     .scaleEffect(isHovered ? 1.03 : 1.0)
                     .animation(.easeInOut(duration: 0.15), value: isHovered)
-                if downloadStore.artists.contains(where: { $0.name == artist.name }) {
+                if isDownloaded {
                     Image(systemName: "arrow.down.circle.fill")
                         .font(.caption)
                         .foregroundStyle(.white)
@@ -212,20 +226,24 @@ struct ArtistGridItem: View {
     }
 }
 
-struct ArtistListRow: View {
+struct ArtistListRow: View, Equatable {
     let artist: Artist
-    @ObservedObject private var downloadStore = DownloadStore.shared
+    let isDownloaded: Bool
     @Environment(\.themeColor) private var themeColor
     @State private var isHovered = false
 
-    private var coverURL: URL? {
-        guard let id = artist.coverArt else { return nil }
-        return SubsonicAPIService.shared.coverArtURL(id: id, size: 120)
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.artist == rhs.artist && lhs.isDownloaded == rhs.isDownloaded
     }
 
     var body: some View {
         HStack(spacing: 12) {
-            CoverArtView(url: coverURL, size: 52, isCircle: true)
+            CoverArtView(
+                coverArtID: artist.coverArt,
+                requestSize: 120,
+                size: 52,
+                isCircle: true
+            )
             VStack(alignment: .leading, spacing: 2) {
                 Text(artist.name)
                     .font(.body)
@@ -237,7 +255,7 @@ struct ArtistListRow: View {
                 }
             }
             Spacer(minLength: 0)
-            if downloadStore.artists.contains(where: { $0.name == artist.name }) {
+            if isDownloaded {
                 Image(systemName: "arrow.down.circle.fill")
                     .font(.caption)
                     .foregroundStyle(.white)

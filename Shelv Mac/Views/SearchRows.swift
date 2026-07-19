@@ -5,7 +5,7 @@ struct SearchSection<Content: View>: View {
     @ViewBuilder let content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        LazyVStack(alignment: .leading, spacing: 0) {
             Text(title)
                 .font(.title3.bold())
                 .padding(.horizontal, 20)
@@ -17,14 +17,16 @@ struct SearchSection<Content: View>: View {
 
 struct SearchArtistRow: View {
     let artist: Artist
-    @ObservedObject private var downloadStore = DownloadStore.shared
-    @AppStorage("enableDownloads") private var enableDownloads = true
-    @Environment(\.themeColor) private var themeColor
+    var showsDownloadBadge = true
     @State private var isHovered = false
-
     var body: some View {
         HStack(spacing: 12) {
-            CoverArtView(url: artist.coverArt.flatMap { SubsonicAPIService.shared.coverArtURL(id: $0, size: 50) }, size: 44, isCircle: true)
+            CoverArtView(
+                coverArtID: artist.coverArt,
+                requestSize: 50,
+                size: 44,
+                isCircle: true
+            )
                 .padding(.leading, 20)
             VStack(alignment: .leading) {
                 Text(artist.name).font(.callout.bold())
@@ -33,13 +35,8 @@ struct SearchArtistRow: View {
                 }
             }
             Spacer()
-            if enableDownloads && downloadStore.artists.contains(where: { $0.name == artist.name }) {
-                Image(systemName: "arrow.down.circle.fill")
-                    .font(.caption)
-                    .foregroundStyle(.white)
-                    .padding(4)
-                    .background(themeColor, in: Circle())
-                    .shadow(color: .black.opacity(0.3), radius: 2, y: 1)
+            if showsDownloadBadge {
+                ArtistDownloadBadge(artistName: artist.name)
             }
             Image(systemName: "chevron.right").foregroundStyle(.tertiary)
                 .padding(.trailing, 20)
@@ -57,7 +54,12 @@ struct SearchAlbumRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            CoverArtView(url: album.coverArt.flatMap { SubsonicAPIService.shared.coverArtURL(id: $0, size: 50) }, size: 44, cornerRadius: 6)
+            CoverArtView(
+                coverArtID: album.coverArt,
+                requestSize: 50,
+                size: 44,
+                cornerRadius: 6
+            )
                 .padding(.leading, 20)
             VStack(alignment: .leading) {
                 Text(album.name).font(.callout.bold())
@@ -88,15 +90,20 @@ struct SearchSongRow: View {
     var onAddToPlaylist: (() -> Void)? = nil
 
     @Environment(\.themeColor) private var themeColor
-    @EnvironmentObject private var appState: AppState
-    @ObservedObject private var offlineMode = OfflineModeService.shared
-    @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
-    @AppStorage("enableDownloads") private var enableDownloads = true
+    private var offlineMode: OfflineModeService { .shared }
+    private var showInstantMixActions: Bool {
+        UserDefaults.standard.object(forKey: PersonalizationPreferenceKey.showInstantMixActions) as? Bool ?? true
+    }
     @State private var isHovered = false
 
     var body: some View {
         HStack(spacing: 12) {
-            CoverArtView(url: song.coverArt.flatMap { SubsonicAPIService.shared.coverArtURL(id: $0, size: 50) }, size: 44, cornerRadius: 6)
+            CoverArtView(
+                coverArtID: song.coverArt,
+                requestSize: 50,
+                size: 44,
+                cornerRadius: 6
+            )
                 .padding(.leading, 20)
             VStack(alignment: .leading) {
                 Text(song.title).font(.callout.bold())
@@ -149,7 +156,7 @@ struct SearchSongRow: View {
             }
             Divider()
             Button(String(localized: "song_info_details")) {
-                appState.showSongInfo(song)
+                AppState.shared.showSongInfo(song)
             }
         }
     }
@@ -167,17 +174,19 @@ struct LyricsSearchRow: View {
     var onFavorite: (() -> Void)? = nil
     var onAddToPlaylist: (() -> Void)? = nil
     @Environment(\.themeColor) private var themeColor
-    @EnvironmentObject private var appState: AppState
-    @ObservedObject private var offlineMode = OfflineModeService.shared
-    @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
-    @AppStorage("enableDownloads") private var enableDownloads = true
+    private var offlineMode: OfflineModeService { .shared }
+    private var showInstantMixActions: Bool {
+        UserDefaults.standard.object(forKey: PersonalizationPreferenceKey.showInstantMixActions) as? Bool ?? true
+    }
     @State private var isHovered = false
 
     var body: some View {
         HStack(spacing: 12) {
             CoverArtView(
-                url: item.coverArt.flatMap { SubsonicAPIService.shared.coverArtURL(id: $0, size: 80) },
-                size: 44, cornerRadius: 6
+                coverArtID: item.coverArt,
+                requestSize: 80,
+                size: 44,
+                cornerRadius: 6
             )
             .padding(.leading, 20)
             VStack(alignment: .leading, spacing: 2) {
@@ -244,7 +253,7 @@ struct LyricsSearchRow: View {
             }
             Divider()
             Button(String(localized: "song_info_details")) {
-                appState.showSongInfo(fallbackSong)
+                AppState.shared.showSongInfo(fallbackSong)
             }
         }
     }

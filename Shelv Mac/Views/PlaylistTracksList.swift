@@ -22,9 +22,10 @@ struct PlaylistTrackRow: View {
     var onMoveUp: () -> Void = {}
     var onMoveDown: () -> Void = {}
 
-    @ObservedObject private var offlineMode = OfflineModeService.shared
-    @EnvironmentObject private var appState: AppState
-    @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
+    private var offlineMode: OfflineModeService { .shared }
+    private var showInstantMixActions: Bool {
+        UserDefaults.standard.object(forKey: PersonalizationPreferenceKey.showInstantMixActions) as? Bool ?? true
+    }
     @State private var isHovered = false
 
     var body: some View {
@@ -47,7 +48,8 @@ struct PlaylistTrackRow: View {
             .padding(.leading, 20)
 
             CoverArtView(
-                url: song.coverArt.flatMap { SubsonicAPIService.shared.coverArtURL(id: $0, size: 80) },
+                coverArtID: song.coverArt,
+                requestSize: 80,
                 size: 40,
                 cornerRadius: 4
             )
@@ -150,7 +152,7 @@ struct PlaylistTrackRow: View {
             }
             Divider()
             Button(String(localized: "song_info_details")) {
-                appState.showSongInfo(song)
+                AppState.shared.showSongInfo(song)
             }
         }
     }

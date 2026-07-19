@@ -2,14 +2,23 @@ import SwiftUI
 
 struct AlbumContextMenuModifier: ViewModifier {
     let album: Album
-    @ObservedObject var libraryStore = LibraryViewModel.shared
-    @ObservedObject private var downloadStore = DownloadStore.shared
-    @ObservedObject private var offlineMode = OfflineModeService.shared
-    @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
-    @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
-    @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
-    @AppStorage("enableDownloads") private var enableDownloads = true
+    private let libraryStore = LibraryViewModel.shared
+    private let downloadStore = DownloadStore.shared
     @State private var showDeleteConfirm = false
+
+    private var offlineMode: OfflineModeService { .shared }
+    private var showFavoriteActions: Bool {
+        UserDefaults.standard.object(forKey: PersonalizationPreferenceKey.showFavoriteActions) as? Bool ?? true
+    }
+    private var showPlaylistActions: Bool {
+        UserDefaults.standard.object(forKey: PersonalizationPreferenceKey.showPlaylistActions) as? Bool ?? true
+    }
+    private var showInstantMixActions: Bool {
+        UserDefaults.standard.object(forKey: PersonalizationPreferenceKey.showInstantMixActions) as? Bool ?? true
+    }
+    private var enableDownloads: Bool {
+        UserDefaults.standard.object(forKey: "enableDownloads") as? Bool ?? true
+    }
 
     func body(content: Content) -> some View {
         content.contextMenu {

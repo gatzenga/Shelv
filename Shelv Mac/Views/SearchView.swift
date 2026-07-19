@@ -7,6 +7,7 @@ struct SearchView: View {
     @FocusState private var isSearchFocused: Bool
     @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
     @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
+    @AppStorage("enableDownloads") private var enableDownloads = true
     @State private var lyricsResults: [LyricsSearchResult] = []
     @State private var searchTask: Task<Void, Never>?
     @State private var lyricsTask: Task<Void, Never>?
@@ -51,12 +52,15 @@ struct SearchView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 28) {
+                    LazyVStack(alignment: .leading, spacing: 28) {
                         if !vm.artists.isEmpty {
                             SearchSection(title: String(localized: "artists")) {
                                 ForEach(vm.artists) { artist in
                                     NavigationLink(value: artist) {
-                                        SearchArtistRow(artist: artist)
+                                        SearchArtistRow(
+                                            artist: artist,
+                                            showsDownloadBadge: enableDownloads
+                                        )
                                     }
                                     .buttonStyle(.plain)
                                     .artistContextMenu(artist)
