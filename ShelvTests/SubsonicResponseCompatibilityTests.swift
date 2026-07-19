@@ -457,7 +457,11 @@ private struct MixedBody: Decodable {
 }
 
 private struct PlaylistContainer: Decodable {
-    let playlist: [Playlist]?
+    let playlist: [TestPlaylist]?
+}
+
+private struct TestPlaylist: Decodable {
+    let id: String
 }
 
 private struct QueueContainer: Decodable {
