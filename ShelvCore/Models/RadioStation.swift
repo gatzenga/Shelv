@@ -148,6 +148,31 @@ nonisolated struct RadioStationDisplayItem: Identifiable, Hashable, Sendable {
     var usesDynamicSongCover: Bool { metadata.useAzuraCastAPI && metadata.showSongCover }
 }
 
+nonisolated enum RadioStationDisplayItemBuilder {
+    static func makeItems(
+        stations: [RadioStation],
+        serverId: String,
+        metadataByRecordName: [String: RadioStationMetadata]
+    ) -> [RadioStationDisplayItem] {
+        ordered(stations.map { station in
+            let recordName = RadioStationMetadata.recordName(
+                serverId: serverId,
+                stationId: station.id,
+                streamURL: station.streamURL
+            )
+            let metadata = metadataByRecordName[recordName]
+                ?? RadioStationMetadata(serverId: serverId, station: station)
+            return RadioStationDisplayItem(station: station, metadata: metadata)
+        })
+    }
+
+    static func ordered(_ items: [RadioStationDisplayItem]) -> [RadioStationDisplayItem] {
+        items.sorted {
+            $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }
+    }
+}
+
 nonisolated struct RadioNowPlayingMetadata: Codable, Hashable, Sendable {
     static let artworkRevisionQueryItemName = "_shelv_radio_artwork"
 

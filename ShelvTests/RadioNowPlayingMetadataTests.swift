@@ -150,4 +150,37 @@ final class RadioNowPlayingMetadataTests: XCTestCase {
             )
         )
     }
+
+    func testDisplayItemBuilderPreservesMetadataAndSortsStations() throws {
+        let zulu = RadioStation(
+            id: "zulu",
+            name: "Zulu Radio",
+            streamURL: "https://radio.example.com/zulu"
+        )
+        let alpha = RadioStation(
+            id: "alpha",
+            name: "alpha radio",
+            streamURL: "https://radio.example.com/alpha"
+        )
+        var zuluMetadata = RadioStationMetadata(serverId: "server", station: zulu)
+        zuluMetadata.useAzuraCastAPI = true
+        zuluMetadata.azuraCastAPIURL = "https://radio.example.com/api/zulu"
+
+        let items = RadioStationDisplayItemBuilder.makeItems(
+            stations: [zulu, alpha],
+            serverId: "server",
+            metadataByRecordName: [zuluMetadata.recordName: zuluMetadata]
+        )
+
+        XCTAssertEqual(items.map(\.id), ["alpha", "zulu"])
+        XCTAssertEqual(try XCTUnwrap(items.first(where: { $0.id == "zulu" })).metadata, zuluMetadata)
+        XCTAssertEqual(
+            try XCTUnwrap(items.first(where: { $0.id == "alpha" })).metadata.recordName,
+            RadioStationMetadata.recordName(
+                serverId: "server",
+                stationId: alpha.id,
+                streamURL: alpha.streamURL
+            )
+        )
+    }
 }

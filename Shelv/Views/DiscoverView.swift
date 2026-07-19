@@ -3,12 +3,117 @@ import Combine
 import SwiftUI
 import UIKit
 
+private struct DiscoverLibrarySnapshot: Equatable {
+    var recentlyAdded: [Album]
+    var recentlyPlayed: [Album]
+    var frequentlyPlayed: [Album]
+    var randomAlbums: [Album]
+    var isLoadingDiscover: Bool
+    var reloadID: UUID
+
+    init(store: LibraryStore) {
+        recentlyAdded = store.recentlyAdded
+        recentlyPlayed = store.recentlyPlayed
+        frequentlyPlayed = store.frequentlyPlayed
+        randomAlbums = store.randomAlbums
+        isLoadingDiscover = store.isLoadingDiscover
+        reloadID = store.reloadID
+    }
+}
+
+@MainActor
+private final class DiscoverContentObserver: ObservableObject {
+    @Published private(set) var library: DiscoverLibrarySnapshot
+    @Published private(set) var recapPlaylistIDs: Set<String>
+
+    private let libraryStore: LibraryStore
+    private let recapStore: RecapStore
+    private var isActive: Bool
+    private var cancellables: Set<AnyCancellable> = []
+
+    init(isActive: Bool) {
+        let libraryStore = LibraryStore.shared
+        let recapStore = RecapStore.shared
+        self.isActive = isActive
+        self.libraryStore = libraryStore
+        self.recapStore = recapStore
+        library = DiscoverLibrarySnapshot(store: libraryStore)
+        recapPlaylistIDs = recapStore.recapPlaylistIds
+        subscribeToRelevantChanges()
+    }
+
+    func setActive(_ active: Bool) {
+        guard isActive != active else {
+            if active { synchronize() }
+            return
+        }
+        isActive = active
+        if active { synchronize() }
+    }
+
+    private func subscribeToRelevantChanges() {
+        libraryStore.$recentlyAdded
+            .removeDuplicates()
+            .sink { [weak self] value in self?.update(\.recentlyAdded, to: value) }
+            .store(in: &cancellables)
+        libraryStore.$recentlyPlayed
+            .removeDuplicates()
+            .sink { [weak self] value in self?.update(\.recentlyPlayed, to: value) }
+            .store(in: &cancellables)
+        libraryStore.$frequentlyPlayed
+            .removeDuplicates()
+            .sink { [weak self] value in self?.update(\.frequentlyPlayed, to: value) }
+            .store(in: &cancellables)
+        libraryStore.$randomAlbums
+            .removeDuplicates()
+            .sink { [weak self] value in self?.update(\.randomAlbums, to: value) }
+            .store(in: &cancellables)
+        libraryStore.$isLoadingDiscover
+            .removeDuplicates()
+            .sink { [weak self] value in self?.update(\.isLoadingDiscover, to: value) }
+            .store(in: &cancellables)
+        libraryStore.$reloadID
+            .removeDuplicates()
+            .sink { [weak self] value in self?.update(\.reloadID, to: value) }
+            .store(in: &cancellables)
+        recapStore.$recapPlaylistIds
+            .removeDuplicates()
+            .sink { [weak self] value in
+                guard let self, isActive, recapPlaylistIDs != value else { return }
+                recapPlaylistIDs = value
+            }
+            .store(in: &cancellables)
+    }
+
+    private func update<Value: Equatable>(
+        _ keyPath: WritableKeyPath<DiscoverLibrarySnapshot, Value>,
+        to value: Value
+    ) {
+        guard isActive, library[keyPath: keyPath] != value else { return }
+        var updated = library
+        updated[keyPath: keyPath] = value
+        library = updated
+    }
+
+    private func synchronize() {
+        let currentLibrary = DiscoverLibrarySnapshot(store: libraryStore)
+        if library != currentLibrary {
+            library = currentLibrary
+        }
+        let currentRecapPlaylistIDs = recapStore.recapPlaylistIds
+        if recapPlaylistIDs != currentRecapPlaylistIDs {
+            recapPlaylistIDs = currentRecapPlaylistIDs
+        }
+    }
+}
+
 struct DiscoverView: View {
-    @ObservedObject var libraryStore = LibraryStore.shared
+    let isActive: Bool
+    private let libraryStore = LibraryStore.shared
+    @StateObject private var contentObserver: DiscoverContentObserver
     @ObservedObject var offlineMode = OfflineModeService.shared
     private let downloadStore = DownloadStore.shared
     @EnvironmentObject var serverStore: ServerStore
-    @EnvironmentObject var recapStore: RecapStore
     @Environment(\.personalizationSwipeConfiguration) private var personalization
     private let player = AudioPlayerService.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
@@ -23,12 +128,19 @@ struct DiscoverView: View {
     @AppStorage(PersonalizationPreferenceKey.discoverySectionOrder) private var discoverySectionOrderRaw = PersonalizationSettings.defaultDiscoverySectionOrderRaw
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
+    init(isActive: Bool = true) {
+        self.isActive = isActive
+        _contentObserver = StateObject(
+            wrappedValue: DiscoverContentObserver(isActive: isActive)
+        )
+    }
+
     private var recapButtonVisible: Bool {
         // Wenn Recap deaktiviert ist, soll der Eintrag komplett aus der UI verschwinden.
         guard recapEnabled else { return false }
         if !offlineMode.isOffline { return true }
         // Offline: nur wenn mindestens eine Recap-Playlist heruntergeladen ist.
-        return !recapStore.recapPlaylistIds.isDisjoint(with: offlinePlaylistIDs)
+        return !contentObserver.recapPlaylistIDs.isDisjoint(with: offlinePlaylistIDs)
     }
 
     private var visibleSmartMixes: [PersonalizationSmartMix] {
@@ -79,16 +191,16 @@ struct DiscoverView: View {
     }
 
     private var discoverContentIsEmpty: Bool {
-        libraryStore.recentlyAdded.isEmpty
-            && libraryStore.recentlyPlayed.isEmpty
-            && libraryStore.frequentlyPlayed.isEmpty
-            && libraryStore.randomAlbums.isEmpty
+        contentObserver.library.recentlyAdded.isEmpty
+            && contentObserver.library.recentlyPlayed.isEmpty
+            && contentObserver.library.frequentlyPlayed.isEmpty
+            && contentObserver.library.randomAlbums.isEmpty
     }
 
     private var shouldShowDiscoverLoadingState: Bool {
         !offlineMode.isOffline
             && !showConnectionRecoveryState
-            && (isSwitchingServerURL || (libraryStore.isLoadingDiscover && discoverContentIsEmpty))
+            && (isSwitchingServerURL || (contentObserver.library.isLoadingDiscover && discoverContentIsEmpty))
     }
 
     private var shouldShowConnectionRecoveryState: Bool {
@@ -185,12 +297,21 @@ struct DiscoverView: View {
                 await loadOnlineDiscoverContent(refreshRandom: true)
                 await RadioStationStore.shared.refresh()
             }
-            .task(id: libraryStore.reloadID) {
+            .task(id: contentObserver.library.reloadID) {
                 await loadOnlineDiscoverContent()
             }
             .task {
                 await updateDeviceNetworkState()
                 updateDiscoverAirPlayRouteState()
+            }
+            .onAppear {
+                contentObserver.setActive(isActive)
+            }
+            .onDisappear {
+                contentObserver.setActive(false)
+            }
+            .onChange(of: isActive) { _, active in
+                contentObserver.setActive(active)
             }
             .onReceive(NotificationCenter.default.publisher(for: .networkStatusChanged)) { _ in
                 Task { await handleNetworkStatusChanged() }
@@ -576,7 +697,7 @@ struct DiscoverView: View {
 
     @ViewBuilder
     private var randomAlbumSection: some View {
-        albumSection(title: String(localized: "random_albums"), albums: libraryStore.randomAlbums) {
+        albumSection(title: String(localized: "random_albums"), albums: contentObserver.library.randomAlbums) {
             Button {
                 randomRefreshing = true
                 Task {
@@ -617,13 +738,13 @@ struct DiscoverView: View {
             #endif
             return !visibleSmartMixes.isEmpty && !discoverContentIsEmpty
         case .recentlyAdded:
-            return !libraryStore.recentlyAdded.isEmpty
+            return !contentObserver.library.recentlyAdded.isEmpty
         case .recentlyPlayed:
-            return !libraryStore.recentlyPlayed.isEmpty
+            return !contentObserver.library.recentlyPlayed.isEmpty
         case .frequentlyPlayed:
-            return !libraryStore.frequentlyPlayed.isEmpty
+            return !contentObserver.library.frequentlyPlayed.isEmpty
         case .randomAlbums:
-            return !libraryStore.randomAlbums.isEmpty
+            return !contentObserver.library.randomAlbums.isEmpty
         }
     }
 
@@ -658,17 +779,17 @@ struct DiscoverView: View {
         case .recentlyAdded:
             albumSection(
                 title: String(localized: "recently_added"),
-                albums: libraryStore.recentlyAdded
+                albums: contentObserver.library.recentlyAdded
             )
         case .recentlyPlayed:
             albumSection(
                 title: String(localized: "recently_played"),
-                albums: libraryStore.recentlyPlayed
+                albums: contentObserver.library.recentlyPlayed
             )
         case .frequentlyPlayed:
             albumSection(
                 title: String(localized: "frequently_played"),
-                albums: libraryStore.frequentlyPlayed
+                albums: contentObserver.library.frequentlyPlayed
             )
         case .randomAlbums:
             randomAlbumSection
