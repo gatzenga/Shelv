@@ -105,47 +105,47 @@ private nonisolated struct ArtistsBody: Decodable, Sendable {
     let artists: ArtistsContainer?
 }
 
-private nonisolated struct AlbumBody: Decodable {
+private nonisolated struct AlbumBody: Decodable, Sendable {
     let status: String
     let error: StatusCheck.APIError?
     let album: AlbumDetail?
 }
 
-private nonisolated struct ArtistBody: Decodable {
+private nonisolated struct ArtistBody: Decodable, Sendable {
     let status: String
     let error: StatusCheck.APIError?
     let artist: ArtistDetail?
 }
 
-private nonisolated struct ArtistInfoBody: Decodable {
+private nonisolated struct ArtistInfoBody: Decodable, Sendable {
     let status: String
     let error: StatusCheck.APIError?
     let artistInfo2: ArtistInfo?
 }
 
-private nonisolated struct SearchBody: Decodable {
+private nonisolated struct SearchBody: Decodable, Sendable {
     let status: String
     let error: StatusCheck.APIError?
     let searchResult3: SearchResult?
 }
 
-private nonisolated struct SongBody: Decodable {
+private nonisolated struct SongBody: Decodable, Sendable {
     let status: String
     let error: StatusCheck.APIError?
     let song: Song?
 }
 
-private nonisolated struct PingBody: Decodable {
+private nonisolated struct PingBody: Decodable, Sendable {
     let status: String
     let error: StatusCheck.APIError?
 }
 
-private nonisolated struct PlayQueueBody: Decodable {
+private nonisolated struct PlayQueueBody: Decodable, Sendable {
     let status: String
     let error: StatusCheck.APIError?
     let playQueue: PlayQueueDetail?
 
-    struct PlayQueueDetail: Decodable {
+    struct PlayQueueDetail: Decodable, Sendable {
         let entry: [Song]?
         let current: String?
         let position: Int?
@@ -154,7 +154,7 @@ private nonisolated struct PlayQueueBody: Decodable {
 }
 
 
-private nonisolated struct PingInfoBody: Decodable {
+private nonisolated struct PingInfoBody: Decodable, Sendable {
     let status: String
     let version: String
     let type: String?
@@ -162,14 +162,14 @@ private nonisolated struct PingInfoBody: Decodable {
     let error: StatusCheck.APIError?
 }
 
-private nonisolated struct ScanStatusBody: Decodable {
+private nonisolated struct ScanStatusBody: Decodable, Sendable {
     let status: String
     let error: StatusCheck.APIError?
     let scanStatus: ScanStatusDetail?
 
-    struct ScanStatusDetail: Decodable {
+    struct ScanStatusDetail: Decodable, Sendable {
         let scanning: Bool
-        let count: Int
+        let count: Int?
     }
 }
 
@@ -197,7 +197,7 @@ nonisolated struct ArtistIndex: Decodable, Sendable {
     let artist: [Artist]?
 }
 
-nonisolated struct AlbumDetail: Decodable, Identifiable {
+nonisolated struct AlbumDetail: Decodable, Identifiable, Sendable {
     let id: String
     let name: String
     let sortName: String?
@@ -251,7 +251,7 @@ nonisolated struct AlbumDetail: Decodable, Identifiable {
     }
 }
 
-nonisolated struct ArtistDetail: Decodable, Identifiable {
+nonisolated struct ArtistDetail: Decodable, Identifiable, Sendable {
     let id: String
     let name: String
     let sortName: String?
@@ -276,72 +276,72 @@ nonisolated struct ArtistDetail: Decodable, Identifiable {
     }
 }
 
-nonisolated struct ArtistInfo: Decodable {
+nonisolated struct ArtistInfo: Decodable, Sendable {
     let biography: String?
 }
 
-nonisolated struct SearchResult: Decodable {
+nonisolated struct SearchResult: Decodable, Sendable {
     let artist: [Artist]?
     let album: [Album]?
     let song: [Song]?
 }
 
-nonisolated struct StarredResult: Decodable {
+nonisolated struct StarredResult: Decodable, Sendable {
     let artist: [Artist]?
     let album: [Album]?
     let song: [Song]?
 }
 
-private nonisolated struct RandomSongsBody: Decodable {
+private nonisolated struct RandomSongsBody: Decodable, Sendable {
     let status: String
     let error: StatusCheck.APIError?
     let randomSongs: RandomSongsList?
-    struct RandomSongsList: Decodable { let song: [Song]? }
+    struct RandomSongsList: Decodable, Sendable { let song: [Song]? }
 }
 
-private nonisolated struct TopSongsBody: Decodable {
+private nonisolated struct TopSongsBody: Decodable, Sendable {
     let status: String
     let error: StatusCheck.APIError?
     let topSongs: TopSongsList?
-    struct TopSongsList: Decodable { let song: [Song]? }
+    struct TopSongsList: Decodable, Sendable { let song: [Song]? }
 }
 
-private nonisolated struct SimilarSongsBody: Decodable {
+private nonisolated struct SimilarSongsBody: Decodable, Sendable {
     let status: String
     let error: StatusCheck.APIError?
     let similarSongs: SimilarSongsList?
-    struct SimilarSongsList: Decodable { let song: [Song]? }
+    struct SimilarSongsList: Decodable, Sendable { let song: [Song]? }
 }
 
-private nonisolated struct SimilarSongs2Body: Decodable {
+private nonisolated struct SimilarSongs2Body: Decodable, Sendable {
     let status: String
     let error: StatusCheck.APIError?
     let similarSongs2: SimilarSongsList?
-    struct SimilarSongsList: Decodable { let song: [Song]? }
+    struct SimilarSongsList: Decodable, Sendable { let song: [Song]? }
 }
 
-private nonisolated struct StarredBody: Decodable {
+private nonisolated struct StarredBody: Decodable, Sendable {
     let status: String
     let error: StatusCheck.APIError?
     let starred2: StarredResult?
 }
 
-private nonisolated struct PlaylistsBody: Decodable {
+private nonisolated struct PlaylistsBody: Decodable, Sendable {
     let status: String
     let error: StatusCheck.APIError?
     let playlists: PlaylistsContainer?
 
-    struct PlaylistsContainer: Decodable {
+    struct PlaylistsContainer: Decodable, Sendable {
         let playlist: [Playlist]?
     }
 }
 
-private nonisolated struct PlaylistBody: Decodable {
+private nonisolated struct PlaylistBody: Decodable, Sendable {
     let status: String
     let error: StatusCheck.APIError?
     let playlist: PlaylistDetail?
 
-    struct PlaylistDetail: Decodable {
+    struct PlaylistDetail: Decodable, Sendable {
         let id: String
         let name: String
         let comment: String?
@@ -352,18 +352,18 @@ private nonisolated struct PlaylistBody: Decodable {
     }
 }
 
-private nonisolated struct CreatePlaylistBody: Decodable {
+private nonisolated struct CreatePlaylistBody: Decodable, Sendable {
     let status: String
     let error: StatusCheck.APIError?
     let playlist: PlaylistBody.PlaylistDetail?
 }
 
-private nonisolated struct InternetRadioStationsBody: Decodable {
+private nonisolated struct InternetRadioStationsBody: Decodable, Sendable {
     let status: String
     let error: StatusCheck.APIError?
     let internetRadioStations: InternetRadioStationsContainer?
 
-    struct InternetRadioStationsContainer: Decodable {
+    struct InternetRadioStationsContainer: Decodable, Sendable {
         let internetRadioStation: [RadioStation]?
     }
 }
@@ -373,9 +373,11 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
     nonisolated private static let requestTimeout: TimeInterval = 10
 
     private let credentialLock = NSLock()
+    private let compatibilityLock = NSLock()
     nonisolated(unsafe) private var _activeServer: SubsonicServer?
     nonisolated(unsafe) private var _activePassword: String?
     nonisolated(unsafe) private var _credentialGeneration: UInt64 = 0
+    nonisolated(unsafe) private var requestCompatibilityByServer: [String: SubsonicRequestCompatibility] = [:]
 
     nonisolated var activeServer: SubsonicServer? {
         get { credentialLock.withLock { _activeServer } }
@@ -443,9 +445,10 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
     nonisolated var isDemoActive: Bool { activeServer?.baseURL == DemoContent.serverBaseURL }
     #endif
 
-    private let apiVersion = "1.16.1"
     private let clientName = "Shelv"
     private let decoder = SubsonicAPIService.makeDecoder()
+    private let responseFormatPreferences = SubsonicResponseFormatPreferences.shared
+    private let responseRequestGate = SubsonicResponseRequestGate()
 
     nonisolated private static func makeDecoder() -> JSONDecoder {
         let d = JSONDecoder()
@@ -462,10 +465,16 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
 
     nonisolated private static func decodeOffMain<T: Decodable & Sendable>(
         _ type: T.Type,
-        from data: Data
+        from data: Data,
+        format: SubsonicResponseFormat = .json
     ) async throws -> T {
         try await Task.detached(priority: .userInitiated) {
-            try makeDecoder().decode(type, from: data)
+            switch format {
+            case .json:
+                return try makeDecoder().decode(type, from: data)
+            case .xml:
+                return try SubsonicXMLDecoder().decode(type, from: data)
+            }
         }.value
     }
 
@@ -563,7 +572,12 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         )
     }
 
-    private func makeAuthParams(server: SubsonicServer, password: String) -> [URLQueryItem] {
+    private func makeAuthParams(
+        server: SubsonicServer,
+        password: String,
+        apiVersion: String,
+        responseFormat: SubsonicResponseFormat = .json
+    ) -> [URLQueryItem] {
         let s = makeSalt()
         let t = makeToken(password: password, salt: s)
         return [
@@ -572,7 +586,7 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
             URLQueryItem(name: "s", value: s),
             URLQueryItem(name: "v", value: apiVersion),
             URLQueryItem(name: "c", value: clientName),
-            URLQueryItem(name: "f", value: "json")
+            URLQueryItem(name: "f", value: responseFormat.queryValue)
         ]
     }
 
@@ -594,19 +608,22 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
 
     func authParams() throws -> [URLQueryItem] {
         let creds = try resolveCachedCredentials()
-        return makeAuthParams(server: creds.server, password: creds.password)
+        let compatibility = requestCompatibility(for: creds.server)
+        return makeAuthParams(
+            server: creds.server,
+            password: creds.password,
+            apiVersion: compatibility.apiVersion
+        )
     }
 
     private func buildURL(path: String, extra: [URLQueryItem] = []) throws -> URL {
         let creds = try resolveCachedCredentials()
-        var base = creds.server.activeBaseURL
-        if base.hasSuffix("/") { base.removeLast() }
-        guard var comps = URLComponents(string: "\(base)/rest/\(path)") else {
-            throw SubsonicAPIError.invalidURL
-        }
-        comps.queryItems = makeAuthParams(server: creds.server, password: creds.password) + extra
-        guard let url = comps.url else { throw SubsonicAPIError.invalidURL }
-        return url
+        return try buildURL(
+            for: creds.server,
+            password: creds.password,
+            path: path,
+            extra: extra
+        )
     }
 
     private func activeRequestSignature(
@@ -655,13 +672,27 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
     }
     #endif
 
-    private func fetchData(path: String, extra: [URLQueryItem] = [], retries: Int = 0) async throws -> Data {
-        let creds = try await resolveCredentials()
+    private func fetchData(
+        path: String,
+        extra: [URLQueryItem] = [],
+        retries: Int = 0,
+        responseFormat: SubsonicResponseFormat = .json,
+        credentials resolvedCredentials: (
+            server: SubsonicServer,
+            password: String,
+            generation: UInt64
+        )? = nil
+    ) async throws -> Data {
+        let creds: (server: SubsonicServer, password: String, generation: UInt64)
+        if let resolvedCredentials {
+            creds = resolvedCredentials
+        } else {
+            creds = try await resolveCredentials()
+        }
         let requestSignature = activeRequestSignature(
             for: creds.server,
             generation: creds.generation
         )
-        let url = try buildURL(for: creds.server, password: creds.password, path: path, extra: extra)
         await NetworkStatus.shared.waitUntilReady()
         if !NetworkStatus.shared.hasNetwork {
             let networkError = SubsonicAPIError.networkError(URLError(.notConnectedToInternet))
@@ -670,41 +701,66 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
             throw networkError
         }
         var lastError: Error?
-        for attempt in 0...retries {
-            if attempt > 0 {
-                try await Task.sleep(for: .milliseconds(500 * attempt))
-                try Task.checkCancellation()
-            }
-            var request = URLRequest(url: url)
-            request.timeoutInterval = Self.requestTimeout
-            let startedAt = Date()
-            let data: Data
-            let response: URLResponse
-            do {
-                (data, response) = try await session.data(for: request)
-            } catch {
-                if Task.isCancelled || (error as? URLError)?.code == .cancelled {
-                    throw CancellationError()
-                }
-                lastError = error
-                let isRetryable = (error as? URLError).map {
-                    [.timedOut, .networkConnectionLost, .notConnectedToInternet, .cannotConnectToHost].contains($0.code)
-                } ?? false
-                if !isRetryable || attempt == retries {
-                    let elapsed = Date().timeIntervalSince(startedAt)
-                    ConnectivityDebugLog.log("request failed: \(path) -> \(ConnectivityDebugLog.short(error)) after \(String(format: "%.2f", elapsed))s")
-                    break
-                }
-                continue
-            }
+        var compatibility = requestCompatibility(for: creds.server)
+        var attemptedCompatibilities: Set<SubsonicRequestCompatibility> = []
 
-            let elapsed = Date().timeIntervalSince(startedAt)
-            if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
-                let httpError = SubsonicAPIError.httpError(http.statusCode)
-                ConnectivityDebugLog.log("request failed: \(path) -> HTTP \(http.statusCode) after \(String(format: "%.2f", elapsed))s")
-                await notifyServerErrorIfCurrentRequest(requestSignature, message: httpError.localizedDescription)
-                throw httpError
-            } else {
+        compatibilityAttempts: while attemptedCompatibilities.insert(compatibility).inserted {
+            let url = try buildURL(
+                for: creds.server,
+                password: creds.password,
+                path: path,
+                extra: extra,
+                compatibility: compatibility,
+                responseFormat: responseFormat
+            )
+
+            for attempt in 0...retries {
+                if attempt > 0 {
+                    try await Task.sleep(for: .milliseconds(500 * attempt))
+                    try Task.checkCancellation()
+                }
+                var request = URLRequest(url: url)
+                request.timeoutInterval = Self.requestTimeout
+                let startedAt = Date()
+                let data: Data
+                let response: URLResponse
+                do {
+                    (data, response) = try await session.data(for: request)
+                } catch {
+                    if Task.isCancelled || (error as? URLError)?.code == .cancelled {
+                        throw CancellationError()
+                    }
+                    lastError = error
+                    let isRetryable = (error as? URLError).map {
+                        [.timedOut, .networkConnectionLost, .notConnectedToInternet, .cannotConnectToHost].contains($0.code)
+                    } ?? false
+                    if !isRetryable || attempt == retries {
+                        let elapsed = Date().timeIntervalSince(startedAt)
+                        ConnectivityDebugLog.log("request failed: \(path) -> \(ConnectivityDebugLog.short(error)) after \(String(format: "%.2f", elapsed))s")
+                        break compatibilityAttempts
+                    }
+                    continue
+                }
+
+                let elapsed = Date().timeIntervalSince(startedAt)
+                let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 200
+                if let adjusted = compatibility.retrying(
+                    afterHTTPStatus: statusCode,
+                    responseData: data,
+                    responseFormat: responseFormat
+                ), !attemptedCompatibilities.contains(adjusted) {
+                    compatibility = adjusted
+                    continue compatibilityAttempts
+                }
+
+                guard (200...299).contains(statusCode) else {
+                    let httpError = SubsonicAPIError.httpError(statusCode)
+                    ConnectivityDebugLog.log("request failed: \(path) -> HTTP \(statusCode) after \(String(format: "%.2f", elapsed))s")
+                    await notifyServerErrorIfCurrentRequest(requestSignature, message: httpError.localizedDescription)
+                    throw httpError
+                }
+
+                rememberRequestCompatibility(compatibility, for: creds.server)
                 // Server hat geantwortet -> Banner ausblenden, aber nur wenn diese Antwort
                 // noch zur aktuell ausgewählten URL gehört.
                 await clearServerErrorIfCurrentRequest(requestSignature)
@@ -723,7 +779,12 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         }
     }
 
-    nonisolated private func authParams(for server: SubsonicServer, password: String) -> [URLQueryItem] {
+    nonisolated private func authParams(
+        for server: SubsonicServer,
+        password: String,
+        apiVersion: String,
+        responseFormat: SubsonicResponseFormat = .json
+    ) -> [URLQueryItem] {
         let s = makeSalt()
         let t = makeToken(password: password, salt: s)
         return [
@@ -732,46 +793,319 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
             URLQueryItem(name: "s", value: s),
             URLQueryItem(name: "v", value: apiVersion),
             URLQueryItem(name: "c", value: clientName),
-            URLQueryItem(name: "f", value: "json")
+            URLQueryItem(name: "f", value: responseFormat.queryValue)
         ]
     }
 
-    nonisolated private func buildURL(for server: SubsonicServer, password: String, path: String, extra: [URLQueryItem] = []) throws -> URL {
+    nonisolated private func buildURL(
+        for server: SubsonicServer,
+        password: String,
+        path: String,
+        extra: [URLQueryItem] = [],
+        compatibility: SubsonicRequestCompatibility? = nil,
+        responseFormat: SubsonicResponseFormat = .json
+    ) throws -> URL {
+        let compatibility = compatibility ?? requestCompatibility(for: server)
         var base = server.activeBaseURL
         if base.hasSuffix("/") { base.removeLast() }
-        guard var comps = URLComponents(string: "\(base)/rest/\(path)") else {
+        let endpointPath = compatibility.endpointPath(for: path)
+        guard var comps = URLComponents(string: "\(base)/rest/\(endpointPath)") else {
             throw SubsonicAPIError.invalidURL
         }
-        comps.queryItems = authParams(for: server, password: password) + extra
+        comps.queryItems = authParams(
+            for: server,
+            password: password,
+            apiVersion: compatibility.apiVersion,
+            responseFormat: responseFormat
+        ) + extra
         guard let url = comps.url else { throw SubsonicAPIError.invalidURL }
         return url
     }
 
-    private func fetchData(for server: SubsonicServer, password: String, path: String, extra: [URLQueryItem] = []) async throws -> Data {
-        let url = try buildURL(for: server, password: password, path: path, extra: extra)
+    nonisolated private func compatibilityCacheKey(for server: SubsonicServer) -> String {
+        "\(server.id.uuidString)|\(server.activeBaseURL)"
+    }
+
+    nonisolated private func requestCompatibility(
+        for server: SubsonicServer
+    ) -> SubsonicRequestCompatibility {
+        compatibilityLock.withLock {
+            requestCompatibilityByServer[compatibilityCacheKey(for: server)] ?? .current
+        }
+    }
+
+    nonisolated private func rememberRequestCompatibility(
+        _ compatibility: SubsonicRequestCompatibility,
+        for server: SubsonicServer
+    ) {
+        compatibilityLock.withLock {
+            requestCompatibilityByServer[compatibilityCacheKey(for: server)] = compatibility
+        }
+    }
+
+    private func fetchData(
+        for server: SubsonicServer,
+        password: String,
+        path: String,
+        extra: [URLQueryItem] = [],
+        responseFormat: SubsonicResponseFormat = .json
+    ) async throws -> Data {
         await NetworkStatus.shared.waitUntilReady()
         guard NetworkStatus.shared.hasNetwork else {
             throw SubsonicAPIError.networkError(URLError(.notConnectedToInternet))
         }
-        do {
-            var request = URLRequest(url: url)
-            request.timeoutInterval = Self.requestTimeout
-            let (data, response) = try await session.data(for: request)
-            if let http = response as? HTTPURLResponse,
-               !(200...299).contains(http.statusCode) {
-                throw SubsonicAPIError.httpError(http.statusCode)
-            }
-            return data
-        } catch let error as SubsonicAPIError {
-            throw error
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch {
-            if Task.isCancelled || (error as? URLError)?.code == .cancelled {
+
+        var compatibility = requestCompatibility(for: server)
+        var attemptedCompatibilities: Set<SubsonicRequestCompatibility> = []
+
+        while attemptedCompatibilities.insert(compatibility).inserted {
+            let url = try buildURL(
+                for: server,
+                password: password,
+                path: path,
+                extra: extra,
+                compatibility: compatibility,
+                responseFormat: responseFormat
+            )
+            do {
+                var request = URLRequest(url: url)
+                request.timeoutInterval = Self.requestTimeout
+                let (data, response) = try await session.data(for: request)
+                let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 200
+                if let adjusted = compatibility.retrying(
+                    afterHTTPStatus: statusCode,
+                    responseData: data,
+                    responseFormat: responseFormat
+                ), !attemptedCompatibilities.contains(adjusted) {
+                    compatibility = adjusted
+                    continue
+                }
+                guard (200...299).contains(statusCode) else {
+                    throw SubsonicAPIError.httpError(statusCode)
+                }
+                rememberRequestCompatibility(compatibility, for: server)
+                return data
+            } catch let error as SubsonicAPIError {
+                throw error
+            } catch is CancellationError {
                 throw CancellationError()
+            } catch {
+                if Task.isCancelled || (error as? URLError)?.code == .cancelled {
+                    throw CancellationError()
+                }
+                throw SubsonicAPIError.networkError(error)
             }
-            throw SubsonicAPIError.networkError(error)
         }
+
+        throw SubsonicAPIError.apiError(0, "No compatible Subsonic request format")
+    }
+
+    private func fetchDecoded<Value: Decodable & Sendable>(
+        _ type: Value.Type,
+        path: String,
+        extra: [URLQueryItem] = [],
+        retries: Int = 0
+    ) async throws -> Value {
+        let credentials = try await resolveCredentials()
+        return try await fetchDecoded(
+            type,
+            server: credentials.server,
+            path: path,
+            extra: extra,
+            fetch: { [self] format in
+                try await fetchData(
+                    path: path,
+                    extra: extra,
+                    retries: retries,
+                    responseFormat: format,
+                    credentials: credentials
+                )
+            },
+            quietFetch: { [self] format in
+                try await fetchData(
+                    for: credentials.server,
+                    password: credentials.password,
+                    path: path,
+                    extra: extra,
+                    responseFormat: format
+                )
+            }
+        )
+    }
+
+    private func fetchDecoded<Value: Decodable & Sendable>(
+        _ type: Value.Type,
+        for server: SubsonicServer,
+        password: String,
+        path: String,
+        extra: [URLQueryItem] = []
+    ) async throws -> Value {
+        try await fetchDecoded(
+            type,
+            server: server,
+            path: path,
+            extra: extra,
+            fetch: { [self] format in
+                try await fetchData(
+                    for: server,
+                    password: password,
+                    path: path,
+                    extra: extra,
+                    responseFormat: format
+                )
+            },
+            quietFetch: { [self] format in
+                try await fetchData(
+                    for: server,
+                    password: password,
+                    path: path,
+                    extra: extra,
+                    responseFormat: format
+                )
+            }
+        )
+    }
+
+    private func fetchDecoded<Value: Decodable & Sendable>(
+        _ type: Value.Type,
+        server: SubsonicServer,
+        path: String,
+        extra: [URLQueryItem],
+        fetch: @escaping @Sendable (SubsonicResponseFormat) async throws -> Data,
+        quietFetch: @escaping @Sendable (SubsonicResponseFormat) async throws -> Data
+    ) async throws -> Value {
+        let serverKey = responseFormatServerKey(for: server)
+        let selection = responseFormatPreferences.selection(
+            serverKey: serverKey,
+            endpoint: path
+        )
+        let primaryFormat = selection.preferredFormat
+        let requestKey = responseRequestKey(
+            serverKey: serverKey,
+            path: path,
+            extra: extra
+        )
+
+        let result: SubsonicResponseNegotiationResult<Value>
+        do {
+            result = try await SubsonicResponseNegotiator.load(
+                primaryFormat: primaryFormat,
+                fallbackFormat: selection.fallbackFormat,
+                fetch: { [responseRequestGate] format in
+                    guard format != primaryFormat else {
+                        return try await fetch(format)
+                    }
+                    return try await responseRequestGate.data(
+                        for: "\(requestKey)|\(format.rawValue)"
+                    ) {
+                        try await fetch(format)
+                    }
+                },
+                decode: { data, format in
+                    try await Self.decodeOffMain(type, from: data, format: format)
+                }
+            )
+        } catch let failure as SubsonicResponseDecodingFailure {
+            if failure.fallbackFormat == .xml {
+                responseFormatPreferences.recordXMLFailure(
+                    serverKey: serverKey,
+                    endpoint: path
+                )
+            }
+            throw SubsonicAPIError.decodingError(failure)
+        }
+
+        switch (primaryFormat, result.format) {
+        case (.json, .json):
+            // A normal JSON response must not erase an XML decision learned
+            // concurrently from another request to the same endpoint.
+            break
+        case (.xml, .json):
+            responseFormatPreferences.recordJSONSuccess(
+                serverKey: serverKey,
+                endpoint: path
+            )
+        case (.json, .xml):
+            responseFormatPreferences.recordXMLSuccess(
+                serverKey: serverKey,
+                endpoint: path
+            )
+        case (.xml, .xml):
+            if case .xml(let shouldReprobeJSON) = selection,
+               shouldReprobeJSON {
+                scheduleJSONReprobe(
+                    type,
+                    serverKey: serverKey,
+                    path: path,
+                    fetch: quietFetch
+                )
+            }
+        }
+        return result.value
+    }
+
+    private func scheduleJSONReprobe<Value: Decodable & Sendable>(
+        _ type: Value.Type,
+        serverKey: String,
+        path: String,
+        fetch: @escaping @Sendable (SubsonicResponseFormat) async throws -> Data
+    ) {
+        guard responseFormatPreferences.claimJSONReprobe(
+            serverKey: serverKey,
+            endpoint: path
+        ) else { return }
+
+        Task(priority: .utility) { [responseFormatPreferences] in
+            do {
+                let data = try await fetch(.json)
+                do {
+                    _ = try await Self.decodeOffMain(type, from: data, format: .json)
+                    responseFormatPreferences.finishJSONReprobe(
+                        serverKey: serverKey,
+                        endpoint: path,
+                        decodedSuccessfully: true,
+                        receivedResponse: true
+                    )
+                } catch {
+                    responseFormatPreferences.finishJSONReprobe(
+                        serverKey: serverKey,
+                        endpoint: path,
+                        decodedSuccessfully: false,
+                        receivedResponse: true
+                    )
+                }
+            } catch {
+                responseFormatPreferences.finishJSONReprobe(
+                    serverKey: serverKey,
+                    endpoint: path,
+                    decodedSuccessfully: false,
+                    receivedResponse: false
+                )
+            }
+        }
+    }
+
+    nonisolated private func responseFormatServerKey(for server: SubsonicServer) -> String {
+        "\(server.id.uuidString)|\(server.activeBaseURL)|\(server.username)"
+    }
+
+    nonisolated private func responseFormatServerFingerprint(_ info: ServerInfo) -> String {
+        [info.apiVersion, info.serverType, info.serverVersion]
+            .compactMap { value in
+                guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+                      !value.isEmpty else { return nil }
+                return value
+            }
+            .joined(separator: "|")
+    }
+
+    nonisolated private func responseRequestKey(
+        serverKey: String,
+        path: String,
+        extra: [URLQueryItem]
+    ) -> String {
+        let query = extra.map { "\($0.name)=\($0.value ?? "")" }.joined(separator: "&")
+        return "\(serverKey)|\(path)|\(query)"
     }
 
     func ping() async throws {
@@ -781,8 +1115,10 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
             return
         }
         #endif
-        let data = try await fetchData(path: "ping")
-        let body = try decoder.decode(Envelope<PingBody>.self, from: data).response
+        let body = try await fetchDecoded(
+            Envelope<PingBody>.self,
+            path: "ping"
+        ).response
         try check(status: body.status, error: body.error)
     }
 
@@ -790,24 +1126,49 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
     func ping(server: SubsonicServer, password: String) async throws -> ServerInfo {
         #if DEBUG
         if server.baseURL == DemoContent.serverBaseURL || server.activeBaseURL == DemoContent.serverBaseURL {
-            return ServerInfo(apiVersion: apiVersion, serverVersion: "Shelv Demo", serverType: "demo")
+            return ServerInfo(
+                apiVersion: SubsonicRequestCompatibility.currentAPIVersion,
+                serverVersion: "Shelv Demo",
+                serverType: "demo"
+            )
         }
         #endif
-        let data = try await fetchData(for: server, password: password, path: "ping")
-        let body = try decoder.decode(Envelope<PingInfoBody>.self, from: data).response
+        let body = try await fetchDecoded(
+            Envelope<PingInfoBody>.self,
+            for: server,
+            password: password,
+            path: "ping"
+        ).response
         try check(status: body.status, error: body.error)
-        return ServerInfo(apiVersion: body.version, serverVersion: body.serverVersion, serverType: body.type)
+        let info = ServerInfo(
+            apiVersion: body.version,
+            serverVersion: body.serverVersion,
+            serverType: body.type
+        )
+        responseFormatPreferences.noteServerFingerprint(
+            responseFormatServerFingerprint(info),
+            serverKey: responseFormatServerKey(for: server)
+        )
+        return info
     }
 
     func startScan(server: SubsonicServer, password: String) async throws {
-        let data = try await fetchData(for: server, password: password, path: "startScan")
-        let body = try decoder.decode(Envelope<PingBody>.self, from: data).response
+        let body = try await fetchDecoded(
+            Envelope<PingBody>.self,
+            for: server,
+            password: password,
+            path: "startScan"
+        ).response
         try check(status: body.status, error: body.error)
     }
 
     func getScanStatus(server: SubsonicServer, password: String) async throws -> ScanStatus {
-        let data = try await fetchData(for: server, password: password, path: "getScanStatus")
-        let body = try decoder.decode(Envelope<ScanStatusBody>.self, from: data).response
+        let body = try await fetchDecoded(
+            Envelope<ScanStatusBody>.self,
+            for: server,
+            password: password,
+            path: "getScanStatus"
+        ).response
         try check(status: body.status, error: body.error)
         let detail = body.scanStatus
         return ScanStatus(scanning: detail?.scanning ?? false, count: detail?.count ?? 0)
@@ -817,12 +1178,11 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         #if DEBUG
         if isDemoActive { return offset > 0 ? [] : DemoContent.albumList(type: type) }
         #endif
-        let data = try await fetchData(path: "getAlbumList2", extra: [
+        let body = try await fetchDecoded(Envelope<AlbumListBody>.self, path: "getAlbumList2", extra: [
             URLQueryItem(name: "type", value: type),
             URLQueryItem(name: "size", value: "\(size)"),
             URLQueryItem(name: "offset", value: "\(offset)")
-        ])
-        let body = try await Self.decodeOffMain(Envelope<AlbumListBody>.self, from: data).response
+        ]).response
         try check(status: body.status, error: body.error)
         return body.albumList2?.album ?? []
     }
@@ -843,8 +1203,10 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         #if DEBUG
         if isDemoActive { return DemoContent.artists }
         #endif
-        let data = try await fetchData(path: "getArtists")
-        let body = try await Self.decodeOffMain(Envelope<ArtistsBody>.self, from: data).response
+        let body = try await fetchDecoded(
+            Envelope<ArtistsBody>.self,
+            path: "getArtists"
+        ).response
         try check(status: body.status, error: body.error)
         let indices = body.artists?.index ?? []
         return indices.flatMap { $0.artist ?? [] }
@@ -857,10 +1219,9 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
             return d
         }
         #endif
-        let data = try await fetchData(path: "getAlbum", extra: [
+        let body = try await fetchDecoded(Envelope<AlbumBody>.self, path: "getAlbum", extra: [
             URLQueryItem(name: "id", value: id)
-        ], retries: retries)
-        let body = try decoder.decode(Envelope<AlbumBody>.self, from: data).response
+        ], retries: retries).response
         try check(status: body.status, error: body.error)
         guard let album = body.album else { throw SubsonicAPIError.apiError(0, "Album not found") }
         return album
@@ -873,10 +1234,9 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
             return d
         }
         #endif
-        let data = try await fetchData(path: "getArtist", extra: [
+        let body = try await fetchDecoded(Envelope<ArtistBody>.self, path: "getArtist", extra: [
             URLQueryItem(name: "id", value: id)
-        ], retries: retries)
-        let body = try decoder.decode(Envelope<ArtistBody>.self, from: data).response
+        ], retries: retries).response
         try check(status: body.status, error: body.error)
         guard let artist = body.artist else { throw SubsonicAPIError.apiError(0, "Artist not found") }
         return artist
@@ -886,33 +1246,31 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         #if DEBUG
         if isDemoActive { return ArtistInfo(biography: nil) }
         #endif
-        let data = try await fetchData(path: "getArtistInfo2", extra: [
+        let body = try await fetchDecoded(Envelope<ArtistInfoBody>.self, path: "getArtistInfo2", extra: [
             URLQueryItem(name: "id", value: id),
             URLQueryItem(name: "count", value: "0")
-        ])
-        let body = try decoder.decode(Envelope<ArtistInfoBody>.self, from: data).response
+        ]).response
         try check(status: body.status, error: body.error)
         return body.artistInfo2 ?? ArtistInfo(biography: nil)
     }
 
     func getSong(id: String, retries: Int = 0) async throws -> Song {
-        let data = try await fetchData(path: "getSong", extra: [
+        let body = try await fetchDecoded(Envelope<SongBody>.self, path: "getSong", extra: [
             URLQueryItem(name: "id", value: id)
-        ], retries: retries)
-        let body = try decoder.decode(Envelope<SongBody>.self, from: data).response
+        ], retries: retries).response
         try check(status: body.status, error: body.error)
         guard let song = body.song else { throw SubsonicAPIError.apiError(0, "Song not found") }
         return song
     }
 
     func getSong(id: String, context: SubsonicServerRequestContext) async throws -> Song {
-        let data = try await fetchData(
+        let body = try await fetchDecoded(
+            Envelope<SongBody>.self,
             for: context.server,
             password: context.password,
             path: "getSong",
             extra: [URLQueryItem(name: "id", value: id)]
-        )
-        let body = try decoder.decode(Envelope<SongBody>.self, from: data).response
+        ).response
         try check(status: body.status, error: body.error)
         guard let song = body.song else { throw SubsonicAPIError.apiError(0, "Song not found") }
         return song
@@ -937,13 +1295,12 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         #if DEBUG
         if isDemoActive { return DemoContent.search(query: query) }
         #endif
-        let data = try await fetchData(path: "search3", extra: [
+        let body = try await fetchDecoded(Envelope<SearchBody>.self, path: "search3", extra: [
             URLQueryItem(name: "query", value: query),
             URLQueryItem(name: "artistCount", value: "10"),
             URLQueryItem(name: "albumCount", value: "10"),
             URLQueryItem(name: "songCount", value: "20")
-        ])
-        let body = try decoder.decode(Envelope<SearchBody>.self, from: data).response
+        ]).response
         try check(status: body.status, error: body.error)
         return body.searchResult3 ?? SearchResult(artist: nil, album: nil, song: nil)
     }
@@ -972,8 +1329,12 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
     ) async throws -> [Song] {
         var extra = [URLQueryItem(name: "size", value: "\(size)")]
         if let g = genre { extra.append(URLQueryItem(name: "genre", value: g)) }
-        let data = try await fetchData(path: "getRandomSongs", extra: extra, retries: retries)
-        let body = try decoder.decode(Envelope<RandomSongsBody>.self, from: data).response
+        let body = try await fetchDecoded(
+            Envelope<RandomSongsBody>.self,
+            path: "getRandomSongs",
+            extra: extra,
+            retries: retries
+        ).response
         try check(status: body.status, error: body.error)
         return body.randomSongs?.song ?? []
     }
@@ -1009,11 +1370,16 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         #if DEBUG
         if isDemoActive { return }
         #endif
-        let data = try await fetchData(
+        let body = try await fetchDecoded(
+            Envelope<PingBody>.self,
             path: "scrobble",
-            extra: scrobbleQueryItems(songId: songId, submission: submission, playedAt: playedAt)
-        )
-        try validateScrobbleResponse(data)
+            extra: scrobbleQueryItems(
+                songId: songId,
+                submission: submission,
+                playedAt: playedAt
+            )
+        ).response
+        try check(status: body.status, error: body.error)
     }
 
     /// Servergebundene Variante für die persistente Outbox. Sie verwendet nicht
@@ -1031,13 +1397,14 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
             return
         }
         #endif
-        let data = try await fetchData(
+        let body = try await fetchDecoded(
+            Envelope<PingBody>.self,
             for: server,
             password: password,
             path: "scrobble",
             extra: scrobbleQueryItems(songId: songId, submission: submission, playedAt: playedAt)
-        )
-        try validateScrobbleResponse(data)
+        ).response
+        try check(status: body.status, error: body.error)
     }
 
     private func scrobbleQueryItems(
@@ -1056,11 +1423,6 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         return extra
     }
 
-    private func validateScrobbleResponse(_ data: Data) throws {
-        let body = try decoder.decode(Envelope<PingBody>.self, from: data).response
-        try check(status: body.status, error: body.error)
-    }
-
     /// Speichert die Wiedergabe-Queue serverseitig (`savePlayQueue`).
     /// - Parameter songIds: Reihenfolge der Songs. Leer = gespeicherte Queue löschen.
     /// - Parameter current: ID des aktuellen Songs (nur relevant, wenn `songIds` nicht leer).
@@ -1074,8 +1436,11 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
             if let current { extra.append(URLQueryItem(name: "current", value: current)) }
             extra.append(URLQueryItem(name: "position", value: String(positionMs)))
         }
-        let data = try await fetchData(path: "savePlayQueue", extra: extra)
-        let body = try decoder.decode(Envelope<PingBody>.self, from: data).response
+        let body = try await fetchDecoded(
+            Envelope<PingBody>.self,
+            path: "savePlayQueue",
+            extra: extra
+        ).response
         try check(status: body.status, error: body.error)
     }
 
@@ -1096,13 +1461,13 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
             if let current { extra.append(URLQueryItem(name: "current", value: current)) }
             extra.append(URLQueryItem(name: "position", value: String(positionMs)))
         }
-        let data = try await fetchData(
+        let body = try await fetchDecoded(
+            Envelope<PingBody>.self,
             for: context.server,
             password: context.password,
             path: "savePlayQueue",
             extra: extra
-        )
-        let body = try decoder.decode(Envelope<PingBody>.self, from: data).response
+        ).response
         try check(status: body.status, error: body.error)
     }
 
@@ -1112,8 +1477,10 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         #if DEBUG
         if isDemoActive { return nil }
         #endif
-        let data = try await fetchData(path: "getPlayQueue")
-        let body = try decoder.decode(Envelope<PlayQueueBody>.self, from: data).response
+        let body = try await fetchDecoded(
+            Envelope<PlayQueueBody>.self,
+            path: "getPlayQueue"
+        ).response
         try check(status: body.status, error: body.error)
         guard let q = body.playQueue, let entries = q.entry, !entries.isEmpty else { return nil }
         return SubsonicPlayQueue(
@@ -1125,22 +1492,20 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
 
     /// Ähnliche Songs zu einer Song-ID.
     func getSimilarSongs(id: String, count: Int = 50, retries: Int = 0) async throws -> [Song] {
-        let data = try await fetchData(path: "getSimilarSongs", extra: [
+        let body = try await fetchDecoded(Envelope<SimilarSongsBody>.self, path: "getSimilarSongs", extra: [
             URLQueryItem(name: "id", value: id),
             URLQueryItem(name: "count", value: "\(count)")
-        ], retries: retries)
-        let body = try decoder.decode(Envelope<SimilarSongsBody>.self, from: data).response
+        ], retries: retries).response
         try check(status: body.status, error: body.error)
         return body.similarSongs?.song ?? []
     }
 
     /// Ähnliche Songs über die ID3/OpenSubsonic-Variante, typischerweise für Artist-IDs.
     func getSimilarSongs2(id: String, count: Int = 50, retries: Int = 0) async throws -> [Song] {
-        let data = try await fetchData(path: "getSimilarSongs2", extra: [
+        let body = try await fetchDecoded(Envelope<SimilarSongs2Body>.self, path: "getSimilarSongs2", extra: [
             URLQueryItem(name: "id", value: id),
             URLQueryItem(name: "count", value: "\(count)")
-        ], retries: retries)
-        let body = try decoder.decode(Envelope<SimilarSongs2Body>.self, from: data).response
+        ], retries: retries).response
         try check(status: body.status, error: body.error)
         return body.similarSongs2?.song ?? []
     }
@@ -1151,11 +1516,10 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         count: Int = 50,
         retries: Int = 0
     ) async throws -> [Song] {
-        let data = try await fetchData(path: "getTopSongs", extra: [
+        let body = try await fetchDecoded(Envelope<TopSongsBody>.self, path: "getTopSongs", extra: [
             URLQueryItem(name: "artist", value: artistName),
             URLQueryItem(name: "count", value: "\(count)")
-        ], retries: retries)
-        let body = try decoder.decode(Envelope<TopSongsBody>.self, from: data).response
+        ], retries: retries).response
         try check(status: body.status, error: body.error)
         return body.topSongs?.song ?? []
     }
@@ -1167,24 +1531,41 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
 
     /// Ping mit Server-Metadaten für den aktiven Server (macOS-Serververwaltung).
     func getServerInfo() async throws -> ServerInfo {
-        let data = try await fetchData(path: "ping")
-        let body = try decoder.decode(Envelope<PingInfoBody>.self, from: data).response
+        let body = try await fetchDecoded(
+            Envelope<PingInfoBody>.self,
+            path: "ping"
+        ).response
         try check(status: body.status, error: body.error)
-        return ServerInfo(apiVersion: body.version, serverVersion: body.serverVersion, serverType: body.type)
+        let info = ServerInfo(
+            apiVersion: body.version,
+            serverVersion: body.serverVersion,
+            serverType: body.type
+        )
+        if let server = activeServer {
+            responseFormatPreferences.noteServerFingerprint(
+                responseFormatServerFingerprint(info),
+                serverKey: responseFormatServerKey(for: server)
+            )
+        }
+        return info
     }
 
     /// Scan auf dem aktiven Server starten (macOS-Serververwaltung).
     func startScan() async throws -> ScanStatus {
-        let data = try await fetchData(path: "startScan")
-        let body = try decoder.decode(Envelope<ScanStatusBody>.self, from: data).response
+        let body = try await fetchDecoded(
+            Envelope<ScanStatusBody>.self,
+            path: "startScan"
+        ).response
         try check(status: body.status, error: body.error)
         return ScanStatus(scanning: body.scanStatus?.scanning ?? false, count: body.scanStatus?.count ?? 0)
     }
 
     /// Scan-Status des aktiven Servers (macOS-Serververwaltung).
     func getScanStatus() async throws -> ScanStatus {
-        let data = try await fetchData(path: "getScanStatus")
-        let body = try decoder.decode(Envelope<ScanStatusBody>.self, from: data).response
+        let body = try await fetchDecoded(
+            Envelope<ScanStatusBody>.self,
+            path: "getScanStatus"
+        ).response
         try check(status: body.status, error: body.error)
         return ScanStatus(scanning: body.scanStatus?.scanning ?? false, count: body.scanStatus?.count ?? 0)
     }
@@ -1312,8 +1693,10 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         #if DEBUG
         if isDemoActive { return DemoContent.starred }
         #endif
-        let data = try await fetchData(path: "getStarred2")
-        let body = try decoder.decode(Envelope<StarredBody>.self, from: data).response
+        let body = try await fetchDecoded(
+            Envelope<StarredBody>.self,
+            path: "getStarred2"
+        ).response
         try check(status: body.status, error: body.error)
         return body.starred2 ?? StarredResult(artist: nil, album: nil, song: nil)
     }
@@ -1323,8 +1706,11 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         if let id = songId   { extra.append(URLQueryItem(name: "id",       value: id)) }
         if let id = albumId  { extra.append(URLQueryItem(name: "albumId",  value: id)) }
         if let id = artistId { extra.append(URLQueryItem(name: "artistId", value: id)) }
-        let data = try await fetchData(path: "star", extra: extra)
-        let body = try decoder.decode(Envelope<PingBody>.self, from: data).response
+        let body = try await fetchDecoded(
+            Envelope<PingBody>.self,
+            path: "star",
+            extra: extra
+        ).response
         try check(status: body.status, error: body.error)
     }
 
@@ -1333,8 +1719,11 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         if let id = songId   { extra.append(URLQueryItem(name: "id",       value: id)) }
         if let id = albumId  { extra.append(URLQueryItem(name: "albumId",  value: id)) }
         if let id = artistId { extra.append(URLQueryItem(name: "artistId", value: id)) }
-        let data = try await fetchData(path: "unstar", extra: extra)
-        let body = try decoder.decode(Envelope<PingBody>.self, from: data).response
+        let body = try await fetchDecoded(
+            Envelope<PingBody>.self,
+            path: "unstar",
+            extra: extra
+        ).response
         try check(status: body.status, error: body.error)
     }
 
@@ -1344,8 +1733,10 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         #if DEBUG
         if isDemoActive { return DemoContent.playlists }
         #endif
-        let data = try await fetchData(path: "getPlaylists")
-        let body = try decoder.decode(Envelope<PlaylistsBody>.self, from: data).response
+        let body = try await fetchDecoded(
+            Envelope<PlaylistsBody>.self,
+            path: "getPlaylists"
+        ).response
         try check(status: body.status, error: body.error)
         return body.playlists?.playlist ?? []
     }
@@ -1357,12 +1748,12 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
             return DemoContent.playlists
         }
         #endif
-        let data = try await fetchData(
+        let body = try await fetchDecoded(
+            Envelope<PlaylistsBody>.self,
             for: context.server,
             password: context.password,
             path: "getPlaylists"
-        )
-        let body = try decoder.decode(Envelope<PlaylistsBody>.self, from: data).response
+        ).response
         try check(status: body.status, error: body.error)
         return body.playlists?.playlist ?? []
     }
@@ -1374,10 +1765,9 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
             return p
         }
         #endif
-        let data = try await fetchData(path: "getPlaylist", extra: [
+        let body = try await fetchDecoded(Envelope<PlaylistBody>.self, path: "getPlaylist", extra: [
             URLQueryItem(name: "id", value: id)
-        ])
-        let body = try decoder.decode(Envelope<PlaylistBody>.self, from: data).response
+        ]).response
         try check(status: body.status, error: body.error)
         guard let detail = body.playlist else {
             throw SubsonicAPIError.apiError(0, "Playlist not found")
@@ -1400,13 +1790,13 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
             return playlist
         }
         #endif
-        let data = try await fetchData(
+        let body = try await fetchDecoded(
+            Envelope<PlaylistBody>.self,
             for: context.server,
             password: context.password,
             path: "getPlaylist",
             extra: [URLQueryItem(name: "id", value: id)]
-        )
-        let body = try decoder.decode(Envelope<PlaylistBody>.self, from: data).response
+        ).response
         try check(status: body.status, error: body.error)
         guard let detail = body.playlist else {
             throw SubsonicAPIError.apiError(0, "Playlist not found")
@@ -1422,8 +1812,11 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
     func createPlaylist(name: String, songIds: [String] = [], comment: String? = nil) async throws -> Playlist {
         var extra = [URLQueryItem(name: "name", value: name)]
         extra += songIds.map { URLQueryItem(name: "songId", value: $0) }
-        let data = try await fetchData(path: "createPlaylist", extra: extra)
-        let body = try decoder.decode(Envelope<CreatePlaylistBody>.self, from: data).response
+        let body = try await fetchDecoded(
+            Envelope<CreatePlaylistBody>.self,
+            path: "createPlaylist",
+            extra: extra
+        ).response
         try check(status: body.status, error: body.error)
         guard let detail = body.playlist else {
             throw SubsonicAPIError.apiError(0, "Create playlist failed")
@@ -1445,13 +1838,13 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
     ) async throws -> Playlist {
         var extra = [URLQueryItem(name: "name", value: name)]
         extra += songIds.map { URLQueryItem(name: "songId", value: $0) }
-        let data = try await fetchData(
+        let body = try await fetchDecoded(
+            Envelope<CreatePlaylistBody>.self,
             for: context.server,
             password: context.password,
             path: "createPlaylist",
             extra: extra
-        )
-        let body = try decoder.decode(Envelope<CreatePlaylistBody>.self, from: data).response
+        ).response
         try check(status: body.status, error: body.error)
         guard let detail = body.playlist else {
             throw SubsonicAPIError.apiError(0, "Create playlist failed")
@@ -1473,8 +1866,11 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         extra += songIdsToAdd.map         { URLQueryItem(name: "songIdToAdd",          value: $0) }
         extra += normalizedPlaylistRemovalIndices(songIndicesToRemove)
             .map { URLQueryItem(name: "songIndexToRemove", value: "\($0)") }
-        let data = try await fetchData(path: "updatePlaylist", extra: extra)
-        let body = try decoder.decode(Envelope<PingBody>.self, from: data).response
+        let body = try await fetchDecoded(
+            Envelope<PingBody>.self,
+            path: "updatePlaylist",
+            extra: extra
+        ).response
         try check(status: body.status, error: body.error)
     }
 
@@ -1492,13 +1888,13 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         extra += songIdsToAdd.map { URLQueryItem(name: "songIdToAdd", value: $0) }
         extra += normalizedPlaylistRemovalIndices(songIndicesToRemove)
             .map { URLQueryItem(name: "songIndexToRemove", value: "\($0)") }
-        let data = try await fetchData(
+        let body = try await fetchDecoded(
+            Envelope<PingBody>.self,
             for: context.server,
             password: context.password,
             path: "updatePlaylist",
             extra: extra
-        )
-        let body = try decoder.decode(Envelope<PingBody>.self, from: data).response
+        ).response
         try check(status: body.status, error: body.error)
     }
 
@@ -1507,10 +1903,9 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
     }
 
     func deletePlaylist(id: String) async throws {
-        let data = try await fetchData(path: "deletePlaylist", extra: [
+        let body = try await fetchDecoded(Envelope<PingBody>.self, path: "deletePlaylist", extra: [
             URLQueryItem(name: "id", value: id)
-        ])
-        let body = try decoder.decode(Envelope<PingBody>.self, from: data).response
+        ]).response
         try check(status: body.status, error: body.error)
     }
 
@@ -1521,13 +1916,13 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
             return
         }
         #endif
-        let data = try await fetchData(
+        let body = try await fetchDecoded(
+            Envelope<PingBody>.self,
             for: context.server,
             password: context.password,
             path: "deletePlaylist",
             extra: [URLQueryItem(name: "id", value: id)]
-        )
-        let body = try decoder.decode(Envelope<PingBody>.self, from: data).response
+        ).response
         try check(status: body.status, error: body.error)
     }
 
@@ -1542,8 +1937,10 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
             ]
         }
         #endif
-        let data = try await fetchData(path: "getInternetRadioStations")
-        let body = try decoder.decode(Envelope<InternetRadioStationsBody>.self, from: data).response
+        let body = try await fetchDecoded(
+            Envelope<InternetRadioStationsBody>.self,
+            path: "getInternetRadioStations"
+        ).response
         try check(status: body.status, error: body.error)
         return body.internetRadioStations?.internetRadioStation ?? []
     }
@@ -1556,8 +1953,11 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         if let homePageURL, !homePageURL.isEmpty {
             extra.append(URLQueryItem(name: "homePageUrl", value: homePageURL))
         }
-        let data = try await fetchData(path: "createInternetRadioStation", extra: extra)
-        let body = try decoder.decode(Envelope<PingBody>.self, from: data).response
+        let body = try await fetchDecoded(
+            Envelope<PingBody>.self,
+            path: "createInternetRadioStation",
+            extra: extra
+        ).response
         try check(status: body.status, error: body.error)
     }
 
@@ -1570,63 +1970,77 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         if let homePageURL, !homePageURL.isEmpty {
             extra.append(URLQueryItem(name: "homePageUrl", value: homePageURL))
         }
-        let data = try await fetchData(path: "updateInternetRadioStation", extra: extra)
-        let body = try decoder.decode(Envelope<PingBody>.self, from: data).response
+        let body = try await fetchDecoded(
+            Envelope<PingBody>.self,
+            path: "updateInternetRadioStation",
+            extra: extra
+        ).response
         try check(status: body.status, error: body.error)
     }
 
     func deleteInternetRadioStation(id: String) async throws {
-        let data = try await fetchData(path: "deleteInternetRadioStation", extra: [
+        let body = try await fetchDecoded(Envelope<PingBody>.self, path: "deleteInternetRadioStation", extra: [
             URLQueryItem(name: "id", value: id)
-        ])
-        let body = try decoder.decode(Envelope<PingBody>.self, from: data).response
+        ]).response
         try check(status: body.status, error: body.error)
     }
 
     // MARK: - Lyrics (OpenSubsonic)
 
     func getLyricsBySongId(songId: String) async throws -> StructuredLyrics? {
-        let data = try await fetchData(path: "getLyricsBySongId", extra: [
+        let body = try await fetchDecoded(Envelope<LyricsListBody>.self, path: "getLyricsBySongId", extra: [
             URLQueryItem(name: "id", value: songId)
-        ])
-        let body = try decoder.decode(Envelope<LyricsListBody>.self, from: data).response
+        ]).response
         try check(status: body.status, error: body.error)
         return body.lyricsList?.structuredLyrics?.first
     }
 
     /// URL für getLyricsBySongId — nutzbar mit Background-URLSession.
     nonisolated func lyricsURL(for songId: String, server: SubsonicServer, password: String) -> URL? {
-        try? buildURL(for: server, password: password, path: "getLyricsBySongId", extra: [
+        let responseFormat = SubsonicResponseFormatPreferences.shared.selection(
+            serverKey: responseFormatServerKey(for: server),
+            endpoint: "getLyricsBySongId"
+        ).preferredFormat
+        return try? buildURL(for: server, password: password, path: "getLyricsBySongId", extra: [
             URLQueryItem(name: "id", value: songId)
-        ])
+        ], responseFormat: responseFormat)
     }
 
     /// Parst die Antwort eines getLyricsBySongId-Calls. Returnt nil bei API-Fehler oder leerer Response.
     nonisolated func parseLyricsResponse(data: Data) -> StructuredLyrics? {
-        let dec = JSONDecoder()
-        guard let body = try? dec.decode(Envelope<LyricsListBody>.self, from: data).response,
-              body.status != "failed" else { return nil }
+        if let body = try? Self.makeDecoder().decode(
+            Envelope<LyricsListBody>.self,
+            from: data
+        ).response {
+            guard body.status != "failed" else { return nil }
+            return body.lyricsList?.structuredLyrics?.first
+        }
+        guard let body = try? SubsonicXMLDecoder().decode(
+            Envelope<LyricsListBody>.self,
+            from: data
+        ).response,
+        body.status != "failed" else { return nil }
         return body.lyricsList?.structuredLyrics?.first
     }
 }
 
-nonisolated struct StructuredLyrics: Codable {
+nonisolated struct StructuredLyrics: Codable, Sendable {
     let synced: Bool
     let lang: String?
     let line: [LyricsLine]?
 
-    struct LyricsLine: Codable {
+    struct LyricsLine: Codable, Sendable {
         let start: Int?
         let value: String
     }
 }
 
-private nonisolated struct LyricsListBody: Decodable {
+private nonisolated struct LyricsListBody: Decodable, Sendable {
     let status: String
     let error: StatusCheck.APIError?
     let lyricsList: LyricsList?
 
-    struct LyricsList: Decodable {
+    struct LyricsList: Decodable, Sendable {
         let structuredLyrics: [StructuredLyrics]?
     }
 }
