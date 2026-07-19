@@ -141,6 +141,7 @@ struct ContentView: View {
         if usesNativeMiniPlayer {
             NativeBottomRoot(
                 tabSelection: tabSelection,
+                activeTab: selectedTab,
                 searchResetToken: searchResetToken,
                 settingsPath: $settingsPath,
                 showPlayer: $showPlayer
@@ -148,6 +149,7 @@ struct ContentView: View {
         } else {
             ShelvBottomRoot(
                 tabSelection: tabSelection,
+                activeTab: selectedTab,
                 searchResetToken: searchResetToken,
                 settingsPath: $settingsPath,
                 showPlayer: $showPlayer
@@ -239,6 +241,7 @@ private struct IdentifiableStrings: Identifiable {
 
 private struct ShelvBottomRoot: View {
     let tabSelection: Binding<Int>
+    let activeTab: Int
     let searchResetToken: Int
     @Binding var settingsPath: NavigationPath
     @Binding var showPlayer: Bool
@@ -272,7 +275,7 @@ private struct ShelvBottomRoot: View {
 
     private var standardTabView: some View {
         TabView(selection: tabSelection) {
-            DiscoverView()
+            DiscoverView(isActive: activeTab == 0)
                 .tabItem { Label(String(localized: "discover"), systemImage: "sparkles") }
                 .tag(0)
             LibraryView()
@@ -302,6 +305,7 @@ private struct ShelvBottomRoot: View {
 
 private struct NativeBottomRoot: View {
     let tabSelection: Binding<Int>
+    let activeTab: Int
     let searchResetToken: Int
     @Binding var settingsPath: NavigationPath
     @Binding var showPlayer: Bool
@@ -343,7 +347,7 @@ private struct NativeBottomRoot: View {
     private var tabs: some View {
         TabView(selection: tabSelection) {
             Tab(String(localized: "discover"), systemImage: "sparkles", value: 0) {
-                DiscoverView()
+                DiscoverView(isActive: activeTab == 0)
             }
             Tab(libraryTabTitle, systemImage: libraryTabImage, value: 1) {
                 LibraryView()

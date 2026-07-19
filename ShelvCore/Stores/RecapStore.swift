@@ -478,10 +478,17 @@ class RecapStore: ObservableObject {
 
         return try await RecapSyncLogic.stabilized(
             scan: {
-                let scan = try await self.scanDiffs(
-                    serverId: serverId,
-                    requestContext: requestContext
-                )
+                let scanTask = Task.detached(priority: .utility) {
+                    try await Self.scanDiffs(
+                        serverId: serverId,
+                        requestContext: requestContext
+                    )
+                }
+                let scan = try await withTaskCancellationHandler {
+                    try await scanTask.value
+                } onCancel: {
+                    scanTask.cancel()
+                }
                 return (scan.diffs, scan.deadSongIds)
             },
             removeDeadSongIds: { songIds in
@@ -494,9 +501,9 @@ class RecapStore: ObservableObject {
         )
     }
 
-    /// Network waits already suspend correctly; making the scan nonisolated also
-    /// keeps the set/dictionary/diff construction between those waits off MainActor.
-    private nonisolated func scanDiffs(
+    /// Runs from an explicitly detached utility task so the set, dictionary and
+    /// diff construction between network waits can never inherit MainActor.
+    private nonisolated static func scanDiffs(
         serverId: String,
         requestContext: SubsonicServerRequestContext?
     ) async throws -> RecapDiffScan {
@@ -517,6 +524,7 @@ class RecapStore: ObservableObject {
             ).map(\.songId)
 
             let current: Playlist?
+            try Task.checkCancellation()
             do {
                 if let requestContext {
                     current = try await api.getPlaylist(id: entry.playlistId, context: requestContext)
@@ -610,7 +618,7 @@ class RecapStore: ObservableObject {
         return RecapDiffScan(diffs: diffs, deadSongIds: deadSongIds)
     }
 
-    private nonisolated func resolveSong(
+    private nonisolated static func resolveSong(
         id: String,
         requestContext: SubsonicServerRequestContext?
     ) async throws -> SongResolution {
@@ -640,14 +648,14 @@ class RecapStore: ObservableObject {
         }
     }
 
-    private nonisolated func isDefinitiveNotFound(_ error: Error) -> Bool {
+    private nonisolated static func isDefinitiveNotFound(_ error: Error) -> Bool {
         guard let apiError = error as? SubsonicAPIError,
               case .apiError(let code, let message) = apiError
         else { return false }
         return RecapSyncLogic.isDefinitiveNotFound(code: code, message: message)
     }
 
-    private nonisolated func placeholderSong(id: String) -> Song {
+    private nonisolated static func placeholderSong(id: String) -> Song {
         Song(
             id: id, title: id, artist: nil, album: nil, albumId: nil,
             track: nil, discNumber: nil, duration: nil, coverArt: nil, year: nil, genre: nil,
@@ -778,7 +786,7 @@ class RecapStore: ObservableObject {
                             ckRecordName: recordName,
                             isTest: diff.entry.isTest
                         )
-                    } catch where isDefinitiveNotFound(error) {
+                    } catch where Self.isDefinitiveNotFound(error) {
                         CloudKitSyncService.debugLog("[ApplyDiff] conflict: iCloud playlistId=\(existingPlaylistId) MISSING on Navidrome — overwriting stale marker with new local \(newPlaylist.id)")
                         await CloudKitSyncService.shared.deleteRecapMarker(ckRecordName: recordName)
                         if case .created = try? await CloudKitSyncService.shared.saveRecapMarker(newEntry, periodKey: periodKey) {

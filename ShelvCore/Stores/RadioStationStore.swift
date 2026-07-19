@@ -266,13 +266,16 @@ final class RadioStationStore: ObservableObject {
             }
 
             let localMetadata = await filteredLocalMetadata(for: stations, serverId: metadataServerID)
-            guard refreshGeneration == generation,
+            let preparedItems = await Self.prepareDisplayItems(
+                stations: stations,
+                serverId: metadataServerID,
+                metadataByRecordName: localMetadata
+            )
+            guard !Task.isCancelled,
+                  refreshGeneration == generation,
                   activeServerConfigurationID == configurationID,
                   activeServerId == metadataServerID else { return }
-            replaceItems(
-                displayItems(for: stations, serverId: metadataServerID, metadataByRecordName: localMetadata),
-                serverID: configurationID
-            )
+            replaceItems(preparedItems, serverID: configurationID)
             errorMessage = nil
 
             if waitForCloudMetadata {
@@ -338,7 +341,7 @@ final class RadioStationStore: ObservableObject {
                         configurationID: operationConfigurationID,
                         metadataServerID: operationMetadataServerID
                       ) else { return true }
-                applyMetadata(metadata, to: created.id)
+                await applyMetadata(metadata, to: created.id)
             }
             errorMessage = nil
             return true
@@ -590,13 +593,16 @@ final class RadioStationStore: ObservableObject {
             serverId: metadataServerID,
             generation: generation
         ) else { return }
-        guard refreshGeneration == generation,
+        let preparedItems = await Self.prepareDisplayItems(
+            stations: stations,
+            serverId: metadataServerID,
+            metadataByRecordName: mergedMetadata
+        )
+        guard !Task.isCancelled,
+              refreshGeneration == generation,
               activeServerConfigurationID == configurationID,
               activeServerId == metadataServerID else { return }
-        replaceItems(
-            displayItems(for: stations, serverId: metadataServerID, metadataByRecordName: mergedMetadata),
-            serverID: configurationID
-        )
+        replaceItems(preparedItems, serverID: configurationID)
         errorMessage = nil
     }
 
@@ -630,12 +636,6 @@ final class RadioStationStore: ObservableObject {
             && itemsServerID == configurationID
     }
 
-    private func orderedItems(_ items: [RadioStationDisplayItem]) -> [RadioStationDisplayItem] {
-        items.sorted {
-            $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
-        }
-    }
-
     private func publishCachedStationsIfNeeded(
         configurationID: String,
         metadataServerID: String,
@@ -644,30 +644,36 @@ final class RadioStationStore: ObservableObject {
         guard itemsServerID != configurationID || items.isEmpty else { return }
         let stations = await Self.loadCachedStations(serverId: configurationID)
         let metadata = await filteredLocalMetadata(for: stations, serverId: metadataServerID)
-        guard refreshGeneration == generation,
+        let preparedItems = await Self.prepareDisplayItems(
+            stations: stations,
+            serverId: metadataServerID,
+            metadataByRecordName: metadata
+        )
+        guard !Task.isCancelled,
+              refreshGeneration == generation,
               activeServerConfigurationID == configurationID,
               activeServerId == metadataServerID else { return }
-        replaceItems(
-            displayItems(for: stations, serverId: metadataServerID, metadataByRecordName: metadata),
-            serverID: configurationID
-        )
+        replaceItems(preparedItems, serverID: configurationID)
         errorMessage = nil
     }
 
-    private func displayItems(
-        for stations: [RadioStation],
+    private nonisolated static func prepareDisplayItems(
+        stations: [RadioStation],
         serverId: String,
         metadataByRecordName: [String: RadioStationMetadata]
-    ) -> [RadioStationDisplayItem] {
-        orderedItems(stations.map { station in
-            let recordName = RadioStationMetadata.recordName(
+    ) async -> [RadioStationDisplayItem] {
+        let task = Task.detached(priority: .userInitiated) {
+            RadioStationDisplayItemBuilder.makeItems(
+                stations: stations,
                 serverId: serverId,
-                stationId: station.id,
-                streamURL: station.streamURL
+                metadataByRecordName: metadataByRecordName
             )
-            let metadata = metadataByRecordName[recordName] ?? RadioStationMetadata(serverId: serverId, station: station)
-            return RadioStationDisplayItem(station: station, metadata: metadata)
-        })
+        }
+        return await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
     }
 
     private func filteredLocalMetadata(for stations: [RadioStation], serverId: String) async -> [String: RadioStationMetadata] {
@@ -678,17 +684,41 @@ final class RadioStationStore: ObservableObject {
         return await Self.loadLocalMetadata(serverId: serverId).filter { validRecords.contains($0.key) }
     }
 
-    private func applyMetadata(_ metadata: RadioStationMetadata, to itemId: String) {
+    private func applyMetadata(_ metadata: RadioStationMetadata, to itemId: String) async {
+        let generation = refreshGeneration
+        let serverID = itemsServerID
         guard activeServerId == metadata.serverId,
               let index = items.firstIndex(where: {
                 $0.id == itemId && $0.metadata.recordName == metadata.recordName
               }) else { return }
-        items[index].metadata = metadata
-        setItems(orderedItems(items))
+        var updatedItems = items
+        updatedItems[index].metadata = metadata
+        let orderedItems = await Self.prepareOrderedItems(updatedItems)
+        guard !Task.isCancelled,
+              refreshGeneration == generation,
+              activeServerId == metadata.serverId,
+              itemsServerID == serverID else { return }
+        setItems(orderedItems)
+    }
+
+    private nonisolated static func prepareOrderedItems(
+        _ items: [RadioStationDisplayItem]
+    ) async -> [RadioStationDisplayItem] {
+        let task = Task.detached(priority: .userInitiated) {
+            RadioStationDisplayItemBuilder.ordered(items)
+        }
+        return await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
     }
 
     private func setItems(_ newItems: [RadioStationDisplayItem]) {
-        items = newItems
+        let itemsChanged = items != newItems
+        if itemsChanged {
+            items = newItems
+        }
         if let currentID = AudioPlayerService.shared.currentRadioStation?.id,
            let resolved = newItems.first(where: { $0.id == currentID }) {
             AudioPlayerService.shared.adoptResolvedRadioConfiguration(resolved)
