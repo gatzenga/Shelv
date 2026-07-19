@@ -134,7 +134,7 @@ private nonisolated final class KeychainExecutorProbe: @unchecked Sendable {
 }
 
 final class KeychainServiceTests: XCTestCase {
-    private final class ScriptedOperations {
+    private nonisolated final class ScriptedOperations {
         var copyResponses: [(OSStatus, Any?)] = []
         var updateStatuses: [OSStatus] = []
         var addStatuses: [OSStatus] = []
