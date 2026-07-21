@@ -153,7 +153,7 @@ actor LibraryDatabase {
     static let shared = LibraryDatabase()
 
     private let databaseURL: URL
-    private var pool: DatabasePool?
+    private var databaseQueue: DatabaseQueue?
 
     init(databaseURL: URL? = nil) {
         self.databaseURL = databaseURL ?? Self.defaultDBURL
@@ -172,16 +172,16 @@ actor LibraryDatabase {
     }
 
     func setup() throws {
-        guard pool == nil else { return }
+        guard databaseQueue == nil else { return }
         let dir = databaseURL.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         Self.applyStorageAttributes(at: databaseURL)
-        pool = try openAndMigrate(at: databaseURL)
+        databaseQueue = try openAndMigrate(at: databaseURL)
         Self.applyStorageAttributes(at: databaseURL)
     }
 
     func beginGeneration(entity: LibraryEntity, serverKey: String, generation: String) throws {
-        try ensurePool().write { db in
+        try ensureDatabase().write { db in
             let now = Date().timeIntervalSince1970
             try db.execute(
                 sql: """
@@ -201,7 +201,7 @@ actor LibraryDatabase {
 
     func upsertAlbums(_ albums: [Album], serverKey: String, stableId: String?, generation: String) throws {
         guard !albums.isEmpty else { return }
-        try ensurePool().write { db in
+        try ensureDatabase().write { db in
             let now = Date().timeIntervalSince1970
             for album in albums {
                 let record = LibraryAlbumRecord(
@@ -218,7 +218,7 @@ actor LibraryDatabase {
 
     func upsertArtists(_ artists: [Artist], serverKey: String, stableId: String?, generation: String) throws {
         guard !artists.isEmpty else { return }
-        try ensurePool().write { db in
+        try ensureDatabase().write { db in
             let now = Date().timeIntervalSince1970
             for artist in artists {
                 let record = LibraryArtistRecord(
@@ -242,7 +242,7 @@ actor LibraryDatabase {
         serverKey: String,
         generation: String
     ) throws -> Bool {
-        try ensurePool().write { db -> Bool in
+        try ensureDatabase().write { db -> Bool in
             let table = Self.tableName(for: entity)
             let pendingGeneration = try String.fetchOne(
                 db,
@@ -308,7 +308,7 @@ actor LibraryDatabase {
         generation: String,
         error: Error
     ) throws -> Bool {
-        try ensurePool().write { db -> Bool in
+        try ensureDatabase().write { db -> Bool in
             let message = error.localizedDescription
             let table = Self.tableName(for: entity)
             let visibleGeneration = try visibleGeneration(
@@ -352,7 +352,7 @@ actor LibraryDatabase {
         limit: Int? = nil,
         offset: Int = 0
     ) throws -> [Album] {
-        try ensurePool().read { db in
+        try ensureDatabase().read { db in
             guard let generation = try visibleGeneration(db: db, serverKey: serverKey, entity: .albums) else {
                 return []
             }
@@ -376,7 +376,7 @@ actor LibraryDatabase {
         limit: Int? = nil,
         offset: Int = 0
     ) throws -> [Artist] {
-        try ensurePool().read { db in
+        try ensureDatabase().read { db in
             guard let generation = try visibleGeneration(db: db, serverKey: serverKey, entity: .artists) else {
                 return []
             }
@@ -394,7 +394,7 @@ actor LibraryDatabase {
     }
 
     func searchAlbums(serverKey: String, query: String, limit: Int = 50, offset: Int = 0) throws -> [Album] {
-        try ensurePool().read { db in
+        try ensureDatabase().read { db in
             guard let generation = try visibleGeneration(db: db, serverKey: serverKey, entity: .albums) else {
                 return []
             }
@@ -415,7 +415,7 @@ actor LibraryDatabase {
     }
 
     func searchArtists(serverKey: String, query: String, limit: Int = 50, offset: Int = 0) throws -> [Artist] {
-        try ensurePool().read { db in
+        try ensureDatabase().read { db in
             guard let generation = try visibleGeneration(db: db, serverKey: serverKey, entity: .artists) else {
                 return []
             }
@@ -444,7 +444,7 @@ actor LibraryDatabase {
     }
 
     func albumCountByArtist(serverKey: String) throws -> [String: Int] {
-        try ensurePool().read { db in
+        try ensureDatabase().read { db in
             guard let generation = try visibleGeneration(db: db, serverKey: serverKey, entity: .albums) else {
                 return [:]
             }
@@ -468,7 +468,7 @@ actor LibraryDatabase {
     }
 
     func clear(serverKey: String) throws {
-        try ensurePool().write { db in
+        try ensureDatabase().write { db in
             try db.execute(sql: "DELETE FROM library_albums WHERE serverKey = ?", arguments: [serverKey])
             try db.execute(sql: "DELETE FROM library_artists WHERE serverKey = ?", arguments: [serverKey])
             try db.execute(sql: "DELETE FROM library_sync_state WHERE serverKey = ?", arguments: [serverKey])
@@ -476,7 +476,7 @@ actor LibraryDatabase {
     }
 
     func clearAll() throws {
-        try ensurePool().write { db in
+        try ensureDatabase().write { db in
             try db.execute(sql: "DELETE FROM library_albums")
             try db.execute(sql: "DELETE FROM library_artists")
             try db.execute(sql: "DELETE FROM library_sync_state")
@@ -484,7 +484,7 @@ actor LibraryDatabase {
     }
 
     func removeAllFiles() throws {
-        pool = nil
+        databaseQueue = nil
         for suffix in ["", "-wal", "-shm"] {
             let path = databaseURL.path + suffix
             if FileManager.default.fileExists(atPath: path) {
@@ -494,7 +494,7 @@ actor LibraryDatabase {
     }
 
     func syncState(serverKey: String, entity: LibraryEntity) throws -> LibrarySyncState? {
-        try ensurePool().read { db in
+        try ensureDatabase().read { db in
             guard let row = try Row.fetchOne(
                 db,
                 sql: """
@@ -520,7 +520,7 @@ actor LibraryDatabase {
     }
 
     func schemaObjectNames() throws -> Set<String> {
-        try ensurePool().read { db in
+        try ensureDatabase().read { db in
             let names = try String.fetchAll(
                 db,
                 sql: "SELECT name FROM sqlite_master WHERE type IN ('table', 'index')"
@@ -529,17 +529,17 @@ actor LibraryDatabase {
         }
     }
 
-    private func ensurePool() throws -> DatabasePool {
-        if let pool { return pool }
+    private func ensureDatabase() throws -> DatabaseQueue {
+        if let databaseQueue { return databaseQueue }
         try setup()
-        return pool!
+        return databaseQueue!
     }
 
-    private func openAndMigrate(at url: URL) throws -> DatabasePool {
+    private func openAndMigrate(at url: URL) throws -> DatabaseQueue {
         var config = Configuration()
         config.label = "shelv.db.library"
         config.qos = .userInitiated
-        let pool = try DatabasePool(path: url.path, configuration: config)
+        let databaseQueue = try DatabaseQueue(path: url.path, configuration: config)
 
         var migrator = DatabaseMigrator()
         migrator.registerMigration("v1_create_library_cache") { db in
@@ -628,8 +628,8 @@ actor LibraryDatabase {
                 table.add(column: "pendingGeneration", .text)
             }
         }
-        try migrator.migrate(pool)
-        return pool
+        try migrator.migrate(databaseQueue)
+        return databaseQueue
     }
 
     private static func rebuildLegacySortKeys(_ db: Database, table: String) throws {
@@ -788,7 +788,7 @@ actor LibraryDatabase {
     }
 
     private func count(serverKey: String, entity: LibraryEntity) throws -> Int {
-        try ensurePool().read { db in
+        try ensureDatabase().read { db in
             guard let generation = try visibleGeneration(db: db, serverKey: serverKey, entity: entity) else {
                 return 0
             }
