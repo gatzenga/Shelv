@@ -208,7 +208,8 @@ func menuListItem(title: String, systemImage: String, handler: @escaping CPItemH
 }
 
 func showAllListItem(title: String, handler: @escaping CPItemHandler) -> CPListItem {
-    let item = CPListItem(text: title, detailText: nil, image: cpIcon("chevron.right.circle", pointSize: 20), accessoryImage: nil, accessoryType: .none)
+    let item = CPListItem(text: title, detailText: nil)
+    item.accessoryType = .none
     item.handler = handler
     return item
 }
