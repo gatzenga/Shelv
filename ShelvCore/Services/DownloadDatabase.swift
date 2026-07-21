@@ -161,9 +161,9 @@ actor DownloadDatabase {
     private func openAndMigrate(at url: URL) throws -> DatabasePool {
         var config = Configuration()
         config.label = "shelv.db.downloads"
-        // Download persistence is maintenance work.  Keeping it below interactive
-        // UI work lets scrolling win when a batch completes in the background.
-        config.qos = .utility
+        // Download state is also read by interactive library and search surfaces.
+        // Match their priority so they never block on a lower-priority GRDB queue.
+        config.qos = .userInitiated
         let p = try DatabasePool(path: url.path, configuration: config)
         var m = DatabaseMigrator()
         m.registerMigration("v1_create") { db in
