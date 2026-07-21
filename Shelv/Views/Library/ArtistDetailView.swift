@@ -725,7 +725,7 @@ struct ArtistDetailView: View {
                     } label: {
                         HStack(spacing: 6) {
                             Image(systemName: "arrow.down.circle")
-                            Text(String(localized: "download"))
+                            Text(String(localized: "download_artist"))
                         }
                         .font(.subheadline).bold()
                         .foregroundStyle(accentColor)
@@ -736,7 +736,7 @@ struct ArtistDetailView: View {
                     }
                     .buttonStyle(.plain)
                 }
-            case .partial(let done, let tot):
+            case .partial:
                 if !offlineMode.isOffline {
                     Button {
                         haptic()
@@ -745,7 +745,7 @@ struct ArtistDetailView: View {
                     } label: {
                         HStack(spacing: 6) {
                             Image(systemName: "arrow.down.circle")
-                            Text("Rest (\(tot - done))")
+                            Text(String(localized: "download_remaining"))
                         }
                         .font(.subheadline).bold()
                         .foregroundStyle(accentColor)

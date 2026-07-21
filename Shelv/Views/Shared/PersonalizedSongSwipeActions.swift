@@ -72,7 +72,7 @@ struct PersonalizedSongSwipeActionsModifier: ViewModifier {
                 } label: {
                     Label(
                         isFavorite ? String(localized: "unfavorite") : String(localized: "favorite"),
-                        systemImage: isFavorite ? "heart.slash" : "heart"
+                        systemImage: isFavorite ? "heart.slash.fill" : "heart"
                     )
                 }
             }
@@ -105,7 +105,7 @@ struct PersonalizedSongSwipeActionsModifier: ViewModifier {
                 Button {
                     onFavorite()
                 } label: {
-                    Image(systemName: isFavorite ? "heart.slash" : "heart.fill")
+                    Image(systemName: isFavorite ? "heart.slash.fill" : "heart.fill")
                 }
                 .tint(.pink)
             }

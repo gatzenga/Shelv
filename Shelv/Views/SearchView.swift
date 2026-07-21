@@ -30,7 +30,7 @@ struct SearchView: View {
     @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
     @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     @AppStorage("enableDownloads") private var enableDownloads = true
-    private let downloadStore = DownloadStore.shared
+    @ObservedObject private var downloadStore = DownloadStore.shared
 
     @State private var query = ""
     @State private var searchFieldActive = false
@@ -155,14 +155,12 @@ struct SearchView: View {
                                             }
                                         }
                                         .contextMenu {
-                                            artistInstantMixMenuItem(artist)
+                                            artistContextMenuItems(artist)
                                         }
                                         .personalizedAlbumArtistSwipeActions(
                                             isOffline: offlineMode.isOffline,
                                             isFavorite: libraryStore.isArtistStarred(artist),
-                                            downloadState: artistDownloadState(
-                                                isDownloaded: availability.isCatalogDownloaded
-                                            ),
+                                            downloadState: artistDownloadState(for: artist),
                                             accentColor: accentColor,
                                             onFavorite: {
                                                 haptic(.medium); Task { await libraryStore.toggleStarArtist(artist) }
@@ -405,14 +403,12 @@ struct SearchView: View {
                                             }
                                         }
                                         .contextMenu {
-                                            artistInstantMixMenuItem(artist)
+                                            artistContextMenuItems(artist)
                                         }
                                         .personalizedAlbumArtistSwipeActions(
                                             isOffline: offlineMode.isOffline,
                                             isFavorite: true,
-                                            downloadState: artistDownloadState(
-                                                isDownloaded: availability.isCatalogDownloaded
-                                            ),
+                                            downloadState: artistDownloadState(for: artist),
                                             accentColor: accentColor,
                                             onFavorite: {
                                                 haptic(.medium); Task { await libraryStore.toggleStarArtist(artist) }
@@ -596,7 +592,9 @@ struct SearchView: View {
                 presenting: artistToDeleteDownloads
             ) { artist in
                 Button(String(localized: "delete"), role: .destructive) {
-                    if let match = downloadStore.artists.first(where: { $0.name == artist.name }) {
+                    if let match = downloadStore.artists.first(where: {
+                        $0.artistId == artist.id || $0.name == artist.name
+                    }) {
                         downloadStore.deleteArtist(match.artistId)
                     }
                 }
@@ -658,22 +656,32 @@ struct SearchView: View {
         }
     }
 
-    private func artistDownloadState(isDownloaded: Bool) -> PersonalizedDownloadSwipeState {
+    private func artistDownloadState(for artist: Artist) -> PersonalizedDownloadSwipeState {
         guard enableDownloads else { return .hidden }
-        if isDownloaded {
+        switch downloadStore.artistDownloadStatus(
+            artist: artist,
+            catalogAlbums: libraryStore.albums
+        ) {
+        case .none, .partial:
+            return offlineMode.isOffline ? .hidden : .download
+        case .complete:
             return .delete
         }
-        return offlineMode.isOffline ? .hidden : .download
     }
 
     private func handleArtistDownloadSwipe(_ artist: Artist) {
         guard enableDownloads else { return }
-        if DownloadUIStateHub.shared.isCatalogArtistDownloaded(artist.name) {
-            haptic(); artistToDeleteDownloads = artist
-        } else if !offlineMode.isOffline {
+        switch downloadStore.artistDownloadStatus(
+            artist: artist,
+            catalogAlbums: libraryStore.albums
+        ) {
+        case .none, .partial:
+            guard !offlineMode.isOffline else { return }
             haptic()
             let sid = serverStore.activeServer?.stableId ?? ""
             Task { await DownloadService.shared.enqueueArtist(artist: artist, serverId: sid) }
+        case .complete:
+            haptic(); artistToDeleteDownloads = artist
         }
     }
 
@@ -684,6 +692,56 @@ struct SearchView: View {
                 playInstantMix(artist: artist)
             } label: {
                 Label(String(localized: "instant_mix"), systemImage: "sparkles")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func artistContextMenuItems(_ artist: Artist) -> some View {
+        artistInstantMixMenuItem(artist)
+
+        if enableDownloads {
+            Divider()
+            let downloadStatus = downloadStore.artistDownloadStatus(
+                artist: artist,
+                catalogAlbums: libraryStore.albums
+            )
+            switch downloadStatus {
+            case .none:
+                if !offlineMode.isOffline {
+                    Button {
+                        let sid = serverStore.activeServer?.stableId ?? ""
+                        Task { await DownloadService.shared.enqueueArtist(artist: artist, serverId: sid) }
+                    } label: {
+                        Label(String(localized: "download_artist"), systemImage: "arrow.down.circle")
+                    }
+                }
+            case .partial:
+                if !offlineMode.isOffline {
+                    Button {
+                        let sid = serverStore.activeServer?.stableId ?? ""
+                        Task { await DownloadService.shared.enqueueArtist(artist: artist, serverId: sid) }
+                    } label: {
+                        Label(String(localized: "download_remaining"), systemImage: "arrow.down.circle")
+                    }
+                }
+                Button(
+                    String(localized: "delete_downloads_2"),
+                    systemImage: DownloadActionSymbols.delete,
+                    role: .destructive
+                ) {
+                    artistToDeleteDownloads = artist
+                }
+                .tint(.red)
+            case .complete:
+                Button(
+                    String(localized: "delete_downloads_2"),
+                    systemImage: DownloadActionSymbols.delete,
+                    role: .destructive
+                ) {
+                    artistToDeleteDownloads = artist
+                }
+                .tint(.red)
             }
         }
     }

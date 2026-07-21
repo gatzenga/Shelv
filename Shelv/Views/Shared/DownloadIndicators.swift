@@ -27,15 +27,14 @@ private struct CoverStatusCapsuleModifier: ViewModifier {
         content
             .background {
                 GeometryReader { proxy in
-                    if proxy.size.width > 0, proxy.size.height > 0 {
-                        ZStack {
-                            Capsule().fill(.ultraThinMaterial)
-                            Capsule().stroke(.white.opacity(0.18), lineWidth: 0.5)
-                        }
-                        .padding(.horizontal, -5)
-                        .padding(.vertical, -3)
-                        .shadow(color: .black.opacity(0.22), radius: 2, y: 1)
+                    ZStack {
+                        Capsule().fill(.ultraThinMaterial)
+                        Capsule().stroke(.white.opacity(0.18), lineWidth: 0.5)
                     }
+                    .padding(.horizontal, -5)
+                    .padding(.vertical, -3)
+                    .shadow(color: .black.opacity(0.22), radius: 2, y: 1)
+                    .opacity(proxy.size.width > 0 && proxy.size.height > 0 ? 1 : 0)
                 }
             }
             .padding(.horizontal, 5)

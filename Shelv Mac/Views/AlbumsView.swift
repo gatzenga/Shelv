@@ -244,13 +244,13 @@ struct AlbumGridItem: View, Equatable {
                     size: 160,
                     cornerRadius: 8
                 )
-                    .shadow(color: .black.opacity(isHovered ? 0.3 : 0.12), radius: isHovered ? 10 : 4)
-                    .scaleEffect(isHovered ? 1.03 : 1.0)
-                    .animation(.easeInOut(duration: 0.15), value: isHovered)
                 AlbumDownloadBadge(albumId: album.id, style: .cover)
                     .coverStatusCapsule()
                     .padding(6)
             }
+            .shadow(color: .black.opacity(isHovered ? 0.3 : 0.12), radius: isHovered ? 10 : 4)
+            .scaleEffect(isHovered ? 1.03 : 1.0)
+            .animation(.easeInOut(duration: 0.15), value: isHovered)
             Text(album.name)
                 .font(.caption.bold())
                 .lineLimit(1)

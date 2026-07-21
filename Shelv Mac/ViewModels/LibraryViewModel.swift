@@ -527,9 +527,9 @@ class LibraryViewModel: ObservableObject {
             }.value
             guard isCurrentStarredLoad(generation, identity: identity) else { return }
             if let cached {
-                starredSongs = cached.song ?? []
-                starredAlbums = cached.album ?? []
-                starredArtists = cached.artist ?? []
+                starredSongs = FavoritePresentation.songs(cached.song ?? [])
+                starredAlbums = FavoritePresentation.albums(cached.album ?? [])
+                starredArtists = FavoritePresentation.artists(cached.artist ?? [])
             }
         }
 
@@ -539,9 +539,9 @@ class LibraryViewModel: ObservableObject {
         do {
             let result = try await api.getStarred()
             guard isCurrentStarredLoad(generation, identity: identity) else { return }
-            let songs = result.song ?? []
-            let albums = result.album ?? []
-            let artists = result.artist ?? []
+            let songs = FavoritePresentation.songs(result.song ?? [])
+            let albums = FavoritePresentation.albums(result.album ?? [])
+            let artists = FavoritePresentation.artists(result.artist ?? [])
             starredSongs = songs
             starredAlbums = albums
             starredArtists = artists
@@ -580,7 +580,9 @@ class LibraryViewModel: ObservableObject {
         if wasStarred {
             starredSongs.removeAll { $0.id == song.id }
         } else {
-            starredSongs.append(song)
+            var favorite = song
+            favorite.starred = Date()
+            starredSongs.insert(favorite, at: 0)
         }
         do {
             if wasStarred {
@@ -592,6 +594,7 @@ class LibraryViewModel: ObservableObject {
             // Rollback
             if wasStarred {
                 starredSongs.append(song)
+                starredSongs = FavoritePresentation.songs(starredSongs)
             } else {
                 starredSongs.removeAll { $0.id == song.id }
             }
@@ -604,7 +607,9 @@ class LibraryViewModel: ObservableObject {
         if wasStarred {
             starredAlbums.removeAll { $0.id == album.id }
         } else {
-            starredAlbums.append(album)
+            var favorite = album
+            favorite.starred = Date()
+            starredAlbums.insert(favorite, at: 0)
         }
         do {
             if wasStarred {
@@ -615,6 +620,7 @@ class LibraryViewModel: ObservableObject {
         } catch {
             if wasStarred {
                 starredAlbums.append(album)
+                starredAlbums = FavoritePresentation.albums(starredAlbums)
             } else {
                 starredAlbums.removeAll { $0.id == album.id }
             }
@@ -627,7 +633,9 @@ class LibraryViewModel: ObservableObject {
         if wasStarred {
             starredArtists.removeAll { $0.id == artist.id }
         } else {
-            starredArtists.append(artist)
+            var favorite = artist
+            favorite.starred = Date()
+            starredArtists.insert(favorite, at: 0)
         }
         do {
             if wasStarred {
@@ -638,6 +646,7 @@ class LibraryViewModel: ObservableObject {
         } catch {
             if wasStarred {
                 starredArtists.append(artist)
+                starredArtists = FavoritePresentation.artists(starredArtists)
             } else {
                 starredArtists.removeAll { $0.id == artist.id }
             }

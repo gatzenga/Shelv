@@ -348,9 +348,9 @@ final class LibraryStore: ObservableObject {
         do {
             let r = try await api.getStarred()
             guard isCurrentStarredLoad(generation, identity: identity) else { return }
-            favoriteSongs = r.song ?? []
-            favoriteAlbums = r.album ?? []
-            favoriteArtists = r.artist ?? []
+            favoriteSongs = FavoritePresentation.songs(r.song ?? [])
+            favoriteAlbums = FavoritePresentation.albums(r.album ?? [])
+            favoriteArtists = FavoritePresentation.artists(r.artist ?? [])
         } catch {
             if isCurrentStarredLoad(generation, identity: identity),
                !(error is CancellationError) {
@@ -435,14 +435,23 @@ final class LibraryStore: ObservableObject {
 
     func toggleStarSong(_ song: Song) async {
         let wasStarred = isSongStarred(song)
-        if wasStarred { favoriteSongs.removeAll { $0.id == song.id } }
-        else { favoriteSongs.insert(song, at: 0) }
+        if wasStarred {
+            favoriteSongs.removeAll { $0.id == song.id }
+        } else {
+            var favorite = song
+            favorite.starred = Date()
+            favoriteSongs.insert(favorite, at: 0)
+        }
         do {
             if wasStarred { try await api.unstar(songId: song.id) }
             else { try await api.star(songId: song.id) }
         } catch {
-            if wasStarred { favoriteSongs.insert(song, at: 0) }
-            else { favoriteSongs.removeAll { $0.id == song.id } }
+            if wasStarred {
+                favoriteSongs.append(song)
+                favoriteSongs = FavoritePresentation.songs(favoriteSongs)
+            } else {
+                favoriteSongs.removeAll { $0.id == song.id }
+            }
             if !(error is CancellationError) {
                 errorMessage = OfflineModeService.shared.inlineErrorMessage(for: error, userInitiated: true)
             }
@@ -451,14 +460,23 @@ final class LibraryStore: ObservableObject {
 
     func toggleStarAlbum(_ album: Album) async {
         let wasStarred = isAlbumStarred(album)
-        if wasStarred { favoriteAlbums.removeAll { $0.id == album.id } }
-        else { favoriteAlbums.insert(album, at: 0) }
+        if wasStarred {
+            favoriteAlbums.removeAll { $0.id == album.id }
+        } else {
+            var favorite = album
+            favorite.starred = Date()
+            favoriteAlbums.insert(favorite, at: 0)
+        }
         do {
             if wasStarred { try await api.unstar(albumId: album.id) }
             else { try await api.star(albumId: album.id) }
         } catch {
-            if wasStarred { favoriteAlbums.insert(album, at: 0) }
-            else { favoriteAlbums.removeAll { $0.id == album.id } }
+            if wasStarred {
+                favoriteAlbums.append(album)
+                favoriteAlbums = FavoritePresentation.albums(favoriteAlbums)
+            } else {
+                favoriteAlbums.removeAll { $0.id == album.id }
+            }
             if !(error is CancellationError) {
                 errorMessage = OfflineModeService.shared.inlineErrorMessage(for: error, userInitiated: true)
             }
@@ -467,14 +485,23 @@ final class LibraryStore: ObservableObject {
 
     func toggleStarArtist(_ artist: Artist) async {
         let wasStarred = isArtistStarred(artist)
-        if wasStarred { favoriteArtists.removeAll { $0.id == artist.id } }
-        else { favoriteArtists.insert(artist, at: 0) }
+        if wasStarred {
+            favoriteArtists.removeAll { $0.id == artist.id }
+        } else {
+            var favorite = artist
+            favorite.starred = Date()
+            favoriteArtists.insert(favorite, at: 0)
+        }
         do {
             if wasStarred { try await api.unstar(artistId: artist.id) }
             else { try await api.star(artistId: artist.id) }
         } catch {
-            if wasStarred { favoriteArtists.insert(artist, at: 0) }
-            else { favoriteArtists.removeAll { $0.id == artist.id } }
+            if wasStarred {
+                favoriteArtists.append(artist)
+                favoriteArtists = FavoritePresentation.artists(favoriteArtists)
+            } else {
+                favoriteArtists.removeAll { $0.id == artist.id }
+            }
             if !(error is CancellationError) {
                 errorMessage = OfflineModeService.shared.inlineErrorMessage(for: error, userInitiated: true)
             }

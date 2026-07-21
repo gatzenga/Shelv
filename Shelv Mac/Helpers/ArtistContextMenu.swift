@@ -3,7 +3,7 @@ import SwiftUI
 struct ArtistContextMenuModifier: ViewModifier {
     let artist: Artist
     @ObservedObject private var libraryStore = LibraryViewModel.shared
-    private let downloadStore = DownloadStore.shared
+    @ObservedObject private var downloadStore = DownloadStore.shared
     @State private var showDeleteConfirm = false
 
     private var offlineMode: OfflineModeService { .shared }
@@ -89,10 +89,15 @@ struct ArtistContextMenuModifier: ViewModifier {
             if showFavoriteActions || showPlaylistActions {
                 Divider()
                 if showFavoriteActions {
-                    Button(libraryStore.isArtistStarred(artist)
-                           ? String(localized: "remove_from_favorites")
-                           : String(localized: "add_to_favorites")) {
+                    Button {
                         Task { await libraryStore.toggleStarArtist(artist) }
+                    } label: {
+                        Label(
+                            libraryStore.isArtistStarred(artist)
+                                ? String(localized: "remove_from_favorites")
+                                : String(localized: "add_to_favorites"),
+                            systemImage: libraryStore.isArtistStarred(artist) ? "heart.slash.fill" : "heart"
+                        )
                     }
                 }
                 if showPlaylistActions {
@@ -116,14 +121,37 @@ struct ArtistContextMenuModifier: ViewModifier {
             }
             if enableDownloads {
                 Divider()
-                if !offlineMode.isOffline {
-                    Button(String(localized: "download_artist")) {
-                        let stable = AppState.shared.serverStore.activeServer?.stableId ?? ""
-                        Task { await DownloadService.shared.enqueueArtist(artist: artist, serverId: stable) }
-                        NotificationCenter.default.post(name: .showToast, object: String(localized: "download_started"))
+                let downloadStatus = downloadStore.artistDownloadStatus(
+                    artist: artist,
+                    catalogAlbums: libraryStore.albums
+                )
+                switch downloadStatus {
+                case .none:
+                    if !offlineMode.isOffline {
+                        Button {
+                            let stable = AppState.shared.serverStore.activeServer?.stableId ?? ""
+                            Task { await DownloadService.shared.enqueueArtist(artist: artist, serverId: stable) }
+                            NotificationCenter.default.post(name: .showToast, object: String(localized: "download_started"))
+                        } label: {
+                            Label(String(localized: "download_artist"), systemImage: "arrow.down.circle")
+                        }
                     }
-                }
-                if downloadStore.artists.contains(where: { $0.name == artist.name }) {
+                case .partial:
+                    if !offlineMode.isOffline {
+                        Button {
+                            let stable = AppState.shared.serverStore.activeServer?.stableId ?? ""
+                            Task { await DownloadService.shared.enqueueArtist(artist: artist, serverId: stable) }
+                            NotificationCenter.default.post(name: .showToast, object: String(localized: "download_started"))
+                        } label: {
+                            Label(String(localized: "download_remaining"), systemImage: "arrow.down.circle")
+                        }
+                    }
+                    Button(role: .destructive) {
+                        showDeleteConfirm = true
+                    } label: {
+                        Label { Text(String(localized: "delete_downloads")) } icon: { DeleteDownloadIcon(tint: .red) }
+                    }
+                case .complete:
                     Button(role: .destructive) {
                         showDeleteConfirm = true
                     } label: {
@@ -134,7 +162,9 @@ struct ArtistContextMenuModifier: ViewModifier {
         }
         .alert(String(localized: "delete_downloads_2"), isPresented: $showDeleteConfirm) {
             Button(String(localized: "delete"), role: .destructive) {
-                if let match = downloadStore.artists.first(where: { $0.name == artist.name }) {
+                if let match = downloadStore.artists.first(where: {
+                    $0.artistId == artist.id || $0.name == artist.name
+                }) {
                     downloadStore.deleteArtist(match.artistId)
                 }
             }

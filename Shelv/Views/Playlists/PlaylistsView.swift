@@ -345,11 +345,14 @@ struct PlaylistsView: View {
             }
 
             if isMarkedForOffline {
-                Button(role: .destructive) {
+                Button(
+                    String(localized: "delete_downloads_2"),
+                    systemImage: DownloadActionSymbols.delete,
+                    role: .destructive
+                ) {
                     playlistToDeleteDownloads = playlist
-                } label: {
-                    Label(String(localized: "delete_downloads_2"), systemImage: DownloadActionSymbols.delete)
                 }
+                .tint(.red)
             }
         }
 

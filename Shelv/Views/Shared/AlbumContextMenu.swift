@@ -111,7 +111,7 @@ struct AlbumContextMenuModifier: ViewModifier {
                         libraryStore.isAlbumStarred(album)
                             ? String(localized: "unfavorite")
                             : String(localized: "favorite"),
-                        systemImage: libraryStore.isAlbumStarred(album) ? "heart.slash" : "heart"
+                        systemImage: libraryStore.isAlbumStarred(album) ? "heart.slash.fill" : "heart"
                     )
                 }
             }
@@ -162,17 +162,23 @@ struct AlbumContextMenuModifier: ViewModifier {
                           systemImage: "arrow.down.circle")
                 }
             }
-            Button(role: .destructive) {
+            Button(
+                String(localized: "delete_downloads_2"),
+                systemImage: DownloadActionSymbols.delete,
+                role: .destructive
+            ) {
                 showDeleteAlbumDownloadConfirm = true
-            } label: {
-                Label(String(localized: "delete_downloads_2"), systemImage: DownloadActionSymbols.delete)
             }
+            .tint(.red)
         case .complete:
-            Button(role: .destructive) {
+            Button(
+                String(localized: "delete_downloads_2"),
+                systemImage: DownloadActionSymbols.delete,
+                role: .destructive
+            ) {
                 showDeleteAlbumDownloadConfirm = true
-            } label: {
-                Label(String(localized: "delete_downloads_2"), systemImage: DownloadActionSymbols.delete)
             }
+            .tint(.red)
         }
     }
 

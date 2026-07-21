@@ -26,6 +26,10 @@
 "albums" = "专辑";
 "artists" = "艺术家";
 "favorites" = "收藏";
+"favorite_songs" = "收藏的歌曲";
+"favorite_albums" = "收藏的专辑";
+"favorite_artists" = "收藏的艺术家";
+"show_all_count_format" = "显示全部（%d）";
 "search" = "搜索";
 "name" = "名称";
 "most_played" = "播放最多";

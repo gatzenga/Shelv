@@ -353,36 +353,119 @@ struct LibraryView: View {
         .scrollIndicators(.hidden)
     }
 
-    // MARK: - Favoriten — native List wie die Suche
+    // MARK: - Favoriten
 
     @ViewBuilder
     private var favoritesList: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
-                if !store.favoriteSongs.isEmpty {
-                    Text(String(localized: "songs")).font(.title3).bold().padding(.horizontal, 50)
-                    LazyVStack(spacing: 4) {
-                        ForEach(Array(store.favoriteSongs.enumerated()), id: \.element.id) { i, song in
-                            DetailSongRow(song: song, number: i, showArtwork: true) {
-                                player.play(songs: store.favoriteSongs, startIndex: i)
-                            }
+                if !store.favoriteAlbums.isEmpty {
+                    Text(String(localized: "albums")).font(.title3).bold().padding(.horizontal, 50)
+                    cardRow {
+                        ForEach(Array(store.favoriteAlbums.prefix(FavoritePresentation.previewLimit))) {
+                            AlbumCard(album: $0)
                         }
                     }
                     .focusSection()
+                    if store.favoriteAlbums.count > FavoritePresentation.previewLimit {
+                        showAllFavoritesLink(count: store.favoriteAlbums.count) {
+                            favoriteAlbumsPage
+                        }
+                    }
                 }
-                if !store.favoriteAlbums.isEmpty {
-                    Text(String(localized: "albums")).font(.title3).bold().padding(.horizontal, 50)
-                    cardRow { ForEach(store.favoriteAlbums) { AlbumCard(album: $0) } }
-                        .focusSection()
+
+                if !store.favoriteSongs.isEmpty {
+                    Text(String(localized: "songs")).font(.title3).bold().padding(.horizontal, 50)
+                    LazyVStack(spacing: 4) {
+                        favoriteSongRows(Array(store.favoriteSongs.prefix(FavoritePresentation.previewLimit)))
+                    }
+                    .focusSection()
+                    if store.favoriteSongs.count > FavoritePresentation.previewLimit {
+                        showAllFavoritesLink(count: store.favoriteSongs.count) {
+                            favoriteSongsPage
+                        }
+                    }
                 }
+
                 if !store.favoriteArtists.isEmpty {
                     Text(String(localized: "artists")).font(.title3).bold().padding(.horizontal, 50)
-                    cardRow { ForEach(store.favoriteArtists) { ArtistCard(artist: $0) } }
-                        .focusSection()
+                    cardRow {
+                        ForEach(Array(store.favoriteArtists.prefix(FavoritePresentation.previewLimit))) {
+                            ArtistCard(artist: $0)
+                        }
+                    }
+                    .focusSection()
+                    if store.favoriteArtists.count > FavoritePresentation.previewLimit {
+                        showAllFavoritesLink(count: store.favoriteArtists.count) {
+                            favoriteArtistsPage
+                        }
+                    }
                 }
             }
             .padding(.vertical, 24)
         }
+    }
+
+    @ViewBuilder
+    private func favoriteSongRows(_ songs: [Song]) -> some View {
+        ForEach(songs) { song in
+            let index = store.favoriteSongs.firstIndex(where: { $0.id == song.id }) ?? 0
+            DetailSongRow(song: song, number: index, showArtwork: true) {
+                player.play(songs: store.favoriteSongs, startIndex: index)
+            }
+        }
+    }
+
+    private func showAllFavoritesLink<Destination: View>(
+        count: Int,
+        @ViewBuilder destination: () -> Destination
+    ) -> some View {
+        HStack {
+            NavigationLink(destination: destination()) {
+                Text(String(format: String(localized: "show_all_count_format"), count))
+                    .font(.headline)
+            }
+            .buttonStyle(.bordered)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 50)
+        .focusSection()
+    }
+
+    private var favoriteAlbumsPage: some View {
+        ScrollView {
+            LazyVGrid(columns: coverGridColumns, alignment: .leading, spacing: 50) {
+                ForEach(store.favoriteAlbums) { album in
+                    AlbumCard(album: album)
+                }
+            }
+            .padding(.horizontal, 50)
+            .padding(.vertical, 30)
+        }
+        .navigationTitle(String(localized: "favorite_albums"))
+    }
+
+    private var favoriteSongsPage: some View {
+        ScrollView {
+            LazyVStack(spacing: 4) {
+                favoriteSongRows(store.favoriteSongs)
+            }
+            .padding(.vertical, 24)
+        }
+        .navigationTitle(String(localized: "favorite_songs"))
+    }
+
+    private var favoriteArtistsPage: some View {
+        ScrollView {
+            LazyVGrid(columns: coverGridColumns, alignment: .leading, spacing: 50) {
+                ForEach(store.favoriteArtists) { artist in
+                    ArtistCard(artist: artist)
+                }
+            }
+            .padding(.horizontal, 50)
+            .padding(.vertical, 30)
+        }
+        .navigationTitle(String(localized: "favorite_artists"))
     }
 
     private func cardRow<Content: View>(@ViewBuilder content: () -> Content) -> some View {

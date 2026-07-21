@@ -56,11 +56,13 @@ extension View {
     }
 }
 
-/// Album-Karte: das Cover hebt sich beim Fokus als Ganzes (nativer `.card`-Lift),
+/// Album-Karte: das Cover hebt sich beim Fokus als Ganzes per SwiftUI-Transformation,
 /// Titel/Künstler stehen mit genug Abstand darunter — keine umschließende Box.
 struct AlbumCard: View {
     let album: Album
     var size: CGFloat = 240
+
+    @FocusState private var focused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -68,8 +70,12 @@ struct AlbumCard: View {
                 AlbumDetailView(album: album)
             } label: {
                 CoverArtView(url: album.coverURL(500), size: size, cornerRadius: 8)
+                    .scaleEffect(focused ? 1.08 : 1.0)
+                    .shadow(color: .black.opacity(focused ? 0.5 : 0), radius: 24, y: 12)
+                    .animation(.easeOut(duration: 0.18), value: focused)
             }
-            .buttonStyle(.card)
+            .buttonStyle(PlainRowButtonStyle())
+            .focused($focused)
             .albumContextMenu(album)
 
             Text(album.name).lineLimit(1).font(.callout)
@@ -99,7 +105,7 @@ struct ArtistCard: View {
                     .shadow(color: .black.opacity(focused ? 0.5 : 0), radius: 24, y: 12)
                     .animation(.easeOut(duration: 0.18), value: focused)
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(PlainRowButtonStyle())
             .focused($focused)
             .artistContextMenu(artist)
 
@@ -272,7 +278,7 @@ private struct SongContextMenuModifier: ViewModifier {
                     let starred = library.isSongStarred(song)
                     Button { Task { await library.toggleStarSong(song) } } label: {
                         Label(starred ? String(localized: "unfavorite") : String(localized: "favorite"),
-                              systemImage: starred ? "heart.fill" : "heart")
+                              systemImage: starred ? "heart.slash.fill" : "heart")
                     }
                 }
                 if showPlaylistActions {
@@ -328,7 +334,7 @@ private struct AlbumContextMenuModifier: ViewModifier {
                     let starred = library.isAlbumStarred(album)
                     Button { Task { await library.toggleStarAlbum(album) } } label: {
                         Label(starred ? String(localized: "unfavorite") : String(localized: "favorite"),
-                              systemImage: starred ? "heart.fill" : "heart")
+                              systemImage: starred ? "heart.slash.fill" : "heart")
                     }
                 }
                 if showPlaylistActions {
@@ -426,7 +432,7 @@ private struct ArtistContextMenuModifier: ViewModifier {
                     let starred = library.isArtistStarred(artist)
                     Button { Task { await library.toggleStarArtist(artist) } } label: {
                         Label(starred ? String(localized: "unfavorite") : String(localized: "favorite"),
-                              systemImage: starred ? "heart.fill" : "heart")
+                              systemImage: starred ? "heart.slash.fill" : "heart")
                     }
                 }
                 if showPlaylistActions {

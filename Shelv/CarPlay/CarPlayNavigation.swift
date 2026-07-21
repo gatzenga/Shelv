@@ -194,7 +194,7 @@ enum CarPlayNavigation {
                 }),
             ])
             if enableFavorites {
-                let icon = starred ? "heart.fill" : "heart"
+                let icon = starred ? "heart.slash.fill" : "heart"
                 let label = starred ? String(localized: "unfavorite") : String(localized: "favorite")
                 actions.append((icon: icon, label: label, handler: {
                     Task { await LibraryStore.shared.toggleStarAlbum(album) }
@@ -359,7 +359,7 @@ enum CarPlayNavigation {
                 (icon: "text.append", label: String(localized: "add_to_queue"), handler: playAction({ AudioPlayerService.shared.addToQueue($0) })),
             ])
             if enableFavorites {
-                let icon = starred ? "heart.fill" : "heart"
+                let icon = starred ? "heart.slash.fill" : "heart"
                 let label = starred ? String(localized: "unfavorite") : String(localized: "favorite")
                 actions.append((icon: icon, label: label, handler: {
                     Task { await LibraryStore.shared.toggleStarArtist(artist) }

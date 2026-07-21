@@ -109,9 +109,14 @@ struct DownloadsView: View {
                                 }
                                 .buttonStyle(.plain)
                                 .contextMenu {
-                                    Button(role: .destructive) {
+                                    Button(
+                                        String(localized: "delete_downloads_2"),
+                                        systemImage: DownloadActionSymbols.delete,
+                                        role: .destructive
+                                    ) {
                                         haptic(); albumToDeleteDownloads = album
-                                    } label: { Label(String(localized: "delete_downloads_2"), systemImage: "trash") }
+                                    }
+                                    .tint(.red)
                                 }
                             }
                         }
@@ -535,7 +540,7 @@ struct DownloadedSongRow: View {
                                 ? String(localized: "unfavorite")
                                 : String(localized: "favorite"),
                             systemImage: libraryStore.starredSongs.contains(where: { $0.id == song.songId })
-                                ? "heart.slash"
+                                ? "heart.slash.fill"
                                 : "heart"
                         )
                     }
