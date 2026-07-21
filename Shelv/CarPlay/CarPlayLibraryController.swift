@@ -454,13 +454,16 @@ final class CarPlayLibraryController {
         var orderedCoverArtIds: [String] = []
 
         if !songs.isEmpty {
-            var items: [CPListItem] = Array(songs.prefix(kPreviewCount)).enumerated().map { idx, song in
-                songListItem(song, index: idx) { [weak self] _, c in
+            var items: [CPListItem] = []
+            for (idx, song) in songs.prefix(kPreviewCount).enumerated() {
+                let item = songListItem(song, index: idx, showCover: true) { [weak self] _, c in
                     c()
                     AudioPlayerService.shared.play(songs: songs, startIndex: idx)
                     if let self { CarPlayNavigation.presentNowPlaying(on: self.interfaceController) }
                     self?.rebuildFavoritesTemplate()
                 }
+                registerCoverItem(item, coverArtId: song.coverArt, itemsByCoverId: &itemsByCoverId, orderedCoverArtIds: &orderedCoverArtIds)
+                items.append(item)
             }
             if songs.count > kPreviewCount {
                 items.append(showAllListItem(title: String(format: String(localized: "show_all_count_format"), songs.count)) { [weak self] _, c in
@@ -545,22 +548,47 @@ final class CarPlayLibraryController {
 
     private func pushFullFavoriteSongs(_ songs: [Song]) {
         weak var weakTemplate: CPListTemplate?
-        func makeSongsSection() -> CPListSection {
-            let items = songs.enumerated().map { idx, song in
-                songListItem(song, index: idx) { [weak self] _, c in
+        func makeSongsSection() -> (section: CPListSection, coverMap: [String: [CPListItem]], coverIds: [String]) {
+            var coverMap: [String: [CPListItem]] = [:]
+            var coverIds: [String] = []
+            let items = songs.enumerated().map { idx, song -> CPListItem in
+                let item = songListItem(song, index: idx, showCover: true) { [weak self] _, c in
                     c()
                     AudioPlayerService.shared.play(songs: songs, startIndex: idx)
                     if let self { CarPlayNavigation.presentNowPlaying(on: self.interfaceController) }
-                    Task { @MainActor in
-                        weakTemplate?.updateSections([CPListSection(items: makeSongsSection().items, header: nil, sectionIndexTitle: nil)])
+                    Task { @MainActor [weak self] in
+                        guard let self, let template = weakTemplate else { return }
+                        let fresh = makeSongsSection()
+                        prefillCoversFromCache(fresh.coverMap)
+                        template.updateSections([fresh.section])
+                        self.coverLoadTask?.cancel()
+                        self.coverLoadTask = Task {
+                            await streamCovers(into: fresh.coverMap, orderedCoverArtIds: fresh.coverIds)
+                        }
                     }
                 }
+                if let id = song.coverArt {
+                    if coverMap[id] == nil { coverIds.append(id) }
+                    coverMap[id, default: []].append(item)
+                }
+                return item
             }
-            return CPListSection(items: items, header: nil, sectionIndexTitle: nil)
+            return (
+                CPListSection(items: items, header: nil, sectionIndexTitle: nil),
+                coverMap,
+                coverIds
+            )
         }
-        let template = CPListTemplate(title: String(localized: "favorite_songs"), sections: [makeSongsSection()])
+        let built = makeSongsSection()
+        prefillCoversFromCache(built.coverMap)
+        let template = CPListTemplate(title: String(localized: "favorite_songs"), sections: [built.section])
         weakTemplate = template
         CarPlayNavigation.safePush(template, on: interfaceController)
+        guard !built.coverMap.isEmpty else { return }
+        coverLoadTask?.cancel()
+        coverLoadTask = Task {
+            await streamCovers(into: built.coverMap, orderedCoverArtIds: built.coverIds)
+        }
     }
 
     private func pushFullFavoriteAlbums(_ albums: [Album]) {
