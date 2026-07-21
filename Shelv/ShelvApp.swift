@@ -91,6 +91,10 @@ struct ShelvApp: App {
                     LibraryStore.shared.resetInMemory()
                     guard let server = serverStore.activeServer else { return }
                     OfflineModeService.shared.prepareInitialServerErrorPresentation()
+                    await LibraryStore.shared.loadCachedStarred()
+                    guard !Task.isCancelled,
+                          revision == serverStore.activeServerRevision
+                    else { return }
                     await LibraryStore.shared.loadAlbums()
                     guard !Task.isCancelled,
                           revision == serverStore.activeServerRevision,

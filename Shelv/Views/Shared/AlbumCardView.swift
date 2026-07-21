@@ -17,9 +17,12 @@ struct AlbumCardView: View, Equatable {
                     AlbumArtView(coverArtId: album.coverArt, size: 300, cornerRadius: 12)
                         .aspectRatio(1, contentMode: .fit)
                 }
-                AlbumDownloadBadge(albumId: album.id)
-                    .coverStatusCapsule()
-                    .padding(6)
+                HStack(spacing: 4) {
+                    AlbumFavoriteBadge(albumId: album.id, style: .cover)
+                    AlbumDownloadBadge(albumId: album.id, style: .cover)
+                }
+                .coverStatusCapsule()
+                .padding(6)
             }
             Text(album.name)
                 .font(.caption).bold()

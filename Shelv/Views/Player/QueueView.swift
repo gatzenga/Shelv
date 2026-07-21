@@ -269,6 +269,7 @@ struct QueueView: View {
             }
             Spacer()
             HStack(spacing: 4) {
+                SongFavoriteBadge(songId: song.id)
                 if streamCacheStatus.cachedSongIds.contains(song.id) {
                     DownloadAvailabilityIcon()
                         .accessibilityLabel(String(localized: "precache_ready"))

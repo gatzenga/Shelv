@@ -112,6 +112,7 @@ struct SearchView: View {
                                         query: vm.query,
                                         showFavorite: showFavoriteActions,
                                         showPlaylist: showPlaylistActions,
+                                        isStarred: libraryStore.starredSongs.contains { $0.id == item.songId },
                                         onPlay: { playLyricsResult(item) },
                                         onPlayNext: {
                                             withLyricsSong(item) { song in

@@ -126,7 +126,12 @@ struct RecapDetailView: View {
                                     Button {
                                         Task { await libraryStore.toggleStarSong(entry.song) }
                                     } label: {
-                                        Label(String(localized: "add_to_favorites"), systemImage: "heart")
+                                        Label(
+                                            libraryStore.isSongStarred(entry.song)
+                                                ? String(localized: "remove_from_favorites")
+                                                : String(localized: "add_to_favorites"),
+                                            systemImage: libraryStore.isSongStarred(entry.song) ? "heart.slash.fill" : "heart"
+                                        )
                                     }
                                 }
                                 if showPlaylistActions {
@@ -234,8 +239,11 @@ struct RecapDetailView: View {
                 }
             }
             Spacer(minLength: 0)
-            if enableDownloads {
-                DownloadStatusIcon(songId: entry.song.id)
+            HStack(spacing: 4) {
+                SongFavoriteBadge(songId: entry.song.id)
+                if enableDownloads {
+                    DownloadStatusIcon(songId: entry.song.id)
+                }
             }
             HStack(spacing: 3) {
                 Image(systemName: "play.fill").font(.caption2)

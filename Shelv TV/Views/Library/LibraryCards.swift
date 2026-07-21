@@ -69,10 +69,14 @@ struct AlbumCard: View {
             NavigationLink {
                 AlbumDetailView(album: album)
             } label: {
-                CoverArtView(url: album.coverURL(500), size: size, cornerRadius: 8)
-                    .scaleEffect(focused ? 1.08 : 1.0)
-                    .shadow(color: .black.opacity(focused ? 0.5 : 0), radius: 24, y: 12)
-                    .animation(.easeOut(duration: 0.18), value: focused)
+                ZStack(alignment: .bottomTrailing) {
+                    CoverArtView(url: album.coverURL(500), size: size, cornerRadius: 8)
+                    AlbumFavoriteBadge(albumId: album.id, style: .cover)
+                        .padding(6)
+                }
+                .scaleEffect(focused ? 1.08 : 1.0)
+                .shadow(color: .black.opacity(focused ? 0.5 : 0), radius: 24, y: 12)
+                .animation(.easeOut(duration: 0.18), value: focused)
             }
             .buttonStyle(PlainRowButtonStyle())
             .focused($focused)
@@ -100,10 +104,14 @@ struct ArtistCard: View {
             NavigationLink {
                 ArtistDetailView(artist: artist)
             } label: {
-                CoverArtView(url: artist.coverURL(500), size: size, isCircle: true)
-                    .scaleEffect(focused ? 1.12 : 1.0)
-                    .shadow(color: .black.opacity(focused ? 0.5 : 0), radius: 24, y: 12)
-                    .animation(.easeOut(duration: 0.18), value: focused)
+                ZStack(alignment: .bottomTrailing) {
+                    CoverArtView(url: artist.coverURL(500), size: size, isCircle: true)
+                    ArtistFavoriteBadge(artistId: artist.id, style: .cover)
+                        .padding(6)
+                }
+                .scaleEffect(focused ? 1.12 : 1.0)
+                .shadow(color: .black.opacity(focused ? 0.5 : 0), radius: 24, y: 12)
+                .animation(.easeOut(duration: 0.18), value: focused)
             }
             .buttonStyle(PlainRowButtonStyle())
             .focused($focused)
@@ -140,6 +148,7 @@ struct SongRow: View {
                     }
                 }
                 Spacer()
+                SongFavoriteBadge(songId: song.id)
                 if let d = song.duration {
                     Text(formatDuration(d)).font(.caption).foregroundStyle(.secondary).monospacedDigit()
                         .padding(.trailing, 16)
@@ -541,9 +550,12 @@ struct DetailSongRow: View {
                 }
             }
             Spacer()
-            if showStreamCacheStatus && streamCacheStatus.cachedSongIds.contains(song.id) {
-                DownloadAvailabilityIcon()
-                    .accessibilityLabel(String(localized: "precache_ready"))
+            HStack(spacing: 4) {
+                SongFavoriteBadge(songId: song.id)
+                if showStreamCacheStatus && streamCacheStatus.cachedSongIds.contains(song.id) {
+                    DownloadAvailabilityIcon()
+                        .accessibilityLabel(String(localized: "precache_ready"))
+                }
             }
             if let playCount {
                 HStack(spacing: 6) {
@@ -581,6 +593,7 @@ struct AlbumListRow: View {
                 }
             }
             Spacer()
+            AlbumFavoriteBadge(albumId: album.id)
         }
         .rowButton(action: onSelect)
         .albumContextMenu(album)
@@ -604,6 +617,7 @@ struct ArtistListRow: View {
                 }
             }
             Spacer()
+            ArtistFavoriteBadge(artistId: artist.id)
         }
         .rowButton(action: onSelect)
         .artistContextMenu(artist)

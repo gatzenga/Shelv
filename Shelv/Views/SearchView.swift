@@ -149,8 +149,11 @@ struct SearchView: View {
                                                 Text(artist.name)
                                                     .font(.body)
                                                 Spacer()
-                                                if enableDownloads && availability.isCatalogDownloaded {
-                                                    DownloadAvailabilityIcon()
+                                                HStack(spacing: 4) {
+                                                    ArtistFavoriteBadge(artistId: artist.id)
+                                                    if enableDownloads && availability.isCatalogDownloaded {
+                                                        DownloadAvailabilityIcon()
+                                                    }
                                                 }
                                             }
                                         }
@@ -204,7 +207,10 @@ struct SearchView: View {
                                                     }
                                                 }
                                                 Spacer()
-                                                AlbumDownloadBadge(albumId: album.id, style: .list)
+                                                HStack(spacing: 4) {
+                                                    AlbumFavoriteBadge(albumId: album.id)
+                                                    AlbumDownloadBadge(albumId: album.id, style: .list)
+                                                }
                                             }
                                         }
                                         .albumContextMenu(album, showPreview: false)
@@ -260,7 +266,10 @@ struct SearchView: View {
                                                 }
                                             }
                                             Spacer()
-                                            DownloadStatusIcon(songId: song.id)
+                                            HStack(spacing: 4) {
+                                                SongFavoriteBadge(songId: song.id)
+                                                DownloadStatusIcon(songId: song.id)
+                                            }
                                             Text(song.durationFormatted)
                                                 .font(.caption2)
                                                 .foregroundStyle(.secondary)
@@ -343,7 +352,10 @@ struct SearchView: View {
                                                     .italic()
                                             }
                                             Spacer()
-                                            DownloadStatusIcon(songId: item.songId)
+                                            HStack(spacing: 4) {
+                                                SongFavoriteBadge(songId: item.songId)
+                                                DownloadStatusIcon(songId: item.songId)
+                                            }
                                             if let dur = item.duration {
                                                 Text(String(format: "%d:%02d", dur / 60, dur % 60))
                                                     .font(.caption)
@@ -395,11 +407,12 @@ struct SearchView: View {
                                                     .frame(width: 44, height: 44)
                                                 Text(artist.name).font(.body)
                                                 Spacer()
-                                                if enableDownloads && availability.isCatalogDownloaded {
-                                                    DownloadAvailabilityIcon()
+                                                HStack(spacing: 4) {
+                                                    ArtistFavoriteBadge(artistId: artist.id)
+                                                    if enableDownloads && availability.isCatalogDownloaded {
+                                                        DownloadAvailabilityIcon()
+                                                    }
                                                 }
-                                                Image(systemName: "heart.fill")
-                                                    .font(.caption2).foregroundStyle(.pink)
                                             }
                                         }
                                         .contextMenu {
@@ -445,9 +458,10 @@ struct SearchView: View {
                                                     }
                                                 }
                                                 Spacer()
-                                                AlbumDownloadBadge(albumId: album.id, style: .list)
-                                                Image(systemName: "heart.fill")
-                                                    .font(.caption2).foregroundStyle(.pink)
+                                                HStack(spacing: 4) {
+                                                    AlbumFavoriteBadge(albumId: album.id)
+                                                    AlbumDownloadBadge(albumId: album.id, style: .list)
+                                                }
                                             }
                                         }
                                         .albumContextMenu(album, showPreview: false)
@@ -489,9 +503,10 @@ struct SearchView: View {
                                                 }
                                             }
                                             Spacer()
-                                            DownloadStatusIcon(songId: song.id)
-                                            Image(systemName: "heart.fill")
-                                                .font(.caption2).foregroundStyle(.pink)
+                                            HStack(spacing: 4) {
+                                                SongFavoriteBadge(songId: song.id)
+                                                DownloadStatusIcon(songId: song.id)
+                                            }
                                             Text(song.durationFormatted)
                                                 .font(.caption2).foregroundStyle(.secondary).monospacedDigit()
                                         }

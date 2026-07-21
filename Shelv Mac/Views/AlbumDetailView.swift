@@ -455,7 +455,10 @@ struct TrackRow: View {
             Spacer()
 
             HStack(spacing: 8) {
-                DownloadStatusIcon(songId: song.id)
+                HStack(spacing: 4) {
+                    SongFavoriteBadge(songId: song.id)
+                    DownloadStatusIcon(songId: song.id)
+                }
                 Text(song.durationString)
                     .font(.callout)
                     .foregroundStyle(.secondary)

@@ -192,6 +192,8 @@ class LibraryViewModel: ObservableObject {
         let username: String
     }
 
+    private var loadedStarredCacheIdentity: ServerIdentity?
+
     private var activeServerIdentity: ServerIdentity? {
         guard let server = AppState.shared.serverStore.activeServer else { return nil }
         return ServerIdentity(
@@ -200,6 +202,49 @@ class LibraryViewModel: ObservableObject {
             baseURL: server.activeBaseURL,
             username: server.username
         )
+    }
+
+    /// Publishes the last confirmed favorite state before library rows become visible.
+    /// The subsequent server refresh reconciles removals and additions.
+    func loadCachedStarred() async {
+        guard let identity = activeServerIdentity,
+              loadedStarredCacheIdentity != identity
+        else { return }
+
+        let cacheKey = identity.stableId ?? identity.serverKey
+        let cached: Starred2Result? = await Task.detached(priority: .userInitiated) {
+            LibraryViewModel.loadStarredCache(serverId: cacheKey)
+        }.value
+
+        guard !Task.isCancelled,
+              activeServerIdentity == identity,
+              loadedStarredCacheIdentity != identity
+        else { return }
+        if let cached {
+            let songs = FavoritePresentation.songs(cached.song ?? [])
+            let albums = FavoritePresentation.albums(cached.album ?? [])
+            let artists = FavoritePresentation.artists(cached.artist ?? [])
+            if starredSongs != songs { starredSongs = songs }
+            if starredAlbums != albums { starredAlbums = albums }
+            if starredArtists != artists { starredArtists = artists }
+        }
+        loadedStarredCacheIdentity = identity
+    }
+
+    private func persistStarredCache(for identity: ServerIdentity) {
+        guard activeServerIdentity == identity else { return }
+        let cacheKey = identity.stableId ?? identity.serverKey
+        let songs = starredSongs
+        let albums = starredAlbums
+        let artists = starredArtists
+        Task.detached(priority: .utility) {
+            LibraryViewModel.saveStarredCache(
+                songs: songs,
+                albums: albums,
+                artists: artists,
+                serverId: cacheKey
+            )
+        }
     }
 
     private func isCurrentAlbumLoad(_ generation: Int, identity: ServerIdentity) -> Bool {
@@ -275,6 +320,7 @@ class LibraryViewModel: ObservableObject {
         refreshingArtistIdentity = nil
         refreshingStarredIdentity = nil
         refreshingPlaylistIdentity = nil
+        loadedStarredCacheIdentity = nil
         let waiters = albumRefreshWaiters
             + artistRefreshWaiters
             + starredRefreshWaiters
@@ -307,6 +353,9 @@ class LibraryViewModel: ObservableObject {
             return
         }
         #endif
+
+        await loadCachedStarred()
+        guard !Task.isCancelled else { return }
 
         let requestedIdentity = activeServerIdentity
         if isRefreshingAlbums,
@@ -391,6 +440,9 @@ class LibraryViewModel: ObservableObject {
             return
         }
         #endif
+
+        await loadCachedStarred()
+        guard !Task.isCancelled else { return }
 
         let requestedIdentity = activeServerIdentity
         if isRefreshingArtists,
@@ -494,6 +546,9 @@ class LibraryViewModel: ObservableObject {
     // MARK: - Starred / Favorites
 
     func loadStarred() async {
+        await loadCachedStarred()
+        guard !Task.isCancelled else { return }
+
         let requestedIdentity = activeServerIdentity
         if isRefreshingStarred,
            refreshingStarredIdentity == requestedIdentity {
@@ -521,18 +576,6 @@ class LibraryViewModel: ObservableObject {
               activeServerIdentity == identity
         else { return }
 
-        if let sid = identity.stableId {
-            let cached: Starred2Result? = await Task.detached(priority: .userInitiated) {
-                LibraryViewModel.loadStarredCache(serverId: sid)
-            }.value
-            guard isCurrentStarredLoad(generation, identity: identity) else { return }
-            if let cached {
-                starredSongs = FavoritePresentation.songs(cached.song ?? [])
-                starredAlbums = FavoritePresentation.albums(cached.album ?? [])
-                starredArtists = FavoritePresentation.artists(cached.artist ?? [])
-            }
-        }
-
         guard !OfflineModeService.shared.isOffline else { return }
         isLoadingStarred = starredSongs.isEmpty && starredAlbums.isEmpty && starredArtists.isEmpty
 
@@ -545,10 +588,8 @@ class LibraryViewModel: ObservableObject {
             starredSongs = songs
             starredAlbums = albums
             starredArtists = artists
+            persistStarredCache(for: identity)
             if let sid = identity.stableId {
-                Task.detached(priority: .utility) {
-                    LibraryViewModel.saveStarredCache(songs: songs, albums: albums, artists: artists, serverId: sid)
-                }
                 let starredIds = Set(songs.map(\.id))
                 await DownloadDatabase.shared.syncFavorites(serverId: sid, starredSongIds: starredIds)
                 guard isCurrentStarredLoad(generation, identity: identity) else { return }
@@ -575,6 +616,7 @@ class LibraryViewModel: ObservableObject {
     }
 
     func toggleStarSong(_ song: Song) async {
+        let identity = activeServerIdentity
         let wasStarred = isSongStarred(song)
         // Optimistic update
         if wasStarred {
@@ -590,6 +632,7 @@ class LibraryViewModel: ObservableObject {
             } else {
                 try await api.star(songId: song.id)
             }
+            if let identity { persistStarredCache(for: identity) }
         } catch {
             // Rollback
             if wasStarred {
@@ -598,11 +641,13 @@ class LibraryViewModel: ObservableObject {
             } else {
                 starredSongs.removeAll { $0.id == song.id }
             }
+            if let identity { persistStarredCache(for: identity) }
             errorMessage = OfflineModeService.shared.inlineErrorMessage(for: error, userInitiated: true)
         }
     }
 
     func toggleStarAlbum(_ album: Album) async {
+        let identity = activeServerIdentity
         let wasStarred = isAlbumStarred(album)
         if wasStarred {
             starredAlbums.removeAll { $0.id == album.id }
@@ -617,6 +662,7 @@ class LibraryViewModel: ObservableObject {
             } else {
                 try await api.star(albumId: album.id)
             }
+            if let identity { persistStarredCache(for: identity) }
         } catch {
             if wasStarred {
                 starredAlbums.append(album)
@@ -624,11 +670,13 @@ class LibraryViewModel: ObservableObject {
             } else {
                 starredAlbums.removeAll { $0.id == album.id }
             }
+            if let identity { persistStarredCache(for: identity) }
             errorMessage = OfflineModeService.shared.inlineErrorMessage(for: error, userInitiated: true)
         }
     }
 
     func toggleStarArtist(_ artist: Artist) async {
+        let identity = activeServerIdentity
         let wasStarred = isArtistStarred(artist)
         if wasStarred {
             starredArtists.removeAll { $0.id == artist.id }
@@ -643,6 +691,7 @@ class LibraryViewModel: ObservableObject {
             } else {
                 try await api.star(artistId: artist.id)
             }
+            if let identity { persistStarredCache(for: identity) }
         } catch {
             if wasStarred {
                 starredArtists.append(artist)
@@ -650,6 +699,7 @@ class LibraryViewModel: ObservableObject {
             } else {
                 starredArtists.removeAll { $0.id == artist.id }
             }
+            if let identity { persistStarredCache(for: identity) }
             errorMessage = OfflineModeService.shared.inlineErrorMessage(for: error, userInitiated: true)
         }
     }
@@ -762,9 +812,18 @@ class LibraryViewModel: ObservableObject {
         let dir = starredCacheDir
         let safeServerId = serverId.pathSafeComponent
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        try? JSONEncoder().encode(songs).write(to: dir.appendingPathComponent("starred_songs_\(safeServerId).json"))
-        try? JSONEncoder().encode(albums).write(to: dir.appendingPathComponent("starred_albums_\(safeServerId).json"))
-        try? JSONEncoder().encode(artists).write(to: dir.appendingPathComponent("starred_artists_\(safeServerId).json"))
+        try? JSONEncoder().encode(songs).write(
+            to: dir.appendingPathComponent("starred_songs_\(safeServerId).json"),
+            options: .atomic
+        )
+        try? JSONEncoder().encode(albums).write(
+            to: dir.appendingPathComponent("starred_albums_\(safeServerId).json"),
+            options: .atomic
+        )
+        try? JSONEncoder().encode(artists).write(
+            to: dir.appendingPathComponent("starred_artists_\(safeServerId).json"),
+            options: .atomic
+        )
     }
 
     nonisolated private static func loadStarredCache(serverId: String) -> Starred2Result? {

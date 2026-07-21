@@ -417,7 +417,10 @@ struct AlbumDetailView: View {
                     }
                 }
                 Spacer()
-                DownloadStatusIcon(songId: song.id)
+                HStack(spacing: 4) {
+                    SongFavoriteBadge(songId: song.id)
+                    DownloadStatusIcon(songId: song.id)
+                }
                 Text(song.durationFormatted)
                     .font(.caption)
                     .foregroundStyle(.secondary)
