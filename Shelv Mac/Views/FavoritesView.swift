@@ -1,5 +1,12 @@
 import SwiftUI
 
+enum FavoritesScope: Hashable {
+    case overview
+    case albums
+    case songs
+    case artists
+}
+
 struct FavoritesView: View {
     @ObservedObject var libraryStore = LibraryViewModel.shared
     @EnvironmentObject var appState: AppState
@@ -8,6 +15,15 @@ struct FavoritesView: View {
     @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
     @AppStorage("downloadsOnlyFilter") private var showDownloadsOnly: Bool = false
     @Environment(\.themeColor) private var themeColor
+    private let scope: FavoritesScope
+
+    init() {
+        scope = .overview
+    }
+
+    init(scope: FavoritesScope) {
+        self.scope = scope
+    }
 
     private var effectiveShowDownloadsOnly: Bool {
         offlineMode.isOffline || showDownloadsOnly
@@ -32,92 +48,158 @@ struct FavoritesView: View {
 
     var body: some View {
         ScrollView {
-            if libraryStore.isLoadingStarred
-                && visibleArtists.isEmpty
-                && visibleAlbums.isEmpty
-                && visibleSongs.isEmpty {
-                ProgressView(String(localized: "loading_favorites"))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 60)
-            } else if visibleArtists.isEmpty
-                        && visibleAlbums.isEmpty
-                        && visibleSongs.isEmpty {
-                ContentUnavailableView(
-                    String(localized: "no_favorites"),
-                    systemImage: "heart",
-                    description: Text(String(localized: "mark_tracks_albums_and_artists_as_favorites"))
-                )
+            favoritesContent
+        }
+        .navigationTitle(navigationTitle)
+        .task { await libraryStore.loadStarred() }
+    }
+
+    private var navigationTitle: String {
+        switch scope {
+        case .overview: String(localized: "favorites")
+        case .albums: String(localized: "favorite_albums")
+        case .songs: String(localized: "favorite_songs")
+        case .artists: String(localized: "favorite_artists")
+        }
+    }
+
+    private var isCurrentScopeEmpty: Bool {
+        switch scope {
+        case .overview: visibleAlbums.isEmpty && visibleSongs.isEmpty && visibleArtists.isEmpty
+        case .albums: visibleAlbums.isEmpty
+        case .songs: visibleSongs.isEmpty
+        case .artists: visibleArtists.isEmpty
+        }
+    }
+
+    @ViewBuilder
+    private var favoritesContent: some View {
+        if libraryStore.isLoadingStarred && isCurrentScopeEmpty {
+            ProgressView(String(localized: "loading_favorites"))
+                .frame(maxWidth: .infinity)
                 .padding(.vertical, 60)
-            } else {
-                VStack(alignment: .leading, spacing: 28) {
-                    if !visibleArtists.isEmpty {
-                        FavoritesSection(title: String(localized: "artists")) {
-                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 130, maximum: 170), spacing: 16)], spacing: 20) {
-                                ForEach(visibleArtists) { artist in
-                                    NavigationLink(value: artist) {
-                                        ArtistGridItem(
-                                            artist: artist,
-                                            isDownloaded: DownloadUIStateHub.shared
-                                                .isArtistBadgeDownloaded(artist.name)
-                                        )
-                                        .equatable()
-                                    }
-                                    .buttonStyle(.plain)
-                                    .artistContextMenu(artist)
-                                    .environmentObject(libraryStore)
-                                }
-                            }
-                        }
+        } else if isCurrentScopeEmpty {
+            ContentUnavailableView(
+                String(localized: "no_favorites"),
+                systemImage: "heart",
+                description: Text(String(localized: "mark_tracks_albums_and_artists_as_favorites"))
+            )
+            .padding(.vertical, 60)
+        } else {
+            Group {
+                switch scope {
+                case .overview:
+                    favoritesOverview
+                case .albums:
+                    FavoritesSection(title: navigationTitle) {
+                        albumGrid(visibleAlbums)
                     }
-
-                    if !visibleAlbums.isEmpty {
-                        FavoritesSection(title: String(localized: "albums")) {
-                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 150, maximum: 190), spacing: 16)], spacing: 20) {
-                                ForEach(visibleAlbums) { album in
-                                    NavigationLink(value: album) {
-                                        AlbumGridItem(album: album)
-                                            .equatable()
-                                    }
-                                    .buttonStyle(.plain)
-                                    .albumContextMenu(album)
-                                    .environmentObject(libraryStore)
-                                }
-                            }
-                        }
+                case .songs:
+                    FavoritesSection(title: navigationTitle) {
+                        songList(visibleSongs)
                     }
-
-                    if !visibleSongs.isEmpty {
-                        FavoritesSection(title: String(localized: "tracks")) {
-                            LazyVStack(spacing: 0) {
-                                ForEach(Array(visibleSongs.enumerated()), id: \.element.id) { index, song in
-                                    FavoriteSongRow(
-                                        song: song,
-                                        isPlaying: appState.player.currentSong?.id == song.id,
-                                        showPlaylist: showPlaylistActions,
-                                        themeColor: themeColor
-                                    ) {
-                                        appState.player.play(songs: visibleSongs, startIndex: index)
-                                    } onPlayNext: {
-                                        appState.player.addPlayNext(song)
-                                        NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_play_next"))
-                                    } onAddToQueue: {
-                                        appState.player.addToQueue(song)
-                                        NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_queue"))
-                                    } onRemoveFavorite: {
-                                        Task { await libraryStore.toggleStarSong(song) }
-                                    } onAddToPlaylist: {
-                                        NotificationCenter.default.post(name: .addSongsToPlaylist, object: [song.id])
-                                    }
-                                }
-                            }
-                        }
+                case .artists:
+                    FavoritesSection(title: navigationTitle) {
+                        artistGrid(visibleArtists)
                     }
                 }
-                .padding(20)
+            }
+            .padding(20)
+        }
+    }
+
+    private var favoritesOverview: some View {
+        VStack(alignment: .leading, spacing: 28) {
+            if !visibleAlbums.isEmpty {
+                FavoritesSection(title: String(localized: "albums")) {
+                    albumGrid(Array(visibleAlbums.prefix(FavoritePresentation.previewLimit)))
+                    showAllLinkIfNeeded(scope: .albums, count: visibleAlbums.count)
+                }
+            }
+
+            if !visibleSongs.isEmpty {
+                FavoritesSection(title: String(localized: "tracks")) {
+                    songList(Array(visibleSongs.prefix(FavoritePresentation.previewLimit)))
+                    showAllLinkIfNeeded(scope: .songs, count: visibleSongs.count)
+                }
+            }
+
+            if !visibleArtists.isEmpty {
+                FavoritesSection(title: String(localized: "artists")) {
+                    artistGrid(Array(visibleArtists.prefix(FavoritePresentation.previewLimit)))
+                    showAllLinkIfNeeded(scope: .artists, count: visibleArtists.count)
+                }
             }
         }
-        .navigationTitle(String(localized: "favorites"))
-        .task { await libraryStore.loadStarred() }
+    }
+
+    private func albumGrid(_ albums: [Album]) -> some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 150, maximum: 190), spacing: 16)], spacing: 20) {
+            ForEach(albums) { album in
+                NavigationLink(value: album) {
+                    AlbumGridItem(album: album)
+                        .equatable()
+                }
+                .buttonStyle(.plain)
+                .albumContextMenu(album)
+                .environmentObject(libraryStore)
+            }
+        }
+    }
+
+    private func artistGrid(_ artists: [Artist]) -> some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 130, maximum: 170), spacing: 16)], spacing: 20) {
+            ForEach(artists) { artist in
+                NavigationLink(value: artist) {
+                    ArtistGridItem(
+                        artist: artist,
+                        isDownloaded: DownloadUIStateHub.shared
+                            .isArtistBadgeDownloaded(artist.name)
+                    )
+                    .equatable()
+                }
+                .buttonStyle(.plain)
+                .artistContextMenu(artist)
+                .environmentObject(libraryStore)
+            }
+        }
+    }
+
+    private func songList(_ songs: [Song]) -> some View {
+        LazyVStack(spacing: 0) {
+            ForEach(songs) { song in
+                FavoriteSongRow(
+                    song: song,
+                    isPlaying: appState.player.currentSong?.id == song.id,
+                    showPlaylist: showPlaylistActions,
+                    themeColor: themeColor
+                ) {
+                    let index = visibleSongs.firstIndex(where: { $0.id == song.id }) ?? 0
+                    appState.player.play(songs: visibleSongs, startIndex: index)
+                } onPlayNext: {
+                    appState.player.addPlayNext(song)
+                    NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_play_next"))
+                } onAddToQueue: {
+                    appState.player.addToQueue(song)
+                    NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_queue"))
+                } onRemoveFavorite: {
+                    Task { await libraryStore.toggleStarSong(song) }
+                } onAddToPlaylist: {
+                    NotificationCenter.default.post(name: .addSongsToPlaylist, object: [song.id])
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func showAllLinkIfNeeded(scope: FavoritesScope, count: Int) -> some View {
+        if count > FavoritePresentation.previewLimit {
+            NavigationLink(value: scope) {
+                Text(String(format: String(localized: "show_all_count_format"), count))
+                    .foregroundStyle(themeColor)
+            }
+            .buttonStyle(.plain)
+        }
     }
 }
 
@@ -218,7 +300,11 @@ struct FavoriteSongRow: View {
             Button(String(localized: "play_next")) { onPlayNext() }
             Button(String(localized: "add_to_queue")) { onAddToQueue() }
             Divider()
-            Button(String(localized: "remove_from_favorites")) { onRemoveFavorite() }
+            Button {
+                onRemoveFavorite()
+            } label: {
+                Label(String(localized: "remove_from_favorites"), systemImage: "heart.slash.fill")
+            }
             if showPlaylist {
                 Button(String(localized: "add_to_playlist")) { onAddToPlaylist() }
             }

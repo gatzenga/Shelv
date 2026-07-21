@@ -1,7 +1,7 @@
 import CarPlay
 import Combine
 
-private let kPreviewCount = 4
+private let kPreviewCount = FavoritePresentation.previewLimit
 
 private struct CarPlaySectionBuild {
     let sections: [CPListSection]
@@ -487,7 +487,10 @@ final class CarPlayLibraryController {
                     c(); self?.pushFullFavoriteAlbums(albums)
                 })
             }
-            sections.append(CPListSection(items: items, header: String(localized: "albums"), sectionIndexTitle: nil))
+            sections.insert(
+                CPListSection(items: items, header: String(localized: "albums"), sectionIndexTitle: nil),
+                at: 0
+            )
         }
 
         if !artists.isEmpty {

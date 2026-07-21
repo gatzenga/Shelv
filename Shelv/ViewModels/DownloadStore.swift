@@ -594,6 +594,57 @@ final class DownloadStore: ObservableObject {
         return .partial(downloaded: downloaded, total: totalSongs)
     }
 
+    func artistDownloadStatus(artist: Artist, catalogAlbums: [Album]) -> AlbumDownloadStatus {
+        let matchingAlbumsByID = catalogAlbums.filter { $0.artistId == artist.id }
+        let matchingAlbums = matchingAlbumsByID.isEmpty
+            ? catalogAlbums.filter {
+                $0.artist?.compare(
+                    artist.name,
+                    options: [.caseInsensitive, .diacriticInsensitive]
+                ) == .orderedSame
+            }
+            : matchingAlbumsByID
+
+        let downloadedArtist = artists.first { $0.artistId == artist.id }
+            ?? artists.first {
+                $0.name.compare(
+                    artist.name,
+                    options: [.caseInsensitive, .diacriticInsensitive]
+                ) == .orderedSame
+            }
+        let localDownloadedSongs = downloadedArtist?.albums.reduce(0) {
+            $0 + $1.songs.count
+        } ?? 0
+
+        guard !matchingAlbums.isEmpty else {
+            return localDownloadedSongs == 0
+                ? .none
+                : .partial(downloaded: localDownloadedSongs, total: localDownloadedSongs + 1)
+        }
+
+        let downloadedSongs = matchingAlbums.reduce(0) { result, album in
+            result + (recordsByAlbumId[album.id]?.count ?? 0)
+        }
+        let effectiveDownloadedSongs = max(downloadedSongs, localDownloadedSongs)
+        guard effectiveDownloadedSongs > 0 else { return .none }
+
+        let expectedAlbumCount = artist.albumCount ?? matchingAlbums.count
+        let hasCompleteCatalog = matchingAlbums.count >= expectedAlbumCount
+            && matchingAlbums.allSatisfy { album in
+                guard let totalSongs = album.songCount, totalSongs > 0 else { return false }
+                return (recordsByAlbumId[album.id]?.count ?? 0) >= totalSongs
+            }
+        if hasCompleteCatalog { return .complete }
+
+        let knownTotalSongs = matchingAlbums.reduce(0) { result, album in
+            result + max(album.songCount ?? 0, 0)
+        }
+        return .partial(
+            downloaded: effectiveDownloadedSongs,
+            total: max(knownTotalSongs, effectiveDownloadedSongs + 1)
+        )
+    }
+
     // MARK: - Actions
 
     func enqueueSongs(_ songs: [Song]) {

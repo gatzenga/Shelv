@@ -5,17 +5,13 @@ private struct CoverStatusCapsuleModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .background {
-                GeometryReader { proxy in
-                    if proxy.size.width > 0, proxy.size.height > 0 {
-                        ZStack {
-                            Capsule().fill(.ultraThinMaterial)
-                            Capsule().stroke(.white.opacity(0.18), lineWidth: 0.5)
-                        }
-                        .padding(.horizontal, -7)
-                        .padding(.vertical, -5)
-                        .shadow(color: .black.opacity(0.22), radius: 2, y: 1)
-                    }
+                ZStack {
+                    Capsule().fill(.ultraThinMaterial)
+                    Capsule().stroke(.white.opacity(0.18), lineWidth: 0.5)
                 }
+                .padding(.horizontal, -7)
+                .padding(.vertical, -5)
+                .shadow(color: .black.opacity(0.22), radius: 2, y: 1)
             }
             .padding(.horizontal, 7)
             .padding(.vertical, 5)
@@ -74,7 +70,13 @@ struct AlbumFavoriteBadge: View {
     var body: some View {
         Group {
             if isFavorite {
-                FavoriteAvailabilityIcon(style: style)
+                switch style {
+                case .list:
+                    FavoriteAvailabilityIcon(style: .list)
+                case .cover:
+                    FavoriteAvailabilityIcon(style: .cover)
+                        .coverStatusCapsule()
+                }
             }
         }
         .onReceive(
@@ -102,7 +104,13 @@ struct ArtistFavoriteBadge: View {
     var body: some View {
         Group {
             if isFavorite {
-                FavoriteAvailabilityIcon(style: style)
+                switch style {
+                case .list:
+                    FavoriteAvailabilityIcon(style: .list)
+                case .cover:
+                    FavoriteAvailabilityIcon(style: .cover)
+                        .coverStatusCapsule()
+                }
             }
         }
         .onReceive(
@@ -130,7 +138,13 @@ struct SongFavoriteBadge: View {
     var body: some View {
         Group {
             if isFavorite {
-                FavoriteAvailabilityIcon(style: style)
+                switch style {
+                case .list:
+                    FavoriteAvailabilityIcon(style: .list)
+                case .cover:
+                    FavoriteAvailabilityIcon(style: .cover)
+                        .coverStatusCapsule()
+                }
             }
         }
         .onReceive(

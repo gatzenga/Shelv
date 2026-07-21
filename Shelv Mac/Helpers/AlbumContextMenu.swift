@@ -53,10 +53,15 @@ struct AlbumContextMenuModifier: ViewModifier {
             if showFavoriteActions || showPlaylistActions {
                 Divider()
                 if showFavoriteActions {
-                    Button(libraryStore.isAlbumStarred(album)
-                           ? String(localized: "remove_from_favorites")
-                           : String(localized: "add_to_favorites")) {
+                    Button {
                         Task { await libraryStore.toggleStarAlbum(album) }
+                    } label: {
+                        Label(
+                            libraryStore.isAlbumStarred(album)
+                                ? String(localized: "remove_from_favorites")
+                                : String(localized: "add_to_favorites"),
+                            systemImage: libraryStore.isAlbumStarred(album) ? "heart.slash.fill" : "heart"
+                        )
                     }
                 }
                 if showPlaylistActions {

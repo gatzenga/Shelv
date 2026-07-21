@@ -140,9 +140,9 @@ class LibraryStore: ObservableObject {
               loadedStarredCacheIdentity != identity
         else { return }
         if let cached {
-            let songs = cached.song ?? []
-            let albums = cached.album ?? []
-            let artists = cached.artist ?? []
+            let songs = FavoritePresentation.songs(cached.song ?? [])
+            let albums = FavoritePresentation.albums(cached.album ?? [])
+            let artists = FavoritePresentation.artists(cached.artist ?? [])
             if starredSongs != songs { starredSongs = songs }
             if starredAlbums != albums { starredAlbums = albums }
             if starredArtists != artists { starredArtists = artists }
@@ -627,9 +627,9 @@ class LibraryStore: ObservableObject {
         do {
             let result = try await api.getStarred()
             guard isCurrentStarredLoad(generation, identity: identity) else { return }
-            let songs = result.song ?? []
-            let albums = result.album ?? []
-            let artists = result.artist ?? []
+            let songs = FavoritePresentation.songs(result.song ?? [])
+            let albums = FavoritePresentation.albums(result.album ?? [])
+            let artists = FavoritePresentation.artists(result.artist ?? [])
             if starredSongs != songs { starredSongs = songs }
             if starredAlbums != albums { starredAlbums = albums }
             if starredArtists != artists { starredArtists = artists }
@@ -655,7 +655,9 @@ class LibraryStore: ObservableObject {
         if isStarred {
             starredSongs.removeAll { $0.id == song.id }
         } else {
-            starredSongs.insert(song, at: 0)
+            var favorite = song
+            favorite.starred = Date()
+            starredSongs.insert(favorite, at: 0)
         }
         do {
             if isStarred {
@@ -666,7 +668,8 @@ class LibraryStore: ObservableObject {
             if let id = activeServerID { save(starredSongs, name: "starred_songs", serverID: id) }
         } catch {
             if isStarred {
-                starredSongs.insert(song, at: 0)
+                starredSongs.append(song)
+                starredSongs = FavoritePresentation.songs(starredSongs)
             } else {
                 starredSongs.removeAll { $0.id == song.id }
             }
@@ -681,7 +684,9 @@ class LibraryStore: ObservableObject {
         if isStarred {
             starredAlbums.removeAll { $0.id == album.id }
         } else {
-            starredAlbums.insert(album, at: 0)
+            var favorite = album
+            favorite.starred = Date()
+            starredAlbums.insert(favorite, at: 0)
         }
         do {
             if isStarred {
@@ -692,7 +697,8 @@ class LibraryStore: ObservableObject {
             if let id = activeServerID { save(starredAlbums, name: "starred_albums", serverID: id) }
         } catch {
             if isStarred {
-                starredAlbums.insert(album, at: 0)
+                starredAlbums.append(album)
+                starredAlbums = FavoritePresentation.albums(starredAlbums)
             } else {
                 starredAlbums.removeAll { $0.id == album.id }
             }
@@ -707,7 +713,9 @@ class LibraryStore: ObservableObject {
         if isStarred {
             starredArtists.removeAll { $0.id == artist.id }
         } else {
-            starredArtists.insert(artist, at: 0)
+            var favorite = artist
+            favorite.starred = Date()
+            starredArtists.insert(favorite, at: 0)
         }
         do {
             if isStarred {
@@ -718,7 +726,8 @@ class LibraryStore: ObservableObject {
             if let id = activeServerID { save(starredArtists, name: "starred_artists", serverID: id) }
         } catch {
             if isStarred {
-                starredArtists.insert(artist, at: 0)
+                starredArtists.append(artist)
+                starredArtists = FavoritePresentation.artists(starredArtists)
             } else {
                 starredArtists.removeAll { $0.id == artist.id }
             }
@@ -812,9 +821,9 @@ class LibraryStore: ObservableObject {
             playlists = savedPlaylists
         }
         if let savedStarred {
-            if starredSongs.isEmpty { starredSongs = savedStarred.song ?? [] }
-            if starredAlbums.isEmpty { starredAlbums = savedStarred.album ?? [] }
-            if starredArtists.isEmpty { starredArtists = savedStarred.artist ?? [] }
+            if starredSongs.isEmpty { starredSongs = FavoritePresentation.songs(savedStarred.song ?? []) }
+            if starredAlbums.isEmpty { starredAlbums = FavoritePresentation.albums(savedStarred.album ?? []) }
+            if starredArtists.isEmpty { starredArtists = FavoritePresentation.artists(savedStarred.artist ?? []) }
         }
     }
 

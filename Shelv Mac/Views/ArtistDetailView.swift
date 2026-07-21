@@ -412,18 +412,18 @@ struct ArtistDetailView: View {
                 Button {
                     downloadStore.enqueueArtist(artistModel)
                 } label: {
-                    Label(String(localized: "download"), systemImage: "arrow.down.circle")
+                    Label(String(localized: "download_artist"), systemImage: "arrow.down.circle")
                         .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.large)
             }
-        case .partial(let done, let tot):
+        case .partial:
             if !offlineMode.isOffline {
                 Button {
                     downloadStore.enqueueArtist(artistModel)
                 } label: {
-                    Label("Rest (\(tot - done))", systemImage: "arrow.down.circle")
+                    Label(String(localized: "download_remaining"), systemImage: "arrow.down.circle")
                         .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
                 }
                 .buttonStyle(.bordered)

@@ -199,9 +199,6 @@ struct ArtistGridItem: View, Equatable {
                     size: 140,
                     isCircle: true
                 )
-                    .shadow(color: .black.opacity(isHovered ? 0.3 : 0.12), radius: isHovered ? 10 : 4)
-                    .scaleEffect(isHovered ? 1.03 : 1.0)
-                    .animation(.easeInOut(duration: 0.15), value: isHovered)
                 HStack(spacing: 4) {
                     ArtistFavoriteBadge(artistId: artist.id, style: .cover)
                     if isDownloaded {
@@ -211,6 +208,9 @@ struct ArtistGridItem: View, Equatable {
                 .coverStatusCapsule()
                 .padding(6)
             }
+            .shadow(color: .black.opacity(isHovered ? 0.3 : 0.12), radius: isHovered ? 10 : 4)
+            .scaleEffect(isHovered ? 1.03 : 1.0)
+            .animation(.easeInOut(duration: 0.15), value: isHovered)
             Text(artist.name)
                 .font(.caption.bold())
                 .lineLimit(2)

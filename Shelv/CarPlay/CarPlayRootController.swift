@@ -336,7 +336,7 @@ final class CarPlayRootController: NSObject {
            UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showFavoriteActions),
            !OfflineModeService.shared.isOffline,
            let song {
-            let icon = UIImage(systemName: starred ? "heart.fill" : "heart") ?? UIImage()
+            let icon = UIImage(systemName: starred ? "heart.slash.fill" : "heart") ?? UIImage()
             buttons.append(CPNowPlayingImageButton(image: icon) { _ in
                 Task { await LibraryStore.shared.toggleStarSong(song) }
             })

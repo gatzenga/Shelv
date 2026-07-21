@@ -123,10 +123,15 @@ struct RecapDetailView: View {
                             if showFavoriteActions || showPlaylistActions {
                                 Divider()
                                 if showFavoriteActions {
-                                    Button(libraryStore.isSongStarred(entry.song)
-                                           ? String(localized: "remove_from_favorites")
-                                           : String(localized: "add_to_favorites")) {
+                                    Button {
                                         Task { await libraryStore.toggleStarSong(entry.song) }
+                                    } label: {
+                                        Label(
+                                            libraryStore.isSongStarred(entry.song)
+                                                ? String(localized: "remove_from_favorites")
+                                                : String(localized: "add_to_favorites"),
+                                            systemImage: libraryStore.isSongStarred(entry.song) ? "heart.slash.fill" : "heart"
+                                        )
                                     }
                                 }
                                 if showPlaylistActions {

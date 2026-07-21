@@ -111,6 +111,10 @@ struct MainWindowView: View {
                                 ArtistDetailView(artistId: artist.id, artistName: artist.name)
                                     .environmentObject(libraryStore)
                             }
+                            .navigationDestination(for: FavoritesScope.self) { scope in
+                                FavoritesView(scope: scope)
+                                    .environmentObject(libraryStore)
+                            }
                     }
                     .environmentObject(libraryStore)
                 }

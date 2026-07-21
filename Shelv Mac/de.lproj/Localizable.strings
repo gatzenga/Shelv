@@ -27,6 +27,10 @@
 "artists" = "Künstler";
 "artist" = "Künstler";
 "favorites" = "Favoriten";
+"favorite_songs" = "Lieblingstitel";
+"favorite_albums" = "Lieblingsalben";
+"favorite_artists" = "Lieblingskünstler";
+"show_all_count_format" = "Alle anzeigen (%d)";
 "search" = "Suchen";
 "name" = "Name";
 "most_played" = "Meist gespielt";

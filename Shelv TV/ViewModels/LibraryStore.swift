@@ -123,9 +123,9 @@ final class LibraryStore: ObservableObject {
               loadedStarredCacheIdentity != identity
         else { return }
         if let cached {
-            let songs = cached.song ?? []
-            let albums = cached.album ?? []
-            let artists = cached.artist ?? []
+            let songs = FavoritePresentation.songs(cached.song ?? [])
+            let albums = FavoritePresentation.albums(cached.album ?? [])
+            let artists = FavoritePresentation.artists(cached.artist ?? [])
             if favoriteSongs != songs { favoriteSongs = songs }
             if favoriteAlbums != albums { favoriteAlbums = albums }
             if favoriteArtists != artists { favoriteArtists = artists }
@@ -446,9 +446,9 @@ final class LibraryStore: ObservableObject {
         do {
             let r = try await api.getStarred()
             guard isCurrentStarredLoad(generation, identity: identity) else { return }
-            favoriteSongs = r.song ?? []
-            favoriteAlbums = r.album ?? []
-            favoriteArtists = r.artist ?? []
+            favoriteSongs = FavoritePresentation.songs(r.song ?? [])
+            favoriteAlbums = FavoritePresentation.albums(r.album ?? [])
+            favoriteArtists = FavoritePresentation.artists(r.artist ?? [])
             persistStarredCache(for: identity)
         } catch {
             if isCurrentStarredLoad(generation, identity: identity),
@@ -529,14 +529,22 @@ final class LibraryStore: ObservableObject {
     func toggleStarSong(_ song: Song) async {
         let identity = activeServerIdentity
         let wasStarred = isSongStarred(song)
-        if wasStarred { favoriteSongs.removeAll { $0.id == song.id } }
-        else { favoriteSongs.insert(song, at: 0) }
+        if wasStarred {
+            favoriteSongs.removeAll { $0.id == song.id }
+        } else {
+            var favorite = song
+            favorite.starred = Date()
+            favoriteSongs.insert(favorite, at: 0)
+        }
         do {
             if wasStarred { try await api.unstar(songId: song.id) }
             else { try await api.star(songId: song.id) }
             if let identity { persistStarredCache(for: identity) }
         } catch {
-            if wasStarred { favoriteSongs.insert(song, at: 0) }
+            if wasStarred {
+                favoriteSongs.append(song)
+                favoriteSongs = FavoritePresentation.songs(favoriteSongs)
+            }
             else { favoriteSongs.removeAll { $0.id == song.id } }
             if let identity { persistStarredCache(for: identity) }
             if !(error is CancellationError) {
@@ -548,14 +556,22 @@ final class LibraryStore: ObservableObject {
     func toggleStarAlbum(_ album: Album) async {
         let identity = activeServerIdentity
         let wasStarred = isAlbumStarred(album)
-        if wasStarred { favoriteAlbums.removeAll { $0.id == album.id } }
-        else { favoriteAlbums.insert(album, at: 0) }
+        if wasStarred {
+            favoriteAlbums.removeAll { $0.id == album.id }
+        } else {
+            var favorite = album
+            favorite.starred = Date()
+            favoriteAlbums.insert(favorite, at: 0)
+        }
         do {
             if wasStarred { try await api.unstar(albumId: album.id) }
             else { try await api.star(albumId: album.id) }
             if let identity { persistStarredCache(for: identity) }
         } catch {
-            if wasStarred { favoriteAlbums.insert(album, at: 0) }
+            if wasStarred {
+                favoriteAlbums.append(album)
+                favoriteAlbums = FavoritePresentation.albums(favoriteAlbums)
+            }
             else { favoriteAlbums.removeAll { $0.id == album.id } }
             if let identity { persistStarredCache(for: identity) }
             if !(error is CancellationError) {
@@ -567,14 +583,22 @@ final class LibraryStore: ObservableObject {
     func toggleStarArtist(_ artist: Artist) async {
         let identity = activeServerIdentity
         let wasStarred = isArtistStarred(artist)
-        if wasStarred { favoriteArtists.removeAll { $0.id == artist.id } }
-        else { favoriteArtists.insert(artist, at: 0) }
+        if wasStarred {
+            favoriteArtists.removeAll { $0.id == artist.id }
+        } else {
+            var favorite = artist
+            favorite.starred = Date()
+            favoriteArtists.insert(favorite, at: 0)
+        }
         do {
             if wasStarred { try await api.unstar(artistId: artist.id) }
             else { try await api.star(artistId: artist.id) }
             if let identity { persistStarredCache(for: identity) }
         } catch {
-            if wasStarred { favoriteArtists.insert(artist, at: 0) }
+            if wasStarred {
+                favoriteArtists.append(artist)
+                favoriteArtists = FavoritePresentation.artists(favoriteArtists)
+            }
             else { favoriteArtists.removeAll { $0.id == artist.id } }
             if let identity { persistStarredCache(for: identity) }
             if !(error is CancellationError) {

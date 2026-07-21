@@ -151,10 +151,15 @@ struct SearchSongRow: View {
             if showFavorite || showPlaylist {
                 Divider()
                 if showFavorite, let onFavorite {
-                    Button(isStarred
-                           ? String(localized: "remove_from_favorites")
-                           : String(localized: "add_to_favorites")) {
+                    Button {
                         onFavorite()
+                    } label: {
+                        Label(
+                            isStarred
+                                ? String(localized: "remove_from_favorites")
+                                : String(localized: "add_to_favorites"),
+                            systemImage: isStarred ? "heart.slash.fill" : "heart"
+                        )
                     }
                 }
                 if showPlaylist, let onAddToPlaylist {
@@ -258,10 +263,15 @@ struct LyricsSearchRow: View {
             if showFavorite || showPlaylist {
                 Divider()
                 if showFavorite, let onFavorite {
-                    Button(isStarred
-                           ? String(localized: "remove_from_favorites")
-                           : String(localized: "add_to_favorites")) {
+                    Button {
                         onFavorite()
+                    } label: {
+                        Label(
+                            isStarred
+                                ? String(localized: "remove_from_favorites")
+                                : String(localized: "add_to_favorites"),
+                            systemImage: isStarred ? "heart.slash.fill" : "heart"
+                        )
                     }
                 }
                 if showPlaylist, let onAddToPlaylist {

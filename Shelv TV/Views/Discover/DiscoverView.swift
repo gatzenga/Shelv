@@ -60,7 +60,8 @@ struct DiscoverView: View {
                                 async let discover:  Void = load()
                                 async let playlists: Void = LibraryStore.shared.loadPlaylists()
                                 async let radio:     Void = RadioStationStore.shared.refresh()
-                                _ = await (discover, playlists, radio)
+                                async let favorites: Void = LibraryStore.shared.loadStarred()
+                                _ = await (discover, playlists, radio, favorites)
                             }
                         } label: {
                             Label(String(localized: "refresh"), systemImage: "arrow.clockwise")

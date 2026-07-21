@@ -248,7 +248,7 @@ struct PersonalizedAlbumArtistSwipeActionsModifier: ViewModifier {
             Button {
                 onFavorite()
             } label: {
-                Image(systemName: isFavorite ? "heart.fill" : "heart")
+                Image(systemName: isFavorite ? "heart.slash.fill" : "heart")
             }
             .tint(.pink)
         case .addToPlaylist:

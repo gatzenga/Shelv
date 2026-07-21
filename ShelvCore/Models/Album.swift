@@ -78,3 +78,65 @@ nonisolated struct Album: Identifiable, Codable, Hashable, Sendable {
         songs = nil
     }
 }
+
+nonisolated enum FavoritePresentation {
+    static let previewLimit = 5
+
+    static func songs(_ items: [Song]) -> [Song] {
+        items.sorted {
+            isOrderedBefore(
+                lhsDate: $0.starred,
+                rhsDate: $1.starred,
+                lhsName: $0.title,
+                rhsName: $1.title,
+                lhsID: $0.id,
+                rhsID: $1.id
+            )
+        }
+    }
+
+    static func albums(_ items: [Album]) -> [Album] {
+        items.sorted {
+            isOrderedBefore(
+                lhsDate: $0.starred,
+                rhsDate: $1.starred,
+                lhsName: $0.name,
+                rhsName: $1.name,
+                lhsID: $0.id,
+                rhsID: $1.id
+            )
+        }
+    }
+
+    static func artists(_ items: [Artist]) -> [Artist] {
+        items.sorted {
+            isOrderedBefore(
+                lhsDate: $0.starred,
+                rhsDate: $1.starred,
+                lhsName: $0.name,
+                rhsName: $1.name,
+                lhsID: $0.id,
+                rhsID: $1.id
+            )
+        }
+    }
+
+    private static func isOrderedBefore(
+        lhsDate: Date?,
+        rhsDate: Date?,
+        lhsName: String,
+        rhsName: String,
+        lhsID: String,
+        rhsID: String
+    ) -> Bool {
+        if lhsDate != rhsDate {
+            return (lhsDate ?? .distantPast) > (rhsDate ?? .distantPast)
+        }
+
+        let nameOrder = lhsName.localizedCaseInsensitiveCompare(rhsName)
+        if nameOrder != .orderedSame {
+            return nameOrder == .orderedAscending
+        }
+        return lhsID < rhsID
+    }
+}
