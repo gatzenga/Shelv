@@ -130,7 +130,10 @@ struct LibraryAlbumListRow: View {
                 }
             }
             Spacer()
-            AlbumDownloadBadge(albumId: album.id)
+            HStack(spacing: 4) {
+                AlbumFavoriteBadge(albumId: album.id)
+                AlbumDownloadBadge(albumId: album.id, style: .list)
+            }
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())
@@ -147,15 +150,14 @@ struct LibraryArtistGridCell: View {
             ZStack(alignment: .bottomTrailing) {
                 AlbumArtView(coverArtId: artist.coverArt, size: 300, isCircle: true)
                     .aspectRatio(1, contentMode: .fit)
-                if isDownloaded {
-                    Image(systemName: "arrow.down.circle.fill")
-                        .font(.caption)
-                        .foregroundStyle(.white)
-                        .padding(4)
-                        .background(accentColor, in: Circle())
-                        .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
-                        .padding(6)
+                HStack(spacing: 4) {
+                    ArtistFavoriteBadge(artistId: artist.id, style: .cover)
+                    if isDownloaded {
+                        DownloadAvailabilityIcon(style: .cover)
+                    }
                 }
+                .coverStatusCapsule()
+                .padding(6)
             }
             Text(artist.name)
                 .font(.caption)
@@ -187,12 +189,11 @@ struct LibraryArtistListRow: View {
                 }
             }
             Spacer()
-            if isDownloaded {
-                Image(systemName: "arrow.down.circle.fill")
-                    .font(.caption)
-                    .foregroundStyle(.white)
-                    .padding(4)
-                    .background(accentColor, in: Circle())
+            HStack(spacing: 4) {
+                ArtistFavoriteBadge(artistId: artist.id)
+                if isDownloaded {
+                    DownloadAvailabilityIcon()
+                }
             }
             Image(systemName: "chevron.right")
                 .font(.caption2)
@@ -217,13 +218,11 @@ struct LibraryFavoriteArtistRow: View {
                 .font(.body)
                 .lineLimit(1)
             Spacer()
-            if isDownloaded {
-                Image(systemName: "arrow.down.circle.fill")
-                    .font(.caption)
-                    .foregroundStyle(.white)
-                    .padding(4)
-                    .background(accentColor, in: Circle())
-                    .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
+            HStack(spacing: 4) {
+                ArtistFavoriteBadge(artistId: artist.id)
+                if isDownloaded {
+                    DownloadAvailabilityIcon()
+                }
             }
         }
         .padding(.vertical, 4)
@@ -250,7 +249,10 @@ struct LibraryFavoriteAlbumRow: View {
                 }
             }
             Spacer()
-            AlbumDownloadBadge(albumId: album.id)
+            HStack(spacing: 4) {
+                AlbumFavoriteBadge(albumId: album.id)
+                AlbumDownloadBadge(albumId: album.id, style: .list)
+            }
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())
@@ -276,7 +278,10 @@ struct LibraryStarredSongRow: View {
                 }
             }
             Spacer()
-            DownloadStatusIcon(songId: song.id)
+            HStack(spacing: 4) {
+                SongFavoriteBadge(songId: song.id)
+                DownloadStatusIcon(songId: song.id)
+            }
             Text(song.durationFormatted)
                 .font(.caption2)
                 .foregroundStyle(.secondary)

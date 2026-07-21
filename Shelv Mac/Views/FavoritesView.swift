@@ -184,7 +184,10 @@ struct FavoriteSongRow: View {
                     .frame(maxWidth: 150, alignment: .trailing)
             }
 
-            DownloadStatusIcon(songId: song.id)
+            HStack(spacing: 4) {
+                SongFavoriteBadge(songId: song.id)
+                DownloadStatusIcon(songId: song.id)
+            }
 
             Text(song.durationString)
                 .font(.callout)

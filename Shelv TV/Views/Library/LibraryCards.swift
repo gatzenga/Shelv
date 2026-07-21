@@ -68,6 +68,13 @@ struct AlbumCard: View {
                 AlbumDetailView(album: album)
             } label: {
                 CoverArtView(url: album.coverURL(500), size: size, cornerRadius: 8)
+                    .overlay(alignment: .bottomTrailing) {
+                        HStack(spacing: 4) {
+                            AlbumFavoriteBadge(albumId: album.id, style: .cover)
+                        }
+                        .coverStatusCapsule()
+                        .padding(6)
+                    }
             }
             .buttonStyle(.card)
             .albumContextMenu(album)
@@ -95,6 +102,13 @@ struct ArtistCard: View {
                 ArtistDetailView(artist: artist)
             } label: {
                 CoverArtView(url: artist.coverURL(500), size: size, isCircle: true)
+                    .overlay(alignment: .bottomTrailing) {
+                        HStack(spacing: 4) {
+                            ArtistFavoriteBadge(artistId: artist.id, style: .cover)
+                        }
+                        .coverStatusCapsule()
+                        .padding(6)
+                    }
                     .scaleEffect(focused ? 1.12 : 1.0)
                     .shadow(color: .black.opacity(focused ? 0.5 : 0), radius: 24, y: 12)
                     .animation(.easeOut(duration: 0.18), value: focused)
@@ -134,6 +148,7 @@ struct SongRow: View {
                     }
                 }
                 Spacer()
+                SongFavoriteBadge(songId: song.id)
                 if let d = song.duration {
                     Text(formatDuration(d)).font(.caption).foregroundStyle(.secondary).monospacedDigit()
                         .padding(.trailing, 16)
@@ -535,6 +550,13 @@ struct DetailSongRow: View {
                 }
             }
             Spacer()
+            HStack(spacing: 4) {
+                SongFavoriteBadge(songId: song.id)
+                if showStreamCacheStatus && streamCacheStatus.cachedSongIds.contains(song.id) {
+                    DownloadAvailabilityIcon()
+                        .accessibilityLabel(String(localized: "precache_ready"))
+                }
+            }
             if let playCount {
                 HStack(spacing: 6) {
                     Image(systemName: "play.fill").font(.caption2)
@@ -544,19 +566,6 @@ struct DetailSongRow: View {
             }
             if let d = song.duration {
                 HStack(spacing: 14) {
-                    if showStreamCacheStatus {
-                        Group {
-                            if streamCacheStatus.cachedSongIds.contains(song.id) {
-                                Image(systemName: "arrow.down.circle.fill")
-                                    .font(.caption)
-                                    .foregroundStyle(AppTheme.color(for: themeColor))
-                                    .accessibilityLabel(String(localized: "precache_ready"))
-                            } else {
-                                Color.clear
-                            }
-                        }
-                        .frame(width: 18, height: 18)
-                    }
                     Text(formatDuration(d))
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -584,6 +593,7 @@ struct AlbumListRow: View {
                 }
             }
             Spacer()
+            AlbumFavoriteBadge(albumId: album.id)
         }
         .rowButton(action: onSelect)
         .albumContextMenu(album)
@@ -607,6 +617,7 @@ struct ArtistListRow: View {
                 }
             }
             Spacer()
+            ArtistFavoriteBadge(artistId: artist.id)
         }
         .rowButton(action: onSelect)
         .artistContextMenu(artist)

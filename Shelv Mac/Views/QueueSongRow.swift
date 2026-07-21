@@ -39,17 +39,11 @@ struct QueueSongRow: View {
                     .foregroundStyle(themeColor)
             } else {
                 HStack(spacing: 4) {
-                    Group {
-                        if streamCacheStatus.cachedSongIds.contains(song.id) {
-                            Image(systemName: "arrow.down.circle.fill")
-                                .font(.caption2)
-                                .foregroundStyle(themeColor)
-                                .accessibilityLabel(String(localized: "precache_ready"))
-                        } else {
-                            Color.clear
-                        }
+                    SongFavoriteBadge(songId: song.id)
+                    if streamCacheStatus.cachedSongIds.contains(song.id) {
+                        DownloadAvailabilityIcon()
+                            .accessibilityLabel(String(localized: "precache_ready"))
                     }
-                    .frame(width: 14, height: 14)
                     Text(song.durationString)
                         .font(.caption2)
                         .foregroundStyle(.tertiary)

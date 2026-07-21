@@ -315,8 +315,11 @@ struct RecapDetailView: View {
                 }
             }
             Spacer(minLength: 0)
-            if enableDownloads {
-                DownloadStatusIcon(songId: entry.song.id)
+            HStack(spacing: 4) {
+                SongFavoriteBadge(songId: entry.song.id)
+                if enableDownloads {
+                    DownloadStatusIcon(songId: entry.song.id)
+                }
             }
             playCountBadge(entry.playCount, isTop3: isTop3)
         }

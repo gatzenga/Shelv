@@ -393,6 +393,14 @@ class AudioPlayerService: ObservableObject {
 
     private func saveState() {
         let defaults = UserDefaults.standard
+        #if os(iOS)
+        guard shouldSavePlayerState(defaults: defaults) else {
+            clearSavedSongQueueState(defaults: defaults)
+            QueueSyncService.shared.scheduleUpload()
+            return
+        }
+        #endif
+
         // Skalare (klein) — auf allen Plattformen in UserDefaults.
         defaults.set(currentIndex, forKey: AudioPlayerStateKey.index)
         defaults.set(currentTime, forKey: AudioPlayerStateKey.resumeTime)
@@ -454,6 +462,13 @@ class AudioPlayerService: ObservableObject {
 
     private func restoreState() {
         let defaults = UserDefaults.standard
+        #if os(iOS)
+        guard shouldSavePlayerState(defaults: defaults) else {
+            clearSavedSongQueueState(defaults: defaults)
+            return
+        }
+        #endif
+
         #if !os(tvOS)
         let decoder = JSONDecoder()
         #endif
@@ -517,6 +532,12 @@ class AudioPlayerService: ObservableObject {
         playbackBackHistory.removeAll()
         if let song = currentSong { nowPlaying.update(song: song, currentTime: currentTime, playbackRate: 0) }
     }
+
+    #if os(iOS)
+    private func shouldSavePlayerState(defaults: UserDefaults) -> Bool {
+        defaults.object(forKey: AudioPlayerStateKey.savePlayerState) as? Bool ?? true
+    }
+    #endif
 
     // MARK: - Queue-Sync (geräteübergreifend)
 

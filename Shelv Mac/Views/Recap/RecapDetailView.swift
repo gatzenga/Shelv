@@ -123,7 +123,9 @@ struct RecapDetailView: View {
                             if showFavoriteActions || showPlaylistActions {
                                 Divider()
                                 if showFavoriteActions {
-                                    Button(String(localized: "add_to_favorites")) {
+                                    Button(libraryStore.isSongStarred(entry.song)
+                                           ? String(localized: "remove_from_favorites")
+                                           : String(localized: "add_to_favorites")) {
                                         Task { await libraryStore.toggleStarSong(entry.song) }
                                     }
                                 }
@@ -232,8 +234,11 @@ struct RecapDetailView: View {
                 }
             }
             Spacer(minLength: 0)
-            if enableDownloads {
-                DownloadStatusIcon(songId: entry.song.id)
+            HStack(spacing: 4) {
+                SongFavoriteBadge(songId: entry.song.id)
+                if enableDownloads {
+                    DownloadStatusIcon(songId: entry.song.id)
+                }
             }
             HStack(spacing: 3) {
                 Image(systemName: "play.fill").font(.caption2)

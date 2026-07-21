@@ -241,14 +241,14 @@ struct PlayerBarView: View {
                     if let song = player.currentSong {
                         VStack(alignment: .leading, spacing: 4) {
                             Button {
-                                appState.showSongInfo(song)
+                                appState.toggleSongInfo(song)
                             } label: {
                                 Text(song.title)
                                     .font(.body.bold())
                                     .lineLimit(1)
                             }
                             .buttonStyle(.plain)
-                            .foregroundStyle(appState.activePanel == .songInfo ? themeColor : .primary)
+                            .foregroundStyle(.primary)
                             .help(String(localized: "song_info"))
                             .onHover { inside in
                                 if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }

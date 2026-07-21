@@ -356,8 +356,12 @@ struct AlbumGridItem: View, Equatable {
                     .shadow(color: .black.opacity(isHovered ? 0.3 : 0.12), radius: isHovered ? 10 : 4)
                     .scaleEffect(isHovered ? 1.03 : 1.0)
                     .animation(.easeInOut(duration: 0.15), value: isHovered)
-                AlbumDownloadBadge(albumId: album.id)
-                    .padding(6)
+                HStack(spacing: 4) {
+                    AlbumFavoriteBadge(albumId: album.id, style: .cover)
+                    AlbumDownloadBadge(albumId: album.id, style: .cover)
+                }
+                .coverStatusCapsule()
+                .padding(6)
             }
             Text(album.name)
                 .font(.caption.bold())
@@ -413,7 +417,10 @@ struct AlbumListRow: View, Equatable {
                 .foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
-            AlbumDownloadBadge(albumId: album.id)
+            HStack(spacing: 4) {
+                AlbumFavoriteBadge(albumId: album.id)
+                AlbumDownloadBadge(albumId: album.id, style: .list)
+            }
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 6)

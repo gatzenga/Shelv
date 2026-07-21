@@ -59,6 +59,7 @@ struct ShelvApp: App {
         if d.string(forKey: "transcodingDownloadCodec") == "aac" { d.set("raw", forKey: "transcodingDownloadCodec") }
         PersonalizationSettings.registerDefaults()
         ShelvDefaultSettings.registerDefaults()
+        LibraryDerivedStatePrewarmer.activate()
         let shortcutPlaybackCoordinator = ShortcutPlaybackCoordinator.shared
         AppDependencyManager.shared.add(dependency: shortcutPlaybackCoordinator)
         ShelvAppShortcuts.updateAppShortcutParameters()
@@ -98,6 +99,10 @@ struct ShelvApp: App {
                     LibraryStore.shared.resetInMemory()
                     guard let server = serverStore.activeServer else { return }
                     OfflineModeService.shared.prepareInitialServerErrorPresentation()
+                    await LibraryStore.shared.loadCachedStarred()
+                    guard !Task.isCancelled,
+                          revision == serverStore.activeServerRevision
+                    else { return }
                     await LibraryStore.shared.loadAlbums()
                     guard !Task.isCancelled,
                           revision == serverStore.activeServerRevision,

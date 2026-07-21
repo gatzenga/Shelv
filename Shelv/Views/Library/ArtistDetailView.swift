@@ -514,7 +514,10 @@ struct ArtistDetailView: View {
                 }
             }
             Spacer(minLength: 0)
-            AlbumDownloadBadge(albumId: album.id)
+            HStack(spacing: 4) {
+                AlbumFavoriteBadge(albumId: album.id)
+                AlbumDownloadBadge(albumId: album.id, style: .list)
+            }
             Image(systemName: "chevron.right")
                 .font(.caption.bold())
                 .foregroundStyle(.tertiary)

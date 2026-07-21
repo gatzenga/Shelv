@@ -25,6 +25,8 @@ struct NowPlayingView: View {
     @State private var displayDuration: Double = 0
     @State private var panel: TVNowPlayingPanel?
     @State private var showSleepTimer = false
+    @State private var songInfoSong: Song?
+    @FocusState private var songTitleFocused: Bool
 
     private var sidePanelVisible: Bool {
         panel != nil && !player.isRadioPlayback
@@ -91,6 +93,9 @@ struct NowPlayingView: View {
         .onChange(of: panel) { _, panel in
             activeSidePanel = isRootVisible ? panel : nil
         }
+        .fullScreenCover(item: $songInfoSong) { song in
+            TVSongInfoView(song: song, initialTab: .details)
+        }
     }
 
     // MARK: - Player (links)
@@ -113,7 +118,25 @@ struct NowPlayingView: View {
             }
 
             VStack(spacing: 6) {
-                Text(player.displayTitle).font(.title2).bold().lineLimit(1)
+                if let song = player.currentSong {
+                    Button {
+                        songInfoSong = song
+                    } label: {
+                        Text(player.displayTitle)
+                            .font(.title2.bold())
+                            .lineLimit(1)
+                            .foregroundStyle(songTitleFocused ? accent : Color.primary)
+                    }
+                    .buttonStyle(.borderless)
+                    .focused($songTitleFocused)
+                    .animation(.easeOut(duration: 0.12), value: songTitleFocused)
+                    .accessibilityLabel(String(localized: "song_info"))
+                    .accessibilityHint(String(localized: "song_info_open_accessibility"))
+                } else {
+                    Text(player.displayTitle)
+                        .font(.title2.bold())
+                        .lineLimit(1)
+                }
                 trackLinks
             }
 

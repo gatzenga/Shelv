@@ -319,6 +319,8 @@
 "accent_color" = "强调色";
 "playlists_favorites" = "播放列表与收藏";
 "playback" = "播放";
+"player_state" = "播放器状态";
+"save_player_state" = "保存播放器状态";
 "playback_position" = "播放位置";
 "replay_gain" = "ReplayGain";
 "replay_gain_mode" = "模式";

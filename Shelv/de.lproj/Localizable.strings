@@ -319,6 +319,8 @@
 "accent_color" = "Akzentfarbe";
 "playlists_favorites" = "Playlists & Favoriten";
 "playback" = "Wiedergabe";
+"player_state" = "Player-Status";
+"save_player_state" = "Player-Status speichern";
 "playback_position" = "Wiedergabeposition";
 "replay_gain" = "ReplayGain";
 "replay_gain_mode" = "Modus";

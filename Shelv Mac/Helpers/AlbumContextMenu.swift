@@ -2,7 +2,7 @@ import SwiftUI
 
 struct AlbumContextMenuModifier: ViewModifier {
     let album: Album
-    private let libraryStore = LibraryViewModel.shared
+    @ObservedObject private var libraryStore = LibraryViewModel.shared
     private let downloadStore = DownloadStore.shared
     @State private var showDeleteConfirm = false
 

@@ -1,4 +1,6 @@
 enum AudioPlayerStateKey {
+    static let savePlayerState = "savePlayerState"
+
     #if os(macOS)
     static let queue          = "shelv_mac_queue"
     static let index          = "shelv_mac_currentIndex"

@@ -202,14 +202,14 @@ struct ArtistGridItem: View, Equatable {
                     .shadow(color: .black.opacity(isHovered ? 0.3 : 0.12), radius: isHovered ? 10 : 4)
                     .scaleEffect(isHovered ? 1.03 : 1.0)
                     .animation(.easeInOut(duration: 0.15), value: isHovered)
-                if isDownloaded {
-                    Image(systemName: "arrow.down.circle.fill")
-                        .font(.caption)
-                        .foregroundStyle(.white)
-                        .padding(4)
-                        .background(themeColor, in: Circle())
-                        .padding(6)
+                HStack(spacing: 4) {
+                    ArtistFavoriteBadge(artistId: artist.id, style: .cover)
+                    if isDownloaded {
+                        DownloadAvailabilityIcon(style: .cover)
+                    }
                 }
+                .coverStatusCapsule()
+                .padding(6)
             }
             Text(artist.name)
                 .font(.caption.bold())
@@ -255,12 +255,11 @@ struct ArtistListRow: View, Equatable {
                 }
             }
             Spacer(minLength: 0)
-            if isDownloaded {
-                Image(systemName: "arrow.down.circle.fill")
-                    .font(.caption)
-                    .foregroundStyle(.white)
-                    .padding(4)
-                    .background(themeColor, in: Circle())
+            HStack(spacing: 4) {
+                ArtistFavoriteBadge(artistId: artist.id)
+                if isDownloaded {
+                    DownloadAvailabilityIcon()
+                }
             }
         }
         .padding(.horizontal, 20)

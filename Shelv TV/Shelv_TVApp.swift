@@ -49,6 +49,10 @@ struct Shelv_TVApp: App {
                     LibraryStore.shared.resetInMemory()
                     guard let server = serverStore.activeServer else { return }
                     OfflineModeService.shared.prepareInitialServerErrorPresentation()
+                    await LibraryStore.shared.loadCachedStarred()
+                    guard !Task.isCancelled,
+                          revision == serverStore.activeServerRevision
+                    else { return }
                     #if DEBUG
                     AudioPlayerService.shared.ensureDemoStandby()
                     #endif

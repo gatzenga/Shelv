@@ -35,8 +35,11 @@ struct SearchArtistRow: View {
                 }
             }
             Spacer()
-            if showsDownloadBadge {
-                ArtistDownloadBadge(artistName: artist.name)
+            HStack(spacing: 4) {
+                ArtistFavoriteBadge(artistId: artist.id)
+                if showsDownloadBadge {
+                    ArtistDownloadBadge(artistName: artist.name, style: .list)
+                }
             }
             Image(systemName: "chevron.right").foregroundStyle(.tertiary)
                 .padding(.trailing, 20)
@@ -66,7 +69,10 @@ struct SearchAlbumRow: View {
                 if let artist = album.artist { Text(artist).font(.caption).foregroundStyle(.secondary) }
             }
             Spacer()
-            AlbumDownloadBadge(albumId: album.id)
+            HStack(spacing: 4) {
+                AlbumFavoriteBadge(albumId: album.id)
+                AlbumDownloadBadge(albumId: album.id, style: .list)
+            }
             if let year = album.year { Text(String(year)).font(.caption).foregroundStyle(.tertiary) }
             Image(systemName: "chevron.right").foregroundStyle(.tertiary)
                 .padding(.trailing, 20)
@@ -110,7 +116,10 @@ struct SearchSongRow: View {
                 if let artist = song.artist { Text(artist).font(.caption).foregroundStyle(.secondary) }
             }
             Spacer()
-            DownloadStatusIcon(songId: song.id)
+            HStack(spacing: 4) {
+                SongFavoriteBadge(songId: song.id)
+                DownloadStatusIcon(songId: song.id)
+            }
             Text(song.durationString).font(.caption).foregroundStyle(.tertiary).monospacedDigit()
             Button { onPlay() } label: {
                 Image(systemName: "play.circle")
@@ -167,6 +176,7 @@ struct LyricsSearchRow: View {
     let query: String
     var showFavorite: Bool = false
     var showPlaylist: Bool = false
+    var isStarred: Bool = false
     let onPlay: () -> Void
     var onPlayNext: (() -> Void)? = nil
     var onAddToQueue: (() -> Void)? = nil
@@ -216,7 +226,10 @@ struct LyricsSearchRow: View {
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
-            DownloadStatusIcon(songId: item.songId)
+            HStack(spacing: 4) {
+                SongFavoriteBadge(songId: item.songId)
+                DownloadStatusIcon(songId: item.songId)
+            }
             Button { onPlay() } label: {
                 Image(systemName: "play.circle")
                     .font(.title2)
@@ -245,7 +258,11 @@ struct LyricsSearchRow: View {
             if showFavorite || showPlaylist {
                 Divider()
                 if showFavorite, let onFavorite {
-                    Button(String(localized: "add_to_favorites")) { onFavorite() }
+                    Button(isStarred
+                           ? String(localized: "remove_from_favorites")
+                           : String(localized: "add_to_favorites")) {
+                        onFavorite()
+                    }
                 }
                 if showPlaylist, let onAddToPlaylist {
                     Button(String(localized: "add_to_playlist")) { onAddToPlaylist() }

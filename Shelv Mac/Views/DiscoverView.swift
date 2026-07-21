@@ -944,8 +944,12 @@ struct AlbumCard: View, Equatable {
                 cornerRadius: 8
             )
                 .overlay(alignment: .bottomTrailing) {
-                    AlbumDownloadBadge(albumId: album.id)
-                        .padding(4)
+                    HStack(spacing: 4) {
+                        AlbumFavoriteBadge(albumId: album.id, style: .cover)
+                        AlbumDownloadBadge(albumId: album.id, style: .cover)
+                    }
+                    .coverStatusCapsule()
+                    .padding(4)
                 }
                 .shadow(color: .black.opacity(isHovered ? 0.25 : 0.1), radius: isHovered ? 8 : 4)
                 .scaleEffect(isHovered ? 1.03 : 1.0)

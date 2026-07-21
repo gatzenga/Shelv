@@ -9,6 +9,7 @@ struct PlaybackSettingsView: View {
     @AppStorage("recapThreshold") private var recapThreshold = 30
     @AppStorage("queueSyncMode") private var queueSyncMode = "off"
     @AppStorage("infinityMixAheadCount") private var infinityMixAheadCount = 1
+    @AppStorage(AudioPlayerStateKey.savePlayerState) private var savePlayerState = true
     @State private var showAboutQueueSync = false
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
@@ -140,6 +141,15 @@ struct PlaybackSettingsView: View {
                 .onChange(of: infinityMixAheadCount) { _, _ in
                     AudioPlayerService.shared.refreshInfinityMixWindow()
                 }
+            }
+
+            Section(String(localized: "player_state")) {
+                Toggle(isOn: $savePlayerState) {
+                    Label { Text(String(localized: "save_player_state")) } icon: {
+                        Image(systemName: "play.circle").foregroundStyle(accentColor)
+                    }
+                }
+                .tint(accentColor)
             }
 
             PlayerBottomSpacer()

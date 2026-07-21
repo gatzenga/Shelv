@@ -57,6 +57,8 @@ class LibraryStore: ObservableObject {
         let username: String
     }
 
+    private var loadedStarredCacheIdentity: ServerIdentity?
+
     nonisolated static var libraryDir: URL {
         FileManager.default
             .urls(for: .cachesDirectory, in: .userDomainMask)[0]
@@ -115,6 +117,37 @@ class LibraryStore: ObservableObject {
             baseURL: server.activeBaseURL,
             username: server.username
         )
+    }
+
+    /// Publishes the last confirmed favorite state before library rows become visible.
+    /// The later `loadStarred()` request remains authoritative and reconciles this snapshot.
+    func loadCachedStarred() async {
+        guard let identity = activeServerIdentity,
+              loadedStarredCacheIdentity != identity
+        else { return }
+
+        let serverID = identity.id
+        let cached: StarredResult? = await Task.detached(priority: .userInitiated) {
+            let songs = Self.readFromDisk([Song].self, name: "starred_songs", serverID: serverID)
+            let albums = Self.readFromDisk([Album].self, name: "starred_albums", serverID: serverID)
+            let artists = Self.readFromDisk([Artist].self, name: "starred_artists", serverID: serverID)
+            guard songs != nil || albums != nil || artists != nil else { return nil }
+            return StarredResult(artist: artists, album: albums, song: songs)
+        }.value
+
+        guard !Task.isCancelled,
+              activeServerIdentity == identity,
+              loadedStarredCacheIdentity != identity
+        else { return }
+        if let cached {
+            let songs = cached.song ?? []
+            let albums = cached.album ?? []
+            let artists = cached.artist ?? []
+            if starredSongs != songs { starredSongs = songs }
+            if starredAlbums != albums { starredAlbums = albums }
+            if starredArtists != artists { starredArtists = artists }
+        }
+        loadedStarredCacheIdentity = identity
     }
 
     private func isCurrentAlbumLoad(_ generation: Int, identity: ServerIdentity) -> Bool {
@@ -238,6 +271,9 @@ class LibraryStore: ObservableObject {
         }
         #endif
 
+        await loadCachedStarred()
+        guard !Task.isCancelled else { return }
+
         let requestedIdentity = activeServerIdentity
         if isRefreshingAlbums,
            refreshingAlbumIdentity == requestedIdentity {
@@ -359,6 +395,9 @@ class LibraryStore: ObservableObject {
         }
         #endif
 
+        await loadCachedStarred()
+        guard !Task.isCancelled else { return }
+
         let requestedIdentity = activeServerIdentity
         if isRefreshingArtists,
            refreshingArtistIdentity == requestedIdentity {
@@ -458,6 +497,7 @@ class LibraryStore: ObservableObject {
         refreshingArtistIdentity = nil
         refreshingStarredIdentity = nil
         refreshingPlaylistIdentity = nil
+        loadedStarredCacheIdentity = nil
         let waiters = albumRefreshWaiters
             + artistRefreshWaiters
             + starredRefreshWaiters
@@ -550,6 +590,9 @@ class LibraryStore: ObservableObject {
     }
 
     func loadStarred() async {
+        await loadCachedStarred()
+        guard !Task.isCancelled else { return }
+
         let requestedIdentity = activeServerIdentity
         if isRefreshingStarred,
            refreshingStarredIdentity == requestedIdentity {
@@ -577,23 +620,6 @@ class LibraryStore: ObservableObject {
               activeServerIdentity == identity
         else { return }
 
-        let serverID = identity.id
-        let cached: StarredResult? = await Task.detached(priority: .utility) {
-            guard let songs = Self.readFromDisk([Song].self, name: "starred_songs", serverID: serverID),
-                  let albums = Self.readFromDisk([Album].self, name: "starred_albums", serverID: serverID),
-                  let artists = Self.readFromDisk([Artist].self, name: "starred_artists", serverID: serverID) else { return nil }
-            return StarredResult(artist: artists, album: albums, song: songs)
-        }.value
-        guard isCurrentStarredLoad(generation, identity: identity) else { return }
-        if let cached {
-            let songs = cached.song ?? []
-            let albums = cached.album ?? []
-            let artists = cached.artist ?? []
-            if starredSongs != songs { starredSongs = songs }
-            if starredAlbums != albums { starredAlbums = albums }
-            if starredArtists != artists { starredArtists = artists }
-        }
-
         guard !OfflineModeService.shared.isOffline else { return }
 
         let shouldShowLoading = starredSongs.isEmpty && starredAlbums.isEmpty && starredArtists.isEmpty
@@ -607,9 +633,9 @@ class LibraryStore: ObservableObject {
             if starredSongs != songs { starredSongs = songs }
             if starredAlbums != albums { starredAlbums = albums }
             if starredArtists != artists { starredArtists = artists }
-            save(songs, name: "starred_songs", serverID: serverID)
-            save(albums, name: "starred_albums", serverID: serverID)
-            save(artists, name: "starred_artists", serverID: serverID)
+            save(songs, name: "starred_songs", serverID: identity.id)
+            save(albums, name: "starred_albums", serverID: identity.id)
+            save(artists, name: "starred_artists", serverID: identity.id)
             if let stable = identity.stableId {
                 let starredIds = Set(songs.map(\.id))
                 await DownloadDatabase.shared.syncFavorites(serverId: stable, starredSongIds: starredIds)

@@ -4,6 +4,7 @@ struct AlphabetIndexBar: View {
     let letters: [String]
     let onSelect: (String) -> Void
 
+    @Environment(\.scenePhase) private var scenePhase
     @AppStorage("themeColor") private var themeColorName = "violet"
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
@@ -28,7 +29,7 @@ struct AlphabetIndexBar: View {
         .gesture(
             DragGesture(minimumDistance: 0, coordinateSpace: .local)
                 .onChanged { value in
-                    guard !letters.isEmpty else { return }
+                    guard scenePhase == .active, !letters.isEmpty else { return }
                     let index = min(max(Int(value.location.y / itemHeight), 0), letters.count - 1)
                     let letter = letters[index]
                     guard letter != lastSelected else { return }
@@ -43,7 +44,8 @@ struct AlphabetIndexBar: View {
                         throttleTask?.cancel()
                         throttleTask = Task { @MainActor in
                             try? await Task.sleep(nanoseconds: 40_000_000)
-                            guard !Task.isCancelled else { return }
+                            guard !Task.isCancelled, scenePhase == .active else { return }
+                            throttleTask = nil
                             throttled = false
                             if !pendingLetter.isEmpty {
                                 let l = pendingLetter
@@ -54,9 +56,11 @@ struct AlphabetIndexBar: View {
                     }
                 }
                 .onEnded { value in
-                    throttleTask?.cancel()
-                    throttleTask = nil
-                    throttled = false
+                    guard scenePhase == .active else {
+                        resetInteraction()
+                        return
+                    }
+                    cancelPendingSelection()
                     if !pendingLetter.isEmpty {
                         guard !letters.isEmpty else { lastSelected = ""; pendingLetter = ""; return }
                         let index = min(max(Int(value.location.y / itemHeight), 0), letters.count - 1)
@@ -66,9 +70,28 @@ struct AlphabetIndexBar: View {
                     pendingLetter = ""
                 }
         )
-        .onDisappear {
-            throttleTask?.cancel()
-            throttleTask = nil
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active {
+                resetInteraction()
+            }
         }
+        .onChange(of: letters) { _, _ in
+            resetInteraction()
+        }
+        .onDisappear {
+            resetInteraction()
+        }
+    }
+
+    private func cancelPendingSelection() {
+        throttleTask?.cancel()
+        throttleTask = nil
+        throttled = false
+    }
+
+    private func resetInteraction() {
+        cancelPendingSelection()
+        lastSelected = ""
+        pendingLetter = ""
     }
 }
