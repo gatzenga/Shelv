@@ -268,6 +268,22 @@ final class PersonalizationSettingsTests: XCTestCase {
         XCTAssertEqual(PersonalizationSettings.visibleSwipeAction(for: .leftSecondary, in: defaults), .none)
     }
 
+    func testFavoriteLibraryVisibilityAndActionsStayIndependent() {
+        PersonalizationSettings.registerDefaults(in: defaults)
+
+        defaults.set(false, forKey: PersonalizationPreferenceKey.showFavoritesInLibrary)
+        defaults.set(true, forKey: PersonalizationPreferenceKey.showFavoriteActions)
+
+        XCTAssertFalse(defaults.bool(forKey: PersonalizationPreferenceKey.showFavoritesInLibrary))
+        XCTAssertTrue(PersonalizationSettings.isAvailable(.favorite, in: defaults))
+
+        defaults.set(true, forKey: PersonalizationPreferenceKey.showFavoritesInLibrary)
+        defaults.set(false, forKey: PersonalizationPreferenceKey.showFavoriteActions)
+
+        XCTAssertTrue(defaults.bool(forKey: PersonalizationPreferenceKey.showFavoritesInLibrary))
+        XCTAssertFalse(PersonalizationSettings.isAvailable(.favorite, in: defaults))
+    }
+
     func testSmartMixVisibilityUsesRegisteredDefaultsAndStoredValues() {
         PersonalizationSettings.registerDefaults(in: defaults)
 

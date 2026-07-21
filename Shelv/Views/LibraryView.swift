@@ -1097,7 +1097,7 @@ struct LibraryView: View {
                 tracksIntermediateProgress: false
             ) { downloadStatus in
                 NavigationLink(destination: AlbumDetailView(album: album)) {
-                    LibraryFavoriteAlbumRow(album: album)
+                    LibraryFavoriteAlbumRow(album: album, showsFavoriteBadge: false)
                 }
                 .contextMenu {
                     albumContextMenuItems(album)
@@ -1131,7 +1131,7 @@ struct LibraryView: View {
     private func favoriteSongRows(_ songs: [Song]) -> some View {
         ForEach(songs) { song in
             Button { player.playSong(song) } label: {
-                LibraryStarredSongRow(song: song)
+                LibraryStarredSongRow(song: song, showsFavoriteBadge: false)
             }
             .buttonStyle(.plain)
             .personalizedSongSwipeActions(
@@ -1172,7 +1172,8 @@ struct LibraryView: View {
                     LibraryFavoriteArtistRow(
                         artist: artist,
                         isDownloaded: availability.isBadgeDownloaded,
-                        accentColor: accentColor
+                        accentColor: accentColor,
+                        showsFavoriteBadge: false
                     )
                 }
                 .contextMenu {

@@ -209,6 +209,7 @@ struct LibraryFavoriteArtistRow: View {
     let artist: Artist
     let isDownloaded: Bool
     let accentColor: Color
+    var showsFavoriteBadge = true
 
     var body: some View {
         HStack(spacing: 12) {
@@ -219,7 +220,9 @@ struct LibraryFavoriteArtistRow: View {
                 .lineLimit(1)
             Spacer()
             HStack(spacing: 4) {
-                ArtistFavoriteBadge(artistId: artist.id)
+                if showsFavoriteBadge {
+                    ArtistFavoriteBadge(artistId: artist.id)
+                }
                 if isDownloaded {
                     DownloadAvailabilityIcon()
                 }
@@ -232,6 +235,7 @@ struct LibraryFavoriteArtistRow: View {
 
 struct LibraryFavoriteAlbumRow: View {
     let album: Album
+    var showsFavoriteBadge = true
 
     var body: some View {
         HStack(spacing: 12) {
@@ -250,7 +254,9 @@ struct LibraryFavoriteAlbumRow: View {
             }
             Spacer()
             HStack(spacing: 4) {
-                AlbumFavoriteBadge(albumId: album.id)
+                if showsFavoriteBadge {
+                    AlbumFavoriteBadge(albumId: album.id)
+                }
                 AlbumDownloadBadge(albumId: album.id, style: .list)
             }
         }
@@ -261,6 +267,7 @@ struct LibraryFavoriteAlbumRow: View {
 
 struct LibraryStarredSongRow: View {
     let song: Song
+    var showsFavoriteBadge = true
 
     var body: some View {
         HStack(spacing: 12) {
@@ -279,7 +286,9 @@ struct LibraryStarredSongRow: View {
             }
             Spacer()
             HStack(spacing: 4) {
-                SongFavoriteBadge(songId: song.id)
+                if showsFavoriteBadge {
+                    SongFavoriteBadge(songId: song.id)
+                }
                 DownloadStatusIcon(songId: song.id)
             }
             Text(song.durationFormatted)

@@ -61,6 +61,7 @@ extension View {
 struct AlbumCard: View {
     let album: Album
     var size: CGFloat = 240
+    var showsFavoriteBadge = true
 
     @FocusState private var focused: Bool
 
@@ -71,8 +72,10 @@ struct AlbumCard: View {
             } label: {
                 ZStack(alignment: .bottomTrailing) {
                     CoverArtView(url: album.coverURL(500), size: size, cornerRadius: 8)
-                    AlbumFavoriteBadge(albumId: album.id, style: .cover)
-                        .padding(6)
+                    if showsFavoriteBadge {
+                        AlbumFavoriteBadge(albumId: album.id, style: .cover)
+                            .padding(6)
+                    }
                 }
                 .scaleEffect(focused ? 1.08 : 1.0)
                 .shadow(color: .black.opacity(focused ? 0.5 : 0), radius: 24, y: 12)
@@ -96,6 +99,7 @@ struct AlbumCard: View {
 struct ArtistCard: View {
     let artist: Artist
     var size: CGFloat = 240
+    var showsFavoriteBadge = true
 
     @FocusState private var focused: Bool
 
@@ -106,8 +110,10 @@ struct ArtistCard: View {
             } label: {
                 ZStack(alignment: .bottomTrailing) {
                     CoverArtView(url: artist.coverURL(500), size: size, isCircle: true)
-                    ArtistFavoriteBadge(artistId: artist.id, style: .cover)
-                        .padding(6)
+                    if showsFavoriteBadge {
+                        ArtistFavoriteBadge(artistId: artist.id, style: .cover)
+                            .padding(6)
+                    }
                 }
                 .scaleEffect(focused ? 1.12 : 1.0)
                 .shadow(color: .black.opacity(focused ? 0.5 : 0), radius: 24, y: 12)
@@ -513,6 +519,7 @@ struct DetailSongRow: View {
     let song: Song
     let number: Int
     var showArtwork: Bool = false
+    var showsFavoriteBadge = true
     /// Rang-Zahl links vom Cover (Playlists/Recap). nil = keine Zahl (z.B. Queue).
     var rank: Int? = nil
     /// Recap: erste drei Ränge fett in Akzentfarbe hervorheben.
@@ -551,7 +558,9 @@ struct DetailSongRow: View {
             }
             Spacer()
             HStack(spacing: 4) {
-                SongFavoriteBadge(songId: song.id)
+                if showsFavoriteBadge {
+                    SongFavoriteBadge(songId: song.id)
+                }
                 if showStreamCacheStatus && streamCacheStatus.cachedSongIds.contains(song.id) {
                     DownloadAvailabilityIcon()
                         .accessibilityLabel(String(localized: "precache_ready"))
