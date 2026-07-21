@@ -183,11 +183,14 @@ struct ArtistsView: View {
 struct ArtistGridItem: View, Equatable {
     let artist: Artist
     let isDownloaded: Bool
+    var showsFavoriteBadge = true
     @Environment(\.themeColor) private var themeColor
     @State private var isHovered = false
 
     static func == (lhs: Self, rhs: Self) -> Bool {
-        lhs.artist == rhs.artist && lhs.isDownloaded == rhs.isDownloaded
+        lhs.artist == rhs.artist
+            && lhs.isDownloaded == rhs.isDownloaded
+            && lhs.showsFavoriteBadge == rhs.showsFavoriteBadge
     }
 
     var body: some View {
@@ -200,7 +203,9 @@ struct ArtistGridItem: View, Equatable {
                     isCircle: true
                 )
                 HStack(spacing: 4) {
-                    ArtistFavoriteBadge(artistId: artist.id, style: .cover)
+                    if showsFavoriteBadge {
+                        ArtistFavoriteBadge(artistId: artist.id, style: .cover)
+                    }
                     if isDownloaded {
                         DownloadAvailabilityIcon(style: .cover)
                     }

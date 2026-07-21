@@ -137,7 +137,7 @@ struct FavoritesView: View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 150, maximum: 190), spacing: 16)], spacing: 20) {
             ForEach(albums) { album in
                 NavigationLink(value: album) {
-                    AlbumGridItem(album: album)
+                    AlbumGridItem(album: album, showsFavoriteBadge: false)
                         .equatable()
                 }
                 .buttonStyle(.plain)
@@ -154,7 +154,8 @@ struct FavoritesView: View {
                     ArtistGridItem(
                         artist: artist,
                         isDownloaded: DownloadUIStateHub.shared
-                            .isArtistBadgeDownloaded(artist.name)
+                            .isArtistBadgeDownloaded(artist.name),
+                        showsFavoriteBadge: false
                     )
                     .equatable()
                 }
@@ -267,7 +268,6 @@ struct FavoriteSongRow: View {
             }
 
             HStack(spacing: 4) {
-                SongFavoriteBadge(songId: song.id)
                 DownloadStatusIcon(songId: song.id)
             }
 

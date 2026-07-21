@@ -338,10 +338,12 @@ struct AlbumsView: View {
 
 struct AlbumGridItem: View, Equatable {
     let album: Album
+    var showsFavoriteBadge = true
     @State private var isHovered = false
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.album == rhs.album
+            && lhs.showsFavoriteBadge == rhs.showsFavoriteBadge
     }
 
     var body: some View {
@@ -354,7 +356,9 @@ struct AlbumGridItem: View, Equatable {
                     cornerRadius: 8
                 )
                 HStack(spacing: 4) {
-                    AlbumFavoriteBadge(albumId: album.id, style: .cover)
+                    if showsFavoriteBadge {
+                        AlbumFavoriteBadge(albumId: album.id, style: .cover)
+                    }
                     AlbumDownloadBadge(albumId: album.id, style: .cover)
                 }
                 .coverStatusCapsule()

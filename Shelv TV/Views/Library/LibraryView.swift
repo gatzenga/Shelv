@@ -446,7 +446,7 @@ struct LibraryView: View {
                     Text(String(localized: "albums")).font(.title3).bold().padding(.horizontal, 50)
                     cardRow {
                         ForEach(Array(store.favoriteAlbums.prefix(FavoritePresentation.previewLimit))) {
-                            AlbumCard(album: $0)
+                            AlbumCard(album: $0, showsFavoriteBadge: false)
                         }
                     }
                     .focusSection()
@@ -474,7 +474,7 @@ struct LibraryView: View {
                     Text(String(localized: "artists")).font(.title3).bold().padding(.horizontal, 50)
                     cardRow {
                         ForEach(Array(store.favoriteArtists.prefix(FavoritePresentation.previewLimit))) {
-                            ArtistCard(artist: $0)
+                            ArtistCard(artist: $0, showsFavoriteBadge: false)
                         }
                     }
                     .focusSection()
@@ -493,7 +493,12 @@ struct LibraryView: View {
     private func favoriteSongRows(_ songs: [Song]) -> some View {
         ForEach(songs) { song in
             let index = store.favoriteSongs.firstIndex(where: { $0.id == song.id }) ?? 0
-            DetailSongRow(song: song, number: index, showArtwork: true) {
+            DetailSongRow(
+                song: song,
+                number: index,
+                showArtwork: true,
+                showsFavoriteBadge: false
+            ) {
                 player.play(songs: store.favoriteSongs, startIndex: index)
             }
         }
@@ -519,7 +524,7 @@ struct LibraryView: View {
         ScrollView {
             LazyVGrid(columns: coverGridColumns, alignment: .leading, spacing: 50) {
                 ForEach(store.favoriteAlbums) { album in
-                    AlbumCard(album: album)
+                    AlbumCard(album: album, showsFavoriteBadge: false)
                 }
             }
             .padding(.horizontal, 50)
@@ -542,7 +547,7 @@ struct LibraryView: View {
         ScrollView {
             LazyVGrid(columns: coverGridColumns, alignment: .leading, spacing: 50) {
                 ForEach(store.favoriteArtists) { artist in
-                    ArtistCard(artist: artist)
+                    ArtistCard(artist: artist, showsFavoriteBadge: false)
                 }
             }
             .padding(.horizontal, 50)
