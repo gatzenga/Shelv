@@ -18,6 +18,7 @@ struct AlbumCardView: View, Equatable {
                         .aspectRatio(1, contentMode: .fit)
                 }
                 AlbumDownloadBadge(albumId: album.id)
+                    .coverStatusCapsule()
                     .padding(6)
             }
             Text(album.name)

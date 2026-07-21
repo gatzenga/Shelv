@@ -362,6 +362,7 @@ struct PlaylistSidebarRow: View {
                         .font(.caption2)
                         .foregroundStyle(themeColor)
                 }
+                PlaylistDownloadBadge(playlistId: playlist.id)
             }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 7)

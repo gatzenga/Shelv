@@ -4,7 +4,7 @@ struct AlbumContextMenuModifier: ViewModifier {
     let album: Album
     var showPreview: Bool = true
 
-    private let libraryStore = LibraryStore.shared
+    @ObservedObject private var libraryStore = LibraryStore.shared
     private let offlineMode = OfflineModeService.shared
     @Environment(\.personalizationSwipeConfiguration) private var personalization
 

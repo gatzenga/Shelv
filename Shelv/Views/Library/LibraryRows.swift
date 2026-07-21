@@ -130,7 +130,7 @@ struct LibraryAlbumListRow: View {
                 }
             }
             Spacer()
-            AlbumDownloadBadge(albumId: album.id)
+            AlbumDownloadBadge(albumId: album.id, style: .list)
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())
@@ -148,12 +148,8 @@ struct LibraryArtistGridCell: View {
                 AlbumArtView(coverArtId: artist.coverArt, size: 300, isCircle: true)
                     .aspectRatio(1, contentMode: .fit)
                 if isDownloaded {
-                    Image(systemName: "arrow.down.circle.fill")
-                        .font(.caption)
-                        .foregroundStyle(.white)
-                        .padding(4)
-                        .background(accentColor, in: Circle())
-                        .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
+                    DownloadAvailabilityIcon(style: .cover)
+                        .coverStatusCapsule()
                         .padding(6)
                 }
             }
@@ -188,11 +184,7 @@ struct LibraryArtistListRow: View {
             }
             Spacer()
             if isDownloaded {
-                Image(systemName: "arrow.down.circle.fill")
-                    .font(.caption)
-                    .foregroundStyle(.white)
-                    .padding(4)
-                    .background(accentColor, in: Circle())
+                DownloadAvailabilityIcon()
             }
             Image(systemName: "chevron.right")
                 .font(.caption2)
@@ -218,12 +210,7 @@ struct LibraryFavoriteArtistRow: View {
                 .lineLimit(1)
             Spacer()
             if isDownloaded {
-                Image(systemName: "arrow.down.circle.fill")
-                    .font(.caption)
-                    .foregroundStyle(.white)
-                    .padding(4)
-                    .background(accentColor, in: Circle())
-                    .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
+                DownloadAvailabilityIcon()
             }
         }
         .padding(.vertical, 4)
@@ -250,7 +237,7 @@ struct LibraryFavoriteAlbumRow: View {
                 }
             }
             Spacer()
-            AlbumDownloadBadge(albumId: album.id)
+            AlbumDownloadBadge(albumId: album.id, style: .list)
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())

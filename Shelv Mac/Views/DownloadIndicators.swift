@@ -10,6 +10,59 @@ enum DownloadActionSymbols {
     }
 }
 
+enum DownloadIndicatorStyle {
+    case list
+    case cover
+}
+
+private struct CoverStatusCapsuleModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .background {
+                GeometryReader { proxy in
+                    if proxy.size.width > 0, proxy.size.height > 0 {
+                        ZStack {
+                            Capsule().fill(.ultraThinMaterial)
+                            Capsule().stroke(.white.opacity(0.18), lineWidth: 0.5)
+                        }
+                        .padding(.horizontal, -5)
+                        .padding(.vertical, -3)
+                        .shadow(color: .black.opacity(0.22), radius: 2, y: 1)
+                    }
+                }
+            }
+            .padding(.horizontal, 5)
+            .padding(.vertical, 3)
+    }
+}
+
+extension View {
+    func coverStatusCapsule() -> some View {
+        modifier(CoverStatusCapsuleModifier())
+    }
+}
+
+/// Einheitliche Download-Darstellung: subtil in Listen, akzentfarben auf Cover-Artwork.
+struct DownloadAvailabilityIcon: View {
+    var style: DownloadIndicatorStyle = .list
+    @Environment(\.themeColor) private var themeColor
+
+    var body: some View {
+        switch style {
+        case .list:
+            Image(systemName: "arrow.down.circle.fill")
+                .font(.caption)
+                .foregroundStyle(themeColor)
+                .frame(width: 14, height: 14)
+        case .cover:
+            Image(systemName: "arrow.down.circle.fill")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(themeColor)
+                .frame(width: 14, height: 14)
+        }
+    }
+}
+
 struct DownloadStatusIcon: View {
     let songId: String
     private let downloadStore = DownloadStore.shared
@@ -44,9 +97,7 @@ struct DownloadStatusIcon: View {
                         .frame(width: 14, height: 14)
                 }
             case .completed:
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                DownloadAvailabilityIcon()
             case .failed:
                 Image(systemName: "exclamationmark.circle.fill")
                     .font(.caption)
@@ -104,11 +155,12 @@ struct DeleteDownloadIcon: View {
 
 struct AlbumDownloadBadge: View {
     let albumId: String
+    var style: DownloadIndicatorStyle = .cover
     @State private var isDownloaded: Bool
-    @Environment(\.themeColor) private var themeColor
 
-    init(albumId: String) {
+    init(albumId: String, style: DownloadIndicatorStyle = .cover) {
         self.albumId = albumId
+        self.style = style
         _isDownloaded = State(
             initialValue: DownloadUIStateHub.shared.isAlbumDownloaded(albumId)
         )
@@ -117,12 +169,7 @@ struct AlbumDownloadBadge: View {
     var body: some View {
         Group {
             if isDownloaded {
-                Image(systemName: "arrow.down.circle.fill")
-                    .font(.caption)
-                    .foregroundStyle(.white)
-                    .padding(4)
-                    .background(themeColor, in: Circle())
-                    .shadow(color: .black.opacity(0.3), radius: 2, y: 1)
+                DownloadAvailabilityIcon(style: style)
             }
         }
         .onReceive(
@@ -133,11 +180,12 @@ struct AlbumDownloadBadge: View {
 
 struct ArtistDownloadBadge: View {
     let artistName: String
+    var style: DownloadIndicatorStyle = .cover
     @State private var isDownloaded: Bool
-    @Environment(\.themeColor) private var themeColor
 
-    init(artistName: String) {
+    init(artistName: String, style: DownloadIndicatorStyle = .cover) {
         self.artistName = artistName
+        self.style = style
         _isDownloaded = State(
             initialValue: DownloadUIStateHub.shared.isArtistBadgeDownloaded(artistName)
         )
@@ -146,12 +194,7 @@ struct ArtistDownloadBadge: View {
     var body: some View {
         Group {
             if isDownloaded {
-                Image(systemName: "arrow.down.circle.fill")
-                    .font(.caption)
-                    .foregroundStyle(.white)
-                    .padding(4)
-                    .background(themeColor, in: Circle())
-                    .shadow(color: .black.opacity(0.3), radius: 2, y: 1)
+                DownloadAvailabilityIcon(style: style)
             }
         }
         .onReceive(
@@ -162,18 +205,13 @@ struct ArtistDownloadBadge: View {
 
 struct PlaylistDownloadBadge: View {
     let playlistId: String
+    var style: DownloadIndicatorStyle = .list
     @ObservedObject private var downloadStore = DownloadStore.shared
-    @Environment(\.themeColor) private var themeColor
     @AppStorage("enableDownloads") private var enableDownloads = true
 
     var body: some View {
         if enableDownloads && downloadStore.downloadedPlaylistIds.contains(playlistId) {
-            Image(systemName: "arrow.down.circle.fill")
-                .font(.caption)
-                .foregroundStyle(.white)
-                .padding(4)
-                .background(themeColor, in: Circle())
-                .shadow(color: .black.opacity(0.3), radius: 2, y: 1)
+            DownloadAvailabilityIcon(style: style)
         }
     }
 }

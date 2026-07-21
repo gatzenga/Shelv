@@ -203,11 +203,8 @@ struct ArtistGridItem: View, Equatable {
                     .scaleEffect(isHovered ? 1.03 : 1.0)
                     .animation(.easeInOut(duration: 0.15), value: isHovered)
                 if isDownloaded {
-                    Image(systemName: "arrow.down.circle.fill")
-                        .font(.caption)
-                        .foregroundStyle(.white)
-                        .padding(4)
-                        .background(themeColor, in: Circle())
+                    DownloadAvailabilityIcon(style: .cover)
+                        .coverStatusCapsule()
                         .padding(6)
                 }
             }
@@ -256,11 +253,7 @@ struct ArtistListRow: View, Equatable {
             }
             Spacer(minLength: 0)
             if isDownloaded {
-                Image(systemName: "arrow.down.circle.fill")
-                    .font(.caption)
-                    .foregroundStyle(.white)
-                    .padding(4)
-                    .background(themeColor, in: Circle())
+                DownloadAvailabilityIcon()
             }
         }
         .padding(.horizontal, 20)

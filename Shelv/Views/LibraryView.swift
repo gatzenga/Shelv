@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 
 private struct LibraryDerivedState {
@@ -7,7 +8,7 @@ private struct LibraryDerivedState {
     var albumCountByArtist: [String: Int] = [:]
 }
 
-private struct LibraryDerivedStateInput {
+private struct LibraryDerivedStateInput: Equatable {
     let isOffline: Bool
     let libraryAlbums: [Album]
     let libraryArtists: [Artist]
@@ -222,9 +223,187 @@ private actor LibraryDerivedStateWorker {
     }
 }
 
+@MainActor
+private final class LibraryDerivedStateController: ObservableObject {
+    static let shared = LibraryDerivedStateController()
+
+    @Published private(set) var state = LibraryDerivedState()
+
+    private let worker = LibraryDerivedStateWorker()
+    private var rebuildTask: Task<Void, Never>?
+    private var pendingInput: LibraryDerivedStateInput?
+    private var completedInput: LibraryDerivedStateInput?
+    private var generation: UInt64 = 0
+    private var cancellables = Set<AnyCancellable>()
+    private var isActive = false
+
+    private init() {}
+
+    func activate() {
+        guard !isActive else { return }
+        isActive = true
+
+        LibraryStore.shared.$albums
+            .dropFirst()
+            .sink { [weak self] albums in
+                self?.rebuildCurrent(libraryAlbums: albums)
+            }
+            .store(in: &cancellables)
+
+        LibraryStore.shared.$artists
+            .dropFirst()
+            .sink { [weak self] artists in
+                self?.rebuildCurrent(libraryArtists: artists)
+            }
+            .store(in: &cancellables)
+
+        DownloadStore.shared.$albums
+            .dropFirst()
+            .sink { [weak self] albums in
+                guard OfflineModeService.shared.isOffline else { return }
+                self?.rebuildCurrent(
+                    downloadedAlbums: albums,
+                    coalescingBackgroundUpdates: true
+                )
+            }
+            .store(in: &cancellables)
+
+        DownloadStore.shared.$artists
+            .dropFirst()
+            .sink { [weak self] artists in
+                guard OfflineModeService.shared.isOffline else { return }
+                self?.rebuildCurrent(
+                    downloadedArtists: artists,
+                    coalescingBackgroundUpdates: true
+                )
+            }
+            .store(in: &cancellables)
+
+        OfflineModeService.shared.$isOffline
+            .dropFirst()
+            .sink { [weak self] isOffline in
+                self?.rebuildCurrent(isOffline: isOffline)
+            }
+            .store(in: &cancellables)
+
+        rebuildCurrent()
+    }
+
+    func rebuild(
+        from input: LibraryDerivedStateInput,
+        coalescingBackgroundUpdates: Bool = false
+    ) {
+        guard input != pendingInput, input != completedInput else { return }
+
+        rebuildTask?.cancel()
+        generation &+= 1
+        let requestGeneration = generation
+        pendingInput = input
+        let worker = worker
+
+        rebuildTask = Task.detached(priority: .utility) { [weak self] in
+            if coalescingBackgroundUpdates {
+                do {
+                    try await Task.sleep(nanoseconds: 120_000_000)
+                } catch {
+                    await self?.finishCancelled(generation: requestGeneration)
+                    return
+                }
+            }
+
+            guard !Task.isCancelled,
+                  let result = await worker.rebuild(from: input),
+                  !Task.isCancelled
+            else {
+                await self?.finishCancelled(generation: requestGeneration)
+                return
+            }
+
+            await self?.publish(
+                result,
+                for: input,
+                generation: requestGeneration
+            )
+        }
+    }
+
+    private func rebuildCurrent(
+        isOffline: Bool? = nil,
+        libraryAlbums: [Album]? = nil,
+        libraryArtists: [Artist]? = nil,
+        downloadedAlbums: [DownloadedAlbum]? = nil,
+        downloadedArtists: [DownloadedArtist]? = nil,
+        coalescingBackgroundUpdates: Bool = false
+    ) {
+        let defaults = UserDefaults.standard
+        let albumSort = AlbumSortOption(
+            rawValue: defaults.string(forKey: "albumSortOption")
+                ?? AlbumSortOption.alphabetical.rawValue
+        ) ?? .alphabetical
+        let albumDirection = SortDirection(
+            rawValue: defaults.string(forKey: "albumSortDirection")
+                ?? SortDirection.ascending.rawValue
+        ) ?? .ascending
+        let artistSort = ArtistSortOption(
+            rawValue: defaults.string(forKey: "artistSortOption")
+                ?? ArtistSortOption.alphabetical.rawValue
+        ) ?? .alphabetical
+        let artistDirection = SortDirection(
+            rawValue: defaults.string(forKey: "artistSortDirection")
+                ?? SortDirection.ascending.rawValue
+        ) ?? .ascending
+
+        rebuild(
+            from: LibraryDerivedStateInput(
+                isOffline: isOffline ?? OfflineModeService.shared.isOffline,
+                libraryAlbums: libraryAlbums ?? LibraryStore.shared.albums,
+                libraryArtists: libraryArtists ?? LibraryStore.shared.artists,
+                downloadedAlbums: downloadedAlbums ?? DownloadStore.shared.albums,
+                downloadedArtists: downloadedArtists ?? DownloadStore.shared.artists,
+                albumSort: albumSort,
+                albumDirection: albumDirection,
+                selectedAlbumGenre: defaults.bool(forKey: PersonalizationPreferenceKey.showGenreFilter)
+                    ? AlbumGenreFilterOption.normalizedGenre(
+                        defaults.string(forKey: PersonalizationPreferenceKey.albumGenreFilter) ?? ""
+                    )
+                    : nil,
+                artistSort: artistSort,
+                artistDirection: artistDirection
+            ),
+            coalescingBackgroundUpdates: coalescingBackgroundUpdates
+        )
+    }
+
+    private func publish(
+        _ result: LibraryDerivedState,
+        for input: LibraryDerivedStateInput,
+        generation requestGeneration: UInt64
+    ) {
+        guard generation == requestGeneration else { return }
+        pendingInput = nil
+        completedInput = input
+        rebuildTask = nil
+        state = result
+    }
+
+    private func finishCancelled(generation requestGeneration: UInt64) {
+        guard generation == requestGeneration else { return }
+        pendingInput = nil
+        rebuildTask = nil
+    }
+}
+
+@MainActor
+enum LibraryDerivedStatePrewarmer {
+    static func activate() {
+        LibraryDerivedStateController.shared.activate()
+    }
+}
+
 struct LibraryView: View {
     @ObservedObject var libraryStore = LibraryStore.shared
     @ObservedObject var offlineMode = OfflineModeService.shared
+    @ObservedObject private var derivedStateController = LibraryDerivedStateController.shared
     @EnvironmentObject var serverStore: ServerStore
     @Environment(\.personalizationSwipeConfiguration) private var personalization
     private let player = AudioPlayerService.shared
@@ -256,12 +435,9 @@ struct LibraryView: View {
     @State private var navigateToAlbum: Album?
     @State private var navigateToArtist: Artist?
     @State private var currentToast: ShelveToast?
-    @State private var derivedState = LibraryDerivedState()
     private let downloadStore = DownloadStore.shared
     @State private var albumToDeleteDownloads: Album?
     @State private var artistToDeleteDownloads: Artist?
-    @State private var rebuildTask: Task<Void, Never>?
-    @State private var rebuildWorker = LibraryDerivedStateWorker()
 
     private let columns = [GridItem(.adaptive(minimum: 150, maximum: 200), spacing: 14)]
 
@@ -272,6 +448,7 @@ struct LibraryView: View {
         let songIds: Set<String>
     }
 
+    private var derivedState: LibraryDerivedState { derivedStateController.state }
     private var albumGroups: [(letter: String, items: [Album])] { derivedState.albumGroups }
     private var albumGenreOptions: [AlbumGenreFilterOption] { derivedState.albumGenreOptions }
     private var artistGroups: [(letter: String, items: [Artist])] { derivedState.artistGroups }
@@ -407,17 +584,6 @@ struct LibraryView: View {
     private var stackContent: some View {
         stackBase
         .onAppear { rebuildGroups() }
-        .onDisappear { rebuildTask?.cancel() }
-        .onReceive(libraryStore.$albums) { _ in rebuildGroups(coalescingBackgroundUpdates: true) }
-        .onReceive(libraryStore.$artists) { _ in rebuildGroups(coalescingBackgroundUpdates: true) }
-        .onReceive(downloadStore.$albums) { _ in
-            guard offlineMode.isOffline else { return }
-            rebuildGroups(coalescingBackgroundUpdates: true)
-        }
-        .onReceive(downloadStore.$artists) { _ in
-            guard offlineMode.isOffline else { return }
-            rebuildGroups(coalescingBackgroundUpdates: true)
-        }
         .onChange(of: offlineMode.isOffline) { _, isOffline in
             if isOffline {
                 if sortOption.requiresServer { sortOptionRaw = AlbumSortOption.alphabetical.rawValue }
@@ -444,8 +610,6 @@ struct LibraryView: View {
     }
 
     private func rebuildGroups(coalescingBackgroundUpdates: Bool = false) {
-        rebuildTask?.cancel()
-
         let input = LibraryDerivedStateInput(
             isOffline: offlineMode.isOffline,
             libraryAlbums: libraryStore.albums,
@@ -460,26 +624,10 @@ struct LibraryView: View {
             artistSort: artistSortOption,
             artistDirection: artistDirection
         )
-        let worker = rebuildWorker
-
-        rebuildTask = Task.detached(priority: .utility) {
-            if coalescingBackgroundUpdates {
-                do {
-                    try await Task.sleep(nanoseconds: 120_000_000)
-                } catch {
-                    return
-                }
-            }
-            guard !Task.isCancelled,
-                  let result = await worker.rebuild(from: input),
-                  !Task.isCancelled
-            else { return }
-
-            await MainActor.run {
-                guard !Task.isCancelled else { return }
-                self.derivedState = result
-            }
-        }
+        derivedStateController.rebuild(
+            from: input,
+            coalescingBackgroundUpdates: coalescingBackgroundUpdates
+        )
     }
 
     private var downloadedLibrarySnapshot: DownloadedLibrarySnapshot {

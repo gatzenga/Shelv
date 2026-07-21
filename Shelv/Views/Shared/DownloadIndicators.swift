@@ -17,7 +17,60 @@ enum DownloadActionSymbols {
     }
 }
 
-/// Kompakter Status-Indikator für einen einzelnen Song: Ring während Download, Häkchen wenn fertig.
+enum DownloadIndicatorStyle {
+    case list
+    case cover
+}
+
+private struct CoverStatusCapsuleModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .background {
+                GeometryReader { proxy in
+                    if proxy.size.width > 0, proxy.size.height > 0 {
+                        ZStack {
+                            Capsule().fill(.ultraThinMaterial)
+                            Capsule().stroke(.white.opacity(0.18), lineWidth: 0.5)
+                        }
+                        .padding(.horizontal, -5)
+                        .padding(.vertical, -3)
+                        .shadow(color: .black.opacity(0.22), radius: 2, y: 1)
+                    }
+                }
+            }
+            .padding(.horizontal, 5)
+            .padding(.vertical, 3)
+    }
+}
+
+extension View {
+    func coverStatusCapsule() -> some View {
+        modifier(CoverStatusCapsuleModifier())
+    }
+}
+
+/// Einheitliche Download-Darstellung: subtil in Listen, akzentfarben auf Cover-Artwork.
+struct DownloadAvailabilityIcon: View {
+    var style: DownloadIndicatorStyle = .list
+    @AppStorage("themeColor") private var themeColorName = "violet"
+
+    var body: some View {
+        switch style {
+        case .list:
+            Image(systemName: "arrow.down.circle.fill")
+                .font(.caption)
+                .foregroundStyle(AppTheme.color(for: themeColorName))
+                .frame(width: 14, height: 14)
+        case .cover:
+            Image(systemName: "arrow.down.circle.fill")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppTheme.color(for: themeColorName))
+                .frame(width: 14, height: 14)
+        }
+    }
+}
+
+/// Kompakter Status-Indikator für einen einzelnen Song: Ring während Download, Pfeil wenn fertig.
 struct DownloadStatusIcon: View {
     let songId: String
     private let downloadStore = DownloadStore.shared
@@ -54,9 +107,7 @@ struct DownloadStatusIcon: View {
                         .frame(width: 14, height: 14)
                 }
             case .completed:
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                DownloadAvailabilityIcon()
             case .failed:
                 Image(systemName: "exclamationmark.circle.fill")
                     .font(.caption)
@@ -114,11 +165,12 @@ struct DeleteDownloadIcon: View {
 /// wenn mindestens ein Song lokal verfügbar ist.
 struct AlbumDownloadBadge: View {
     let albumId: String
+    var style: DownloadIndicatorStyle = .cover
     @State private var isDownloaded: Bool
-    @AppStorage("themeColor") private var themeColorName = "violet"
 
-    init(albumId: String) {
+    init(albumId: String, style: DownloadIndicatorStyle = .cover) {
         self.albumId = albumId
+        self.style = style
         _isDownloaded = State(
             initialValue: DownloadUIStateHub.shared.isAlbumDownloaded(albumId)
         )
@@ -127,12 +179,7 @@ struct AlbumDownloadBadge: View {
     var body: some View {
         Group {
             if isDownloaded {
-                Image(systemName: "arrow.down.circle.fill")
-                    .font(.caption)
-                    .foregroundStyle(.white)
-                    .padding(4)
-                    .background(AppTheme.color(for: themeColorName), in: Circle())
-                    .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
+                DownloadAvailabilityIcon(style: style)
             }
         }
         .onReceive(
@@ -144,13 +191,14 @@ struct AlbumDownloadBadge: View {
 /// Badge für Playlist-Rows — zeigt an, dass die Playlist für den Offline-Modus markiert ist.
 struct PlaylistDownloadBadge: View {
     let playlistId: String
+    var style: DownloadIndicatorStyle = .list
     private let downloadStore = DownloadStore.shared
     @State private var isMarkedForOffline: Bool
-    @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage("enableDownloads") private var enableDownloads = true
 
-    init(playlistId: String) {
+    init(playlistId: String, style: DownloadIndicatorStyle = .list) {
         self.playlistId = playlistId
+        self.style = style
         _isMarkedForOffline = State(
             initialValue: DownloadStore.shared.offlinePlaylistIds.contains(playlistId)
         )
@@ -159,12 +207,7 @@ struct PlaylistDownloadBadge: View {
     var body: some View {
         Group {
             if enableDownloads && isMarkedForOffline {
-                Image(systemName: "arrow.down.circle.fill")
-                    .font(.caption)
-                    .foregroundStyle(.white)
-                    .padding(4)
-                    .background(AppTheme.color(for: themeColorName), in: Circle())
-                    .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
+                DownloadAvailabilityIcon(style: style)
             }
         }
         .onReceive(

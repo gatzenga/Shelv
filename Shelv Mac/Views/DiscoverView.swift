@@ -960,6 +960,7 @@ struct AlbumCard: View, Equatable {
             )
                 .overlay(alignment: .bottomTrailing) {
                     AlbumDownloadBadge(albumId: album.id)
+                        .coverStatusCapsule()
                         .padding(4)
                 }
                 .shadow(color: .black.opacity(isHovered ? 0.25 : 0.1), radius: isHovered ? 8 : 4)

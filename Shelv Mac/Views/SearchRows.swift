@@ -36,7 +36,7 @@ struct SearchArtistRow: View {
             }
             Spacer()
             if showsDownloadBadge {
-                ArtistDownloadBadge(artistName: artist.name)
+                ArtistDownloadBadge(artistName: artist.name, style: .list)
             }
             Image(systemName: "chevron.right").foregroundStyle(.tertiary)
                 .padding(.trailing, 20)
@@ -66,7 +66,7 @@ struct SearchAlbumRow: View {
                 if let artist = album.artist { Text(artist).font(.caption).foregroundStyle(.secondary) }
             }
             Spacer()
-            AlbumDownloadBadge(albumId: album.id)
+            AlbumDownloadBadge(albumId: album.id, style: .list)
             if let year = album.year { Text(String(year)).font(.caption).foregroundStyle(.tertiary) }
             Image(systemName: "chevron.right").foregroundStyle(.tertiary)
                 .padding(.trailing, 20)

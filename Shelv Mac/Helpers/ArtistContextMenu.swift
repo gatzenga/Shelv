@@ -2,7 +2,7 @@ import SwiftUI
 
 struct ArtistContextMenuModifier: ViewModifier {
     let artist: Artist
-    private let libraryStore = LibraryViewModel.shared
+    @ObservedObject private var libraryStore = LibraryViewModel.shared
     private let downloadStore = DownloadStore.shared
     @State private var showDeleteConfirm = false
 

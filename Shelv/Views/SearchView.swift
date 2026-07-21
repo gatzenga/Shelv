@@ -150,12 +150,7 @@ struct SearchView: View {
                                                     .font(.body)
                                                 Spacer()
                                                 if enableDownloads && availability.isCatalogDownloaded {
-                                                    Image(systemName: "arrow.down.circle.fill")
-                                                        .font(.caption)
-                                                        .foregroundStyle(.white)
-                                                        .padding(4)
-                                                        .background(accentColor, in: Circle())
-                                                        .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
+                                                    DownloadAvailabilityIcon()
                                                 }
                                             }
                                         }
@@ -211,7 +206,7 @@ struct SearchView: View {
                                                     }
                                                 }
                                                 Spacer()
-                                                AlbumDownloadBadge(albumId: album.id)
+                                                AlbumDownloadBadge(albumId: album.id, style: .list)
                                             }
                                         }
                                         .albumContextMenu(album, showPreview: false)
@@ -403,12 +398,7 @@ struct SearchView: View {
                                                 Text(artist.name).font(.body)
                                                 Spacer()
                                                 if enableDownloads && availability.isCatalogDownloaded {
-                                                    Image(systemName: "arrow.down.circle.fill")
-                                                        .font(.caption)
-                                                        .foregroundStyle(.white)
-                                                        .padding(4)
-                                                        .background(accentColor, in: Circle())
-                                                        .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
+                                                    DownloadAvailabilityIcon()
                                                 }
                                                 Image(systemName: "heart.fill")
                                                     .font(.caption2).foregroundStyle(.pink)
@@ -459,7 +449,7 @@ struct SearchView: View {
                                                     }
                                                 }
                                                 Spacer()
-                                                AlbumDownloadBadge(albumId: album.id)
+                                                AlbumDownloadBadge(albumId: album.id, style: .list)
                                                 Image(systemName: "heart.fill")
                                                     .font(.caption2).foregroundStyle(.pink)
                                             }

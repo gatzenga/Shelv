@@ -53,6 +53,7 @@ struct ShelvApp: App {
         if d.string(forKey: "transcodingDownloadCodec") == "aac" { d.set("raw", forKey: "transcodingDownloadCodec") }
         PersonalizationSettings.registerDefaults()
         ShelvDefaultSettings.registerDefaults()
+        LibraryDerivedStatePrewarmer.activate()
     }
 
     private var preferredScheme: ColorScheme? {

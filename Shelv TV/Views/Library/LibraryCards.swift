@@ -535,6 +535,10 @@ struct DetailSongRow: View {
                 }
             }
             Spacer()
+            if showStreamCacheStatus && streamCacheStatus.cachedSongIds.contains(song.id) {
+                DownloadAvailabilityIcon()
+                    .accessibilityLabel(String(localized: "precache_ready"))
+            }
             if let playCount {
                 HStack(spacing: 6) {
                     Image(systemName: "play.fill").font(.caption2)
@@ -544,19 +548,6 @@ struct DetailSongRow: View {
             }
             if let d = song.duration {
                 HStack(spacing: 14) {
-                    if showStreamCacheStatus {
-                        Group {
-                            if streamCacheStatus.cachedSongIds.contains(song.id) {
-                                Image(systemName: "arrow.down.circle.fill")
-                                    .font(.caption)
-                                    .foregroundStyle(AppTheme.color(for: themeColor))
-                                    .accessibilityLabel(String(localized: "precache_ready"))
-                            } else {
-                                Color.clear
-                            }
-                        }
-                        .frame(width: 18, height: 18)
-                    }
                     Text(formatDuration(d))
                         .font(.caption)
                         .foregroundStyle(.secondary)
