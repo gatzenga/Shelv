@@ -395,21 +395,27 @@ struct DiscoverView: View {
     @ViewBuilder
     private func serverURLSlotMenuButton(slot: ServerURLSlot, server: SubsonicServer) -> some View {
         let isActive = activeURLSlot(for: server) == slot
-        Button {
-            guard !isActive else { return }
+        selectionMenuToggle(title(for: slot), isSelected: isActive) {
             startServerURLSlotSwitch(slot)
-        } label: {
-            Label {
-                Text(title(for: slot))
-            } icon: {
-                selectionMenuIcon(isSelected: isActive)
-            }
         }
     }
 
-    private func selectionMenuIcon(isSelected: Bool) -> some View {
-        Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-            .foregroundStyle(accentColor)
+    private func selectionMenuToggle(
+        _ title: String,
+        isSelected: Bool,
+        onSelect: @escaping () -> Void
+    ) -> some View {
+        Toggle(
+            isOn: Binding(
+                get: { isSelected },
+                set: { shouldSelect in
+                    guard shouldSelect, !isSelected else { return }
+                    onSelect()
+                }
+            )
+        ) {
+            Text(title)
+        }
     }
 
     private func activeURLSlot(for server: SubsonicServer) -> ServerURLSlot {
