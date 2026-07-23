@@ -15,10 +15,37 @@ private nonisolated struct OfflineSearchDownloadState: Equatable {
     static let empty = OfflineSearchDownloadState(snapshot: .empty)
 }
 
+private struct SearchPresentationModifier: ViewModifier {
+    @Binding var text: String
+    @Binding var isPresented: Bool
+    let usesSystemSearchTabActivation: Bool
+    let placement: SearchFieldPlacement
+    let prompt: String
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if usesSystemSearchTabActivation {
+            content.searchable(
+                text: $text,
+                placement: placement,
+                prompt: Text(prompt)
+            )
+        } else {
+            content.searchable(
+                text: $text,
+                isPresented: $isPresented,
+                placement: placement,
+                prompt: Text(prompt)
+            )
+        }
+    }
+}
+
 struct SearchView: View {
     /// Wird von ContentView bei jedem Tab-Wechsel zu Search erhöht → triggert Reset + Fokus.
     var resetToken: Int = 0
     var searchPlacement: SearchFieldPlacement = .navigationBarDrawer(displayMode: .always)
+    var usesSystemSearchTabActivation = false
     @ObservedObject var libraryStore = LibraryStore.shared
     @ObservedObject var offlineMode = OfflineModeService.shared
     @EnvironmentObject var serverStore: ServerStore
@@ -113,6 +140,7 @@ struct SearchView: View {
         isSearching = false
         searchFieldActive = false
 
+        guard !usesSystemSearchTabActivation else { return }
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(250))
             searchFieldActive = true
@@ -650,12 +678,13 @@ struct SearchView: View {
                 }
             }
             .navigationTitle(String(localized: "search"))
-            .searchable(
+            .modifier(SearchPresentationModifier(
                 text: $query,
                 isPresented: $searchFieldActive,
+                usesSystemSearchTabActivation: usesSystemSearchTabActivation,
                 placement: searchPlacement,
                 prompt: String(localized: "artists_albums_songs")
-            )
+            ))
             .onSubmit(of: .search) {
                 commitCurrentSearch()
             }

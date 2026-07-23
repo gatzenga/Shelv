@@ -29,9 +29,9 @@ struct AlphabetIndexBar: View {
         .gesture(
             DragGesture(minimumDistance: 0, coordinateSpace: .local)
                 .onChanged { value in
-                    guard scenePhase == .active, !letters.isEmpty else { return }
-                    let index = min(max(Int(value.location.y / itemHeight), 0), letters.count - 1)
-                    let letter = letters[index]
+                    guard scenePhase == .active,
+                          let letter = letter(at: value.location.y)
+                    else { return }
                     guard letter != lastSelected else { return }
                     lastSelected = letter
                     feedback.impactOccurred()
@@ -62,9 +62,9 @@ struct AlphabetIndexBar: View {
                     }
                     cancelPendingSelection()
                     if !pendingLetter.isEmpty {
-                        guard !letters.isEmpty else { lastSelected = ""; pendingLetter = ""; return }
-                        let index = min(max(Int(value.location.y / itemHeight), 0), letters.count - 1)
-                        onSelect(letters[index])
+                        if let letter = letter(at: value.location.y) {
+                            onSelect(letter)
+                        }
                     }
                     lastSelected = ""
                     pendingLetter = ""
@@ -93,5 +93,13 @@ struct AlphabetIndexBar: View {
         cancelPendingSelection()
         lastSelected = ""
         pendingLetter = ""
+    }
+
+    private func letter(at yPosition: CGFloat) -> String? {
+        guard yPosition.isFinite, !letters.isEmpty else { return nil }
+        let rawIndex = yPosition / itemHeight
+        guard rawIndex.isFinite else { return nil }
+        let clampedIndex = min(max(rawIndex, 0), CGFloat(letters.count - 1))
+        return letters[Int(clampedIndex)]
     }
 }

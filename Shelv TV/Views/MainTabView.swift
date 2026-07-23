@@ -83,9 +83,6 @@ struct MainTabView: View {
                 TVIdleNowPlayingView(panel: nowPlayingSidePanel) {
                     dismissIdleNowPlaying()
                 }
-                .onExitCommand {
-                    dismissIdleNowPlaying()
-                }
                 .transition(.opacity)
                 .zIndex(1)
             }
