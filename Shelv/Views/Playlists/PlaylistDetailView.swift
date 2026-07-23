@@ -26,7 +26,6 @@ struct PlaylistDetailView: View {
     @State private var newComment = ""
     @State private var pendingSongDeletionOffsets = IndexSet()
     @State private var showRemoveSongsConfirm = false
-    @State private var revealedSongDeletionRowID: IndexedSongOccurrence.ID?
     @State private var showDeleteConfirm = false
     @State private var showDeleteDownloadConfirm = false
     @State private var currentToast: ShelveToast?
@@ -107,86 +106,47 @@ struct PlaylistDetailView: View {
                     ForEach(displayedSongRows) { row in
                         let song = row.song
                         let songsIndex = row.index
-                        // Native onDelete removes the row visually before an alert can confirm it.
-                        // Keep the edit controls local and mutate `songs` only after confirmation.
-                        HStack(spacing: isEditMode ? 10 : 0) {
-                            if isEditMode {
-                                Button {
-                                    toggleSongDeletionAction(for: row.id)
-                                } label: {
-                                    Image(systemName: "minus.circle.fill")
-                                        .font(.system(size: 22))
-                                        .foregroundStyle(.red)
-                                        .frame(width: 26, height: 40)
-                                        .contentShape(Rectangle())
+                        Button {
+                            player.play(songs: songs, startIndex: songsIndex)
+                        } label: {
+                            HStack(spacing: 14) {
+                                if !isEditMode {
+                                    NowPlayingIndicator(
+                                        songId: song.id,
+                                        fallbackIndex: originalRanks[song.id] ?? (songsIndex + 1),
+                                        accentColor: accentColor
+                                    )
                                 }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel(String(localized: "remove_from_playlist"))
-                            }
-
-                            Button {
-                                guard !isEditMode else { return }
-                                player.play(songs: songs, startIndex: songsIndex)
-                            } label: {
-                                HStack(spacing: 14) {
-                                    if !isEditMode {
-                                        NowPlayingIndicator(
-                                            songId: song.id,
-                                            fallbackIndex: originalRanks[song.id] ?? (songsIndex + 1),
-                                            accentColor: accentColor
-                                        )
-                                    }
-                                    AlbumArtView(coverArtId: song.coverArt, size: 100, cornerRadius: 6)
-                                        .frame(width: 40, height: 40)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(song.title)
-                                            .font(.body)
-                                            .foregroundStyle(.primary)
-                                            .lineLimit(1)
-                                        if let artist = song.artist {
-                                            Text(artist)
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                                .lineLimit(1)
-                                        }
-                                    }
-                                    Spacer()
-                                    if !isEditMode {
-                                        HStack(spacing: 4) {
-                                            SongFavoriteBadge(songId: song.id)
-                                            DownloadStatusIcon(songId: song.id)
-                                        }
-                                        Text(song.durationFormatted)
-                                            .font(.caption2)
+                                AlbumArtView(coverArtId: song.coverArt, size: 100, cornerRadius: 6)
+                                    .frame(width: 40, height: 40)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(song.title)
+                                        .font(.body)
+                                        .foregroundStyle(.primary)
+                                        .lineLimit(1)
+                                    if let artist = song.artist {
+                                        Text(artist)
+                                            .font(.caption)
                                             .foregroundStyle(.secondary)
-                                            .monospacedDigit()
+                                            .lineLimit(1)
                                     }
                                 }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.vertical, 2)
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            .allowsHitTesting(!isEditMode)
-
-                            if isEditMode, revealedSongDeletionRowID == row.id {
-                                Button(role: .destructive) {
-                                    requestSongDeletion(at: IndexSet(integer: songsIndex))
-                                } label: {
-                                    Image(systemName: "trash")
-                                        .font(.system(size: 16, weight: .semibold))
-                                        .foregroundStyle(.white)
-                                        .frame(width: 44, height: 40)
-                                        .background(
-                                            Color.red,
-                                            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                        )
+                                Spacer()
+                                if !isEditMode {
+                                    HStack(spacing: 4) {
+                                        SongFavoriteBadge(songId: song.id)
+                                        DownloadStatusIcon(songId: song.id)
+                                    }
+                                    Text(song.durationFormatted)
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                        .monospacedDigit()
                                 }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel(String(localized: "delete"))
-                                .transition(.move(edge: .trailing).combined(with: .opacity))
                             }
+                            .padding(.vertical, 2)
+                            .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
                         .personalizedSongSwipeActions(
                             song: song,
                             isOffline: offlineMode.isOffline,
@@ -217,10 +177,13 @@ struct PlaylistDetailView: View {
                         )
                     }
                     .onMove { from, to in
-                        revealedSongDeletionRowID = nil
                         songs.move(fromOffsets: from, toOffset: to)
                         Task { await syncOrder() }
                     }
+                    .onDelete { offsets in
+                        requestSongDeletion(at: offsets)
+                    }
+                    .deleteDisabled(!isEditMode)
 
                     PlayerBottomSpacer(activeHeight: 110, inactiveHeight: 0)
                         .listRowInsets(EdgeInsets())
@@ -239,7 +202,6 @@ struct PlaylistDetailView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 if isEditMode {
                     Button(String(localized: "done")) {
-                        revealedSongDeletionRowID = nil
                         isEditMode = false
                     }
                     .bold()
@@ -276,7 +238,6 @@ struct PlaylistDetailView: View {
 
                         Button {
                             searchQuery = ""
-                            revealedSongDeletionRowID = nil
                             isEditMode = true
                         } label: {
                             Label(String(localized: "reorder_delete"), systemImage: "pencil")
@@ -341,15 +302,11 @@ struct PlaylistDetailView: View {
                 let offsets = pendingSongDeletionOffsets
                 pendingSongDeletionOffsets = []
                 withAnimation(.easeInOut(duration: 0.2)) {
-                    revealedSongDeletionRowID = nil
                     removeSongs(at: offsets)
                 }
             }
             Button(String(localized: "cancel"), role: .cancel) {
                 pendingSongDeletionOffsets = []
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    revealedSongDeletionRowID = nil
-                }
             }
         } message: {
             Text(pendingSongDeletionDescription)
@@ -553,13 +510,11 @@ struct PlaylistDetailView: View {
         let validOffsets = IndexSet(offsets.filter { songs.indices.contains($0) })
         guard !validOffsets.isEmpty else { return }
         haptic()
-        pendingSongDeletionOffsets = validOffsets
-        showRemoveSongsConfirm = true
-    }
-
-    private func toggleSongDeletionAction(for rowID: IndexedSongOccurrence.ID) {
-        withAnimation(.easeInOut(duration: 0.2)) {
-            revealedSongDeletionRowID = revealedSongDeletionRowID == rowID ? nil : rowID
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            pendingSongDeletionOffsets = validOffsets
+            showRemoveSongsConfirm = true
         }
     }
 
