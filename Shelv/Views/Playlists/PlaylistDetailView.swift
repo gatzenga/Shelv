@@ -144,6 +144,7 @@ struct PlaylistDetailView: View {
                             isOffline: offlineMode.isOffline,
                             isFavorite: libraryStore.isSongStarred(song),
                             accentColor: accentColor,
+                            isEnabled: !isEditMode,
                             onPlay: {
                                 player.play(songs: songs, startIndex: songsIndex)
                             },
