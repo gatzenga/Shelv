@@ -25,7 +25,10 @@ struct SearchView: View {
                 LazyVStack(alignment: .leading, spacing: 4) {
                     if trimmedQuery.isEmpty {
                         if !recentSearches.isEmpty {
-                            sectionHeader(String(localized: "recent_searches"))
+                            sectionHeader(
+                                String(localized: "recent_searches"),
+                                topPadding: 0
+                            )
                             ForEach(recentSearches, id: \.self) { entry in
                                 HStack(spacing: 20) {
                                     Image(systemName: "clock.arrow.circlepath")
@@ -54,7 +57,7 @@ struct SearchView: View {
 
                                 Spacer(minLength: 0)
                             }
-                            .padding(.horizontal, 50)
+                            .padding(.horizontal, 12)
                             .padding(.top, 20)
                             .focusSection()
                         }
@@ -88,7 +91,8 @@ struct SearchView: View {
                         }
                     }
                 }
-                .padding(.vertical, 24)
+                .padding(.top, 8)
+                .padding(.bottom, 24)
             }
             .scrollIndicators(.hidden)
             .navigationDestination(for: Album.self) { AlbumDetailView(album: $0) }
@@ -159,10 +163,10 @@ struct SearchView: View {
         }
     }
 
-    private func sectionHeader(_ title: String) -> some View {
+    private func sectionHeader(_ title: String, topPadding: CGFloat = 20) -> some View {
         Text(title).font(.title3).bold()
-            .padding(.horizontal, 50)
-            .padding(.top, 20)
+            .padding(.horizontal, 12)
+            .padding(.top, topPadding)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
