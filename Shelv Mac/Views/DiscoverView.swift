@@ -401,51 +401,46 @@ struct DiscoverView: View {
     @ViewBuilder
     private var allMusicLibrariesMenuButton: some View {
         let isSelected = musicLibraries.snapshot.selectsAllLibraries
-        Button {
-            guard !isSelected else { return }
+        selectionMenuToggle(
+            String(localized: "show_all_libraries"),
+            isSelected: isSelected
+        ) {
             musicLibraries.selectAll()
-        } label: {
-            Label {
-                Text(String(localized: "show_all_libraries"))
-            } icon: {
-                selectionMenuIcon(isSelected: isSelected)
-            }
         }
     }
 
     @ViewBuilder
     private func musicLibraryMenuButton(_ folder: SubsonicMusicFolder) -> some View {
         let isSelected = musicLibraries.selectedFolderIDs == Set([folder.id])
-        Button {
-            guard !isSelected else { return }
+        selectionMenuToggle(folder.name, isSelected: isSelected) {
             musicLibraries.selectOnly(folderID: folder.id)
-        } label: {
-            Label {
-                Text(folder.name)
-            } icon: {
-                selectionMenuIcon(isSelected: isSelected)
-            }
         }
     }
 
     @ViewBuilder
     private func serverURLSlotMenuButton(slot: ServerURLSlot, server: SubsonicServer) -> some View {
         let isActive = activeURLSlot(for: server) == slot
-        Button {
-            guard !isActive else { return }
+        selectionMenuToggle(title(for: slot), isSelected: isActive) {
             startServerURLSlotSwitch(slot)
-        } label: {
-            Label {
-                Text(title(for: slot))
-            } icon: {
-                selectionMenuIcon(isSelected: isActive)
-            }
         }
     }
 
-    private func selectionMenuIcon(isSelected: Bool) -> some View {
-        Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-            .foregroundStyle(accentColor)
+    private func selectionMenuToggle(
+        _ title: String,
+        isSelected: Bool,
+        onSelect: @escaping () -> Void
+    ) -> some View {
+        Toggle(
+            isOn: Binding(
+                get: { isSelected },
+                set: { shouldSelect in
+                    guard shouldSelect, !isSelected else { return }
+                    onSelect()
+                }
+            )
+        ) {
+            Text(title)
+        }
     }
 
     private func activeURLSlot(for server: SubsonicServer) -> ServerURLSlot {
