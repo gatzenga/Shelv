@@ -5,6 +5,7 @@ struct PersonalizedSongSwipeActionsModifier: ViewModifier {
     let isOffline: Bool
     let isFavorite: Bool
     let accentColor: Color
+    let isEnabled: Bool
     let onPlay: () -> Void
     let onFavorite: () -> Void
     let onAddToPlaylist: () -> Void
@@ -14,23 +15,28 @@ struct PersonalizedSongSwipeActionsModifier: ViewModifier {
     @State private var songInfoSong: Song?
     @Environment(\.personalizationSwipeConfiguration) private var personalization
 
+    @ViewBuilder
     func body(content: Content) -> some View {
-        content
-            .contextMenu {
-                songContextMenuItems
-            }
-            .sheet(item: $songInfoSong) { song in
-                SongInfoSheetView(song: song, initialTab: .details)
-            }
-            .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                swipeButton(for: .leftPrimary)
-                swipeButton(for: .leftSecondary)
-            }
-            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                swipeButton(for: .rightPrimary)
-                swipeButton(for: .rightSecondary)
-                swipeButton(for: .rightTertiary)
-            }
+        if isEnabled {
+            content
+                .contextMenu {
+                    songContextMenuItems
+                }
+                .sheet(item: $songInfoSong) { song in
+                    SongInfoSheetView(song: song, initialTab: .details)
+                }
+                .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                    swipeButton(for: .leftPrimary)
+                    swipeButton(for: .leftSecondary)
+                }
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    swipeButton(for: .rightPrimary)
+                    swipeButton(for: .rightSecondary)
+                    swipeButton(for: .rightTertiary)
+                }
+        } else {
+            content
+        }
     }
 
     @ViewBuilder
@@ -183,6 +189,7 @@ extension View {
         isOffline: Bool,
         isFavorite: Bool,
         accentColor: Color,
+        isEnabled: Bool = true,
         onPlay: @escaping () -> Void,
         onFavorite: @escaping () -> Void,
         onAddToPlaylist: @escaping () -> Void,
@@ -195,6 +202,7 @@ extension View {
                 isOffline: isOffline,
                 isFavorite: isFavorite,
                 accentColor: accentColor,
+                isEnabled: isEnabled,
                 onPlay: onPlay,
                 onFavorite: onFavorite,
                 onAddToPlaylist: onAddToPlaylist,
