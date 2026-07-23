@@ -61,8 +61,6 @@ struct ServerFormView: View {
     @State private var isSaving = false
     @State private var testResult: String?
     @State private var testSuccess = false
-    @State private var showServerURLEditor = false
-    @State private var draftServerURL = ""
 
     private var accent: Color { AppTheme.color(for: themeColor) }
     private var isEditing: Bool { editingServer != nil }
@@ -79,18 +77,15 @@ struct ServerFormView: View {
 
             Section(String(localized: "server")) {
                 TextField(String(localized: "name_optional"), text: $name)
-                Button {
-                    draftServerURL = serverURL
-                    showServerURLEditor = true
-                } label: {
-                    HStack {
-                        Text(String(localized: "server_url"))
-                        Spacer()
-                        Text(serverURL.isEmpty ? String(localized: "server_url") : serverURL)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                }
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity)
+                TextField(String(localized: "server_url"), text: $serverURL)
+                    .textContentType(.URL)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.URL)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity)
             }
 
             Section(String(localized: "account")) {
@@ -165,17 +160,6 @@ struct ServerFormView: View {
             }
         }
         .toolbar(.hidden, for: .tabBar)
-        .alert(String(localized: "server_url"), isPresented: $showServerURLEditor) {
-            TextField(String(localized: "server_url"), text: $draftServerURL)
-                .textContentType(.URL)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .keyboardType(.URL)
-            Button(String(localized: "cancel"), role: .cancel) {}
-            Button(String(localized: "done")) {
-                serverURL = draftServerURL.trimmingCharacters(in: .whitespacesAndNewlines)
-            }
-        }
         .onAppear {
             guard let server = editingServer else { return }
             name = server.name

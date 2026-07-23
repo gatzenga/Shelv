@@ -23,14 +23,21 @@ struct LoginView: View {
 
             VStack(spacing: 16) {
                 TextField(String(localized: "name_optional"), text: $name)
+                    .lineLimit(1)
                 TextField(String(localized: "server_url"), text: $serverURL)
                     .textContentType(.URL)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.URL)
+                    .lineLimit(1)
                 TextField(String(localized: "username"), text: $username)
                     .textContentType(.username)
+                    .lineLimit(1)
                 SecureField(String(localized: "password"), text: $password)
                     .textContentType(.password)
+                    .lineLimit(1)
             }
-            .frame(maxWidth: 700)
+            .frame(width: 700)
 
             if let errorMessage {
                 Text(errorMessage)
