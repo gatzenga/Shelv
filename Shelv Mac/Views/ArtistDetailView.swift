@@ -225,6 +225,20 @@ struct ArtistDetailView: View {
             }
         }
         .navigationTitle(vm.artist?.name ?? artistName)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                if enableDownloads,
+                   let detail = vm.artist,
+                   !offlineMode.isOffline || artistDownloadStatus != .none {
+                    Menu {
+                        artistDownloadMenuItems(for: detail)
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                            .symbolRenderingMode(.hierarchical)
+                    }
+                }
+            }
+        }
         .searchable(text: $searchQuery, prompt: String(localized: "search_albums_and_songs"))
         .onChange(of: offlineMode.isOffline) { _, isOffline in
             if isOffline && sortOption.requiresServer {
@@ -353,10 +367,6 @@ struct ArtistDetailView: View {
             .controlSize(.large)
             .disabled(displayAlbums.isEmpty || vm.isLoadingSongs)
 
-            if enableDownloads, let detail = vm.artist {
-                artistDownloadButton(for: detail, iconOnly: iconOnly)
-            }
-
             if showFavoriteActions, let detail = vm.artist {
                 let isStarred = libraryStore.starredArtists.contains { $0.id == detail.id }
                 Button {
@@ -402,7 +412,7 @@ struct ArtistDetailView: View {
     }
 
     @ViewBuilder
-    private func artistDownloadButton(for detail: ArtistDetail, iconOnly: Bool) -> some View {
+    private func artistDownloadMenuItems(for detail: ArtistDetail) -> some View {
         let artistModel = Artist(id: detail.id, name: detail.name,
                                  albumCount: detail.albumCount, coverArt: detail.coverArt,
                                  starred: nil)
@@ -413,10 +423,9 @@ struct ArtistDetailView: View {
                     downloadStore.enqueueArtist(artistModel)
                 } label: {
                     Label(String(localized: "download_artist"), systemImage: "arrow.down.circle")
-                        .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
+                        .foregroundStyle(themeColor)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
+                .tint(themeColor)
             }
         case .partial:
             if !offlineMode.isOffline {
@@ -424,30 +433,31 @@ struct ArtistDetailView: View {
                     downloadStore.enqueueArtist(artistModel)
                 } label: {
                     Label(String(localized: "download_remaining"), systemImage: "arrow.down.circle")
-                        .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
+                        .foregroundStyle(themeColor)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
+                .tint(themeColor)
             }
-            Button {
+            Button(role: .destructive) {
                 showDeleteDownloadConfirm = true
             } label: {
-                Label(String(localized: "delete_downloads"), systemImage: DownloadActionSymbols.delete)
-                    .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
-                    .foregroundStyle(.red)
+                Label {
+                    Text(String(localized: "delete_downloads"))
+                } icon: {
+                    DeleteDownloadIcon(tint: .red)
+                }
             }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
+            .tint(.red)
         case .complete:
-            Button {
+            Button(role: .destructive) {
                 showDeleteDownloadConfirm = true
             } label: {
-                Label(String(localized: "delete_downloads"), systemImage: DownloadActionSymbols.delete)
-                    .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
-                    .foregroundStyle(.red)
+                Label {
+                    Text(String(localized: "delete_downloads"))
+                } icon: {
+                    DeleteDownloadIcon(tint: .red)
+                }
             }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
+            .tint(.red)
         }
     }
 }

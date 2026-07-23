@@ -145,6 +145,7 @@
 "create_add" = "Erstellen & Hinzufügen";
 "no_songs_in_this_playlist" = "Keine Titel in dieser Playlist.";
 "reorder_delete" = "Sortieren / Löschen";
+"remove_from_playlist" = "Aus Playlist entfernen";
 "rename" = "Umbenennen";
 "delete_playlist" = "Playlist löschen";
 "rename_playlist" = "Playlist umbenennen";

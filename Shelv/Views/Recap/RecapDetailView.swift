@@ -98,37 +98,32 @@ struct RecapDetailView: View {
             } else {
                 List {
                     Section {
-                        VStack(spacing: 8) {
-                            HStack(spacing: 14) {
-                                Button {
-                                    player.play(songs: allSongs, startIndex: 0)
-                                } label: {
-                                    Label(String(localized: "play"), systemImage: "play.fill")
-                                        .font(.body).bold()
-                                        .foregroundStyle(.white)
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 14)
-                                        .background(accentColor)
-                                        .clipShape(Capsule())
-                                }
-                                .buttonStyle(.plain)
+                        HStack(spacing: 14) {
+                            Button {
+                                player.play(songs: allSongs, startIndex: 0)
+                            } label: {
+                                Label(String(localized: "play"), systemImage: "play.fill")
+                                    .font(.body).bold()
+                                    .foregroundStyle(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 14)
+                                    .background(accentColor)
+                                    .clipShape(Capsule())
+                            }
+                            .buttonStyle(.plain)
 
-                                Button {
-                                    player.playShuffled(songs: allSongs)
-                                } label: {
-                                    Label(String(localized: "shuffle"), systemImage: "shuffle")
-                                        .font(.body).bold()
-                                        .foregroundStyle(accentColor)
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 14)
-                                        .background(accentColor.opacity(0.15))
-                                        .clipShape(Capsule())
-                                }
-                                .buttonStyle(.plain)
+                            Button {
+                                player.playShuffled(songs: allSongs)
+                            } label: {
+                                Label(String(localized: "shuffle"), systemImage: "shuffle")
+                                    .font(.body).bold()
+                                    .foregroundStyle(accentColor)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 14)
+                                    .background(accentColor.opacity(0.15))
+                                    .clipShape(Capsule())
                             }
-                            if enableDownloads && !songs.isEmpty {
-                                downloadHeaderButtons()
-                            }
+                            .buttonStyle(.plain)
                         }
                         .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                         .listRowSeparator(.hidden)
@@ -191,22 +186,6 @@ struct RecapDetailView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Button {
-                        player.play(songs: allSongs, startIndex: 0)
-                    } label: {
-                        Label(String(localized: "play"), systemImage: "play.fill")
-                    }
-                    .disabled(songs.isEmpty)
-
-                    Button {
-                        player.playShuffled(songs: allSongs)
-                    } label: {
-                        Label(String(localized: "shuffle"), systemImage: "shuffle")
-                    }
-                    .disabled(songs.isEmpty)
-
-                    Divider()
-
-                    Button {
                         player.addPlayNext(allSongs)
                         currentToast = ShelveToast(message: String(localized: "plays_next"))
                     } label: {
@@ -221,6 +200,13 @@ struct RecapDetailView: View {
                         Label(String(localized: "add_to_queue"), systemImage: "text.badge.plus")
                     }
                     .disabled(songs.isEmpty)
+
+                    if enableDownloads
+                        && !songs.isEmpty
+                        && (!offlineMode.isOffline || isMarkedForOffline) {
+                        Divider()
+                        recapDownloadMenuItems
+                    }
 
                     Divider()
 
@@ -364,84 +350,61 @@ struct RecapDetailView: View {
         .clipShape(Capsule())
     }
 
-    // MARK: - Download Header
+    // MARK: - Download Menu
 
     @ViewBuilder
-    private func downloadHeaderButtons() -> some View {
+    private var recapDownloadMenuItems: some View {
         let isMarked = isMarkedForOffline
         let trackedSongIDs = trackedPlaylistSongIDs.isEmpty
             ? allSongs.map(\.id)
             : trackedPlaylistSongIDs
         let downloadedCount = trackedSongIDs.filter(downloadedSongIDs.contains).count
         let remaining = isMarked ? max(0, trackedSongIDs.count - downloadedCount) : 0
-        HStack(spacing: 10) {
-            if !isMarked && !offlineMode.isOffline {
-                Button {
-                    haptic()
-                    let missing = allSongs.filter {
-                        !DownloadUIStateHub.shared.isSongDownloaded($0.id)
-                    }
-                    if !missing.isEmpty { downloadStore.enqueueSongs(missing) }
-                    downloadStore.addOfflinePlaylist(
-                        entry.playlistId,
-                        name: period.playlistName,
-                        songIds: allSongs.map(\.id)
-                    )
-                    currentToast = ShelveToast(message: String(localized: "download_started"))
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "arrow.down.circle")
-                        Text(String(localized: "download"))
-                    }
-                    .font(.subheadline).bold()
+        if !isMarked && !offlineMode.isOffline {
+            Button {
+                haptic()
+                let missing = allSongs.filter {
+                    !DownloadUIStateHub.shared.isSongDownloaded($0.id)
+                }
+                if !missing.isEmpty { downloadStore.enqueueSongs(missing) }
+                downloadStore.addOfflinePlaylist(
+                    entry.playlistId,
+                    name: period.playlistName,
+                    songIds: allSongs.map(\.id)
+                )
+                currentToast = ShelveToast(message: String(localized: "download_started"))
+            } label: {
+                Label(String(localized: "download"), systemImage: "arrow.down.circle")
                     .foregroundStyle(accentColor)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(accentColor.opacity(0.12))
-                    .clipShape(Capsule())
-                }
-                .buttonStyle(.plain)
             }
-            if isMarked && remaining > 0 && !offlineMode.isOffline {
-                Button {
-                    haptic()
-                    let missing = allSongs.filter {
-                        !DownloadUIStateHub.shared.isSongDownloaded($0.id)
-                    }
-                    if !missing.isEmpty { downloadStore.enqueueSongs(missing) }
-                    currentToast = ShelveToast(message: String(localized: "download_started"))
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "arrow.down.circle")
-                        Text("Rest (\(remaining))")
-                    }
-                    .font(.subheadline).bold()
+            .tint(accentColor)
+        }
+        if isMarked && remaining > 0 && !offlineMode.isOffline {
+            Button {
+                haptic()
+                let missing = allSongs.filter {
+                    !DownloadUIStateHub.shared.isSongDownloaded($0.id)
+                }
+                if !missing.isEmpty { downloadStore.enqueueSongs(missing) }
+                currentToast = ShelveToast(message: String(localized: "download_started"))
+            } label: {
+                Label("Rest (\(remaining))", systemImage: "arrow.down.circle")
                     .foregroundStyle(accentColor)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(accentColor.opacity(0.12))
-                    .clipShape(Capsule())
-                }
-                .buttonStyle(.plain)
             }
-            if isMarked {
-                Button {
-                    haptic()
-                    showDeleteDownloadConfirm = true
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: DownloadActionSymbols.delete)
-                        Text(String(localized: "delete_downloads_2"))
-                    }
-                    .font(.subheadline).bold()
-                    .foregroundStyle(.red)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(Color.red.opacity(0.12))
-                    .clipShape(Capsule())
+            .tint(accentColor)
+        }
+        if isMarked {
+            Button(role: .destructive) {
+                haptic()
+                showDeleteDownloadConfirm = true
+            } label: {
+                Label {
+                    Text(String(localized: "delete_downloads_2"))
+                } icon: {
+                    DeleteDownloadIcon(tint: .red)
                 }
-                .buttonStyle(.plain)
             }
+            .tint(.red)
         }
     }
 

@@ -145,6 +145,7 @@
 "create_add" = "创建并添加";
 "no_songs_in_this_playlist" = "此播放列表中没有歌曲。";
 "reorder_delete" = "排序 / 删除";
+"remove_from_playlist" = "从播放列表移除";
 "rename" = "重命名";
 "delete_playlist" = "删除播放列表";
 "rename_playlist" = "重命名播放列表";
