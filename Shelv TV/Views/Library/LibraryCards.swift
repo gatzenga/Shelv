@@ -17,6 +17,7 @@ struct PlainRowButtonStyle: ButtonStyle {
 /// Markierung allein über die abgerundete Akzent-Box, kein weißes Highlight, kein Cover-Zoom.
 private struct RowButtonModifier: ViewModifier {
     let action: () -> Void
+    let contentHorizontalPadding: CGFloat
     @FocusState private var focused: Bool
     @AppStorage("themeColor") private var themeColor = "violet"
 
@@ -24,7 +25,7 @@ private struct RowButtonModifier: ViewModifier {
         Button(action: action) {
             content
                 .padding(.vertical, 10)
-                .padding(.horizontal, 24)
+                .padding(.horizontal, contentHorizontalPadding)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(RoundedRectangle(cornerRadius: 14)
                     .fill(focused ? AppTheme.color(for: themeColor).opacity(0.4) : Color.clear))
@@ -39,7 +40,15 @@ private struct RowButtonModifier: ViewModifier {
 
 extension View {
     /// Einheitlicher, zuverlässig auslösbarer Zeilen-Button mit Akzent-Box-Fokus.
-    func rowButton(action: @escaping () -> Void) -> some View { modifier(RowButtonModifier(action: action)) }
+    func rowButton(
+        contentHorizontalPadding: CGFloat = 24,
+        action: @escaping () -> Void
+    ) -> some View {
+        modifier(RowButtonModifier(
+            action: action,
+            contentHorizontalPadding: contentHorizontalPadding
+        ))
+    }
 
     /// Sanftes Aus-/Einblenden an Ober- und Unterkante — Inhalt reißt nicht hart an der
     /// Tab-Leiste bzw. am unteren Rand ab (Lyrics & Warteschlange im Now-Playing-Panel).

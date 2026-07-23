@@ -38,7 +38,7 @@ struct SearchView: View {
                                         .lineLimit(1)
                                     Spacer(minLength: 0)
                                 }
-                                .rowButton {
+                                .rowButton(contentHorizontalPadding: 8) {
                                     selectSearchHistoryEntry(entry)
                                 }
                             }
