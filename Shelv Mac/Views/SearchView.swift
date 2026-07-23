@@ -3,6 +3,7 @@ import SwiftUI
 struct SearchView: View {
     @EnvironmentObject var appState: AppState
     @ObservedObject var libraryStore = LibraryViewModel.shared
+    @ObservedObject private var serverStore = ServerStore.shared
     @StateObject private var vm = SearchViewModel()
     @FocusState private var isSearchFocused: Bool
     @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
@@ -11,6 +12,11 @@ struct SearchView: View {
     @State private var lyricsResults: [LyricsSearchResult] = []
     @State private var searchTask: Task<Void, Never>?
     @State private var lyricsTask: Task<Void, Never>?
+    @State private var recentSearches: [String] = []
+
+    private var trimmedQuery: String {
+        vm.query.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -20,7 +26,10 @@ struct SearchView: View {
                 TextField(String(localized: "search_artists_albums_tracks"), text: $vm.query)
                     .textFieldStyle(.plain)
                     .focused($isSearchFocused)
-                    .onSubmit { Task { await vm.search() } }
+                    .onSubmit {
+                        commitCurrentSearch()
+                        Task { await vm.search() }
+                    }
                 if !vm.query.isEmpty {
                     Button { vm.query = ""; vm.clearResults() } label: {
                         Image(systemName: "xmark.circle.fill")
@@ -38,7 +47,9 @@ struct SearchView: View {
             if vm.isLoading {
                 ProgressView(String(localized: "searching"))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if vm.isEmpty && lyricsResults.isEmpty && !vm.query.isEmpty {
+            } else if trimmedQuery.isEmpty && !recentSearches.isEmpty {
+                searchHistoryView
+            } else if vm.isEmpty && lyricsResults.isEmpty && !trimmedQuery.isEmpty {
                 ContentUnavailableView.search(text: vm.query)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if vm.isEmpty && lyricsResults.isEmpty {
@@ -62,6 +73,9 @@ struct SearchView: View {
                                             showsDownloadBadge: enableDownloads
                                         )
                                     }
+                                    .simultaneousGesture(
+                                        TapGesture().onEnded { commitCurrentSearch() }
+                                    )
                                     .buttonStyle(.plain)
                                     .artistContextMenu(artist)
                                 }
@@ -73,6 +87,9 @@ struct SearchView: View {
                                     NavigationLink(value: album) {
                                         SearchAlbumRow(album: album)
                                     }
+                                    .simultaneousGesture(
+                                        TapGesture().onEnded { commitCurrentSearch() }
+                                    )
                                     .buttonStyle(.plain)
                                     .albumContextMenu(album)
                                     .environmentObject(libraryStore)
@@ -88,6 +105,7 @@ struct SearchView: View {
                                         showPlaylist: showPlaylistActions,
                                         isStarred: libraryStore.isSongStarred(song)
                                     ) {
+                                        commitCurrentSearch()
                                         let idx = vm.songs.firstIndex(where: { $0.id == song.id }) ?? 0
                                         appState.player.play(songs: vm.songs, startIndex: idx)
                                     } onPlayNext: {
@@ -113,7 +131,10 @@ struct SearchView: View {
                                         showFavorite: showFavoriteActions,
                                         showPlaylist: showPlaylistActions,
                                         isStarred: libraryStore.starredSongs.contains { $0.id == item.songId },
-                                        onPlay: { playLyricsResult(item) },
+                                        onPlay: {
+                                            commitCurrentSearch()
+                                            playLyricsResult(item)
+                                        },
                                         onPlayNext: {
                                             withLyricsSong(item) { song in
                                                 appState.player.addPlayNext(song)
@@ -149,7 +170,13 @@ struct SearchView: View {
             }
         }
         .navigationTitle(String(localized: "search"))
-        .onAppear { isSearchFocused = true }
+        .onAppear {
+            isSearchFocused = true
+            reloadSearchHistory()
+        }
+        .onChange(of: serverStore.activeServerID) { _, _ in
+            reloadSearchHistory()
+        }
         .onChange(of: vm.query) { _, newValue in
             searchTask?.cancel()
             lyricsTask?.cancel()
@@ -177,6 +204,80 @@ struct SearchView: View {
             lyricsTask?.cancel()
             vm.cancelSearch()
         }
+    }
+
+    private var searchHistoryView: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text(String(localized: "recent_searches"))
+                    .font(.headline)
+                Spacer()
+                Button {
+                    clearSearchHistory()
+                } label: {
+                    Text(String(localized: "clear"))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.tint)
+                .accessibilityLabel(String(localized: "clear_search_history"))
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 10)
+
+            Divider()
+
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    ForEach(recentSearches, id: \.self) { entry in
+                        Button {
+                            selectSearchHistoryEntry(entry)
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: "clock.arrow.circlepath")
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 20)
+                                Text(entry)
+                                    .foregroundStyle(.primary)
+                                    .lineLimit(1)
+                                Spacer(minLength: 0)
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 12)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+
+                        Divider()
+                            .padding(.leading, 52)
+                    }
+                }
+            }
+        }
+    }
+
+    private func reloadSearchHistory() {
+        recentSearches = SearchHistoryStore.entries(for: serverStore.activeServerID)
+    }
+
+    private func commitCurrentSearch() {
+        recentSearches = SearchHistoryStore.record(
+            vm.query,
+            for: serverStore.activeServerID
+        )
+    }
+
+    private func selectSearchHistoryEntry(_ entry: String) {
+        recentSearches = SearchHistoryStore.record(
+            entry,
+            for: serverStore.activeServerID
+        )
+        vm.query = entry
+        isSearchFocused = true
+    }
+
+    private func clearSearchHistory() {
+        recentSearches = SearchHistoryStore.clear(for: serverStore.activeServerID)
     }
 
     private func performLyricsSearch(query: String) async {

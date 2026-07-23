@@ -138,6 +138,8 @@
 "edit" = "Bearbeiten";
 "clear_queue" = "Warteschlange leeren?";
 "clear" = "Leeren";
+"recent_searches" = "Letzte Suchanfragen";
+"clear_search_history" = "Suchverlauf löschen";
 "new_playlist" = "Neue Playlist…";
 "add_to_playlist_2" = "Zu Playlist hinzufügen";
 "my_playlist" = "Meine Playlist";

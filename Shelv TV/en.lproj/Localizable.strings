@@ -128,6 +128,8 @@
 "edit" = "Edit";
 "clear_queue" = "Clear Queue?";
 "clear" = "Clear";
+"recent_searches" = "Recent Searches";
+"clear_search_history" = "Clear Search History";
 "new_playlist" = "New Playlist…";
 "pin" = "Pin";
 "unpin" = "Unpin";

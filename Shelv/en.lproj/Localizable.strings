@@ -138,6 +138,8 @@
 "edit" = "Edit";
 "clear_queue" = "Clear Queue?";
 "clear" = "Clear";
+"recent_searches" = "Recent Searches";
+"clear_search_history" = "Clear Search History";
 "new_playlist" = "New Playlist…";
 "add_to_playlist_2" = "Add to Playlist";
 "my_playlist" = "My Playlist";

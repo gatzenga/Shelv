@@ -115,6 +115,8 @@
 "no_cache_events_yet" = "No cache events yet.";
 "cache_log" = "Cache Log";
 "clear" = "Clear";
+"recent_searches" = "Recent Searches";
+"clear_search_history" = "Clear Search History";
 "done" = "Done";
 "offline_mixes" = "Offline Mixes";
 "play_all_downloads" = "Play: All Downloads";

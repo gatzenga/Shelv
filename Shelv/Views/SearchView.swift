@@ -47,6 +47,11 @@ struct SearchView: View {
     @State private var artistToDeleteDownloads: Artist?
     @State private var albumToDeleteDownloads: Album?
     @State private var offlineDownloadState = OfflineSearchDownloadState.empty
+    @State private var recentSearches: [String] = []
+
+    private var trimmedQuery: String {
+        query.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     private var matchedFavoriteArtists: [Artist] {
         guard showFavoritesInLibrary, !query.isEmpty else { return [] }
@@ -116,21 +121,93 @@ struct SearchView: View {
         }
     }
 
+    private func reloadSearchHistory() {
+        recentSearches = SearchHistoryStore.entries(for: serverStore.activeServerID)
+    }
+
+    private func commitCurrentSearch() {
+        recentSearches = SearchHistoryStore.record(
+            query,
+            for: serverStore.activeServerID
+        )
+    }
+
+    private func selectSearchHistoryEntry(_ entry: String) {
+        recentSearches = SearchHistoryStore.record(
+            entry,
+            for: serverStore.activeServerID
+        )
+        query = entry
+        searchFieldActive = true
+    }
+
+    private func clearSearchHistory() {
+        recentSearches = SearchHistoryStore.clear(for: serverStore.activeServerID)
+    }
+
     var body: some View {
         NavigationStack {
             Group {
-                if query.isEmpty {
-                    VStack(spacing: 14) {
-                        Image(systemName: "magnifyingglass")
-                            .font(.largeTitle)
-                            .foregroundStyle(.secondary)
-                        Text(String(localized: "search_for_artists_albums_or_songs"))
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 40)
+                if trimmedQuery.isEmpty {
+                    if recentSearches.isEmpty {
+                        VStack(spacing: 14) {
+                            Image(systemName: "magnifyingglass")
+                                .font(.largeTitle)
+                                .foregroundStyle(.secondary)
+                            Text(String(localized: "search_for_artists_albums_or_songs"))
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 40)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        List {
+                            Section {
+                                ForEach(recentSearches, id: \.self) { entry in
+                                    Button {
+                                        selectSearchHistoryEntry(entry)
+                                    } label: {
+                                        HStack(spacing: 12) {
+                                            Image(systemName: "clock.arrow.circlepath")
+                                                .foregroundStyle(.secondary)
+                                            Text(entry)
+                                                .foregroundStyle(.primary)
+                                                .lineLimit(1)
+                                            Spacer(minLength: 0)
+                                        }
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .contentShape(Rectangle())
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            } header: {
+                                HStack {
+                                    Text(String(localized: "recent_searches"))
+                                    Spacer()
+                                    Button {
+                                        clearSearchHistory()
+                                    } label: {
+                                        Text(String(localized: "clear"))
+                                            .textCase(nil)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .foregroundStyle(accentColor)
+                                    .accessibilityLabel(String(localized: "clear_search_history"))
+                                }
+                                .textCase(nil)
+                            }
+
+                            Section {
+                                PlayerBottomSpacer(activeHeight: 90, inactiveHeight: 0)
+                                    .listRowInsets(EdgeInsets())
+                                    .listRowBackground(Color.clear)
+                                    .listRowSeparator(.hidden)
+                            }
+                        }
+                        .listStyle(.insetGrouped)
+                        .scrollIndicators(.hidden)
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if isSearching {
                     ProgressView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -157,6 +234,9 @@ struct SearchView: View {
                                                 }
                                             }
                                         }
+                                        .simultaneousGesture(
+                                            TapGesture().onEnded { commitCurrentSearch() }
+                                        )
                                         .contextMenu {
                                             artistContextMenuItems(artist)
                                         }
@@ -213,6 +293,9 @@ struct SearchView: View {
                                                 }
                                             }
                                         }
+                                        .simultaneousGesture(
+                                            TapGesture().onEnded { commitCurrentSearch() }
+                                        )
                                         .albumContextMenu(album, showPreview: false)
                                         .personalizedAlbumArtistSwipeActions(
                                             isOffline: offlineMode.isOffline,
@@ -244,6 +327,7 @@ struct SearchView: View {
                             Section(String(localized: "songs")) {
                                 ForEach(songs) { song in
                                     Button {
+                                        commitCurrentSearch()
                                         player.playSong(song)
                                     } label: {
                                         HStack(spacing: 12) {
@@ -320,6 +404,7 @@ struct SearchView: View {
                                         starred: nil, suffix: nil, bitRate: nil, replayGain: nil
                                     )
                                     Button {
+                                        commitCurrentSearch()
                                         playLyricsResult(item)
                                     } label: {
                                         HStack(spacing: 12) {
@@ -415,6 +500,9 @@ struct SearchView: View {
                                                 }
                                             }
                                         }
+                                        .simultaneousGesture(
+                                            TapGesture().onEnded { commitCurrentSearch() }
+                                        )
                                         .contextMenu {
                                             artistContextMenuItems(artist)
                                         }
@@ -464,6 +552,9 @@ struct SearchView: View {
                                                 }
                                             }
                                         }
+                                        .simultaneousGesture(
+                                            TapGesture().onEnded { commitCurrentSearch() }
+                                        )
                                         .albumContextMenu(album, showPreview: false)
                                         .personalizedAlbumArtistSwipeActions(
                                             isOffline: offlineMode.isOffline,
@@ -489,7 +580,10 @@ struct SearchView: View {
                                     }
                                 }
                                 ForEach(matchedFavoriteSongs) { song in
-                                    Button { player.playSong(song) } label: {
+                                    Button {
+                                        commitCurrentSearch()
+                                        player.playSong(song)
+                                    } label: {
                                         HStack(spacing: 12) {
                                             AlbumArtView(coverArtId: song.coverArt, size: 100, cornerRadius: 8)
                                                 .frame(width: 44, height: 44)
@@ -562,8 +656,12 @@ struct SearchView: View {
                 placement: searchPlacement,
                 prompt: String(localized: "artists_albums_songs")
             )
+            .onSubmit(of: .search) {
+                commitCurrentSearch()
+            }
             .onAppear {
                 applyResetTokenIfNeeded(resetToken)
+                reloadSearchHistory()
                 if offlineMode.isOffline {
                     offlineDownloadState = OfflineSearchDownloadState(
                         snapshot: DownloadUIStateHub.shared.currentSnapshot
@@ -572,6 +670,9 @@ struct SearchView: View {
             }
             .onChange(of: resetToken) { _, newValue in
                 applyResetTokenIfNeeded(newValue)
+            }
+            .onChange(of: serverStore.activeServerID) { _, _ in
+                reloadSearchHistory()
             }
             .onChange(of: offlineMode.isOffline) { _, isOffline in
                 guard isOffline else { return }
@@ -589,7 +690,8 @@ struct SearchView: View {
             }
             .onChange(of: query) { _, newValue in
                 searchTask?.cancel()
-                guard !newValue.isEmpty else {
+                let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else {
                     result = nil
                     lyricsResults = []
                     return
@@ -597,7 +699,7 @@ struct SearchView: View {
                 searchTask = Task {
                     try? await Task.sleep(for: .milliseconds(400))
                     guard !Task.isCancelled else { return }
-                    await performSearch(query: newValue)
+                    await performSearch(query: trimmed)
                 }
             }
             .shelveToast($currentToast)
