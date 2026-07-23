@@ -111,6 +111,8 @@ struct PlaylistDetailView: View {
     @State private var isLoading = true
     @State private var showDeleteConfirm = false
     @State private var showDeleteDownloadConfirm = false
+    @State private var pendingSongDeletionOffsets = IndexSet()
+    @State private var showRemoveSongsConfirm = false
     @State private var isMutatingSongs = false
     @State private var isEditMode = false
     @State private var editName: String = ""
@@ -174,9 +176,11 @@ struct PlaylistDetailView: View {
                     appState.player.addToQueue(song)
                     NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_queue"))
                 },
-                onRemoveAt: { index in removeSong(at: index) },
+                onRemoveAt: { index in
+                    requestSongDeletion(at: IndexSet(integer: index))
+                },
                 onMove: moveSongs,
-                onDelete: deleteSongs
+                onDelete: requestSongDeletion
             )
 
         }
@@ -194,6 +198,21 @@ struct PlaylistDetailView: View {
             Button(String(localized: "cancel"), role: .cancel) {}
         } message: {
             Text(String(localized: "the_downloads_will_be_removed_from_this_device"))
+        }
+        .alert(
+            String(localized: "remove_from_playlist"),
+            isPresented: $showRemoveSongsConfirm
+        ) {
+            Button(String(localized: "delete"), role: .destructive) {
+                let offsets = pendingSongDeletionOffsets
+                pendingSongDeletionOffsets = []
+                deleteSongs(at: offsets)
+            }
+            Button(String(localized: "cancel"), role: .cancel) {
+                pendingSongDeletionOffsets = []
+            }
+        } message: {
+            Text(pendingSongDeletionDescription)
         }
         .alert(String(localized: "delete_playlist"), isPresented: $showDeleteConfirm) {
             Button(String(localized: "delete"), role: .destructive) {
@@ -368,6 +387,21 @@ struct PlaylistDetailView: View {
         }
     }
 
+    private var pendingSongDeletionDescription: String {
+        pendingSongDeletionOffsets
+            .compactMap { songs.indices.contains($0) ? songs[$0].title : nil }
+            .map { "\"\($0)\"" }
+            .joined(separator: "\n")
+    }
+
+    private func requestSongDeletion(at offsets: IndexSet) {
+        guard !isMutatingSongs else { return }
+        let validOffsets = IndexSet(offsets.filter { songs.indices.contains($0) })
+        guard !validOffsets.isEmpty else { return }
+        pendingSongDeletionOffsets = validOffsets
+        showRemoveSongsConfirm = true
+    }
+
     private func deleteSongs(at offsets: IndexSet) {
         guard !isMutatingSongs else { return }
         let validOffsets = IndexSet(offsets.filter { songs.indices.contains($0) })
@@ -378,21 +412,6 @@ struct PlaylistDetailView: View {
         songs.remove(atOffsets: validOffsets)
         Task {
             if await libraryStore.removeSongsFromPlaylist(playlist, indices: indices) {
-                await loadDetail()
-            } else {
-                songs = previousSongs
-            }
-            isMutatingSongs = false
-        }
-    }
-
-    private func removeSong(at index: Int) {
-        guard !isMutatingSongs, songs.indices.contains(index) else { return }
-        let previousSongs = songs
-        isMutatingSongs = true
-        songs.remove(at: index)
-        Task {
-            if await libraryStore.removeSongsFromPlaylist(playlist, indices: [index]) {
                 await loadDetail()
             } else {
                 songs = previousSongs

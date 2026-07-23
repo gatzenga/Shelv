@@ -207,23 +207,6 @@ struct PlaylistDetailView: View {
                 } else {
                     Menu {
                         Button {
-                            searchQuery = ""
-                            isEditMode = true
-                        } label: {
-                            Label(String(localized: "reorder_delete"), systemImage: "pencil")
-                        }
-
-                        Button {
-                            newName = currentRawName
-                            newComment = playlist.comment ?? ""
-                            showRenameAlert = true
-                        } label: {
-                            Label(String(localized: "rename"), systemImage: "pencil.line")
-                        }
-
-                        Divider()
-
-                        Button {
                             if !songs.isEmpty {
                                 player.addPlayNext(songs)
                                 currentToast = ShelveToast(message: String(localized: "plays_next"))
@@ -248,6 +231,23 @@ struct PlaylistDetailView: View {
                             && (!offlineMode.isOffline || isMarkedForOffline) {
                             Divider()
                             playlistDownloadMenuItems
+                        }
+
+                        Divider()
+
+                        Button {
+                            searchQuery = ""
+                            isEditMode = true
+                        } label: {
+                            Label(String(localized: "reorder_delete"), systemImage: "pencil")
+                        }
+
+                        Button {
+                            newName = currentRawName
+                            newComment = playlist.comment ?? ""
+                            showRenameAlert = true
+                        } label: {
+                            Label(String(localized: "rename"), systemImage: "pencil.line")
                         }
 
                         Divider()
