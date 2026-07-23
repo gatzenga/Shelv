@@ -230,20 +230,6 @@ struct ArtistDetailView: View {
             }
         }
         .navigationTitle(vm.artist?.name ?? artistName)
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                if enableDownloads,
-                   let detail = vm.artist,
-                   !offlineMode.isOffline || artistDownloadStatus != .none {
-                    Menu {
-                        artistDownloadMenuItems(for: detail)
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                            .symbolRenderingMode(.hierarchical)
-                    }
-                }
-            }
-        }
         .searchable(text: $searchQuery, prompt: String(localized: "search_albums_and_songs"))
         .onChange(of: offlineMode.isOffline) { _, isOffline in
             if isOffline && sortOption.requiresServer {
@@ -374,6 +360,10 @@ struct ArtistDetailView: View {
             .controlSize(.large)
             .disabled(displayAlbums.isEmpty || vm.isLoadingSongs)
 
+            if enableDownloads, let detail = vm.artist {
+                artistDownloadButtons(for: detail, iconOnly: iconOnly)
+            }
+
             if showFavoriteActions, let detail = vm.artist {
                 let isStarred = libraryStore.starredArtists.contains { $0.id == detail.id }
                 Button {
@@ -419,7 +409,7 @@ struct ArtistDetailView: View {
     }
 
     @ViewBuilder
-    private func artistDownloadMenuItems(for detail: ArtistDetail) -> some View {
+    private func artistDownloadButtons(for detail: ArtistDetail, iconOnly: Bool) -> some View {
         let artistModel = Artist(id: detail.id, name: detail.name,
                                  albumCount: detail.albumCount, coverArt: detail.coverArt,
                                  starred: nil)
@@ -430,8 +420,10 @@ struct ArtistDetailView: View {
                     downloadStore.enqueueArtist(artistModel)
                 } label: {
                     Label(String(localized: "download_artist"), systemImage: "arrow.down.circle")
-                        .foregroundStyle(themeColor)
+                        .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
                 }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
                 .tint(themeColor)
             }
         case .partial:
@@ -440,8 +432,10 @@ struct ArtistDetailView: View {
                     downloadStore.enqueueArtist(artistModel)
                 } label: {
                     Label(String(localized: "download_remaining"), systemImage: "arrow.down.circle")
-                        .foregroundStyle(themeColor)
+                        .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
                 }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
                 .tint(themeColor)
             }
             Button(role: .destructive) {
@@ -452,7 +446,10 @@ struct ArtistDetailView: View {
                 } icon: {
                     DeleteDownloadIcon(tint: .red)
                 }
+                .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
             }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
             .tint(.red)
         case .complete:
             Button(role: .destructive) {
@@ -463,7 +460,10 @@ struct ArtistDetailView: View {
                 } icon: {
                     DeleteDownloadIcon(tint: .red)
                 }
+                .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
             }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
             .tint(.red)
         }
     }

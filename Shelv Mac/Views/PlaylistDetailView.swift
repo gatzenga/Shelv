@@ -19,19 +19,21 @@ struct PlaylistDetailView: View {
     }
 
     @ViewBuilder
-    private var playlistDownloadMenuItems: some View {
+    private func playlistDownloadButtons(iconOnly: Bool) -> some View {
         let isMarked = downloadStore.downloadedPlaylistIds.contains(playlist.id)
         let remaining = isMarked ? songs.filter { !downloadStore.isDownloaded(songId: $0.id) }.count : 0
         if !isMarked && !offlineMode.isOffline {
             Button {
                 let missing = songs.filter { !downloadStore.isDownloaded(songId: $0.id) }
                 if !missing.isEmpty { downloadStore.enqueueSongs(missing) }
-                downloadStore.markPlaylistDownloaded(id: playlist.id, name: playlist.name, songIds: songs.map { $0.id })
+                downloadStore.markPlaylistDownloaded(id: playlist.id, name: currentRawName, songIds: songs.map { $0.id })
                 NotificationCenter.default.post(name: .showToast, object: String(localized: "download_started"))
             } label: {
                 Label(String(localized: "download"), systemImage: "arrow.down.circle")
-                    .foregroundStyle(themeColor)
+                    .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
             }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
             .tint(themeColor)
         }
         if isMarked && remaining > 0 && !offlineMode.isOffline {
@@ -42,8 +44,10 @@ struct PlaylistDetailView: View {
                 NotificationCenter.default.post(name: .showToast, object: String(localized: "download_started"))
             } label: {
                 Label("Rest (\(remaining))", systemImage: "arrow.down.circle")
-                    .foregroundStyle(themeColor)
+                    .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
             }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
             .tint(themeColor)
         }
         if isMarked {
@@ -55,7 +59,10 @@ struct PlaylistDetailView: View {
                 } icon: {
                     DeleteDownloadIcon(tint: .red)
                 }
+                .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
             }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
             .tint(.red)
         }
     }
@@ -108,6 +115,9 @@ struct PlaylistDetailView: View {
             .controlSize(.large)
             .disabled(isLoading || songs.isEmpty)
 
+            if enableDownloads && !songs.isEmpty {
+                playlistDownloadButtons(iconOnly: iconOnly)
+            }
         }
     }
     @Environment(\.themeColor) private var themeColor
@@ -121,6 +131,7 @@ struct PlaylistDetailView: View {
     @State private var pendingSongDeletionOffsets = IndexSet()
     @State private var showRemoveSongsConfirm = false
     @State private var isMutatingSongs = false
+    @State private var isSavingMetadata = false
     @State private var isEditMode = false
     @State private var editName: String = ""
     @State private var editComment: String = ""
@@ -282,20 +293,7 @@ struct PlaylistDetailView: View {
                 )
             }
             .help(isEditMode ? String(localized: "finish_editing") : String(localized: "edit_playlist"))
-            .disabled(isLoading || isMutatingSongs)
-        }
-        ToolbarItem(placement: .primaryAction) {
-            if enableDownloads
-                && !songs.isEmpty
-                && (!offlineMode.isOffline
-                    || downloadStore.downloadedPlaylistIds.contains(playlist.id)) {
-                Menu {
-                    playlistDownloadMenuItems
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                        .symbolRenderingMode(.hierarchical)
-                }
-            }
+            .disabled(isLoading || isMutatingSongs || isSavingMetadata)
         }
         ToolbarItem(placement: .primaryAction) {
             Button(role: .destructive) {
@@ -434,26 +432,51 @@ struct PlaylistDetailView: View {
         let commentChanged = comment != displayComment
         guard nameChanged || commentChanged else { return }
 
+        let previousName = displayName
+        let previousComment = displayComment
         let newName = nameChanged ? name : displayName
         let newComment = commentChanged ? comment : displayComment
         displayName = newName
         displayComment = newComment
+        editName = newName
+        editComment = newComment
+        isSavingMetadata = true
 
         Task {
+            defer { isSavingMetadata = false }
             do {
                 try await SubsonicAPIService.shared.updatePlaylist(
                     id: playlist.id,
                     name: nameChanged ? name : nil,
                     comment: commentChanged ? comment : nil
                 )
-                await libraryStore.loadPlaylists()
+                let updated = libraryStore.applyPlaylistMetadata(
+                    playlist,
+                    name: newName,
+                    comment: newComment
+                )
+                if let currentDetail = detail {
+                    detail = PlaylistDetail(
+                        id: currentDetail.id,
+                        name: newName,
+                        comment: newComment,
+                        songCount: currentDetail.songCount,
+                        duration: currentDetail.duration,
+                        coverArt: currentDetail.coverArt,
+                        songs: currentDetail.songs
+                    )
+                }
+                appState.selectedPlaylist = updated
             } catch {
+                displayName = previousName
+                displayComment = previousComment
+                editName = previousName
+                editComment = previousComment
                 if !OfflineModeService.shared.presentConnectivityErrorIfNeeded(error, userInitiated: true) {
                     NotificationCenter.default.post(
                         name: .showToast,
                         object: String(localized: "changes_could_not_be_saved")
                     )
-                    await loadDetail()
                 }
             }
         }

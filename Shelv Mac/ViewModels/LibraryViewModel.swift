@@ -964,8 +964,20 @@ class LibraryViewModel: ObservableObject {
             let freshCount = detail.songs?.count ?? detail.songCount
             if let idx = playlists.firstIndex(where: { $0.id == id }) {
                 let p = playlists[idx]
-                playlists[idx] = Playlist(id: p.id, name: p.name, comment: p.comment,
-                                          songCount: freshCount, duration: detail.duration, coverArt: p.coverArt)
+                playlists[idx] = Playlist(
+                    id: p.id,
+                    name: detail.name,
+                    comment: detail.comment,
+                    songCount: freshCount,
+                    duration: detail.duration,
+                    coverArt: detail.coverArt ?? p.coverArt,
+                    created: p.created,
+                    changed: p.changed,
+                    songs: p.songs
+                )
+                if let serverId = activeServerIdentity?.stableId {
+                    savePlaylistsCache(playlists, serverId: serverId)
+                }
             }
             return detail
         } catch {
@@ -1108,14 +1120,53 @@ class LibraryViewModel: ObservableObject {
     func renamePlaylist(_ playlist: Playlist, newName: String) async {
         do {
             try await api.updatePlaylist(id: playlist.id, name: newName)
-            if let idx = playlists.firstIndex(where: { $0.id == playlist.id }) {
-                playlists[idx] = Playlist(id: playlist.id, name: newName, comment: playlist.comment,
-                                          songCount: playlist.songCount, duration: playlist.duration,
-                                          coverArt: playlist.coverArt)
-            }
+            applyPlaylistMetadata(playlist, name: newName, comment: playlist.comment)
         } catch {
             errorMessage = OfflineModeService.shared.inlineErrorMessage(for: error, userInitiated: true)
         }
+    }
+
+    @discardableResult
+    func applyPlaylistMetadata(
+        _ playlist: Playlist,
+        name: String,
+        comment: String?
+    ) -> Playlist {
+        let current = playlists.first(where: { $0.id == playlist.id }) ?? playlist
+        let updated = Playlist(
+            id: current.id,
+            name: name,
+            comment: comment,
+            songCount: current.songCount,
+            duration: current.duration,
+            coverArt: current.coverArt,
+            created: current.created,
+            changed: current.changed,
+            songs: current.songs
+        )
+
+        if let index = playlists.firstIndex(where: { $0.id == playlist.id }) {
+            playlists[index] = updated
+            if let serverId = activeServerIdentity?.stableId {
+                savePlaylistsCache(playlists, serverId: serverId)
+            }
+        }
+
+        if let cachedDetail = loadPlaylistDetailCache(id: playlist.id) {
+            savePlaylistDetailCache(
+                PlaylistDetail(
+                    id: cachedDetail.id,
+                    name: name,
+                    comment: comment,
+                    songCount: cachedDetail.songCount,
+                    duration: cachedDetail.duration,
+                    coverArt: cachedDetail.coverArt,
+                    songs: cachedDetail.songs
+                )
+            )
+        }
+
+        return updated
     }
 
     @discardableResult

@@ -121,20 +121,6 @@ struct AlbumDetailView: View {
         }
         .background(Color(NSColor.windowBackgroundColor))
         .navigationTitle(vm.album?.name ?? albumName)
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                if enableDownloads,
-                   let album = vm.album,
-                   !offlineMode.isOffline || albumDownloadStatus(for: album) != .none {
-                    Menu {
-                        albumDownloadMenuItems(for: album)
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                            .symbolRenderingMode(.hierarchical)
-                    }
-                }
-            }
-        }
         .searchable(text: $searchQuery, prompt: String(localized: "search_songs"))
         .task(id: albumId) {
             let local = downloadStore.albums.first(where: { $0.albumId == albumId })
@@ -279,6 +265,10 @@ struct AlbumDetailView: View {
             .controlSize(.large)
             .disabled(vm.isLoading || displaySongs.isEmpty)
 
+            if enableDownloads, let album = vm.album {
+                albumDownloadButtons(for: album, iconOnly: iconOnly)
+            }
+
             if showFavoriteActions && !offlineMode.isOffline, let album = vm.album {
                 let albumModel = Album(id: album.id, name: album.name, artist: album.artist,
                                        artistId: album.artistId, coverArt: album.coverArt,
@@ -347,7 +337,7 @@ struct AlbumDetailView: View {
     }
 
     @ViewBuilder
-    private func albumDownloadMenuItems(for album: AlbumDetail) -> some View {
+    private func albumDownloadButtons(for album: AlbumDetail, iconOnly: Bool) -> some View {
         let albumModel = Album(id: album.id, name: album.name, artist: album.artist,
                                artistId: album.artistId, coverArt: album.coverArt,
                                songCount: album.songCount, duration: album.duration,
@@ -361,8 +351,10 @@ struct AlbumDetailView: View {
                     downloadStore.enqueueAlbum(albumModel)
                 } label: {
                     Label(String(localized: "download"), systemImage: "arrow.down.circle")
-                        .foregroundStyle(themeColor)
+                        .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
                 }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
                 .tint(themeColor)
             }
         case .partial(let done, let total):
@@ -371,8 +363,10 @@ struct AlbumDetailView: View {
                     downloadStore.enqueueAlbum(albumModel)
                 } label: {
                     Label("Rest (\(total - done))", systemImage: "arrow.down.circle")
-                        .foregroundStyle(themeColor)
+                        .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
                 }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
                 .tint(themeColor)
             }
             Button(role: .destructive) {
@@ -383,7 +377,10 @@ struct AlbumDetailView: View {
                 } icon: {
                     DeleteDownloadIcon(tint: .red)
                 }
+                .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
             }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
             .tint(.red)
         case .complete:
             Button(role: .destructive) {
@@ -394,7 +391,10 @@ struct AlbumDetailView: View {
                 } icon: {
                     DeleteDownloadIcon(tint: .red)
                 }
+                .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
             }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
             .tint(.red)
         }
     }
