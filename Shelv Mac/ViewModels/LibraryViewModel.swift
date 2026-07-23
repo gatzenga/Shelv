@@ -974,6 +974,21 @@ class LibraryViewModel: ObservableObject {
     }
 
     @discardableResult
+    func cachePlaylistOrder(_ songs: [Song], for detail: PlaylistDetail) -> PlaylistDetail {
+        let updated = PlaylistDetail(
+            id: detail.id,
+            name: detail.name,
+            comment: detail.comment,
+            songCount: detail.songCount,
+            duration: detail.duration,
+            coverArt: detail.coverArt,
+            songs: songs
+        )
+        savePlaylistDetailCache(updated)
+        return updated
+    }
+
+    @discardableResult
     func addSongsToPlaylist(_ playlist: Playlist, songIds: [String]) async -> Bool {
         do {
             try await api.updatePlaylist(id: playlist.id, songIdsToAdd: songIds)

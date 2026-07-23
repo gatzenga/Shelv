@@ -11,16 +11,12 @@ struct PlaylistTrackRow: View {
     let themeColor: Color
     var isEditMode: Bool = false
     var isMutationDisabled: Bool = false
-    var canMoveUp: Bool = false
-    var canMoveDown: Bool = false
     let onPlay: () -> Void
     let onPlayNext: () -> Void
     let onAddToQueue: () -> Void
     let onFavorite: () -> Void
     let onAddToPlaylist: () -> Void
     let onRemoveFromPlaylist: () -> Void
-    var onMoveUp: () -> Void = {}
-    var onMoveDown: () -> Void = {}
 
     private var offlineMode: OfflineModeService { .shared }
     private var showInstantMixActions: Bool {
@@ -72,32 +68,14 @@ struct PlaylistTrackRow: View {
             Spacer()
 
             if isEditMode {
-                HStack(spacing: 4) {
-                    Button { onMoveUp() } label: {
-                        Image(systemName: "chevron.up")
-                            .font(.body.bold())
-                            .frame(width: 28, height: 28)
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(isMutationDisabled || !canMoveUp)
-
-                    Button { onMoveDown() } label: {
-                        Image(systemName: "chevron.down")
-                            .font(.body.bold())
-                            .frame(width: 28, height: 28)
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(isMutationDisabled || !canMoveDown)
-
-                    Button(role: .destructive) { onRemoveFromPlaylist() } label: {
-                        Image(systemName: "trash")
-                            .font(.body)
-                            .foregroundStyle(.red)
-                            .frame(width: 28, height: 28)
-                    }
-                    .buttonStyle(.borderless)
-                    .disabled(isMutationDisabled)
+                Button(role: .destructive) { onRemoveFromPlaylist() } label: {
+                    Image(systemName: "trash")
+                        .font(.body)
+                        .foregroundStyle(.red)
+                        .frame(width: 28, height: 28)
                 }
+                .buttonStyle(.borderless)
+                .disabled(isMutationDisabled)
                 .padding(.trailing, 12)
             }
 
@@ -235,8 +213,6 @@ struct PlaylistTracksList: View {
                         themeColor: themeColor,
                         isEditMode: isEditMode,
                         isMutationDisabled: isMutationDisabled,
-                        canMoveUp: index > 0,
-                        canMoveDown: displayIndex < tracksToShow.count - 1,
                         onPlay: { onPlayAt(displayIndex) },
                         onPlayNext: { onPlayNext(song) },
                         onAddToQueue: { onAddToQueue(song) },
@@ -244,9 +220,7 @@ struct PlaylistTracksList: View {
                         onAddToPlaylist: {
                             NotificationCenter.default.post(name: .addSongsToPlaylist, object: [song.id])
                         },
-                        onRemoveFromPlaylist: { onRemoveAt(index) },
-                        onMoveUp: { onMove(IndexSet(integer: index), index - 1) },
-                        onMoveDown: { onMove(IndexSet(integer: index), index + 2) }
+                        onRemoveFromPlaylist: { onRemoveAt(index) }
                     )
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
