@@ -455,14 +455,17 @@ struct DiscoverView: View {
             guard !isActive else { return }
             startServerURLSlotSwitch(slot)
         } label: {
-            HStack(spacing: 16) {
+            Label {
                 Text(title(for: slot))
-                Spacer()
-                if isActive {
-                    Image(systemName: "checkmark")
-                }
+            } icon: {
+                selectionMenuIcon(isSelected: isActive)
             }
         }
+    }
+
+    private func selectionMenuIcon(isSelected: Bool) -> some View {
+        Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+            .foregroundStyle(accentColor)
     }
 
     private func activeURLSlot(for server: SubsonicServer) -> ServerURLSlot {
