@@ -5,6 +5,7 @@ struct SearchView: View {
     @State private var result: SearchResult?
     @State private var searchTask: Task<Void, Never>?
     @State private var path = NavigationPath()
+    @ObservedObject private var serverStore = ServerStore.shared
 
     private let player = AudioPlayerService.shared
 
@@ -42,13 +43,28 @@ struct SearchView: View {
             .navigationDestination(for: Album.self) { AlbumDetailView(album: $0) }
             .navigationDestination(for: Artist.self) { ArtistDetailView(artist: $0) }
             .searchable(text: $query, placement: .automatic)
+            .onChange(of: serverStore.activeServerID) { _, _ in
+                restartSearchAfterServerChange()
+            }
+            .onChange(of: serverStore.activeServerRevision) { _, _ in
+                restartSearchAfterServerChange()
+            }
             .onChange(of: query) { _, q in
                 searchTask?.cancel()
-                guard !q.trimmingCharacters(in: .whitespaces).isEmpty else { result = nil; return }
+                let trimmed = q.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { result = nil; return }
                 searchTask = Task {
                     try? await Task.sleep(for: .milliseconds(400))
                     if Task.isCancelled { return }
-                    result = try? await SubsonicAPIService.shared.search(query: q)
+                    let requestedServerID = serverStore.activeServerID
+                    let requestedServerRevision = serverStore.activeServerRevision
+                    let response = try? await SubsonicAPIService.shared.search(query: trimmed)
+                    guard !Task.isCancelled,
+                          requestedServerID == serverStore.activeServerID,
+                          requestedServerRevision == serverStore.activeServerRevision,
+                          trimmed == query.trimmingCharacters(in: .whitespacesAndNewlines)
+                    else { return }
+                    result = response
                 }
             }
         }
@@ -59,5 +75,23 @@ struct SearchView: View {
             .padding(.horizontal, 50)
             .padding(.top, 20)
             .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func restartSearchAfterServerChange() {
+        searchTask?.cancel()
+        result = nil
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let requestedServerID = serverStore.activeServerID
+        let requestedServerRevision = serverStore.activeServerRevision
+        searchTask = Task {
+            let response = try? await SubsonicAPIService.shared.search(query: trimmed)
+            guard !Task.isCancelled,
+                  requestedServerID == serverStore.activeServerID,
+                  requestedServerRevision == serverStore.activeServerRevision,
+                  trimmed == query.trimmingCharacters(in: .whitespacesAndNewlines)
+            else { return }
+            result = response
+        }
     }
 }

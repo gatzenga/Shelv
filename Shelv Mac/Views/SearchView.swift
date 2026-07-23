@@ -3,6 +3,7 @@ import SwiftUI
 struct SearchView: View {
     @EnvironmentObject var appState: AppState
     @ObservedObject var libraryStore = LibraryViewModel.shared
+    @ObservedObject private var serverStore = ServerStore.shared
     @StateObject private var vm = SearchViewModel()
     @FocusState private var isSearchFocused: Bool
     @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
@@ -150,6 +151,12 @@ struct SearchView: View {
         }
         .navigationTitle(String(localized: "search"))
         .onAppear { isSearchFocused = true }
+        .onChange(of: serverStore.activeServerID) { _, _ in
+            restartSearchAfterServerChange()
+        }
+        .onChange(of: serverStore.activeServerRevision) { _, _ in
+            restartSearchAfterServerChange()
+        }
         .onChange(of: vm.query) { _, newValue in
             searchTask?.cancel()
             lyricsTask?.cancel()
@@ -179,11 +186,27 @@ struct SearchView: View {
         }
     }
 
+    private func restartSearchAfterServerChange() {
+        searchTask?.cancel()
+        lyricsTask?.cancel()
+        vm.clearResults()
+        lyricsResults = []
+        let trimmed = vm.query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count >= 2 else { return }
+        searchTask = Task { await vm.search() }
+        lyricsTask = Task { await performLyricsSearch(query: trimmed) }
+    }
+
     private func performLyricsSearch(query: String) async {
+        let requestedServerID = appState.serverStore.activeServerID
+        let requestedServerRevision = appState.serverStore.activeServerRevision
         let serverId = appState.serverStore.activeServerID?.uuidString ?? ""
         guard !serverId.isEmpty else { return }
         var results = await LyricsService.shared.searchLyrics(text: query, serverId: serverId)
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled,
+              requestedServerID == appState.serverStore.activeServerID,
+              requestedServerRevision == appState.serverStore.activeServerRevision
+        else { return }
         if OfflineModeService.shared.isOffline {
             let downloadedIds = Set(DownloadStore.shared.songs.map { $0.songId })
             results = results.filter { downloadedIds.contains($0.songId) }
@@ -193,8 +216,14 @@ struct SearchView: View {
         lyricsResults = results
         let missing = results.filter { $0.songTitle == nil || $0.duration == nil }
         for item in missing {
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled,
+                  requestedServerID == appState.serverStore.activeServerID,
+                  requestedServerRevision == appState.serverStore.activeServerRevision
+            else { return }
             guard let song = try? await SubsonicAPIService.shared.getSong(id: item.songId) else { continue }
+            guard requestedServerID == appState.serverStore.activeServerID,
+                  requestedServerRevision == appState.serverStore.activeServerRevision
+            else { return }
             await LyricsService.shared.updateMetadata(
                 songId: item.songId, serverId: serverId,
                 title: song.title, artist: song.artist, coverArt: song.coverArt,

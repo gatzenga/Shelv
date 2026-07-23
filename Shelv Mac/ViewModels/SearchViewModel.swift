@@ -16,6 +16,8 @@ class SearchViewModel: ObservableObject {
 
     func search() async {
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let requestedServerID = AppState.shared.serverStore.activeServerID
+        let requestedServerRevision = AppState.shared.serverStore.activeServerRevision
         guard !term.isEmpty else {
             clearResults()
             return
@@ -33,12 +35,20 @@ class SearchViewModel: ObservableObject {
             } else {
                 do {
                     let result = try await api.search(query: term)
-                    guard !Task.isCancelled else { return }
+                    guard !Task.isCancelled,
+                          requestedServerID == AppState.shared.serverStore.activeServerID,
+                          requestedServerRevision == AppState.shared.serverStore.activeServerRevision,
+                          term == query.trimmingCharacters(in: .whitespacesAndNewlines)
+                    else { return }
                     artists = (result.artist ?? []).filter { ($0.albumCount ?? 0) > 0 }
                     albums = result.album ?? []
                     songs = result.song ?? []
                 } catch {
-                    guard !Task.isCancelled else { return }
+                    guard !Task.isCancelled,
+                          requestedServerID == AppState.shared.serverStore.activeServerID,
+                          requestedServerRevision == AppState.shared.serverStore.activeServerRevision,
+                          term == query.trimmingCharacters(in: .whitespacesAndNewlines)
+                    else { return }
                     guard !OfflineModeService.shared.presentConnectivityErrorIfNeeded(error, userInitiated: true) else { return }
                     NotificationCenter.default.post(name: .showToast, object: String(localized: "search_failed"))
                 }
@@ -48,10 +58,15 @@ class SearchViewModel: ObservableObject {
     }
 
     private func searchOffline(query: String) async {
+        let requestedServerID = AppState.shared.serverStore.activeServerID
+        let requestedServerRevision = AppState.shared.serverStore.activeServerRevision
         let stable = AppState.shared.serverStore.activeServer?.stableId ?? ""
         guard !stable.isEmpty else { artists = []; albums = []; songs = []; return }
         let records = await DownloadDatabase.shared.search(serverId: stable, query: query, limit: 100)
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled,
+              requestedServerID == AppState.shared.serverStore.activeServerID,
+              requestedServerRevision == AppState.shared.serverStore.activeServerRevision
+        else { return }
         songs = records.map { $0.toDownloadedSong().asSong() }
 
         let q = query.lowercased()

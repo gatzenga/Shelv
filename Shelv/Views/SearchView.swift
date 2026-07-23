@@ -602,6 +602,12 @@ struct SearchView: View {
             .onChange(of: resetToken) { _, newValue in
                 applyResetTokenIfNeeded(newValue)
             }
+            .onChange(of: serverStore.activeServerID) { _, _ in
+                restartSearchAfterServerChange()
+            }
+            .onChange(of: serverStore.activeServerRevision) { _, _ in
+                restartSearchAfterServerChange()
+            }
             .onChange(of: offlineMode.isOffline) { _, isOffline in
                 guard isOffline else { return }
                 offlineDownloadState = OfflineSearchDownloadState(
@@ -885,34 +891,68 @@ struct SearchView: View {
     }
 
     private func performSearch(query: String) async {
+        let requestedServerID = serverStore.activeServerID
+        let requestedServerRevision = serverStore.activeServerRevision
         isSearching = true
         if offlineMode.isOffline {
             await performOfflineSearch(query: query)
-            isSearching = false
+            if requestedServerID == serverStore.activeServerID,
+               requestedServerRevision == serverStore.activeServerRevision {
+                isSearching = false
+            }
             return
         }
         do {
-            result = try await SubsonicAPIService.shared.search(query: query)
+            let response = try await SubsonicAPIService.shared.search(query: query)
+            guard !Task.isCancelled,
+                  requestedServerID == serverStore.activeServerID,
+                  requestedServerRevision == serverStore.activeServerRevision,
+                  query == self.query
+            else { return }
+            result = response
         } catch {
             let isCancelled = error is CancellationError
                 || (error as? URLError)?.code == .cancelled
             if isCancelled {
-                isSearching = false
+                if requestedServerID == serverStore.activeServerID,
+                   requestedServerRevision == serverStore.activeServerRevision,
+                   query == self.query {
+                    isSearching = false
+                }
                 return
             }
+            guard requestedServerID == serverStore.activeServerID,
+                  requestedServerRevision == serverStore.activeServerRevision,
+                  query == self.query
+            else { return }
             errorMessage = error.localizedDescription
             showError = true
         }
-        guard !Task.isCancelled else { isSearching = false; return }
+        guard !Task.isCancelled,
+              requestedServerID == serverStore.activeServerID,
+              requestedServerRevision == serverStore.activeServerRevision,
+              query == self.query
+        else { return }
         isSearching = false
         if let serverId = SubsonicAPIService.shared.activeServer?.id.uuidString {
             let results = await LyricsService.shared.searchLyrics(text: query, serverId: serverId)
+            guard !Task.isCancelled,
+                  requestedServerID == serverStore.activeServerID,
+                  requestedServerRevision == serverStore.activeServerRevision,
+                  query == self.query
+            else { return }
             lyricsResults = results
             let missing = results.filter { $0.songTitle == nil || $0.duration == nil }
             if !missing.isEmpty {
                 for item in missing {
-                    guard !Task.isCancelled else { break }
+                    guard !Task.isCancelled,
+                          requestedServerID == serverStore.activeServerID,
+                          requestedServerRevision == serverStore.activeServerRevision
+                    else { break }
                     guard let song = try? await SubsonicAPIService.shared.getSong(id: item.songId) else { continue }
+                    guard requestedServerID == serverStore.activeServerID,
+                          requestedServerRevision == serverStore.activeServerRevision
+                    else { break }
                     await LyricsService.shared.updateMetadata(
                         songId: item.songId, serverId: serverId,
                         title: song.title, artist: song.artist, coverArt: song.coverArt,
@@ -932,12 +972,17 @@ struct SearchView: View {
     }
 
     private func performOfflineSearch(query: String) async {
+        let requestedServerID = serverStore.activeServerID
+        let requestedServerRevision = serverStore.activeServerRevision
         guard let sid = serverStore.activeServer?.stableId, !sid.isEmpty else {
             result = SearchResult(artist: [], album: [], song: [])
             lyricsResults = []
             return
         }
         let records = await DownloadDatabase.shared.search(serverId: sid, query: query, limit: 100)
+        guard requestedServerID == serverStore.activeServerID,
+              requestedServerRevision == serverStore.activeServerRevision
+        else { return }
         let songs = records.map { $0.toDownloadedSong().asSong() }
         let q = query.lowercased()
         let matchedAlbums = DownloadStore.shared.albums
@@ -949,8 +994,25 @@ struct SearchView: View {
         result = SearchResult(artist: matchedArtists, album: matchedAlbums, song: songs)
         let lyricsSid = serverStore.activeServer?.id.uuidString ?? sid
         let allLyrics = await LyricsService.shared.searchLyrics(text: query, serverId: lyricsSid)
+        guard requestedServerID == serverStore.activeServerID,
+              requestedServerRevision == serverStore.activeServerRevision
+        else { return }
         let downloadedIds = Set(DownloadStore.shared.songs.map { $0.songId })
         lyricsResults = allLyrics.filter { downloadedIds.contains($0.songId) }
+    }
+
+    private func restartSearchAfterServerChange() {
+        searchTask?.cancel()
+        result = nil
+        lyricsResults = []
+        isSearching = false
+        let currentQuery = query
+        guard !currentQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return
+        }
+        searchTask = Task {
+            await performSearch(query: currentQuery)
+        }
     }
 
     private func highlightedLyricsSnippet(_ snippet: String, query: String, accentColor: Color) -> Text {

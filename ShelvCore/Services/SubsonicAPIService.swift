@@ -1281,6 +1281,37 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         return album
     }
 
+    func getAlbum(
+        id: String,
+        context: SubsonicServerRequestContext
+    ) async throws -> AlbumDetail {
+        #if DEBUG
+        if context.server.baseURL == DemoContent.serverBaseURL
+            || context.server.activeBaseURL == DemoContent.serverBaseURL {
+            guard let detail = DemoContent.albumDetail(id: id) else {
+                throw SubsonicAPIError.apiError(0, "Album not found")
+            }
+            return detail
+        }
+        #endif
+        let body = try await fetchDecoded(
+            Envelope<AlbumBody>.self,
+            for: context.server,
+            password: context.password,
+            path: "getAlbum",
+            extra: [URLQueryItem(name: "id", value: id)]
+        ).response
+        try check(status: body.status, error: body.error)
+        guard let album = body.album else {
+            throw SubsonicAPIError.apiError(0, "Album not found")
+        }
+        await DownloadService.shared.observeAlbumDetail(
+            album,
+            serverId: context.serverId
+        )
+        return album
+    }
+
     func getArtist(id: String, retries: Int = 0) async throws -> ArtistDetail {
         #if DEBUG
         if isDemoActive {
