@@ -46,7 +46,7 @@ private struct TVNativeLyricLineRow: View {
         Text(line.text)
             .font(.system(size: 44, weight: .bold))
             .lineSpacing(7)
-            .foregroundStyle((isActive ? Color.white : Color.primary).opacity(opacity))
+            .foregroundStyle(Color.primary.opacity(opacity))
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
             .blur(radius: blurRadius)

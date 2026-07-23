@@ -100,7 +100,7 @@ private struct NativeLyricLineRow: View {
             Text(line.text)
                 .font(lyricFont)
                 .lineSpacing(isPad ? 5 : 4)
-                .foregroundStyle((isActive ? Color.white : Color.primary).opacity(opacity))
+                .foregroundStyle(Color.primary.opacity(opacity))
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .blur(radius: blurRadius)
