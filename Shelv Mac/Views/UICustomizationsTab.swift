@@ -124,19 +124,18 @@ private struct MacSmartMixToggleRow: View {
 }
 
 private struct MacPlaylistsPersonalizationPanel: View {
-    @AppStorage(PersonalizationPreferenceKey.showPlaylistsTab) private var showPlaylistsTab = true
-    @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
+    @ObservedObject private var visibility = MacPersonalizationVisibilityStore.shared
     @Environment(\.themeColor) private var themeColor
 
     var body: some View {
         Form {
             Section {
-                Toggle(isOn: $showPlaylistsTab) {
+                Toggle(isOn: $visibility.showPlaylistsInSidebar) {
                     Label(String(localized: "show_playlists_in_sidebar"), systemImage: "sidebar.left")
                 }
                 .tint(themeColor)
 
-                Toggle(isOn: $showPlaylistActions) {
+                Toggle(isOn: $visibility.showPlaylistActions) {
                     Label(String(localized: "show_add_to_playlist_actions"), systemImage: "text.badge.plus")
                 }
                 .tint(themeColor)
@@ -204,19 +203,18 @@ private struct MacGeneralPersonalizationPanel: View {
 }
 
 private struct MacFavoritesPersonalizationPanel: View {
-    @AppStorage(PersonalizationPreferenceKey.showFavoritesInLibrary) private var showFavoritesInLibrary = true
-    @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
+    @ObservedObject private var visibility = MacPersonalizationVisibilityStore.shared
     @Environment(\.themeColor) private var themeColor
 
     var body: some View {
         Form {
             Section {
-                Toggle(isOn: $showFavoritesInLibrary) {
+                Toggle(isOn: $visibility.showFavoritesInLibrary) {
                     Label(String(localized: "show_favorites_in_sidebar"), systemImage: "heart.text.square")
                 }
                 .tint(themeColor)
 
-                Toggle(isOn: $showFavoriteActions) {
+                Toggle(isOn: $visibility.showFavoriteActions) {
                     Label(String(localized: "show_favorite_actions"), systemImage: "heart")
                 }
                 .tint(themeColor)

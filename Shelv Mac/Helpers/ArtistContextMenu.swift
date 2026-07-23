@@ -4,14 +4,15 @@ struct ArtistContextMenuModifier: ViewModifier {
     let artist: Artist
     @ObservedObject private var libraryStore = LibraryViewModel.shared
     @ObservedObject private var downloadStore = DownloadStore.shared
+    @ObservedObject private var personalizationVisibility = MacPersonalizationVisibilityStore.shared
     @State private var showDeleteConfirm = false
 
     private var offlineMode: OfflineModeService { .shared }
     private var showFavoriteActions: Bool {
-        UserDefaults.standard.object(forKey: PersonalizationPreferenceKey.showFavoriteActions) as? Bool ?? true
+        personalizationVisibility.showFavoriteActions
     }
     private var showPlaylistActions: Bool {
-        UserDefaults.standard.object(forKey: PersonalizationPreferenceKey.showPlaylistActions) as? Bool ?? true
+        personalizationVisibility.showPlaylistActions
     }
     private var showInstantMixActions: Bool {
         UserDefaults.standard.object(forKey: PersonalizationPreferenceKey.showInstantMixActions) as? Bool ?? true

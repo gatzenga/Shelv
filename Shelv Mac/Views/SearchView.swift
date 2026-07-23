@@ -7,14 +7,21 @@ struct SearchView: View {
     @ObservedObject private var musicLibraries = MusicLibraryStore.shared
     @StateObject private var vm = SearchViewModel()
     @FocusState private var isSearchFocused: Bool
-    @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
-    @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
+    @ObservedObject private var personalizationVisibility = MacPersonalizationVisibilityStore.shared
     @AppStorage("enableDownloads") private var enableDownloads = true
     @State private var lyricsResults: [LyricsSearchResult] = []
     @State private var searchTask: Task<Void, Never>?
     @State private var lyricsTask: Task<Void, Never>?
     @State private var recentSearches: [String] = []
     @State private var automaticallyRecordedQuery: String?
+
+    private var showFavoriteActions: Bool {
+        personalizationVisibility.showFavoriteActions
+    }
+
+    private var showPlaylistActions: Bool {
+        personalizationVisibility.showPlaylistActions
+    }
 
     private var trimmedQuery: String {
         vm.query.trimmingCharacters(in: .whitespacesAndNewlines)
