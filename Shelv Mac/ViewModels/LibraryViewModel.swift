@@ -413,6 +413,14 @@ class LibraryViewModel: ObservableObject {
             }
         }
 
+        if let serverId = identity.stableId, !albums.isEmpty {
+            await DownloadService.shared.adoptCachedAlbumDownloads(
+                albums,
+                serverId: serverId
+            )
+            guard isCurrentAlbumLoad(generation, identity: identity) else { return }
+        }
+
         guard !OfflineModeService.shared.isOffline else { return }
 
         do {
@@ -423,6 +431,15 @@ class LibraryViewModel: ObservableObject {
             )
             guard isCurrentAlbumLoad(generation, identity: identity) else { return }
             albums = all
+            if let serverId = identity.stableId {
+                Task {
+                    await DownloadService.shared.observeAlbumSummaries(
+                        all,
+                        serverId: serverId,
+                        schedulesStaleRefresh: true
+                    )
+                }
+            }
         } catch {
             if isCurrentAlbumLoad(generation, identity: identity),
                !(error is CancellationError) {

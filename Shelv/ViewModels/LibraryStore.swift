@@ -329,6 +329,14 @@ class LibraryStore: ObservableObject {
             }
         }
 
+        if let serverId = identity.stableId, !albums.isEmpty {
+            await DownloadService.shared.adoptCachedAlbumDownloads(
+                albums,
+                serverId: serverId
+            )
+            guard isCurrentAlbumLoad(generation, identity: identity) else { return }
+        }
+
         guard !OfflineModeService.shared.isOffline else { return }
 
         do {
@@ -340,6 +348,15 @@ class LibraryStore: ObservableObject {
             guard isCurrentAlbumLoad(generation, identity: identity) else { return }
             if albums != result { albums = result }
             UserDefaults.standard.set(result.count, forKey: "shelv_albumCount_\(identity.id)")
+            if let serverId = identity.stableId {
+                Task {
+                    await DownloadService.shared.observeAlbumSummaries(
+                        result,
+                        serverId: serverId,
+                        schedulesStaleRefresh: true
+                    )
+                }
+            }
         } catch {
             if isCurrentAlbumLoad(generation, identity: identity),
                !(error is CancellationError) {

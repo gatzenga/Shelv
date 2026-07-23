@@ -177,6 +177,10 @@ actor LyricsService {
             var config = Configuration()
             config.label = "shelv.db.lyrics"
             config.qos = .userInitiated
+            #if os(iOS)
+            // Avoid closing idle readers from GRDB's main-thread lifecycle callback.
+            config.persistentReadOnlyConnections = true
+            #endif
             let p = try DatabasePool(path: url.path, configuration: config)
             Self.applyDataProtection(at: url)
             var m = DatabaseMigrator()

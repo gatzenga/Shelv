@@ -105,6 +105,10 @@ actor PlayLogService {
             var config = Configuration()
             config.label = "shelv.db.playlog"
             config.qos = .userInitiated
+            #if os(iOS)
+            // Avoid closing idle readers from GRDB's main-thread lifecycle callback.
+            config.persistentReadOnlyConnections = true
+            #endif
             let p = try DatabasePool(path: url.path, configuration: config)
             var m = DatabaseMigrator()
             m.registerMigration("v1_create") { db in

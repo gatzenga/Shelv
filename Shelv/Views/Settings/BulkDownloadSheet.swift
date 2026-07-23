@@ -31,6 +31,7 @@ struct BulkDownloadSheet: View {
     @AppStorage("themeColor") private var themeColorName = "violet"
 
     @State private var plan: BulkDownloadPlan?
+    @State private var planServerID: UUID?
     @State private var isPlanning = false
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
@@ -63,9 +64,13 @@ struct BulkDownloadSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(String(localized: "start")) {
-                        guard let plan, !offlineMode.isOffline else { return }
-                        if mode.isKeepLibraryOffline,
-                           let stable = serverStore.activeServer?.stableId {
+                        guard let plan,
+                              !offlineMode.isOffline,
+                              let server = serverStore.activeServer,
+                              planServerID == server.id
+                        else { return }
+                        let stable = server.stableId
+                        if mode.isKeepLibraryOffline {
                             keepOffline.setEnabled(true, serverId: stable)
                             if !plan.planned.isEmpty {
                                 keepOffline.rememberStoragePause(
@@ -78,7 +83,15 @@ struct BulkDownloadSheet: View {
                                 keepOffline.markPausedLowStorage(serverId: stable, skippedSongs: plan.skipped)
                             }
                         }
-                        downloadStore.enqueueSongs(plan.planned)
+                        let plannedSongs = plan.planned
+                        let albumMarkers = plan.albumMarkers
+                        Task {
+                            await DownloadService.shared.enqueue(
+                                songs: plannedSongs,
+                                serverId: stable,
+                                managedAlbumMarkers: albumMarkers
+                            )
+                        }
                         let plannedIds = Set(plan.planned.map(\.id))
                         for marker in plan.playlistMarkers {
                             let allCovered = marker.songIds.allSatisfy { downloadStore.isDownloaded(songId: $0) || plannedIds.contains($0) }
@@ -204,12 +217,20 @@ struct BulkDownloadSheet: View {
 
     private func recompute() async {
         isPlanning = true
+        plan = nil
+        planServerID = nil
         defer { isPlanning = false }
-        guard let stable = serverStore.activeServer?.stableId, !stable.isEmpty else { return }
+        guard let server = serverStore.activeServer,
+              !server.stableId.isEmpty
+        else { return }
+        let stable = server.stableId
+        let serverID = server.id
         if libraryStore.albums.isEmpty {
             await libraryStore.loadAlbums()
         }
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled,
+              serverStore.activeServer?.id == serverID
+        else { return }
         let albums = libraryStore.albums
         guard !albums.isEmpty else { return }
         let recapIds = await MainActor.run { recapEnabled ? Array(recapStore.recapPlaylistIds) : [] }
@@ -242,10 +263,14 @@ struct BulkDownloadSheet: View {
                 availableBytes: available,
                 isKeepLibraryOffline: true,
                 playlistMarkers: planned.playlistMarkers,
+                albumMarkers: planned.albumMarkers,
                 recapPlaylistSongIds: planned.recapPlaylistSongIds
             )
         }
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled,
+              serverStore.activeServer?.id == serverID
+        else { return }
+        planServerID = serverID
         plan = computed
     }
 }

@@ -43,3 +43,54 @@ final class LocalDownloadIndex {
         return exists
     }
 }
+
+nonisolated enum LocalOfflinePlaylistCatalog {
+    static func songIds(serverId: String) -> [String: [String]] {
+        #if os(iOS) || os(macOS)
+        #if os(iOS)
+        let key = "shelv_offline_playlist_songs_\(serverId)"
+        #else
+        let key = "shelv_mac_playlist_song_ids_\(serverId)"
+        #endif
+        return UserDefaults.standard.dictionary(forKey: key) as? [String: [String]] ?? [:]
+        #else
+        return [:]
+        #endif
+    }
+
+    static func updateName(serverId: String, id: String, name: String) async {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, songIds(serverId: serverId)[id] != nil else { return }
+        #if os(iOS)
+        let key = "shelv_offline_playlist_names_\(serverId)"
+        var names = UserDefaults.standard.dictionary(forKey: key) as? [String: String] ?? [:]
+        guard names[id] != trimmed else { return }
+        names[id] = trimmed
+        UserDefaults.standard.set(names, forKey: key)
+        #elseif os(macOS)
+        await DownloadDatabase.shared.markPlaylistDownloaded(
+            id: id,
+            name: trimmed,
+            serverId: serverId
+        )
+        #endif
+    }
+
+    static func updateSongIds(
+        serverId: String,
+        id: String,
+        songIds updatedSongIds: [String]
+    ) {
+        #if os(iOS) || os(macOS)
+        #if os(iOS)
+        let key = "shelv_offline_playlist_songs_\(serverId)"
+        #else
+        let key = "shelv_mac_playlist_song_ids_\(serverId)"
+        #endif
+        var stored = UserDefaults.standard.dictionary(forKey: key) as? [String: [String]] ?? [:]
+        guard stored[id] != nil else { return }
+        stored[id] = updatedSongIds
+        UserDefaults.standard.set(stored, forKey: key)
+        #endif
+    }
+}

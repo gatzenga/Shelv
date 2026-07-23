@@ -247,10 +247,13 @@ struct Shelv_DesktopApp: App {
 
     @MainActor
     private func runKeepLibraryOfflineCheck(serverId: String, force: Bool = false) async {
+        guard SubsonicAPIService.shared.activeServer?.stableId == serverId else { return }
         guard UserDefaults.standard.bool(forKey: "enableDownloads") else { return }
         guard KeepLibraryOfflineService.shared.isEnabled(serverId: serverId) else { return }
         await DownloadService.shared.waitForRestoredInflightTasks()
+        guard SubsonicAPIService.shared.activeServer?.stableId == serverId else { return }
         await LibraryViewModel.shared.loadAlbums()
+        guard SubsonicAPIService.shared.activeServer?.stableId == serverId else { return }
         let recapIds = UserDefaults.standard.bool(forKey: "recapEnabled")
             ? Array(RecapStore.shared.recapPlaylistIds)
             : []

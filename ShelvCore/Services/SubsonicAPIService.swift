@@ -348,7 +348,27 @@ private nonisolated struct PlaylistBody: Decodable, Sendable {
         let songCount: Int?
         let duration: Int?
         let coverArt: String?
+        let created: Date?
+        let changed: Date?
         let entry: [Song]?
+
+        enum CodingKeys: String, CodingKey {
+            case id, name, comment, songCount, duration, coverArt
+            case created, changed, entry
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            id = try container.decode(String.self, forKey: .id)
+            name = try container.decode(String.self, forKey: .name)
+            comment = try container.decodeIfPresent(String.self, forKey: .comment)
+            songCount = try container.decodeIfPresent(Int.self, forKey: .songCount)
+            duration = try container.decodeIfPresent(Int.self, forKey: .duration)
+            coverArt = try container.decodeIfPresent(String.self, forKey: .coverArt)
+            created = FlexibleDate.decode(container, .created)
+            changed = FlexibleDate.decode(container, .changed)
+            entry = try container.decodeIfPresent([Song].self, forKey: .entry)
+        }
     }
 }
 
@@ -397,6 +417,17 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
                 _credentialGeneration &+= 1
             }
         }
+    }
+
+    nonisolated private func activeDownloadSyncServerId() -> String? {
+        credentialLock.withLock {
+            guard let id = _activeServer?.stableId, !id.isEmpty else { return nil }
+            return id
+        }
+    }
+
+    nonisolated private func isCurrentDownloadSyncServer(_ serverId: String) -> Bool {
+        credentialLock.withLock { _activeServer?.stableId == serverId }
     }
 
     nonisolated func setCredentials(server: SubsonicServer, password: String?) {
@@ -1178,13 +1209,21 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         #if DEBUG
         if isDemoActive { return offset > 0 ? [] : DemoContent.albumList(type: type) }
         #endif
+        let syncServerId = activeDownloadSyncServerId()
         let body = try await fetchDecoded(Envelope<AlbumListBody>.self, path: "getAlbumList2", extra: [
             URLQueryItem(name: "type", value: type),
             URLQueryItem(name: "size", value: "\(size)"),
             URLQueryItem(name: "offset", value: "\(offset)")
         ]).response
         try check(status: body.status, error: body.error)
-        return body.albumList2?.album ?? []
+        let albums = body.albumList2?.album ?? []
+        if let syncServerId, isCurrentDownloadSyncServer(syncServerId) {
+            await DownloadService.shared.observeAlbumSummaries(
+                albums,
+                serverId: syncServerId
+            )
+        }
+        return albums
     }
 
     func getRecentlyAdded(size: Int = 20) async throws -> [Album] {
@@ -1203,13 +1242,21 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         #if DEBUG
         if isDemoActive { return DemoContent.artists }
         #endif
+        let syncServerId = activeDownloadSyncServerId()
         let body = try await fetchDecoded(
             Envelope<ArtistsBody>.self,
             path: "getArtists"
         ).response
         try check(status: body.status, error: body.error)
         let indices = body.artists?.index ?? []
-        return indices.flatMap { $0.artist ?? [] }
+        let artists = indices.flatMap { $0.artist ?? [] }
+        if let syncServerId, isCurrentDownloadSyncServer(syncServerId) {
+            await DownloadService.shared.observeArtistSummaries(
+                artists,
+                serverId: syncServerId
+            )
+        }
+        return artists
     }
 
     func getAlbum(id: String, retries: Int = 0) async throws -> AlbumDetail {
@@ -1219,11 +1266,18 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
             return d
         }
         #endif
+        let syncServerId = activeDownloadSyncServerId()
         let body = try await fetchDecoded(Envelope<AlbumBody>.self, path: "getAlbum", extra: [
             URLQueryItem(name: "id", value: id)
         ], retries: retries).response
         try check(status: body.status, error: body.error)
         guard let album = body.album else { throw SubsonicAPIError.apiError(0, "Album not found") }
+        if let syncServerId, isCurrentDownloadSyncServer(syncServerId) {
+            await DownloadService.shared.observeAlbumDetail(
+                album,
+                serverId: syncServerId
+            )
+        }
         return album
     }
 
@@ -1234,11 +1288,30 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
             return d
         }
         #endif
+        let syncServerId = activeDownloadSyncServerId()
         let body = try await fetchDecoded(Envelope<ArtistBody>.self, path: "getArtist", extra: [
             URLQueryItem(name: "id", value: id)
         ], retries: retries).response
         try check(status: body.status, error: body.error)
         guard let artist = body.artist else { throw SubsonicAPIError.apiError(0, "Artist not found") }
+        if let syncServerId, isCurrentDownloadSyncServer(syncServerId) {
+            await DownloadService.shared.observeArtistSummaries(
+                [
+                    Artist(
+                        id: artist.id,
+                        name: artist.name,
+                        sortName: artist.sortName,
+                        albumCount: artist.albumCount,
+                        coverArt: artist.coverArt
+                    )
+                ],
+                serverId: syncServerId
+            )
+            await DownloadService.shared.observeAlbumSummaries(
+                artist.album ?? [],
+                serverId: syncServerId
+            )
+        }
         return artist
     }
 
@@ -1255,11 +1328,15 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
     }
 
     func getSong(id: String, retries: Int = 0) async throws -> Song {
+        let syncServerId = activeDownloadSyncServerId()
         let body = try await fetchDecoded(Envelope<SongBody>.self, path: "getSong", extra: [
             URLQueryItem(name: "id", value: id)
         ], retries: retries).response
         try check(status: body.status, error: body.error)
         guard let song = body.song else { throw SubsonicAPIError.apiError(0, "Song not found") }
+        if let syncServerId, isCurrentDownloadSyncServer(syncServerId) {
+            await DownloadService.shared.observeSongs([song], serverId: syncServerId)
+        }
         return song
     }
 
@@ -1273,6 +1350,7 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         ).response
         try check(status: body.status, error: body.error)
         guard let song = body.song else { throw SubsonicAPIError.apiError(0, "Song not found") }
+        await DownloadService.shared.observeSongs([song], serverId: context.serverId)
         return song
     }
 
@@ -1295,6 +1373,7 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         #if DEBUG
         if isDemoActive { return DemoContent.search(query: query) }
         #endif
+        let syncServerId = activeDownloadSyncServerId()
         let body = try await fetchDecoded(Envelope<SearchBody>.self, path: "search3", extra: [
             URLQueryItem(name: "query", value: query),
             URLQueryItem(name: "artistCount", value: "10"),
@@ -1302,7 +1381,22 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
             URLQueryItem(name: "songCount", value: "20")
         ]).response
         try check(status: body.status, error: body.error)
-        return body.searchResult3 ?? SearchResult(artist: nil, album: nil, song: nil)
+        let result = body.searchResult3 ?? SearchResult(artist: nil, album: nil, song: nil)
+        if let syncServerId, isCurrentDownloadSyncServer(syncServerId) {
+            await DownloadService.shared.observeArtistSummaries(
+                result.artist ?? [],
+                serverId: syncServerId
+            )
+            await DownloadService.shared.observeAlbumSummaries(
+                result.album ?? [],
+                serverId: syncServerId
+            )
+            await DownloadService.shared.observeSongs(
+                result.song ?? [],
+                serverId: syncServerId
+            )
+        }
+        return result
     }
 
     func getNewestSongs(albumCount: Int = 10) async throws -> [Song] {
@@ -1327,6 +1421,7 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         genre: String? = nil,
         retries: Int = 0
     ) async throws -> [Song] {
+        let syncServerId = activeDownloadSyncServerId()
         var extra = [URLQueryItem(name: "size", value: "\(size)")]
         if let g = genre { extra.append(URLQueryItem(name: "genre", value: g)) }
         let body = try await fetchDecoded(
@@ -1336,7 +1431,11 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
             retries: retries
         ).response
         try check(status: body.status, error: body.error)
-        return body.randomSongs?.song ?? []
+        let songs = body.randomSongs?.song ?? []
+        if let syncServerId, isCurrentDownloadSyncServer(syncServerId) {
+            await DownloadService.shared.observeSongs(songs, serverId: syncServerId)
+        }
+        return songs
     }
 
     func getRecentSongs(albumCount: Int = 30, limit: Int = 100) async throws -> [Song] {
@@ -1477,12 +1576,16 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         #if DEBUG
         if isDemoActive { return nil }
         #endif
+        let syncServerId = activeDownloadSyncServerId()
         let body = try await fetchDecoded(
             Envelope<PlayQueueBody>.self,
             path: "getPlayQueue"
         ).response
         try check(status: body.status, error: body.error)
         guard let q = body.playQueue, let entries = q.entry, !entries.isEmpty else { return nil }
+        if let syncServerId, isCurrentDownloadSyncServer(syncServerId) {
+            await DownloadService.shared.observeSongs(entries, serverId: syncServerId)
+        }
         return SubsonicPlayQueue(
             songs: entries,
             currentSongId: q.current,
@@ -1492,22 +1595,32 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
 
     /// Ähnliche Songs zu einer Song-ID.
     func getSimilarSongs(id: String, count: Int = 50, retries: Int = 0) async throws -> [Song] {
+        let syncServerId = activeDownloadSyncServerId()
         let body = try await fetchDecoded(Envelope<SimilarSongsBody>.self, path: "getSimilarSongs", extra: [
             URLQueryItem(name: "id", value: id),
             URLQueryItem(name: "count", value: "\(count)")
         ], retries: retries).response
         try check(status: body.status, error: body.error)
-        return body.similarSongs?.song ?? []
+        let songs = body.similarSongs?.song ?? []
+        if let syncServerId, isCurrentDownloadSyncServer(syncServerId) {
+            await DownloadService.shared.observeSongs(songs, serverId: syncServerId)
+        }
+        return songs
     }
 
     /// Ähnliche Songs über die ID3/OpenSubsonic-Variante, typischerweise für Artist-IDs.
     func getSimilarSongs2(id: String, count: Int = 50, retries: Int = 0) async throws -> [Song] {
+        let syncServerId = activeDownloadSyncServerId()
         let body = try await fetchDecoded(Envelope<SimilarSongs2Body>.self, path: "getSimilarSongs2", extra: [
             URLQueryItem(name: "id", value: id),
             URLQueryItem(name: "count", value: "\(count)")
         ], retries: retries).response
         try check(status: body.status, error: body.error)
-        return body.similarSongs2?.song ?? []
+        let songs = body.similarSongs2?.song ?? []
+        if let syncServerId, isCurrentDownloadSyncServer(syncServerId) {
+            await DownloadService.shared.observeSongs(songs, serverId: syncServerId)
+        }
+        return songs
     }
 
     /// Top-Songs eines Künstlers (macOS-Künstlerseite).
@@ -1516,12 +1629,17 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         count: Int = 50,
         retries: Int = 0
     ) async throws -> [Song] {
+        let syncServerId = activeDownloadSyncServerId()
         let body = try await fetchDecoded(Envelope<TopSongsBody>.self, path: "getTopSongs", extra: [
             URLQueryItem(name: "artist", value: artistName),
             URLQueryItem(name: "count", value: "\(count)")
         ], retries: retries).response
         try check(status: body.status, error: body.error)
-        return body.topSongs?.song ?? []
+        let songs = body.topSongs?.song ?? []
+        if let syncServerId, isCurrentDownloadSyncServer(syncServerId) {
+            await DownloadService.shared.observeSongs(songs, serverId: syncServerId)
+        }
+        return songs
     }
 
     /// Alle Alben alphabetisch, mit Paging (macOS-Lyrics-Bulk-Download).
@@ -1693,12 +1811,28 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         #if DEBUG
         if isDemoActive { return DemoContent.starred }
         #endif
+        let syncServerId = activeDownloadSyncServerId()
         let body = try await fetchDecoded(
             Envelope<StarredBody>.self,
             path: "getStarred2"
         ).response
         try check(status: body.status, error: body.error)
-        return body.starred2 ?? StarredResult(artist: nil, album: nil, song: nil)
+        let result = body.starred2 ?? StarredResult(artist: nil, album: nil, song: nil)
+        if let syncServerId, isCurrentDownloadSyncServer(syncServerId) {
+            await DownloadService.shared.observeArtistSummaries(
+                result.artist ?? [],
+                serverId: syncServerId
+            )
+            await DownloadService.shared.observeAlbumSummaries(
+                result.album ?? [],
+                serverId: syncServerId
+            )
+            await DownloadService.shared.observeSongs(
+                result.song ?? [],
+                serverId: syncServerId
+            )
+        }
+        return result
     }
 
     func star(songId: String? = nil, albumId: String? = nil, artistId: String? = nil) async throws {
@@ -1733,12 +1867,20 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         #if DEBUG
         if isDemoActive { return DemoContent.playlists }
         #endif
+        let syncServerId = activeDownloadSyncServerId()
         let body = try await fetchDecoded(
             Envelope<PlaylistsBody>.self,
             path: "getPlaylists"
         ).response
         try check(status: body.status, error: body.error)
-        return body.playlists?.playlist ?? []
+        let playlists = body.playlists?.playlist ?? []
+        if let syncServerId, isCurrentDownloadSyncServer(syncServerId) {
+            await DownloadService.shared.observePlaylistSummaries(
+                playlists,
+                serverId: syncServerId
+            )
+        }
+        return playlists
     }
 
     func getPlaylists(context: SubsonicServerRequestContext) async throws -> [Playlist] {
@@ -1755,7 +1897,12 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
             path: "getPlaylists"
         ).response
         try check(status: body.status, error: body.error)
-        return body.playlists?.playlist ?? []
+        let playlists = body.playlists?.playlist ?? []
+        await DownloadService.shared.observePlaylistSummaries(
+            playlists,
+            serverId: context.serverId
+        )
+        return playlists
     }
 
     func getPlaylist(id: String) async throws -> Playlist {
@@ -1765,6 +1912,7 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
             return p
         }
         #endif
+        let syncServerId = activeDownloadSyncServerId()
         let body = try await fetchDecoded(Envelope<PlaylistBody>.self, path: "getPlaylist", extra: [
             URLQueryItem(name: "id", value: id)
         ]).response
@@ -1774,9 +1922,17 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         }
         var playlist = Playlist(
             id: detail.id, name: detail.name, comment: detail.comment,
-            songCount: detail.songCount, duration: detail.duration, coverArt: detail.coverArt
+            songCount: detail.songCount, duration: detail.duration,
+            coverArt: detail.coverArt, created: detail.created,
+            changed: detail.changed
         )
         playlist.songs = detail.entry ?? []
+        if let syncServerId, isCurrentDownloadSyncServer(syncServerId) {
+            await DownloadService.shared.observePlaylistDetail(
+                playlist,
+                serverId: syncServerId
+            )
+        }
         return playlist
     }
 
@@ -1803,9 +1959,15 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         }
         var playlist = Playlist(
             id: detail.id, name: detail.name, comment: detail.comment,
-            songCount: detail.songCount, duration: detail.duration, coverArt: detail.coverArt
+            songCount: detail.songCount, duration: detail.duration,
+            coverArt: detail.coverArt, created: detail.created,
+            changed: detail.changed
         )
         playlist.songs = detail.entry ?? []
+        await DownloadService.shared.observePlaylistDetail(
+            playlist,
+            serverId: context.serverId
+        )
         return playlist
     }
 

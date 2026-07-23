@@ -3,7 +3,7 @@ import GRDB
 
 // MARK: - Records
 
-nonisolated struct DownloadRecord: Codable, FetchableRecord, PersistableRecord, Sendable {
+nonisolated struct DownloadRecord: Codable, FetchableRecord, PersistableRecord, Sendable, Equatable {
     var songId: String
     var serverId: String
     var albumId: String
@@ -82,6 +82,40 @@ struct MissingStrikeRecord: Codable, FetchableRecord, PersistableRecord {
     var lastStrikeAt: Double
 
     static let databaseTableName = "missing_song_strikes"
+}
+
+nonisolated enum DownloadCollectionKind: String, Sendable {
+    case album
+    case playlist
+}
+
+nonisolated struct DownloadCollectionObservation: Sendable {
+    let id: String
+    let signature: String
+}
+
+nonisolated struct DownloadAlbumMetadata: Sendable {
+    let id: String
+    let name: String
+    let artist: String?
+    let artistId: String?
+    let coverArt: String?
+    let songCount: Int?
+    let duration: Int?
+    let year: Int?
+    let genre: String?
+}
+
+nonisolated struct DownloadRecordMetadataChange: Sendable {
+    let previous: DownloadRecord
+    let updated: DownloadRecord
+}
+
+nonisolated struct DownloadMetadataUpdate: Sendable {
+    let changes: [DownloadRecordMetadataChange]
+
+    static let empty = DownloadMetadataUpdate(changes: [])
+    var isEmpty: Bool { changes.isEmpty }
 }
 
 // MARK: - DownloadDatabase
@@ -164,6 +198,10 @@ actor DownloadDatabase {
         // Download state is also read by interactive library and search surfaces.
         // Match their priority so they never block on a lower-priority GRDB queue.
         config.qos = .userInitiated
+        #if os(iOS)
+        // Avoid closing idle readers from GRDB's main-thread lifecycle callback.
+        config.persistentReadOnlyConnections = true
+        #endif
         let p = try DatabasePool(path: url.path, configuration: config)
         var m = DatabaseMigrator()
         m.registerMigration("v1_create") { db in
@@ -289,6 +327,23 @@ actor DownloadDatabase {
             try db.drop(table: "downloaded_playlists")
             try db.rename(table: "downloaded_playlists_v6", to: "downloaded_playlists")
         }
+        m.registerMigration("v7_add_collection_reconciliation") { db in
+            try db.create(table: "downloaded_albums", ifNotExists: true) { t in
+                t.column("server_id", .text).notNull()
+                t.column("album_id", .text).notNull()
+                t.column("album_name", .text).notNull()
+                t.column("downloaded_at", .double).notNull()
+                t.primaryKey(["server_id", "album_id"])
+            }
+            try db.create(table: "download_collection_sync", ifNotExists: true) { t in
+                t.column("server_id", .text).notNull()
+                t.column("collection_kind", .text).notNull()
+                t.column("collection_id", .text).notNull()
+                t.column("summary_signature", .text).notNull()
+                t.column("last_detail_sync", .double).notNull()
+                t.primaryKey(["server_id", "collection_kind", "collection_id"])
+            }
+        }
         try m.migrate(p)
         return p
     }
@@ -408,6 +463,387 @@ actor DownloadDatabase {
         }
     }
 
+    // MARK: - Server Metadata Reconciliation
+
+    func updateObservedSongs(
+        _ songs: [Song],
+        serverId: String,
+        albumMetadata: DownloadAlbumMetadata? = nil
+    ) -> DownloadMetadataUpdate {
+        guard !songs.isEmpty else { return .empty }
+        let songsByID = Dictionary(
+            songs.map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        var result = DownloadMetadataUpdate.empty
+        safeWrite { db in
+            let songIDs = Array(songsByID.keys)
+            let placeholders = songIDs.map { _ in "?" }.joined(separator: ",")
+            var arguments: [DatabaseValueConvertible] = [serverId]
+            arguments.append(contentsOf: songIDs)
+            let records = try DownloadRecord.fetchAll(
+                db,
+                sql: """
+                    SELECT * FROM downloads
+                    WHERE serverId = ? AND songId IN (\(placeholders))
+                    """,
+                arguments: StatementArguments(arguments)
+            )
+            var changes: [DownloadRecordMetadataChange] = []
+            for var record in records {
+                guard let song = songsByID[record.songId] else { continue }
+                let previous = record
+                Self.applyServerSongMetadata(
+                    song,
+                    albumMetadata: albumMetadata,
+                    to: &record
+                )
+                guard record != previous else { continue }
+                try record.insert(db, onConflict: .replace)
+                changes.append(.init(previous: previous, updated: record))
+            }
+            result = DownloadMetadataUpdate(changes: changes)
+        }
+        return result
+    }
+
+    func updateAlbumSummaries(
+        _ albums: [Album],
+        serverId: String
+    ) -> DownloadMetadataUpdate {
+        guard !albums.isEmpty else { return .empty }
+        let albumsByID = Dictionary(
+            albums.map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        var result = DownloadMetadataUpdate.empty
+        safeWrite { db in
+            let albumIDs = Array(albumsByID.keys)
+            let placeholders = albumIDs.map { _ in "?" }.joined(separator: ",")
+            var arguments: [DatabaseValueConvertible] = [serverId]
+            arguments.append(contentsOf: albumIDs)
+            let records = try DownloadRecord.fetchAll(
+                db,
+                sql: """
+                    SELECT * FROM downloads
+                    WHERE serverId = ? AND albumId IN (\(placeholders))
+                    """,
+                arguments: StatementArguments(arguments)
+            )
+            var changes: [DownloadRecordMetadataChange] = []
+            for var record in records {
+                guard let album = albumsByID[record.albumId] else { continue }
+                let previous = record
+                Self.applyServerAlbumMetadata(album, to: &record)
+                guard record != previous else { continue }
+                try record.insert(db, onConflict: .replace)
+                changes.append(.init(previous: previous, updated: record))
+            }
+            result = DownloadMetadataUpdate(changes: changes)
+        }
+        return result
+    }
+
+    func updateArtistSummaries(
+        _ artists: [Artist],
+        serverId: String
+    ) -> DownloadMetadataUpdate {
+        guard !artists.isEmpty else { return .empty }
+        let artistsByID = Dictionary(
+            artists.map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        var result = DownloadMetadataUpdate.empty
+        safeWrite { db in
+            let artistIDs = Array(artistsByID.keys)
+            let placeholders = artistIDs.map { _ in "?" }.joined(separator: ",")
+            var arguments: [DatabaseValueConvertible] = [serverId]
+            arguments.append(contentsOf: artistIDs)
+            let records = try DownloadRecord.fetchAll(
+                db,
+                sql: """
+                    SELECT * FROM downloads
+                    WHERE serverId = ? AND artistId IN (\(placeholders))
+                    """,
+                arguments: StatementArguments(arguments)
+            )
+            var changes: [DownloadRecordMetadataChange] = []
+            for var record in records {
+                guard let artistID = record.artistId,
+                      let artist = artistsByID[artistID]
+                else { continue }
+                let previous = record
+                let oldArtistName = record.artistName
+                record.artistName = artist.name
+                record.artistCoverArtId = artist.coverArt
+                if record.albumArtistName == oldArtistName {
+                    record.albumArtistName = artist.name
+                }
+                guard record != previous else { continue }
+                try record.insert(db, onConflict: .replace)
+                changes.append(.init(previous: previous, updated: record))
+            }
+            result = DownloadMetadataUpdate(changes: changes)
+        }
+        return result
+    }
+
+    nonisolated static func albumSignature(_ album: Album) -> String {
+        signature([
+            album.id,
+            album.name,
+            album.artist,
+            album.artistId,
+            album.coverArt,
+            album.songCount.map(String.init),
+            album.duration.map(String.init),
+            album.year.map(String.init),
+            album.genre,
+        ])
+    }
+
+    nonisolated static func albumSignature(_ album: DownloadAlbumMetadata) -> String {
+        signature([
+            album.id,
+            album.name,
+            album.artist,
+            album.artistId,
+            album.coverArt,
+            album.songCount.map(String.init),
+            album.duration.map(String.init),
+            album.year.map(String.init),
+            album.genre,
+        ])
+    }
+
+    nonisolated static func playlistSignature(_ playlist: Playlist) -> String {
+        signature([
+            playlist.id,
+            playlist.name,
+            playlist.comment,
+            playlist.songCount.map(String.init),
+            playlist.duration.map(String.init),
+            playlist.coverArt,
+            playlist.changed.map { String($0.timeIntervalSince1970) },
+        ])
+    }
+
+    // MARK: - Managed Collections
+
+    func markAlbumDownloaded(
+        id: String,
+        name: String,
+        serverId: String
+    ) {
+        guard !id.isEmpty, !serverId.isEmpty else { return }
+        safeWrite { db in
+            try db.execute(
+                sql: """
+                    INSERT INTO downloaded_albums (
+                        server_id, album_id, album_name, downloaded_at
+                    ) VALUES (?, ?, ?, ?)
+                    ON CONFLICT(server_id, album_id) DO UPDATE SET
+                        album_name = excluded.album_name
+                    """,
+                arguments: [serverId, id, name, Date().timeIntervalSince1970]
+            )
+        }
+    }
+
+    func unmarkAlbumDownloaded(id: String, serverId: String) {
+        guard !id.isEmpty, !serverId.isEmpty else { return }
+        safeWrite { db in
+            try db.execute(
+                sql: "DELETE FROM downloaded_albums WHERE server_id = ? AND album_id = ?",
+                arguments: [serverId, id]
+            )
+            try db.execute(
+                sql: """
+                    DELETE FROM download_collection_sync
+                    WHERE server_id = ? AND collection_kind = ? AND collection_id = ?
+                    """,
+                arguments: [serverId, DownloadCollectionKind.album.rawValue, id]
+            )
+        }
+    }
+
+    func managedAlbumIds(serverId: String) -> Set<String> {
+        guard let pool else { return [] }
+        let ids: [String] = (try? pool.read { db in
+            try String.fetchAll(
+                db,
+                sql: "SELECT album_id FROM downloaded_albums WHERE server_id = ?",
+                arguments: [serverId]
+            )
+        }) ?? []
+        return Set(ids)
+    }
+
+    func collectionRefreshCandidates(
+        kind: DownloadCollectionKind,
+        observations: [DownloadCollectionObservation],
+        serverId: String,
+        managedIds: Set<String>,
+        staleBefore: Double?,
+        staleLimit: Int
+    ) -> [String] {
+        guard let pool, !observations.isEmpty, !managedIds.isEmpty else { return [] }
+        let observationsByID = Dictionary(
+            observations
+                .filter { managedIds.contains($0.id) }
+                .map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        guard !observationsByID.isEmpty else { return [] }
+
+        struct SyncState {
+            let signature: String
+            let lastDetailSync: Double
+        }
+
+        let states: [String: SyncState] = (try? pool.read { db in
+            let rows = try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT collection_id, summary_signature, last_detail_sync
+                    FROM download_collection_sync
+                    WHERE server_id = ? AND collection_kind = ?
+                    """,
+                arguments: [serverId, kind.rawValue]
+            )
+            return Dictionary(
+                uniqueKeysWithValues: rows.map { row in
+                    (
+                        row["collection_id"] as String,
+                        SyncState(
+                            signature: row["summary_signature"] as String,
+                            lastDetailSync: row["last_detail_sync"] as Double
+                        )
+                    )
+                }
+            )
+        }) ?? [:]
+
+        let changed = observationsByID.values
+            .filter { states[$0.id]?.signature != $0.signature }
+            .map(\.id)
+            .sorted()
+        guard let staleBefore, staleLimit > 0 else { return changed }
+        let changedIds = Set(changed)
+        let stale = observationsByID.values
+            .compactMap { observation -> (id: String, date: Double)? in
+                guard !changedIds.contains(observation.id),
+                      let state = states[observation.id],
+                      state.lastDetailSync < staleBefore
+                else { return nil }
+                return (observation.id, state.lastDetailSync)
+            }
+            .sorted { $0.date < $1.date }
+            .prefix(staleLimit)
+            .map(\.id)
+        return changed + stale
+    }
+
+    func noteCollectionDetail(
+        kind: DownloadCollectionKind,
+        id: String,
+        serverId: String,
+        signature: String,
+        date: Double = Date().timeIntervalSince1970
+    ) {
+        guard !id.isEmpty, !serverId.isEmpty else { return }
+        safeWrite { db in
+            try db.execute(
+                sql: """
+                    INSERT INTO download_collection_sync (
+                        server_id, collection_kind, collection_id,
+                        summary_signature, last_detail_sync
+                    ) VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT(server_id, collection_kind, collection_id) DO UPDATE SET
+                        summary_signature = excluded.summary_signature,
+                        last_detail_sync = excluded.last_detail_sync
+                    """,
+                arguments: [serverId, kind.rawValue, id, signature, date]
+            )
+        }
+    }
+
+    private nonisolated static func signature(_ values: [String?]) -> String {
+        values.map { value in
+            guard let value else { return "-1:" }
+            return "\(value.utf8.count):\(value)"
+        }.joined(separator: "|")
+    }
+
+    private nonisolated static func applyServerAlbumMetadata(
+        _ album: Album,
+        to record: inout DownloadRecord
+    ) {
+        let previousAlbumArtist = record.albumArtistName
+        let previousAlbumCover = record.albumCoverArtId
+
+        record.albumTitle = album.name
+        if let artist = album.artist {
+            record.albumArtistName = artist
+        }
+        if let coverArt = album.coverArt {
+            record.albumCoverArtId = coverArt
+        }
+        record.year = album.year
+        record.genre = album.genre
+
+        if record.artistName == previousAlbumArtist, let artist = album.artist {
+            record.artistName = artist
+            record.artistId = album.artistId ?? record.artistId
+        }
+        if record.coverArtId == nil || record.coverArtId == previousAlbumCover {
+            record.coverArtId = album.coverArt
+        }
+    }
+
+    private nonisolated static func applyServerSongMetadata(
+        _ song: Song,
+        albumMetadata: DownloadAlbumMetadata?,
+        to record: inout DownloadRecord
+    ) {
+        let resolvedAlbumArtist = song.displayAlbumArtist
+            ?? song.albumArtists?.first?.name
+            ?? albumMetadata?.artist
+        let resolvedAlbumCover = albumMetadata?.coverArt
+            ?? record.albumCoverArtId
+            ?? song.coverArt
+
+        record.albumId = song.albumId ?? albumMetadata?.id ?? record.albumId
+        record.artistId = song.artistId ?? record.artistId
+        record.title = song.title
+        record.albumTitle = song.album ?? albumMetadata?.name ?? record.albumTitle
+        record.artistName = song.artist
+            ?? song.displayArtist
+            ?? albumMetadata?.artist
+            ?? record.artistName
+        if let resolvedAlbumArtist {
+            record.albumArtistName = resolvedAlbumArtist
+        }
+        if let resolvedAlbumCover {
+            record.albumCoverArtId = resolvedAlbumCover
+        }
+        record.track = song.track
+        record.disc = song.discNumber
+        record.duration = song.duration
+        record.year = song.year ?? albumMetadata?.year
+        record.genre = song.genre ?? albumMetadata?.genre
+        record.playCount = song.playCount
+        record.explicitStatus = song.explicitStatus
+        if let coverArt = song.coverArt ?? albumMetadata?.coverArt {
+            record.coverArtId = coverArt
+        }
+        record.bpm = song.bpm
+        record.replayGainTrackGain = song.replayGain?.trackGain
+        record.replayGainAlbumGain = song.replayGain?.albumGain
+        // filePath, bytes and codec properties describe the local audio file.
+        // They must never be replaced by metadata describing the server source.
+    }
+
     // MARK: - Delete
 
     func delete(songId: String, serverId: String) {
@@ -429,15 +865,47 @@ actor DownloadDatabase {
                 sql: "DELETE FROM downloads WHERE albumId = ? AND serverId = ?",
                 arguments: [albumId, serverId]
             )
+            try db.execute(
+                sql: "DELETE FROM downloaded_albums WHERE server_id = ? AND album_id = ?",
+                arguments: [serverId, albumId]
+            )
+            try db.execute(
+                sql: """
+                    DELETE FROM download_collection_sync
+                    WHERE server_id = ? AND collection_kind = ? AND collection_id = ?
+                    """,
+                arguments: [serverId, DownloadCollectionKind.album.rawValue, albumId]
+            )
         }
     }
 
     func deleteArtist(artistId: String, serverId: String) {
         safeWrite { db in
+            let albumIds = try String.fetchAll(
+                db,
+                sql: """
+                    SELECT DISTINCT albumId FROM downloads
+                    WHERE artistId = ? AND serverId = ? AND albumId != ''
+                    """,
+                arguments: [artistId, serverId]
+            )
             try db.execute(
                 sql: "DELETE FROM downloads WHERE artistId = ? AND serverId = ?",
                 arguments: [artistId, serverId]
             )
+            for albumId in albumIds {
+                try db.execute(
+                    sql: "DELETE FROM downloaded_albums WHERE server_id = ? AND album_id = ?",
+                    arguments: [serverId, albumId]
+                )
+                try db.execute(
+                    sql: """
+                        DELETE FROM download_collection_sync
+                        WHERE server_id = ? AND collection_kind = ? AND collection_id = ?
+                        """,
+                    arguments: [serverId, DownloadCollectionKind.album.rawValue, albumId]
+                )
+            }
         }
     }
 
@@ -451,6 +919,18 @@ actor DownloadDatabase {
                 sql: "DELETE FROM missing_song_strikes WHERE serverId = ?",
                 arguments: [serverId]
             )
+            try db.execute(
+                sql: "DELETE FROM downloaded_playlists WHERE server_id = ?",
+                arguments: [serverId]
+            )
+            try db.execute(
+                sql: "DELETE FROM downloaded_albums WHERE server_id = ?",
+                arguments: [serverId]
+            )
+            try db.execute(
+                sql: "DELETE FROM download_collection_sync WHERE server_id = ?",
+                arguments: [serverId]
+            )
         }
     }
 
@@ -459,6 +939,8 @@ actor DownloadDatabase {
             try db.execute(sql: "DELETE FROM downloads")
             try db.execute(sql: "DELETE FROM missing_song_strikes")
             try db.execute(sql: "DELETE FROM downloaded_playlists")
+            try db.execute(sql: "DELETE FROM downloaded_albums")
+            try db.execute(sql: "DELETE FROM download_collection_sync")
         }
     }
 
@@ -485,6 +967,35 @@ actor DownloadDatabase {
                     Column("track").asc
                 )
                 .fetchAll(db)
+        }) ?? []
+    }
+
+    func records(serverId: String, albumId: String) -> [DownloadRecord] {
+        guard let pool else { return [] }
+        return (try? pool.read { db in
+            try DownloadRecord
+                .filter(Column("serverId") == serverId && Column("albumId") == albumId)
+                .order(Column("disc").asc, Column("track").asc)
+                .fetchAll(db)
+        }) ?? []
+    }
+
+    func records(serverId: String, albumIds: Set<String>) -> [DownloadRecord] {
+        guard let pool, !albumIds.isEmpty else { return [] }
+        let ids = Array(albumIds)
+        let placeholders = ids.map { _ in "?" }.joined(separator: ",")
+        var arguments: [DatabaseValueConvertible] = [serverId]
+        arguments.append(contentsOf: ids)
+        return (try? pool.read { db in
+            try DownloadRecord.fetchAll(
+                db,
+                sql: """
+                    SELECT * FROM downloads
+                    WHERE serverId = ? AND albumId IN (\(placeholders))
+                    ORDER BY albumId ASC, disc ASC, track ASC
+                    """,
+                arguments: StatementArguments(arguments)
+            )
         }) ?? []
     }
 
@@ -607,6 +1118,13 @@ actor DownloadDatabase {
             try db.execute(
                 sql: "DELETE FROM downloaded_playlists WHERE server_id = ? AND playlist_id = ?",
                 arguments: [serverId, id]
+            )
+            try db.execute(
+                sql: """
+                    DELETE FROM download_collection_sync
+                    WHERE server_id = ? AND collection_kind = ? AND collection_id = ?
+                    """,
+                arguments: [serverId, DownloadCollectionKind.playlist.rawValue, id]
             )
         }
     }
