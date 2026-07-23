@@ -177,7 +177,7 @@ struct Shelv_DesktopApp: App {
             }
 
             CommandGroup(replacing: .help) {
-                Link(String(localized: "shelv_on_github"), destination: URL(string: "https://github.com/gatzenga/Shelv-Desktop")!)
+                Link(String(localized: "shelv_on_github"), destination: URL(string: "https://github.com/gatzenga/Shelv")!)
                 Link(String(localized: "navidrome_documentation"), destination: URL(string: "https://www.navidrome.org/docs/")!)
                 Divider()
                 Link(String(localized: "developer_website"), destination: URL(string: "https://vkugler.app")!)

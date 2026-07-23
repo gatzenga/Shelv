@@ -25,7 +25,7 @@ struct AboutTab: View {
             HStack(spacing: 16) {
                 Link(String(localized: "developer_website"), destination: URL(string: "https://vkugler.app")!)
                 Text("·").foregroundStyle(.secondary)
-                Link("GitHub", destination: URL(string: "https://github.com/gatzenga/Shelv-Desktop")!)
+                Link("GitHub", destination: URL(string: "https://github.com/gatzenga/Shelv")!)
                 Text("·").foregroundStyle(.secondary)
                 Link(String(localized: "privacy_policy"), destination: URL(string: "https://vkugler.app/shelv_privacy.html")!)
                 Text("·").foregroundStyle(.secondary)
