@@ -483,7 +483,8 @@ struct PlaylistDetailView: View {
     }
 
     private func syncOrder(previousSongs: [Song]) async {
-        let newIds = songs.map(\.id)
+        let reorderedSongs = songs
+        let newIds = reorderedSongs.map(\.id)
         let allOldIndices = Array(0..<newIds.count)
         do {
             try await SubsonicAPIService.shared.updatePlaylist(
@@ -491,7 +492,14 @@ struct PlaylistDetailView: View {
                 songIdsToAdd: newIds,
                 songIndicesToRemove: allOldIndices
             )
-            await loadDetail()
+            if let currentDetail = detail {
+                detail = libraryStore.cachePlaylistOrder(reorderedSongs, for: currentDetail)
+            }
+            songOriginalRanks = Dictionary(
+                reorderedSongs.enumerated().map { ($1.id, $0 + 1) },
+                uniquingKeysWith: { first, _ in first }
+            )
+            downloadStore.syncPlaylistSongIds(playlist.id, songIds: newIds)
         } catch {
             if !OfflineModeService.shared.presentConnectivityErrorIfNeeded(error, userInitiated: true) {
                 NotificationCenter.default.post(
