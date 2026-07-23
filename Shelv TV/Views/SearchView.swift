@@ -8,6 +8,7 @@ struct SearchView: View {
     @State private var searchTask: Task<Void, Never>?
     @State private var path = NavigationPath()
     @State private var recentSearches: [String] = []
+    @State private var automaticallyRecordedQuery: String?
 
     private let player = AudioPlayerService.shared
 
@@ -117,6 +118,9 @@ struct SearchView: View {
                           trimmed == trimmedQuery
                     else { return }
                     result = response
+                    if response != nil {
+                        recordCompletedSearch(trimmed)
+                    }
                 }
             }
             .onChange(of: query) { _, q in
@@ -124,6 +128,7 @@ struct SearchView: View {
                 let trimmed = q.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !trimmed.isEmpty else {
                     result = nil
+                    automaticallyRecordedQuery = nil
                     return
                 }
                 searchTask = Task {
@@ -140,6 +145,9 @@ struct SearchView: View {
                           trimmed == trimmedQuery
                     else { return }
                     result = response
+                    if response != nil {
+                        recordCompletedSearch(trimmed)
+                    }
                 }
             }
         }
@@ -157,10 +165,23 @@ struct SearchView: View {
     }
 
     private func commitCurrentSearch() {
-        recentSearches = SearchHistoryStore.record(
+        let update = SearchHistoryStore.recordAutomatically(
             query,
+            replacing: automaticallyRecordedQuery,
             for: serverStore.activeServerID
         )
+        recentSearches = update.entries
+        automaticallyRecordedQuery = nil
+    }
+
+    private func recordCompletedSearch(_ query: String) {
+        let update = SearchHistoryStore.recordAutomatically(
+            query,
+            replacing: automaticallyRecordedQuery,
+            for: serverStore.activeServerID
+        )
+        recentSearches = update.entries
+        automaticallyRecordedQuery = update.provisionalQuery
     }
 
     private func selectSearchHistoryEntry(_ entry: String) {
@@ -168,16 +189,19 @@ struct SearchView: View {
             entry,
             for: serverStore.activeServerID
         )
+        automaticallyRecordedQuery = nil
         query = entry
     }
 
     private func clearSearchHistory() {
         recentSearches = SearchHistoryStore.clear(for: serverStore.activeServerID)
+        automaticallyRecordedQuery = nil
     }
 
     private func restartSearchAfterServerChange() {
         searchTask?.cancel()
         result = nil
+        automaticallyRecordedQuery = nil
         reloadSearchHistory()
         let trimmed = trimmedQuery
         guard !trimmed.isEmpty else { return }
@@ -191,6 +215,9 @@ struct SearchView: View {
                   trimmed == trimmedQuery
             else { return }
             result = response
+            if response != nil {
+                recordCompletedSearch(trimmed)
+            }
         }
     }
 }

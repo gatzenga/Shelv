@@ -41,4 +41,43 @@ final class SearchHistoryStoreTests: XCTestCase {
         XCTAssertTrue(SearchHistoryStore.entries(for: firstServerID).isEmpty)
         XCTAssertEqual(SearchHistoryStore.entries(for: secondServerID), ["Second"])
     }
+
+    func testAutomaticRecordReplacesEarlierQueryFromSameTypingSession() {
+        let serverID = UUID()
+        defer { SearchHistoryStore.clear(for: serverID) }
+
+        let partial = SearchHistoryStore.recordAutomatically(
+            "Ali",
+            replacing: nil,
+            for: serverID
+        )
+        let completed = SearchHistoryStore.recordAutomatically(
+            "Alice",
+            replacing: partial.provisionalQuery,
+            for: serverID
+        )
+
+        XCTAssertEqual(completed.entries, ["Alice"])
+        XCTAssertEqual(completed.provisionalQuery, "Alice")
+    }
+
+    func testAutomaticRecordPreservesMatchingCommittedQuery() {
+        let serverID = UUID()
+        defer { SearchHistoryStore.clear(for: serverID) }
+
+        SearchHistoryStore.record("Alice", for: serverID)
+        let partial = SearchHistoryStore.recordAutomatically(
+            "Ali",
+            replacing: nil,
+            for: serverID
+        )
+        let completed = SearchHistoryStore.recordAutomatically(
+            "alice",
+            replacing: partial.provisionalQuery,
+            for: serverID
+        )
+
+        XCTAssertEqual(completed.entries, ["alice"])
+        XCTAssertNil(completed.provisionalQuery)
+    }
 }

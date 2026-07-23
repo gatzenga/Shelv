@@ -14,6 +14,7 @@ struct SearchView: View {
     @State private var searchTask: Task<Void, Never>?
     @State private var lyricsTask: Task<Void, Never>?
     @State private var recentSearches: [String] = []
+    @State private var automaticallyRecordedQuery: String?
 
     private var trimmedQuery: String {
         vm.query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -29,7 +30,8 @@ struct SearchView: View {
                     .focused($isSearchFocused)
                     .onSubmit {
                         commitCurrentSearch()
-                        Task { await vm.search() }
+                        let trimmed = trimmedQuery
+                        Task { await searchAndRecord(query: trimmed) }
                     }
                 if !vm.query.isEmpty {
                     Button { vm.query = ""; vm.clearResults() } label: {
@@ -190,7 +192,7 @@ struct SearchView: View {
             vm.clearResults()
             lyricsResults = []
             let trimmed = trimmedQuery
-            searchTask = Task { await vm.search() }
+            searchTask = Task { await searchAndRecord(query: trimmed) }
             lyricsTask = Task { await performLyricsSearch(query: trimmed) }
         }
         .onChange(of: vm.query) { _, newValue in
@@ -202,7 +204,7 @@ struct SearchView: View {
                 searchTask = Task {
                     try? await Task.sleep(for: .milliseconds(300))
                     guard !Task.isCancelled else { return }
-                    await vm.search()
+                    await searchAndRecord(query: trimmed)
                 }
                 lyricsTask?.cancel()
                 lyricsTask = Task {
@@ -211,6 +213,9 @@ struct SearchView: View {
                     await performLyricsSearch(query: trimmed)
                 }
             } else {
+                if trimmed.isEmpty {
+                    automaticallyRecordedQuery = nil
+                }
                 lyricsResults = []
                 vm.clearResults()
             }
@@ -277,10 +282,32 @@ struct SearchView: View {
     }
 
     private func commitCurrentSearch() {
-        recentSearches = SearchHistoryStore.record(
+        let update = SearchHistoryStore.recordAutomatically(
             vm.query,
+            replacing: automaticallyRecordedQuery,
             for: serverStore.activeServerID
         )
+        recentSearches = update.entries
+        automaticallyRecordedQuery = nil
+    }
+
+    private func recordCompletedSearch(_ query: String) {
+        let update = SearchHistoryStore.recordAutomatically(
+            query,
+            replacing: automaticallyRecordedQuery,
+            for: serverStore.activeServerID
+        )
+        recentSearches = update.entries
+        automaticallyRecordedQuery = update.provisionalQuery
+    }
+
+    private func searchAndRecord(query: String) async {
+        let completed = await vm.search()
+        guard completed,
+              !Task.isCancelled,
+              query == trimmedQuery
+        else { return }
+        recordCompletedSearch(query)
     }
 
     private func selectSearchHistoryEntry(_ entry: String) {
@@ -288,12 +315,14 @@ struct SearchView: View {
             entry,
             for: serverStore.activeServerID
         )
+        automaticallyRecordedQuery = nil
         vm.query = entry
         isSearchFocused = true
     }
 
     private func clearSearchHistory() {
         recentSearches = SearchHistoryStore.clear(for: serverStore.activeServerID)
+        automaticallyRecordedQuery = nil
     }
 
     private func restartSearchAfterServerChange() {
@@ -301,10 +330,11 @@ struct SearchView: View {
         lyricsTask?.cancel()
         vm.clearResults()
         lyricsResults = []
+        automaticallyRecordedQuery = nil
         reloadSearchHistory()
         let trimmed = trimmedQuery
         guard trimmed.count >= 2 else { return }
-        searchTask = Task { await vm.search() }
+        searchTask = Task { await searchAndRecord(query: trimmed) }
         lyricsTask = Task { await performLyricsSearch(query: trimmed) }
     }
 

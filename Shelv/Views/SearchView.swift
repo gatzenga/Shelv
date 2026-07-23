@@ -76,6 +76,7 @@ struct SearchView: View {
     @State private var albumToDeleteDownloads: Album?
     @State private var offlineDownloadState = OfflineSearchDownloadState.empty
     @State private var recentSearches: [String] = []
+    @State private var automaticallyRecordedQuery: String?
 
     private var trimmedQuery: String {
         query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -139,6 +140,7 @@ struct SearchView: View {
         result = nil
         lyricsResults = []
         isSearching = false
+        automaticallyRecordedQuery = nil
         searchFieldActive = false
 
         guard !usesSystemSearchTabActivation else { return }
@@ -155,10 +157,23 @@ struct SearchView: View {
     }
 
     private func commitCurrentSearch() {
-        recentSearches = SearchHistoryStore.record(
+        let update = SearchHistoryStore.recordAutomatically(
             query,
+            replacing: automaticallyRecordedQuery,
             for: serverStore.activeServerID
         )
+        recentSearches = update.entries
+        automaticallyRecordedQuery = nil
+    }
+
+    private func recordCompletedSearch(_ query: String) {
+        let update = SearchHistoryStore.recordAutomatically(
+            query,
+            replacing: automaticallyRecordedQuery,
+            for: serverStore.activeServerID
+        )
+        recentSearches = update.entries
+        automaticallyRecordedQuery = update.provisionalQuery
     }
 
     private func selectSearchHistoryEntry(_ entry: String) {
@@ -166,12 +181,14 @@ struct SearchView: View {
             entry,
             for: serverStore.activeServerID
         )
+        automaticallyRecordedQuery = nil
         query = entry
         searchFieldActive = true
     }
 
     private func clearSearchHistory() {
         recentSearches = SearchHistoryStore.clear(for: serverStore.activeServerID)
+        automaticallyRecordedQuery = nil
     }
 
     var body: some View {
@@ -738,6 +755,7 @@ struct SearchView: View {
                 guard !trimmed.isEmpty else {
                     result = nil
                     lyricsResults = []
+                    automaticallyRecordedQuery = nil
                     return
                 }
                 searchTask = Task {
@@ -1009,10 +1027,13 @@ struct SearchView: View {
         isSearching = true
         if offlineMode.isOffline {
             await performOfflineSearch(query: query)
-            if requestedServerID == serverStore.activeServerID,
-               requestedServerRevision == serverStore.activeServerRevision {
-                isSearching = false
-            }
+            guard !Task.isCancelled,
+                  requestedServerID == serverStore.activeServerID,
+                  requestedServerRevision == serverStore.activeServerRevision,
+                  query == trimmedQuery
+            else { return }
+            recordCompletedSearch(query)
+            isSearching = false
             return
         }
         do {
@@ -1026,6 +1047,7 @@ struct SearchView: View {
                 return
             }
             result = response
+            recordCompletedSearch(query)
         } catch {
             let isCancelled = error is CancellationError
                 || (error as? URLError)?.code == .cancelled
@@ -1143,6 +1165,7 @@ struct SearchView: View {
         result = nil
         lyricsResults = []
         isSearching = false
+        automaticallyRecordedQuery = nil
         reloadSearchHistory()
         let trimmed = trimmedQuery
         guard !trimmed.isEmpty else { return }

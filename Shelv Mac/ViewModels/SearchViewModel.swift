@@ -10,17 +10,17 @@ class SearchViewModel: ObservableObject {
     @Published var isLoading: Bool = false
 
     private let api = SubsonicAPIService.shared
-    private var searchTask: Task<Void, Never>?
+    private var searchTask: Task<Bool, Never>?
 
     var isEmpty: Bool { artists.isEmpty && albums.isEmpty && songs.isEmpty }
 
-    func search() async {
+    func search() async -> Bool {
         let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
         let requestedServerID = AppState.shared.serverStore.activeServerID
         let requestedServerRevision = AppState.shared.serverStore.activeServerRevision
         guard !term.isEmpty else {
             clearResults()
-            return
+            return false
         }
         searchTask?.cancel()
         searchTask = Task {
@@ -31,7 +31,7 @@ class SearchViewModel: ObservableObject {
                 }
             }
             if OfflineModeService.shared.isOffline {
-                await searchOffline(query: term)
+                return await searchOffline(query: term)
             } else {
                 do {
                     let result = try await api.search(query: term)
@@ -39,34 +39,44 @@ class SearchViewModel: ObservableObject {
                           requestedServerID == AppState.shared.serverStore.activeServerID,
                           requestedServerRevision == AppState.shared.serverStore.activeServerRevision,
                           term == query.trimmingCharacters(in: .whitespacesAndNewlines)
-                    else { return }
+                    else { return false }
                     artists = (result.artist ?? []).filter { ($0.albumCount ?? 0) > 0 }
                     albums = result.album ?? []
                     songs = result.song ?? []
+                    return true
                 } catch {
                     guard !Task.isCancelled,
                           requestedServerID == AppState.shared.serverStore.activeServerID,
                           requestedServerRevision == AppState.shared.serverStore.activeServerRevision,
                           term == query.trimmingCharacters(in: .whitespacesAndNewlines)
-                    else { return }
-                    guard !OfflineModeService.shared.presentConnectivityErrorIfNeeded(error, userInitiated: true) else { return }
+                    else { return false }
+                    guard !OfflineModeService.shared.presentConnectivityErrorIfNeeded(error, userInitiated: true) else {
+                        return false
+                    }
                     NotificationCenter.default.post(name: .showToast, object: String(localized: "search_failed"))
+                    return false
                 }
             }
         }
-        await searchTask?.value
+        return await searchTask?.value ?? false
     }
 
-    private func searchOffline(query: String) async {
+    private func searchOffline(query: String) async -> Bool {
         let requestedServerID = AppState.shared.serverStore.activeServerID
         let requestedServerRevision = AppState.shared.serverStore.activeServerRevision
         let stable = AppState.shared.serverStore.activeServer?.stableId ?? ""
-        guard !stable.isEmpty else { artists = []; albums = []; songs = []; return }
+        guard !stable.isEmpty else {
+            artists = []
+            albums = []
+            songs = []
+            return false
+        }
         let records = await DownloadDatabase.shared.search(serverId: stable, query: query, limit: 100)
         guard !Task.isCancelled,
               requestedServerID == AppState.shared.serverStore.activeServerID,
-              requestedServerRevision == AppState.shared.serverStore.activeServerRevision
-        else { return }
+              requestedServerRevision == AppState.shared.serverStore.activeServerRevision,
+              query == self.query.trimmingCharacters(in: .whitespacesAndNewlines)
+        else { return false }
         songs = records.map { $0.toDownloadedSong().asSong() }
 
         let q = query.lowercased()
@@ -78,6 +88,7 @@ class SearchViewModel: ObservableObject {
         artists = DownloadStore.shared.artists
             .filter { $0.name.lowercased().contains(q) }
             .map { $0.asArtist() }
+        return true
     }
 
     func cancelSearch() {
