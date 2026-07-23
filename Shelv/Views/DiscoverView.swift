@@ -427,17 +427,21 @@ struct DiscoverView: View {
             if showsServerMenu, let activeServer {
                 Menu {
                     if canSwitchServerURL {
-                        serverURLSlotMenuButton(slot: .primary, server: activeServer)
-                        serverURLSlotMenuButton(slot: .secondary, server: activeServer)
-                    }
-                    if canSwitchServerURL && canSwitchMusicLibrary {
-                        Divider()
+                        Section {
+                            serverURLSlotMenuButton(slot: .primary, server: activeServer)
+                            serverURLSlotMenuButton(slot: .secondary, server: activeServer)
+                        } header: {
+                            Text(String(localized: "urls"))
+                        }
                     }
                     if canSwitchMusicLibrary {
-                        allMusicLibrariesMenuButton
-                        Divider()
-                        ForEach(musicLibraries.availableFolders) { folder in
-                            musicLibraryMenuButton(folder)
+                        Section {
+                            allMusicLibrariesMenuButton
+                            ForEach(musicLibraries.availableFolders) { folder in
+                                musicLibraryMenuButton(folder)
+                            }
+                        } header: {
+                            Text(String(localized: "libraries"))
                         }
                     }
                 } label: {
@@ -468,6 +472,7 @@ struct DiscoverView: View {
     private var allMusicLibrariesMenuButton: some View {
         let isSelected = musicLibraries.snapshot.selectsAllLibraries
         Button {
+            guard !isSelected else { return }
             musicLibraries.selectAll()
         } label: {
             HStack(spacing: 16) {
@@ -478,13 +483,13 @@ struct DiscoverView: View {
                 }
             }
         }
-        .disabled(isSelected)
     }
 
     @ViewBuilder
     private func musicLibraryMenuButton(_ folder: SubsonicMusicFolder) -> some View {
         let isSelected = musicLibraries.selectedFolderIDs == Set([folder.id])
         Button {
+            guard !isSelected else { return }
             musicLibraries.selectOnly(folderID: folder.id)
         } label: {
             HStack(spacing: 16) {
@@ -495,7 +500,6 @@ struct DiscoverView: View {
                 }
             }
         }
-        .disabled(isSelected)
     }
 
     @ViewBuilder
@@ -505,10 +509,14 @@ struct DiscoverView: View {
             guard !isActive else { return }
             startServerURLSlotSwitch(slot)
         } label: {
-            Text(title(for: slot))
+            HStack(spacing: 16) {
+                Text(title(for: slot))
+                Spacer()
+                if isActive {
+                    Image(systemName: "checkmark")
+                }
+            }
         }
-            .foregroundStyle(isActive ? .secondary : .primary)
-            .disabled(isActive)
     }
 
     private func activeURLSlot(for server: SubsonicServer) -> ServerURLSlot {

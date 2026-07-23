@@ -336,6 +336,8 @@
 "user" = "用户";
 "version" = "版本";
 "library" = "音乐库";
+"libraries" = "音乐库";
+"urls" = "URL";
 "show_all_libraries" = "显示所有音乐库";
 "synchronisation" = "同步";
 "last_sync" = "上次同步";

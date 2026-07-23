@@ -27,6 +27,8 @@
 "show_more" = "显示更多";
 "downloads" = "下载";
 "library" = "音乐库";
+"libraries" = "音乐库";
+"urls" = "URL";
 "show_all_libraries" = "显示所有音乐库";
 "albums" = "专辑";
 "artists" = "艺术家";

@@ -27,6 +27,8 @@
 "show_more" = "Show more";
 "downloads" = "Downloads";
 "library" = "Library";
+"libraries" = "Libraries";
+"urls" = "URLs";
 "show_all_libraries" = "Show All Libraries";
 "albums" = "Albums";
 "artists" = "Artists";
