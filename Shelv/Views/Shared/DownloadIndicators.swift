@@ -23,6 +23,8 @@ enum DownloadIndicatorStyle {
 }
 
 private struct CoverStatusCapsuleModifier: ViewModifier {
+    private let inset: CGFloat = 5
+
     func body(content: Content) -> some View {
         content
             .background {
@@ -31,14 +33,12 @@ private struct CoverStatusCapsuleModifier: ViewModifier {
                         Capsule().fill(.ultraThinMaterial)
                         Capsule().stroke(.white.opacity(0.18), lineWidth: 0.5)
                     }
-                    .padding(.horizontal, -5)
-                    .padding(.vertical, -3)
+                    .padding(.all, -inset)
                     .shadow(color: .black.opacity(0.22), radius: 2, y: 1)
                     .opacity(proxy.size.width > 0 && proxy.size.height > 0 ? 1 : 0)
                 }
             }
-            .padding(.horizontal, 5)
-            .padding(.vertical, 3)
+            .padding(.all, inset)
     }
 }
 

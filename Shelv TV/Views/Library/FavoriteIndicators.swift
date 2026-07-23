@@ -2,6 +2,8 @@ import SwiftUI
 @preconcurrency import Combine
 
 private struct CoverStatusCapsuleModifier: ViewModifier {
+    private let inset: CGFloat = 7
+
     func body(content: Content) -> some View {
         content
             .background {
@@ -9,12 +11,10 @@ private struct CoverStatusCapsuleModifier: ViewModifier {
                     Capsule().fill(.ultraThinMaterial)
                     Capsule().stroke(.white.opacity(0.18), lineWidth: 0.5)
                 }
-                .padding(.horizontal, -7)
-                .padding(.vertical, -5)
+                .padding(.all, -inset)
                 .shadow(color: .black.opacity(0.22), radius: 2, y: 1)
             }
-            .padding(.horizontal, 7)
-            .padding(.vertical, 5)
+            .padding(.all, inset)
     }
 }
 
