@@ -322,7 +322,7 @@ struct SidebarView: View {
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                        .frame(width: disclosureIndent)
+                        .frame(width: disclosureIndent, alignment: .trailing)
 
                     PlaylistFolderSidebarRow(
                         title: node.title,
