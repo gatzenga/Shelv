@@ -48,6 +48,7 @@ struct SearchView: View {
     var usesSystemSearchTabActivation = false
     @ObservedObject var libraryStore = LibraryStore.shared
     @ObservedObject var offlineMode = OfflineModeService.shared
+    @ObservedObject private var musicLibraries = MusicLibraryStore.shared
     @EnvironmentObject var serverStore: ServerStore
     private let player = AudioPlayerService.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
@@ -703,6 +704,17 @@ struct SearchView: View {
             .onChange(of: serverStore.activeServerID) { _, _ in
                 reloadSearchHistory()
             }
+            .onChange(of: musicLibraries.revision) { _, _ in
+                guard !offlineMode.isOffline else { return }
+                searchTask?.cancel()
+                let trimmed = trimmedQuery
+                guard !trimmed.isEmpty else { return }
+                result = nil
+                lyricsResults = []
+                searchTask = Task {
+                    await performSearch(query: trimmed)
+                }
+            }
             .onChange(of: offlineMode.isOffline) { _, isOffline in
                 guard isOffline else { return }
                 offlineDownloadState = OfflineSearchDownloadState(
@@ -966,7 +978,8 @@ struct SearchView: View {
                     Task.detached(priority: .utility) {
                         await LyricsService.shared.updateMetadata(
                             songId: item.songId, serverId: serverId,
-                            title: song.title, artist: song.artist, coverArt: song.coverArt,
+                            title: song.title, artist: song.artist,
+                            albumId: song.albumId, coverArt: song.coverArt,
                             duration: song.duration
                         )
                     }
@@ -987,6 +1000,7 @@ struct SearchView: View {
     }
 
     private func performSearch(query: String) async {
+        let selectionRevision = musicLibraries.revision
         isSearching = true
         if offlineMode.isOffline {
             await performOfflineSearch(query: query)
@@ -994,7 +1008,15 @@ struct SearchView: View {
             return
         }
         do {
-            result = try await SubsonicAPIService.shared.search(query: query)
+            let response = try await SubsonicAPIService.shared.search(query: query)
+            guard !Task.isCancelled,
+                  selectionRevision == musicLibraries.revision,
+                  query == trimmedQuery
+            else {
+                isSearching = false
+                return
+            }
+            result = response
         } catch {
             let isCancelled = error is CancellationError
                 || (error as? URLError)?.code == .cancelled
@@ -1005,10 +1027,33 @@ struct SearchView: View {
             errorMessage = error.localizedDescription
             showError = true
         }
-        guard !Task.isCancelled else { isSearching = false; return }
+        guard !Task.isCancelled,
+              selectionRevision == musicLibraries.revision,
+              query == trimmedQuery
+        else {
+            isSearching = false
+            return
+        }
         isSearching = false
         if let serverId = SubsonicAPIService.shared.activeServer?.id.uuidString {
-            let results = await LyricsService.shared.searchLyrics(text: query, serverId: serverId)
+            var results = await LyricsService.shared.searchLyrics(text: query, serverId: serverId)
+            let selection = musicLibraries.snapshot
+            if selection.appliesFilter,
+               let folderIDs = selection.visibleCacheFolderIDs {
+                let visibleAlbumIDs = await LibraryRepository.shared.visibleAlbumIDs(
+                    serverKey: serverId,
+                    libraryIDs: folderIDs
+                )
+                results = await LyricsLibraryFilter.visibleResults(
+                    results,
+                    visibleAlbumIDs: visibleAlbumIDs,
+                    serverId: serverId
+                )
+            }
+            guard !Task.isCancelled,
+                  selectionRevision == musicLibraries.revision,
+                  query == trimmedQuery
+            else { return }
             lyricsResults = results
             let missing = results.filter { $0.songTitle == nil || $0.duration == nil }
             if !missing.isEmpty {
@@ -1017,13 +1062,15 @@ struct SearchView: View {
                     guard let song = try? await SubsonicAPIService.shared.getSong(id: item.songId) else { continue }
                     await LyricsService.shared.updateMetadata(
                         songId: item.songId, serverId: serverId,
-                        title: song.title, artist: song.artist, coverArt: song.coverArt,
+                        title: song.title, artist: song.artist,
+                        albumId: song.albumId, coverArt: song.coverArt,
                         duration: song.duration
                     )
                     if let idx = lyricsResults.firstIndex(where: { $0.songId == item.songId }) {
                         lyricsResults[idx] = LyricsSearchResult(
                             songId: item.songId,
                             songTitle: song.title, artistName: song.artist,
+                            albumId: song.albumId,
                             coverArt: song.coverArt, snippet: item.snippet,
                             duration: song.duration
                         )

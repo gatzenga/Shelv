@@ -46,6 +46,8 @@
 		BC10014C2FFE000000000001 /* ShelvCore/Stores/DownloadUIStateHub.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC10014D2FFE000000000001 /* ShelvCore/Stores/DownloadUIStateHub.swift */; };
 		BC10014E2FFE000000000001 /* ShelvCore/Services/DownloadProgressCoalescer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC10014F2FFE000000000001 /* ShelvCore/Services/DownloadProgressCoalescer.swift */; };
 		BC1001502FFE000000000001 /* ShelvCore/Services/SubsonicResponseCompatibility.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001512FFE000000000001 /* ShelvCore/Services/SubsonicResponseCompatibility.swift */; };
+		BC1001522FFE000000000001 /* ShelvCore/Stores/SearchHistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001532FFE000000000001 /* ShelvCore/Stores/SearchHistoryStore.swift */; };
+		BC1001542FFE000000000001 /* ShelvCore/Support/AlphabetIndexSelection.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001552FFE000000000001 /* ShelvCore/Support/AlphabetIndexSelection.swift */; };
 		BC1867E52F91A088006D96E2 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC1867E42F91A088006D96E2 /* GRDB */; };
 		BC51161D2FDC8A850011CDE9 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC51161C2FDC8A850011CDE9 /* GRDB */; };
 		BC5A00012FFF000000000001 /* Shelv TV Siri Extension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = BC5A00032FFF000000000001 /* Shelv TV Siri Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -123,6 +125,8 @@
 		BC10014D2FFE000000000001 /* ShelvCore/Stores/DownloadUIStateHub.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Stores/DownloadUIStateHub.swift; sourceTree = "<group>"; };
 		BC10014F2FFE000000000001 /* ShelvCore/Services/DownloadProgressCoalescer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/DownloadProgressCoalescer.swift; sourceTree = "<group>"; };
 		BC1001512FFE000000000001 /* ShelvCore/Services/SubsonicResponseCompatibility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/SubsonicResponseCompatibility.swift; sourceTree = "<group>"; };
+		BC1001532FFE000000000001 /* ShelvCore/Stores/SearchHistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Stores/SearchHistoryStore.swift; sourceTree = "<group>"; };
+		BC1001552FFE000000000001 /* ShelvCore/Support/AlphabetIndexSelection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Support/AlphabetIndexSelection.swift; sourceTree = "<group>"; };
 		BC2000012FFE000000000001 /* ShelvAppIntentsUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ShelvAppIntentsUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC5116112FDC8A690011CDE9 /* Shelv TV.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Shelv TV.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC5A00032FFF000000000001 /* Shelv TV Siri Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Shelv TV Siri Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -286,6 +290,8 @@
 				BC10014B2FFE000000000001 /* ShelvCore/Services/BackgroundWorkCoordinator.swift */,
 				BC10014F2FFE000000000001 /* ShelvCore/Services/DownloadProgressCoalescer.swift */,
 				BC1001512FFE000000000001 /* ShelvCore/Services/SubsonicResponseCompatibility.swift */,
+				BC1001532FFE000000000001 /* ShelvCore/Stores/SearchHistoryStore.swift */,
+				BC1001552FFE000000000001 /* ShelvCore/Support/AlphabetIndexSelection.swift */,
 				BC10014D2FFE000000000001 /* ShelvCore/Stores/DownloadUIStateHub.swift */,
 			);
 			name = "ShelvCore Test Sources";
@@ -624,6 +630,8 @@
 				BC10014A2FFE000000000001 /* ShelvCore/Services/BackgroundWorkCoordinator.swift in Sources */,
 				BC10014E2FFE000000000001 /* ShelvCore/Services/DownloadProgressCoalescer.swift in Sources */,
 				BC1001502FFE000000000001 /* ShelvCore/Services/SubsonicResponseCompatibility.swift in Sources */,
+				BC1001522FFE000000000001 /* ShelvCore/Stores/SearchHistoryStore.swift in Sources */,
+				BC1001542FFE000000000001 /* ShelvCore/Support/AlphabetIndexSelection.swift in Sources */,
 				BC10014C2FFE000000000001 /* ShelvCore/Stores/DownloadUIStateHub.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

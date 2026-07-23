@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SearchView: View {
     @EnvironmentObject private var serverStore: ServerStore
+    @ObservedObject private var musicLibraries = MusicLibraryStore.shared
     @State private var query = ""
     @State private var result: SearchResult?
     @State private var searchTask: Task<Void, Never>?
@@ -95,6 +96,22 @@ struct SearchView: View {
             .onChange(of: serverStore.activeServerID) { _, _ in
                 reloadSearchHistory()
             }
+            .onChange(of: musicLibraries.revision) { _, _ in
+                guard !OfflineModeService.shared.isOffline else { return }
+                searchTask?.cancel()
+                let trimmed = trimmedQuery
+                guard !trimmed.isEmpty else { return }
+                result = nil
+                let selectionRevision = musicLibraries.revision
+                searchTask = Task {
+                    let response = try? await SubsonicAPIService.shared.search(query: trimmed)
+                    guard !Task.isCancelled,
+                          selectionRevision == musicLibraries.revision,
+                          trimmed == trimmedQuery
+                    else { return }
+                    result = response
+                }
+            }
             .onChange(of: query) { _, q in
                 searchTask?.cancel()
                 let trimmed = q.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -105,7 +122,13 @@ struct SearchView: View {
                 searchTask = Task {
                     try? await Task.sleep(for: .milliseconds(400))
                     if Task.isCancelled { return }
-                    result = try? await SubsonicAPIService.shared.search(query: trimmed)
+                    let selectionRevision = musicLibraries.revision
+                    let response = try? await SubsonicAPIService.shared.search(query: trimmed)
+                    guard !Task.isCancelled,
+                          selectionRevision == musicLibraries.revision,
+                          trimmed == trimmedQuery
+                    else { return }
+                    result = response
                 }
             }
         }

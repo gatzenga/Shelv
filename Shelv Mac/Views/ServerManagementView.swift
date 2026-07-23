@@ -118,7 +118,7 @@ struct ServerManagementView: View {
 
         async let infoTask   = api.getServerInfo()
         async let statusTask = api.getScanStatus()
-        async let artistTask = api.getAllArtists()
+        async let artistTask = api.getAllArtists(libraryFilter: .all)
         async let albumTask  = loadAlbumCount(api: api)
 
         serverInfo  = try? await infoTask
@@ -136,7 +136,10 @@ struct ServerManagementView: View {
         let pageSize = 500
         while true {
             guard let page = try? await api.getAlbumList(
-                type: .alphabeticalByName, size: pageSize, offset: offset
+                type: .alphabeticalByName,
+                size: pageSize,
+                offset: offset,
+                libraryFilter: .all
             ) else { break }
             total += page.count
             if page.count < pageSize { break }

@@ -7,8 +7,15 @@ nonisolated struct LibraryAPIRequestContext: Equatable, Sendable {
 }
 
 nonisolated protocol LibraryAPIClient: AnyObject {
-    func getAlbumList(type: String, size: Int, offset: Int) async throws -> [Album]
-    func getAllArtists() async throws -> [Artist]
+    func getAlbumList(
+        type: String,
+        size: Int,
+        offset: Int,
+        libraryFilter: MusicLibraryRequestFilter
+    ) async throws -> [Album]
+    func getAllArtists(
+        libraryFilter: MusicLibraryRequestFilter
+    ) async throws -> [Artist]
     func captureLibraryRequestContext(
         serverKey: String,
         stableId: String?
@@ -217,6 +224,7 @@ nonisolated final class LibraryRepository {
     private let database: LibraryDatabase
     private let api: LibraryAPIClient
     private let pageSize: Int
+    private static let folderScopeSeparator = "|music-folder|"
 
     init(database: LibraryDatabase, api: LibraryAPIClient, pageSize: Int = 500) {
         self.database = database
@@ -226,6 +234,7 @@ nonisolated final class LibraryRepository {
 
     func cachedAlbums(
         serverKey: String,
+        libraryIDs: [Int]? = nil,
         sort: LibraryAlbumSort = .name,
         direction: LibraryDatabaseSortDirection = .ascending,
         limit: Int? = nil,
@@ -233,13 +242,47 @@ nonisolated final class LibraryRepository {
     ) async -> [Album] {
         do {
             try await database.setup()
-            return try await database.albums(
-                serverKey: serverKey,
+            guard let libraryIDs = Self.normalizedLibraryIDs(libraryIDs) else {
+                return try await database.albums(
+                    serverKey: serverKey,
+                    sort: sort,
+                    direction: direction,
+                    limit: limit,
+                    offset: offset
+                )
+            }
+
+            if libraryIDs.count == 1, let libraryID = libraryIDs.first {
+                return try await database.albums(
+                    serverKey: Self.cacheServerKey(
+                        serverKey: serverKey,
+                        libraryID: libraryID
+                    ),
+                    sort: sort,
+                    direction: direction,
+                    limit: limit,
+                    offset: offset
+                )
+            }
+
+            var byID: [String: Album] = [:]
+            for libraryID in libraryIDs {
+                let albums = try await database.albums(
+                    serverKey: Self.cacheServerKey(
+                        serverKey: serverKey,
+                        libraryID: libraryID
+                    )
+                )
+                for album in albums where byID[album.id] == nil {
+                    byID[album.id] = album
+                }
+            }
+            let sorted = Self.locallySortedAlbums(
+                Array(byID.values),
                 sort: sort,
-                direction: direction,
-                limit: limit,
-                offset: offset
+                direction: direction
             )
+            return Self.page(sorted, limit: limit, offset: offset)
         } catch {
             return []
         }
@@ -247,6 +290,7 @@ nonisolated final class LibraryRepository {
 
     func cachedArtists(
         serverKey: String,
+        libraryIDs: [Int]? = nil,
         sort: LibraryArtistSort = .name,
         direction: LibraryDatabaseSortDirection = .ascending,
         limit: Int? = nil,
@@ -254,92 +298,276 @@ nonisolated final class LibraryRepository {
     ) async -> [Artist] {
         do {
             try await database.setup()
-            return try await database.artists(
-                serverKey: serverKey,
+            guard let libraryIDs = Self.normalizedLibraryIDs(libraryIDs) else {
+                return try await database.artists(
+                    serverKey: serverKey,
+                    sort: sort,
+                    direction: direction,
+                    limit: limit,
+                    offset: offset
+                )
+            }
+
+            if libraryIDs.count == 1, let libraryID = libraryIDs.first {
+                return try await database.artists(
+                    serverKey: Self.cacheServerKey(
+                        serverKey: serverKey,
+                        libraryID: libraryID
+                    ),
+                    sort: sort,
+                    direction: direction,
+                    limit: limit,
+                    offset: offset
+                )
+            }
+
+            var byID: [String: Artist] = [:]
+            for libraryID in libraryIDs {
+                let artists = try await database.artists(
+                    serverKey: Self.cacheServerKey(
+                        serverKey: serverKey,
+                        libraryID: libraryID
+                    )
+                )
+                for artist in artists {
+                    if let existing = byID[artist.id] {
+                        byID[artist.id] = Self.merging(existing, artist)
+                    } else {
+                        byID[artist.id] = artist
+                    }
+                }
+            }
+            let sorted = Self.locallySortedArtists(
+                Array(byID.values),
                 sort: sort,
-                direction: direction,
-                limit: limit,
-                offset: offset
+                direction: direction
             )
+            return Self.page(sorted, limit: limit, offset: offset)
         } catch {
             return []
         }
     }
 
-    func storeAlbums(_ albums: [Album], serverKey: String, stableId: String?) async {
+    func visibleAlbumIDs(
+        serverKey: String,
+        libraryIDs: [Int]?
+    ) async -> Set<String> {
+        Set(
+            await cachedAlbums(
+                serverKey: serverKey,
+                libraryIDs: libraryIDs
+            ).map(\.id)
+        )
+    }
+
+    func filterAlbums(
+        _ albums: [Album],
+        serverKey: String,
+        libraryIDs: [Int]
+    ) async -> [Album] {
+        let visibleIDs = await visibleAlbumIDs(
+            serverKey: serverKey,
+            libraryIDs: libraryIDs
+        )
+        return albums.filter { visibleIDs.contains($0.id) }
+    }
+
+    func storeAlbums(
+        _ albums: [Album],
+        serverKey: String,
+        stableId: String?,
+        libraryID: Int? = nil
+    ) async {
+        let cacheKey = libraryID.map {
+            Self.cacheServerKey(serverKey: serverKey, libraryID: $0)
+        } ?? serverKey
         let generation = UUID().uuidString
         do {
             try await database.setup()
             try await database.beginGeneration(
                 entity: .albums,
-                serverKey: serverKey,
+                serverKey: cacheKey,
                 generation: generation
             )
-            try await database.upsertAlbums(albums, serverKey: serverKey, stableId: stableId, generation: generation)
+            try await database.upsertAlbums(
+                albums,
+                serverKey: cacheKey,
+                stableId: stableId,
+                generation: generation
+            )
             _ = try await database.finishGeneration(
                 entity: .albums,
-                serverKey: serverKey,
+                serverKey: cacheKey,
                 generation: generation
             )
         } catch {
             _ = try? await database.recordFailure(
                 entity: .albums,
-                serverKey: serverKey,
+                serverKey: cacheKey,
                 generation: generation,
                 error: error
             )
         }
     }
 
-    func storeArtists(_ artists: [Artist], serverKey: String, stableId: String?) async {
+    func storeArtists(
+        _ artists: [Artist],
+        serverKey: String,
+        stableId: String?,
+        libraryID: Int? = nil
+    ) async {
+        let cacheKey = libraryID.map {
+            Self.cacheServerKey(serverKey: serverKey, libraryID: $0)
+        } ?? serverKey
         let generation = UUID().uuidString
         do {
             try await database.setup()
             try await database.beginGeneration(
                 entity: .artists,
-                serverKey: serverKey,
+                serverKey: cacheKey,
                 generation: generation
             )
-            try await database.upsertArtists(artists, serverKey: serverKey, stableId: stableId, generation: generation)
+            try await database.upsertArtists(
+                artists,
+                serverKey: cacheKey,
+                stableId: stableId,
+                generation: generation
+            )
             _ = try await database.finishGeneration(
                 entity: .artists,
-                serverKey: serverKey,
+                serverKey: cacheKey,
                 generation: generation
             )
         } catch {
             _ = try? await database.recordFailure(
                 entity: .artists,
-                serverKey: serverKey,
+                serverKey: cacheKey,
                 generation: generation,
                 error: error
             )
         }
     }
 
-    func refreshAlbums(serverKey: String, stableId: String?, sortBy: String = "alphabeticalByName") async throws -> [Album] {
+    func refreshAlbums(
+        serverKey: String,
+        stableId: String?,
+        libraryIDs: [Int]? = nil,
+        visibleLibraryIDs: [Int]? = nil,
+        sortBy: String = "alphabeticalByName"
+    ) async throws -> [Album] {
+        try await database.setup()
+        let requestContext = try captureRequestContext(
+            serverKey: serverKey,
+            stableId: stableId
+        )
+        let scopes = Self.normalizedLibraryIDs(libraryIDs)
+        if let scopes {
+            for libraryID in scopes {
+                try await refreshAlbumScope(
+                    serverKey: serverKey,
+                    stableId: stableId,
+                    libraryID: libraryID,
+                    sortBy: sortBy,
+                    requestContext: requestContext
+                )
+            }
+        } else {
+            try await refreshAlbumScope(
+                serverKey: serverKey,
+                stableId: stableId,
+                libraryID: nil,
+                sortBy: sortBy,
+                requestContext: requestContext
+            )
+        }
+
+        let cacheSort = Self.albumCacheSort(for: sortBy)
+        return await cachedAlbums(
+            serverKey: serverKey,
+            libraryIDs: visibleLibraryIDs ?? libraryIDs,
+            sort: cacheSort.0,
+            direction: cacheSort.1
+        )
+    }
+
+    func refreshArtists(
+        serverKey: String,
+        stableId: String?,
+        libraryIDs: [Int]? = nil,
+        visibleLibraryIDs: [Int]? = nil
+    ) async throws -> [Artist] {
+        try await database.setup()
+        let requestContext = try captureRequestContext(
+            serverKey: serverKey,
+            stableId: stableId
+        )
+        let scopes = Self.normalizedLibraryIDs(libraryIDs)
+        if let scopes {
+            for libraryID in scopes {
+                try await refreshArtistScope(
+                    serverKey: serverKey,
+                    stableId: stableId,
+                    libraryID: libraryID,
+                    requestContext: requestContext
+                )
+            }
+        } else {
+            try await refreshArtistScope(
+                serverKey: serverKey,
+                stableId: stableId,
+                libraryID: nil,
+                requestContext: requestContext
+            )
+        }
+
+        return await cachedArtists(
+            serverKey: serverKey,
+            libraryIDs: visibleLibraryIDs ?? libraryIDs,
+            sort: .name
+        )
+    }
+
+    private func refreshAlbumScope(
+        serverKey: String,
+        stableId: String?,
+        libraryID: Int?,
+        sortBy: String,
+        requestContext: LibraryAPIRequestContext
+    ) async throws {
+        let cacheKey = libraryID.map {
+            Self.cacheServerKey(serverKey: serverKey, libraryID: $0)
+        } ?? serverKey
         let generation = UUID().uuidString
         do {
-            try await database.setup()
-            let requestContext = try captureRequestContext(
-                serverKey: serverKey,
-                stableId: stableId
-            )
             try await database.beginGeneration(
                 entity: .albums,
-                serverKey: serverKey,
+                serverKey: cacheKey,
                 generation: generation
             )
 
             var offset = 0
             let apiSortBy = Self.apiSort(for: sortBy)
+            let filter: MusicLibraryRequestFilter = libraryID.map {
+                .folders([$0])
+            } ?? .all
 
             while true {
                 try Task.checkCancellation()
                 try validate(requestContext)
-                let page = try await api.getAlbumList(type: apiSortBy, size: pageSize, offset: offset)
+                let page = try await api.getAlbumList(
+                    type: apiSortBy,
+                    size: pageSize,
+                    offset: offset,
+                    libraryFilter: filter
+                )
                 try validate(requestContext)
                 if !page.isEmpty {
-                    try await database.upsertAlbums(page, serverKey: serverKey, stableId: stableId, generation: generation)
+                    try await database.upsertAlbums(
+                        page,
+                        serverKey: cacheKey,
+                        stableId: stableId,
+                        generation: generation
+                    )
                 }
                 if page.count < pageSize { break }
                 offset += pageSize
@@ -348,21 +576,15 @@ nonisolated final class LibraryRepository {
             try validate(requestContext)
             guard try await database.finishGeneration(
                 entity: .albums,
-                serverKey: serverKey,
+                serverKey: cacheKey,
                 generation: generation
             ) else {
                 throw CancellationError()
             }
-            let cacheSort = Self.albumCacheSort(for: sortBy)
-            return try await database.albums(
-                serverKey: serverKey,
-                sort: cacheSort.0,
-                direction: cacheSort.1
-            )
         } catch {
             _ = try? await database.recordFailure(
                 entity: .albums,
-                serverKey: serverKey,
+                serverKey: cacheKey,
                 generation: generation,
                 error: error
             )
@@ -370,37 +592,47 @@ nonisolated final class LibraryRepository {
         }
     }
 
-    func refreshArtists(serverKey: String, stableId: String?) async throws -> [Artist] {
+    private func refreshArtistScope(
+        serverKey: String,
+        stableId: String?,
+        libraryID: Int?,
+        requestContext: LibraryAPIRequestContext
+    ) async throws {
+        let cacheKey = libraryID.map {
+            Self.cacheServerKey(serverKey: serverKey, libraryID: $0)
+        } ?? serverKey
         let generation = UUID().uuidString
         do {
-            try await database.setup()
-            let requestContext = try captureRequestContext(
-                serverKey: serverKey,
-                stableId: stableId
-            )
             try await database.beginGeneration(
                 entity: .artists,
-                serverKey: serverKey,
+                serverKey: cacheKey,
                 generation: generation
             )
             try Task.checkCancellation()
             try validate(requestContext)
-            let artists = try await api.getAllArtists()
+            let filter: MusicLibraryRequestFilter = libraryID.map {
+                .folders([$0])
+            } ?? .all
+            let artists = try await api.getAllArtists(libraryFilter: filter)
             try validate(requestContext)
-            try await database.upsertArtists(artists, serverKey: serverKey, stableId: stableId, generation: generation)
+            try await database.upsertArtists(
+                artists,
+                serverKey: cacheKey,
+                stableId: stableId,
+                generation: generation
+            )
             try validate(requestContext)
             guard try await database.finishGeneration(
                 entity: .artists,
-                serverKey: serverKey,
+                serverKey: cacheKey,
                 generation: generation
             ) else {
                 throw CancellationError()
             }
-            return try await database.artists(serverKey: serverKey, sort: .name)
         } catch {
             _ = try? await database.recordFailure(
                 entity: .artists,
-                serverKey: serverKey,
+                serverKey: cacheKey,
                 generation: generation,
                 error: error
             )
@@ -505,7 +737,29 @@ nonisolated final class LibraryRepository {
         _ artists: [Artist],
         direction: LibraryDatabaseSortDirection = .ascending
     ) -> [Artist] {
+        locallySortedArtists(
+            artists,
+            sort: .name,
+            direction: direction
+        )
+    }
+
+    static func locallySortedArtists(
+        _ artists: [Artist],
+        sort: LibraryArtistSort,
+        direction: LibraryDatabaseSortDirection
+    ) -> [Artist] {
         artists.sorted { lhs, rhs in
+            switch sort {
+            case .albumCount:
+                let lhsCount = lhs.albumCount ?? 0
+                let rhsCount = rhs.albumCount ?? 0
+                if lhsCount != rhsCount {
+                    return ordered(lhsCount, rhsCount, direction: direction)
+                }
+            case .name:
+                break
+            }
             let lhsKey = LibrarySortKey.normalized(
                 displayName: lhs.name,
                 explicitSortName: lhs.sortName
@@ -519,6 +773,49 @@ nonisolated final class LibraryRepository {
             }
             return lhs.id < rhs.id
         }
+    }
+
+    static func cacheServerKey(serverKey: String, libraryID: Int) -> String {
+        "\(serverKey)\(folderScopeSeparator)\(libraryID)"
+    }
+
+    static func isCacheServerKey(_ candidate: String, scopedTo serverKey: String) -> Bool {
+        candidate == serverKey
+            || candidate.hasPrefix("\(serverKey)\(folderScopeSeparator)")
+    }
+
+    private static func normalizedLibraryIDs(_ libraryIDs: [Int]?) -> [Int]? {
+        guard let libraryIDs else { return nil }
+        let normalized = Array(Set(libraryIDs)).sorted()
+        return normalized.isEmpty ? nil : normalized
+    }
+
+    private static func merging(_ lhs: Artist, _ rhs: Artist) -> Artist {
+        let combinedAlbumCount: Int?
+        if lhs.albumCount == nil, rhs.albumCount == nil {
+            combinedAlbumCount = nil
+        } else {
+            combinedAlbumCount = (lhs.albumCount ?? 0) + (rhs.albumCount ?? 0)
+        }
+        return Artist(
+            id: lhs.id,
+            name: lhs.name,
+            sortName: lhs.sortName ?? rhs.sortName,
+            albumCount: combinedAlbumCount,
+            coverArt: lhs.coverArt ?? rhs.coverArt,
+            starred: [lhs.starred, rhs.starred].compactMap { $0 }.max()
+        )
+    }
+
+    private static func page<T>(
+        _ values: [T],
+        limit: Int?,
+        offset: Int
+    ) -> [T] {
+        let start = max(0, offset)
+        guard start < values.count else { return [] }
+        let end = min(values.count, start + max(0, limit ?? (values.count - start)))
+        return Array(values[start..<end])
     }
 
     private static func apiSort(for sortBy: String) -> String {

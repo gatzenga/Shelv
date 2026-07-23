@@ -44,12 +44,14 @@ func haptic(_ style: UIImpactFeedbackGenerator.FeedbackStyle = .light) {
 struct ShelvApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var serverStore = ServerStore.shared
+    @StateObject private var offlineMode = OfflineModeService.shared
     private let downloadActivity = DownloadActivityStore.shared
     private let _playTracker = PlayTracker.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage("appAppearance") private var appAppearance = "system"
     @AppStorage("preventSleepDuringDownloads") private var preventSleepDuringDownloads = false
     @Environment(\.scenePhase) private var scenePhase
+    @State private var musicLibraryReloadTask: Task<Void, Never>?
 
     init() {
         // AAC-Transcoding bleibt deaktiviert — Migration falls vorher gesetzt.
@@ -85,7 +87,7 @@ struct ShelvApp: App {
                 .environmentObject(RecapStore.shared)
                 .environmentObject(CloudKitSyncService.shared.status)
                 .environmentObject(DownloadStore.shared)
-                .environmentObject(OfflineModeService.shared)
+                .environmentObject(offlineMode)
                 .tint(AppTheme.color(for: themeColorName))
                 .preferredColorScheme(preferredScheme)
                 .task {
@@ -99,6 +101,10 @@ struct ShelvApp: App {
                     LibraryStore.shared.resetInMemory()
                     guard let server = serverStore.activeServer else { return }
                     OfflineModeService.shared.prepareInitialServerErrorPresentation()
+                    _ = await MusicLibraryStore.shared.prepareActiveServer(forceRefresh: true)
+                    guard !Task.isCancelled,
+                          revision == serverStore.activeServerRevision
+                    else { return }
                     await LibraryStore.shared.loadCachedStarred()
                     guard !Task.isCancelled,
                           revision == serverStore.activeServerRevision
@@ -226,9 +232,36 @@ struct ShelvApp: App {
                 .onChange(of: preventSleepDuringDownloads) { _, _ in
                     updateIdleTimer(phase: scenePhase)
                 }
+                .onChange(of: offlineMode.isOffline) { _, isOffline in
+                    Task { @MainActor in
+                        await LibraryStore.shared.loadCachedStarred()
+                        if !isOffline {
+                            await LibraryStore.shared.loadStarred()
+                        }
+                    }
+                }
                 .onReceive(NotificationCenter.default.publisher(for: .recapRegistryUpdated)) { _ in
                     guard let server = serverStore.activeServer else { return }
                     Task { await RecapStore.shared.loadEntries(serverId: server.stableId) }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .musicLibrarySelectionChanged)) { notification in
+                    guard let serverID = notification.object as? UUID,
+                          serverStore.activeServer?.id == serverID
+                    else { return }
+                    musicLibraryReloadTask?.cancel()
+                    musicLibraryReloadTask = Task { @MainActor in
+                        await Task.yield()
+                        guard !Task.isCancelled,
+                              serverStore.activeServer?.id == serverID
+                        else { return }
+                        LibraryStore.shared.resetForMusicLibrarySelection()
+                        await LibraryStore.shared.loadAlbums()
+                        guard !Task.isCancelled else { return }
+                        async let artists: Void = LibraryStore.shared.loadArtists()
+                        async let starred: Void = LibraryStore.shared.loadStarred()
+                        async let discover: Bool = LibraryStore.shared.loadDiscover()
+                        _ = await (artists, starred, discover)
+                    }
                 }
         }
     }
@@ -254,13 +287,26 @@ struct ShelvApp: App {
         guard SubsonicAPIService.shared.activeServer?.stableId == serverId else { return }
         await LibraryStore.shared.loadAlbums()
         guard SubsonicAPIService.shared.activeServer?.stableId == serverId else { return }
+        let activeServer = SubsonicAPIService.shared.activeServer
+        let selection = MusicLibraryStore.shared.snapshot
+        let allLibraryAlbums: [Album]
+        if let serverKey = activeServer?.id.uuidString {
+            let cached = await LibraryRepository.shared.cachedAlbums(
+                serverKey: serverKey,
+                libraryIDs: selection.allCacheFolderIDs
+            )
+            allLibraryAlbums = cached.isEmpty ? LibraryStore.shared.albums : cached
+        } else {
+            allLibraryAlbums = LibraryStore.shared.albums
+        }
+        guard SubsonicAPIService.shared.activeServer?.stableId == serverId else { return }
         let recapIds = UserDefaults.standard.bool(forKey: "recapEnabled")
             ? Array(RecapStore.shared.recapPlaylistIds)
             : []
         let favorites = UserDefaults.standard.object(forKey: "enableFavorites") as? Bool ?? true
         await KeepLibraryOfflineService.shared.checkAndDownload(
             serverId: serverId,
-            libraryAlbums: LibraryStore.shared.albums,
+            libraryAlbums: allLibraryAlbums,
             favorites: favorites,
             recapPlaylistIds: recapIds,
             force: force

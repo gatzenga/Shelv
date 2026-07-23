@@ -192,9 +192,11 @@ final class KeepLibraryOfflineService: ObservableObject {
             availableBytes: availableBytes,
             isKeepLibraryOffline: true,
             playlistMarkers: plan.playlistMarkers,
+            albumMarkers: plan.albumMarkers,
             recapPlaylistSongIds: plan.recapPlaylistSongIds
         )
         markCoveredPlaylists(plan.playlistMarkers)
+        await markCoveredAlbums(plan.albumMarkers, serverId: serverId)
 
         if plan.planned.isEmpty {
             if plan.skipped.isEmpty {
@@ -443,6 +445,19 @@ final class KeepLibraryOfflineService: ObservableObject {
             )
         }
         #endif
+    }
+
+    private func markCoveredAlbums(
+        _ markers: [BulkDownloadAlbumMarker],
+        serverId: String
+    ) async {
+        for marker in markers {
+            await DownloadDatabase.shared.markAlbumDownloaded(
+                id: marker.id,
+                name: marker.name,
+                serverId: serverId
+            )
+        }
     }
 }
 

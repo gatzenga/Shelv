@@ -15,6 +15,7 @@ struct LyricsRecord: Codable, FetchableRecord, PersistableRecord {
     var fetchedAt: Double     // Date.timeIntervalSince1970
     var songTitle: String?   = nil
     var artistName: String?  = nil
+    var albumId: String?     = nil
     var coverArt: String?    = nil
     var songDuration: Int?   = nil
 
@@ -23,14 +24,96 @@ struct LyricsRecord: Codable, FetchableRecord, PersistableRecord {
 
 // MARK: - Lyrics Search Result
 
-struct LyricsSearchResult: Identifiable {
+nonisolated struct LyricsSearchResult: Identifiable, Sendable {
     var id: String { songId }
     let songId: String
     let songTitle: String?   // nil wenn noch nicht in DB gespeichert
     let artistName: String?
+    let albumId: String?
     let coverArt: String?
     let snippet: String
     let duration: Int?
+}
+
+nonisolated enum LyricsLibraryFilter {
+    static func visibleResults(
+        _ results: [LyricsSearchResult],
+        visibleAlbumIDs: Set<String>,
+        serverId: String,
+        maximumConcurrentLookups: Int = 6
+    ) async -> [LyricsSearchResult] {
+        guard !results.isEmpty else { return [] }
+
+        var output = Array<LyricsSearchResult?>(repeating: nil, count: results.count)
+        var unresolvedIndices: [Int] = []
+        for (index, result) in results.enumerated() {
+            if let albumId = result.albumId {
+                if visibleAlbumIDs.contains(albumId) {
+                    output[index] = result
+                }
+            } else {
+                unresolvedIndices.append(index)
+            }
+        }
+        guard !unresolvedIndices.isEmpty, !Task.isCancelled else {
+            return output.compactMap { $0 }
+        }
+
+        let limit = max(1, maximumConcurrentLookups)
+        await withTaskGroup(of: (Int, Song?).self) { group in
+            var next = 0
+            for index in 0..<min(limit, unresolvedIndices.count) {
+                let resultIndex = unresolvedIndices[index]
+                let songId = results[resultIndex].songId
+                group.addTask {
+                    let song = try? await SubsonicAPIService.shared.getSong(id: songId)
+                    return (resultIndex, song)
+                }
+                next += 1
+            }
+
+            while let (resultIndex, song) = await group.next() {
+                guard !Task.isCancelled else {
+                    group.cancelAll()
+                    return
+                }
+                if let song {
+                    let result = results[resultIndex]
+                    await LyricsService.shared.updateMetadata(
+                        songId: song.id,
+                        serverId: serverId,
+                        title: song.title,
+                        artist: song.artist,
+                        albumId: song.albumId,
+                        coverArt: song.coverArt,
+                        duration: song.duration
+                    )
+                    if let albumId = song.albumId,
+                       visibleAlbumIDs.contains(albumId) {
+                        output[resultIndex] = LyricsSearchResult(
+                            songId: song.id,
+                            songTitle: song.title,
+                            artistName: song.artist,
+                            albumId: albumId,
+                            coverArt: song.coverArt,
+                            snippet: result.snippet,
+                            duration: song.duration
+                        )
+                    }
+                }
+                if next < unresolvedIndices.count {
+                    let nextResultIndex = unresolvedIndices[next]
+                    let nextSongId = results[nextResultIndex].songId
+                    group.addTask {
+                        let song = try? await SubsonicAPIService.shared.getSong(id: nextSongId)
+                        return (nextResultIndex, song)
+                    }
+                    next += 1
+                }
+            }
+        }
+        return output.compactMap { $0 }
+    }
 }
 
 // MARK: - LRCLIB Response
@@ -177,6 +260,10 @@ actor LyricsService {
             var config = Configuration()
             config.label = "shelv.db.lyrics"
             config.qos = .userInitiated
+            #if os(iOS)
+            // Avoid closing idle readers from GRDB's main-thread lifecycle callback.
+            config.persistentReadOnlyConnections = true
+            #endif
             let p = try DatabasePool(path: url.path, configuration: config)
             Self.applyDataProtection(at: url)
             var m = DatabaseMigrator()
@@ -221,6 +308,13 @@ actor LyricsService {
                 guard !cols.contains("songDuration") else { return }
                 try db.alter(table: "lyrics") { t in
                     t.add(column: "songDuration", .integer)
+                }
+            }
+            m.registerMigration("v4_addAlbumId") { db in
+                let cols = try db.columns(in: "lyrics").map(\.name)
+                guard !cols.contains("albumId") else { return }
+                try db.alter(table: "lyrics") { t in
+                    t.add(column: "albumId", .text)
                 }
             }
             try m.migrate(p)
@@ -320,14 +414,27 @@ actor LyricsService {
 
     // MARK: - Metadata Backfill
 
-    func updateMetadata(songId: String, serverId: String, title: String, artist: String?, coverArt: String?, duration: Int? = nil) {
+    func updateMetadata(
+        songId: String,
+        serverId: String,
+        title: String,
+        artist: String?,
+        albumId: String? = nil,
+        coverArt: String?,
+        duration: Int? = nil
+    ) {
         safeWrite { db in
             try db.execute(
                 sql: """
-                    UPDATE lyrics SET songTitle = ?, artistName = ?, coverArt = ?, songDuration = COALESCE(?, songDuration)
+                    UPDATE lyrics
+                    SET songTitle = ?,
+                        artistName = ?,
+                        albumId = COALESCE(?, albumId),
+                        coverArt = ?,
+                        songDuration = COALESCE(?, songDuration)
                     WHERE songId = ? AND serverId = ?
                 """,
-                arguments: [title, artist, coverArt, duration, songId, serverId]
+                arguments: [title, artist, albumId, coverArt, duration, songId, serverId]
             )
         }
     }
@@ -400,7 +507,8 @@ actor LyricsService {
                 plainText: nil, syncedLrc: nil, isSynced: false,
                 isInstrumental: false, language: nil,
                 fetchedAt: Date().timeIntervalSince1970,
-                songTitle: song.title, artistName: song.artist, coverArt: song.coverArt,
+                songTitle: song.title, artistName: song.artist,
+                albumId: song.albumId, coverArt: song.coverArt,
                 songDuration: song.duration
             )
             save(none)
@@ -411,7 +519,8 @@ actor LyricsService {
                 plainText: nil, syncedLrc: nil, isSynced: false,
                 isInstrumental: false, language: nil,
                 fetchedAt: Date().timeIntervalSince1970,
-                songTitle: song.title, artistName: song.artist, coverArt: song.coverArt,
+                songTitle: song.title, artistName: song.artist,
+                albumId: song.albumId, coverArt: song.coverArt,
                 songDuration: song.duration
             )
         }
@@ -424,7 +533,7 @@ actor LyricsService {
         let pattern = "%\(text)%"
         return (try? pool.read { db in
             try Row.fetchAll(db, sql: """
-                SELECT songId, songTitle, artistName, coverArt, plainText, songDuration
+                SELECT songId, songTitle, artistName, albumId, coverArt, plainText, songDuration
                 FROM lyrics
                 WHERE serverId = ?
                   AND source != 'none'
@@ -441,7 +550,8 @@ actor LyricsService {
                 return LyricsSearchResult(
                     songId: songId,
                     songTitle: songTitle,
-                    artistName: row["artistName"], coverArt: row["coverArt"],
+                    artistName: row["artistName"], albumId: row["albumId"],
+                    coverArt: row["coverArt"],
                     snippet: snippet,
                     duration: row["songDuration"]
                 )
@@ -487,7 +597,8 @@ actor LyricsService {
             isSynced: entry.synced && lrc != nil,
             isInstrumental: false, language: entry.lang,
             fetchedAt: Date().timeIntervalSince1970,
-            songTitle: song.title, artistName: song.artist, coverArt: song.coverArt
+            songTitle: song.title, artistName: song.artist,
+            albumId: song.albumId, coverArt: song.coverArt
         )
     }
 
@@ -589,7 +700,8 @@ actor LyricsService {
                 plainText: nil, syncedLrc: nil, isSynced: false,
                 isInstrumental: true, language: nil,
                 fetchedAt: Date().timeIntervalSince1970,
-                songTitle: song.title, artistName: song.artist, coverArt: song.coverArt
+                songTitle: song.title, artistName: song.artist,
+                albumId: song.albumId, coverArt: song.coverArt
             ))
         }
 
@@ -606,7 +718,8 @@ actor LyricsService {
             isSynced: lrc.syncedLyrics != nil,
             isInstrumental: false, language: nil,
             fetchedAt: Date().timeIntervalSince1970,
-            songTitle: song.title, artistName: song.artist, coverArt: song.coverArt
+            songTitle: song.title, artistName: song.artist,
+            albumId: song.albumId, coverArt: song.coverArt
         ))
     }
 }

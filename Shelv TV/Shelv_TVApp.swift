@@ -9,6 +9,7 @@ struct Shelv_TVApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
     @AppStorage("appAppearance") private var appAppearance = "system"
+    @State private var musicLibraryReloadTask: Task<Void, Never>?
 
     init() {
         PersonalizationSettings.registerDefaults()
@@ -49,6 +50,10 @@ struct Shelv_TVApp: App {
                     LibraryStore.shared.resetInMemory()
                     guard let server = serverStore.activeServer else { return }
                     OfflineModeService.shared.prepareInitialServerErrorPresentation()
+                    _ = await MusicLibraryStore.shared.prepareActiveServer(forceRefresh: true)
+                    guard !Task.isCancelled,
+                          revision == serverStore.activeServerRevision
+                    else { return }
                     await LibraryStore.shared.loadCachedStarred()
                     guard !Task.isCancelled,
                           revision == serverStore.activeServerRevision
@@ -148,6 +153,24 @@ struct Shelv_TVApp: App {
                 .onReceive(NotificationCenter.default.publisher(for: .recapRegistryUpdated)) { _ in
                     guard let server = serverStore.activeServer else { return }
                     Task { await RecapStore.shared.loadEntries(serverId: server.stableId) }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .musicLibrarySelectionChanged)) { notification in
+                    guard let serverID = notification.object as? UUID,
+                          serverStore.activeServer?.id == serverID
+                    else { return }
+                    musicLibraryReloadTask?.cancel()
+                    musicLibraryReloadTask = Task { @MainActor in
+                        await Task.yield()
+                        guard !Task.isCancelled,
+                              serverStore.activeServer?.id == serverID
+                        else { return }
+                        LibraryStore.shared.resetForMusicLibrarySelection()
+                        await LibraryStore.shared.loadAlbums()
+                        guard !Task.isCancelled else { return }
+                        async let artists: Void = LibraryStore.shared.loadArtists()
+                        async let starred: Void = LibraryStore.shared.loadStarred()
+                        _ = await (artists, starred)
+                    }
                 }
         }
     }

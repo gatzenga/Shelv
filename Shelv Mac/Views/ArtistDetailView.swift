@@ -9,6 +9,7 @@ struct ArtistDetailView: View {
     @ObservedObject var libraryStore = LibraryViewModel.shared
     @ObservedObject var downloadStore = DownloadStore.shared
     @ObservedObject private var offlineMode = OfflineModeService.shared
+    @ObservedObject private var musicLibraries = MusicLibraryStore.shared
     @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
     @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     @AppStorage("enableDownloads") private var enableDownloads = true
@@ -250,7 +251,9 @@ struct ArtistDetailView: View {
             guard offlineMode.isOffline else { return }
             Task { await vm.load(artistId: artistId, artistName: artistName) }
         }
-        .task(id: artistId) { await vm.load(artistId: artistId, artistName: artistName) }
+        .task(id: "\(artistId)|\(musicLibraries.revision)") {
+            await vm.load(artistId: artistId, artistName: artistName)
+        }
         .task(id: songSearchLoadID) {
             guard !searchQuery.isEmpty, !availableAlbums.isEmpty else {
                 isLoadingSearchSongs = false

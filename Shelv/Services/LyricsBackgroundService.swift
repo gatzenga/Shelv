@@ -21,6 +21,7 @@ actor LyricsBackgroundService {
         let songTitle: String
         let artistName: String?
         let albumName: String?
+        let albumId: String?
         let coverArt: String?
         let duration: Int?
         let navidromeURL: URL?    // nil wenn Toggle aus
@@ -194,6 +195,7 @@ actor LyricsBackgroundService {
                 songTitle: song.title,
                 artistName: song.artist,
                 albumName: song.album,
+                albumId: song.albumId,
                 coverArt: song.coverArt,
                 duration: song.duration,
                 navidromeURL: navURL,
@@ -408,7 +410,8 @@ actor LyricsBackgroundService {
             plainText: nil, syncedLrc: nil, isSynced: false,
             isInstrumental: false, language: nil,
             fetchedAt: Date().timeIntervalSince1970,
-            songTitle: job.songTitle, artistName: job.artistName, coverArt: job.coverArt,
+            songTitle: job.songTitle, artistName: job.artistName,
+            albumId: job.albumId, coverArt: job.coverArt,
             songDuration: job.duration
         )
         Task { await LyricsService.shared.save(none) }
@@ -475,7 +478,8 @@ actor LyricsBackgroundService {
             isSynced: entry.synced && lrc != nil,
             isInstrumental: false, language: entry.lang,
             fetchedAt: Date().timeIntervalSince1970,
-            songTitle: job.songTitle, artistName: job.artistName, coverArt: job.coverArt,
+            songTitle: job.songTitle, artistName: job.artistName,
+            albumId: job.albumId, coverArt: job.coverArt,
             songDuration: job.duration
         )
     }
@@ -495,7 +499,8 @@ actor LyricsBackgroundService {
                 plainText: nil, syncedLrc: nil, isSynced: false,
                 isInstrumental: true, language: nil,
                 fetchedAt: Date().timeIntervalSince1970,
-                songTitle: job.songTitle, artistName: job.artistName, coverArt: job.coverArt,
+                songTitle: job.songTitle, artistName: job.artistName,
+                albumId: job.albumId, coverArt: job.coverArt,
                 songDuration: job.duration
             )
         }
@@ -506,7 +511,8 @@ actor LyricsBackgroundService {
             isSynced: lrc.syncedLyrics != nil,
             isInstrumental: false, language: nil,
             fetchedAt: Date().timeIntervalSince1970,
-            songTitle: job.songTitle, artistName: job.artistName, coverArt: job.coverArt,
+            songTitle: job.songTitle, artistName: job.artistName,
+            albumId: job.albumId, coverArt: job.coverArt,
             songDuration: job.duration
         )
     }

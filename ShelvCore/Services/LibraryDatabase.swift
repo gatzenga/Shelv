@@ -469,9 +469,19 @@ actor LibraryDatabase {
 
     func clear(serverKey: String) throws {
         try ensureDatabase().write { db in
-            try db.execute(sql: "DELETE FROM library_albums WHERE serverKey = ?", arguments: [serverKey])
-            try db.execute(sql: "DELETE FROM library_artists WHERE serverKey = ?", arguments: [serverKey])
-            try db.execute(sql: "DELETE FROM library_sync_state WHERE serverKey = ?", arguments: [serverKey])
+            let scopedPrefix = "\(serverKey)|music-folder|%"
+            try db.execute(
+                sql: "DELETE FROM library_albums WHERE serverKey = ? OR serverKey LIKE ?",
+                arguments: [serverKey, scopedPrefix]
+            )
+            try db.execute(
+                sql: "DELETE FROM library_artists WHERE serverKey = ? OR serverKey LIKE ?",
+                arguments: [serverKey, scopedPrefix]
+            )
+            try db.execute(
+                sql: "DELETE FROM library_sync_state WHERE serverKey = ? OR serverKey LIKE ?",
+                arguments: [serverKey, scopedPrefix]
+            )
         }
     }
 

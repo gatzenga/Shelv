@@ -5,6 +5,7 @@ struct ArtistDetailView: View {
     private let player = AudioPlayerService.shared
     @ObservedObject private var library = LibraryStore.shared
     @ObservedObject private var offlineMode = OfflineModeService.shared
+    @ObservedObject private var musicLibraries = MusicLibraryStore.shared
     @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
     @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
     @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
@@ -54,7 +55,7 @@ struct ArtistDetailView: View {
         .toolbar(.hidden, for: .tabBar)
         .navigationDestination(item: $navAlbum) { AlbumDetailView(album: $0) }
         .addToPlaylistDialog(isPresented: $showAddToPlaylist, songIds: songs.map(\.id))
-        .task {
+        .task(id: musicLibraries.revision) {
             if let detail = await LibraryStore.shared.artistDetail(artist) {
                 albums = detail.album ?? []
             }

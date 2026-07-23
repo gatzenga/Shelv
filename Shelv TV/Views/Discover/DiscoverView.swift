@@ -8,6 +8,8 @@ struct DiscoverView: View {
     }
 
     @ObservedObject var library = LibraryStore.shared
+    @EnvironmentObject private var serverStore: ServerStore
+    @ObservedObject private var musicLibraries = MusicLibraryStore.shared
     @AppStorage("themeColor") private var themeColor = "violet"
     @AppStorage("recapEnabled") private var recapEnabled = false
     @AppStorage(PersonalizationPreferenceKey.showDiscoverInsights) private var showDiscoverInsights = true
@@ -20,6 +22,19 @@ struct DiscoverView: View {
     private let player = AudioPlayerService.shared
 
     private var accent: Color { AppTheme.color(for: themeColor) }
+
+    private var activeServer: SubsonicServer? {
+        serverStore.activeServer
+    }
+
+    private var discoverTitle: String {
+        let name = activeServer?.name.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return name.isEmpty ? "Shelv" : name
+    }
+
+    private var showsServerMenu: Bool {
+        activeServer?.hasSecondaryURL == true || musicLibraries.snapshot.showsSelector
+    }
 
     private var visibleSmartMixes: [PersonalizationSmartMix] {
         PersonalizationSmartMix.allCases.filter(isSmartMixVisible)
@@ -52,6 +67,29 @@ struct DiscoverView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 40) {
                     HStack {
+                        if showsServerMenu, let activeServer {
+                            Menu {
+                                if activeServer.hasSecondaryURL {
+                                    serverURLMenuButton(.primary, server: activeServer)
+                                    serverURLMenuButton(.secondary, server: activeServer)
+                                }
+                                if activeServer.hasSecondaryURL && musicLibraries.snapshot.showsSelector {
+                                    Divider()
+                                }
+                                if musicLibraries.snapshot.showsSelector {
+                                    ForEach(musicLibraries.availableFolders) { folder in
+                                        musicLibraryMenuButton(folder)
+                                    }
+                                }
+                            } label: {
+                                Label(discoverTitle, systemImage: "server.rack")
+                            }
+                            .buttonStyle(.bordered)
+                        } else {
+                            Text(discoverTitle)
+                                .font(.title2.bold())
+                        }
+
                         Button {
                             Task {
                                 if await OfflineModeService.shared.beginUserInitiatedServerRefresh() { return }
@@ -99,10 +137,52 @@ struct DiscoverView: View {
             .onChange(of: recapNavigationRequest) { _, _ in
                 handleRecapNavigationRequest()
             }
+            .onChange(of: musicLibraries.revision) { _, _ in
+                Task { await load() }
+            }
             .onAppear {
                 handleRecapNavigationRequest()
             }
         }
+    }
+
+    @ViewBuilder
+    private func serverURLMenuButton(
+        _ slot: ServerURLSlot,
+        server: SubsonicServer
+    ) -> some View {
+        let isSelected = server.activeURLSlot == slot
+        Button {
+            Task { await serverStore.setURLSlot(for: server.id, slot: slot) }
+        } label: {
+            HStack {
+                Text(slot == .primary
+                    ? String(localized: "primary_url")
+                    : String(localized: "secondary_url"))
+                Spacer()
+                if isSelected {
+                    Image(systemName: "checkmark")
+                }
+            }
+        }
+        .disabled(isSelected)
+    }
+
+    @ViewBuilder
+    private func musicLibraryMenuButton(_ folder: SubsonicMusicFolder) -> some View {
+        let isSelected = musicLibraries.selectedFolderIDs.contains(folder.id)
+        Button {
+            musicLibraries.toggle(folderID: folder.id)
+        } label: {
+            HStack {
+                Text(folder.name)
+                Spacer()
+                if isSelected {
+                    Image(systemName: "checkmark")
+                }
+            }
+        }
+        .disabled(isSelected && musicLibraries.selectedFolderIDs.count == 1)
     }
 
     private func handleRecapNavigationRequest() {
@@ -114,14 +194,24 @@ struct DiscoverView: View {
     // MARK: - Daten
 
     private func load() async {
+        let expectedServerID = serverStore.activeServer?.id
+        let expectedLibraryRevision = musicLibraries.revision
         async let n = try? api.getAlbumList(type: "newest", size: 20)
         async let r = try? api.getAlbumList(type: "recent", size: 20)
         async let f = try? api.getAlbumList(type: "frequent", size: 20)
         async let rnd = try? api.getAlbumList(type: "random", size: 20)
-        newest = await n ?? []
-        recent = await r ?? []
-        frequent = await f ?? []
-        random = await rnd ?? []
+        let loadedNewest = await n ?? []
+        let loadedRecent = await r ?? []
+        let loadedFrequent = await f ?? []
+        let loadedRandom = await rnd ?? []
+        guard !Task.isCancelled,
+              serverStore.activeServer?.id == expectedServerID,
+              musicLibraries.revision == expectedLibraryRevision
+        else { return }
+        newest = loadedNewest
+        recent = loadedRecent
+        frequent = loadedFrequent
+        random = loadedRandom
     }
 
     private func play(_ mix: PersonalizationSmartMix) async {

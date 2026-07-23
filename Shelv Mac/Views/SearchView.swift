@@ -4,6 +4,7 @@ struct SearchView: View {
     @EnvironmentObject var appState: AppState
     @ObservedObject var libraryStore = LibraryViewModel.shared
     @ObservedObject private var serverStore = ServerStore.shared
+    @ObservedObject private var musicLibraries = MusicLibraryStore.shared
     @StateObject private var vm = SearchViewModel()
     @FocusState private var isSearchFocused: Bool
     @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
@@ -177,6 +178,18 @@ struct SearchView: View {
         .onChange(of: serverStore.activeServerID) { _, _ in
             reloadSearchHistory()
         }
+        .onChange(of: musicLibraries.revision) { _, _ in
+            guard !OfflineModeService.shared.isOffline,
+                  trimmedQuery.count >= 2
+            else { return }
+            searchTask?.cancel()
+            lyricsTask?.cancel()
+            vm.clearResults()
+            lyricsResults = []
+            let trimmed = trimmedQuery
+            searchTask = Task { await vm.search() }
+            lyricsTask = Task { await performLyricsSearch(query: trimmed) }
+        }
         .onChange(of: vm.query) { _, newValue in
             searchTask?.cancel()
             lyricsTask?.cancel()
@@ -291,6 +304,22 @@ struct SearchView: View {
             lyricsResults = results
             return
         }
+        let selection = musicLibraries.snapshot
+        if selection.appliesFilter,
+           let folderIDs = selection.visibleCacheFolderIDs {
+            let visibleAlbumIDs = await LibraryRepository.shared.visibleAlbumIDs(
+                serverKey: appState.serverStore.activeServer?.id.uuidString ?? "",
+                libraryIDs: folderIDs
+            )
+            results = await LyricsLibraryFilter.visibleResults(
+                results,
+                visibleAlbumIDs: visibleAlbumIDs,
+                serverId: serverId
+            )
+        }
+        guard !Task.isCancelled,
+              selection.selectionKey == musicLibraries.snapshot.selectionKey
+        else { return }
         lyricsResults = results
         let missing = results.filter { $0.songTitle == nil || $0.duration == nil }
         for item in missing {
@@ -298,13 +327,15 @@ struct SearchView: View {
             guard let song = try? await SubsonicAPIService.shared.getSong(id: item.songId) else { continue }
             await LyricsService.shared.updateMetadata(
                 songId: item.songId, serverId: serverId,
-                title: song.title, artist: song.artist, coverArt: song.coverArt,
+                title: song.title, artist: song.artist,
+                albumId: song.albumId, coverArt: song.coverArt,
                 duration: song.duration
             )
             if let idx = results.firstIndex(where: { $0.songId == item.songId }) {
                 results[idx] = LyricsSearchResult(
                     songId: item.songId, songTitle: song.title,
-                    artistName: song.artist, coverArt: song.coverArt,
+                    artistName: song.artist, albumId: song.albumId,
+                    coverArt: song.coverArt,
                     snippet: item.snippet, duration: song.duration
                 )
                 lyricsResults = results
@@ -335,7 +366,8 @@ struct SearchView: View {
                     Task.detached(priority: .utility) {
                         await LyricsService.shared.updateMetadata(
                             songId: item.songId, serverId: serverId,
-                            title: song.title, artist: song.artist, coverArt: song.coverArt,
+                            title: song.title, artist: song.artist,
+                            albumId: song.albumId, coverArt: song.coverArt,
                             duration: song.duration
                         )
                     }

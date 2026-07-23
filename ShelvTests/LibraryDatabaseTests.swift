@@ -281,6 +281,49 @@ final class LibraryDatabaseTests: XCTestCase {
         XCTAssertEqual(serverBAlbums, ["b1"])
     }
 
+    func testClearDeletesEveryMusicLibraryScopeForSelectedServer() async throws {
+        let database = try await makeDatabase()
+        let serverAFolder1 = LibraryRepository.cacheServerKey(
+            serverKey: "server-a",
+            libraryID: 1
+        )
+        let serverAFolder2 = LibraryRepository.cacheServerKey(
+            serverKey: "server-a",
+            libraryID: 2
+        )
+        let serverBFolder = LibraryRepository.cacheServerKey(
+            serverKey: "server-b",
+            libraryID: 1
+        )
+        try await writeAlbums(
+            [album(id: "a1", name: "A1")],
+            to: database,
+            serverKey: serverAFolder1,
+            generation: "g1"
+        )
+        try await writeAlbums(
+            [album(id: "a2", name: "A2")],
+            to: database,
+            serverKey: serverAFolder2,
+            generation: "g1"
+        )
+        try await writeAlbums(
+            [album(id: "b1", name: "B1")],
+            to: database,
+            serverKey: serverBFolder,
+            generation: "g1"
+        )
+
+        try await database.clear(serverKey: "server-a")
+
+        let serverAFolder1Albums = try await database.albums(serverKey: serverAFolder1)
+        let serverAFolder2Albums = try await database.albums(serverKey: serverAFolder2)
+        let serverBFolderAlbums = try await database.albums(serverKey: serverBFolder).map(\.id)
+        XCTAssertTrue(serverAFolder1Albums.isEmpty)
+        XCTAssertTrue(serverAFolder2Albums.isEmpty)
+        XCTAssertEqual(serverBFolderAlbums, ["b1"])
+    }
+
     func testGenerationOwnershipRejectsStaleABACompletionAndFailure() async throws {
         let database = try await makeDatabase()
         try await writeAlbums(

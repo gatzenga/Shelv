@@ -86,4 +86,67 @@ final class SubsonicServerTests: XCTestCase {
         XCTAssertNotEqual(base.derivedStableId, otherUser.derivedStableId)
         XCTAssertNotEqual(base.derivedStableId, otherServer.derivedStableId)
     }
+
+    func testMusicLibrarySelectionDefaultsToAllAvailableFolders() {
+        XCTAssertEqual(
+            MusicLibrarySelectionPolicy.resolvedIDs(
+                availableIDs: [1, 2],
+                mode: nil
+            ),
+            [1, 2]
+        )
+    }
+
+    func testMusicLibrarySelectionRestoresOnlyStillAvailableFolders() {
+        XCTAssertEqual(
+            MusicLibrarySelectionPolicy.resolvedIDs(
+                availableIDs: [2, 3],
+                mode: .folders([1, 2])
+            ),
+            [2]
+        )
+    }
+
+    func testMusicLibrarySelectionFallsBackToAllWhenStoredFoldersDisappear() {
+        XCTAssertEqual(
+            MusicLibrarySelectionPolicy.resolvedIDs(
+                availableIDs: [3, 4],
+                mode: .folders([1, 2])
+            ),
+            [3, 4]
+        )
+    }
+
+    func testMusicLibrarySelectionNeverDeselectsLastFolder() {
+        XCTAssertEqual(
+            MusicLibrarySelectionPolicy.toggledIDs(
+                1,
+                selectedIDs: [1],
+                availableIDs: [1, 2]
+            ),
+            [1]
+        )
+    }
+
+    func testSelectingEveryMusicLibraryPersistsAllMode() throws {
+        let mode = MusicLibrarySelectionPolicy.persistedMode(
+            selectedIDs: [1, 2],
+            availableIDs: [1, 2]
+        )
+        XCTAssertEqual(mode, .all)
+
+        let encoded = try JSONEncoder().encode(mode)
+        XCTAssertEqual(
+            try JSONDecoder().decode(MusicLibrarySelectionMode.self, from: encoded),
+            .all
+        )
+    }
+
+    func testMusicLibraryQueryRepeatsSortedFolderParameterAndOmitsAll() {
+        let items = MusicLibraryQueryItems.make(folderIDs: [9, 2, 9])
+
+        XCTAssertEqual(items.map(\.name), ["musicFolderId", "musicFolderId"])
+        XCTAssertEqual(items.map(\.value), ["2", "9"])
+        XCTAssertTrue(MusicLibraryQueryItems.make(folderIDs: nil).isEmpty)
+    }
 }

@@ -30,8 +30,27 @@ struct ArtistsView: View {
 
         displayRebuildTask = Task.detached(priority: .userInitiated) {
             let baseArtists: [Artist]
-            if isOffline && serverArtistsEmpty {
-                baseArtists = downloadedArtists
+            if isOffline {
+                if serverArtistsEmpty {
+                    baseArtists = downloadedArtists
+                } else {
+                    let fromLibrary = sortedArtists
+                        .filter { downloadedCountByName[$0.name] != nil }
+                        .map {
+                            Artist(
+                                id: $0.id,
+                                name: $0.name,
+                                sortName: $0.sortName,
+                                albumCount: downloadedCountByName[$0.name],
+                                coverArt: $0.coverArt,
+                                starred: $0.starred
+                            )
+                        }
+                    let coveredNames = Set(fromLibrary.map(\.name))
+                    baseArtists = fromLibrary + downloadedArtists.filter {
+                        !coveredNames.contains($0.name)
+                    }
+                }
             } else if downloadsOnly {
                 baseArtists = sortedArtists
                     .filter { downloadedCountByName[$0.name] != nil }

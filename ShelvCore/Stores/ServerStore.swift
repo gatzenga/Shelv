@@ -372,6 +372,7 @@ class ServerStore: ObservableObject {
             return false
         }
         credentialCache.removeValue(forKey: current.id)
+        MusicLibraryStore.shared.clearPersistedState(serverID: current.id)
         servers = servers.filter { $0.id != current.id }
         save()
         if wasActive {
@@ -537,6 +538,7 @@ class ServerStore: ObservableObject {
             )
             return false
         }
+        MusicLibraryStore.shared.clearPersistedState(serverID: serverID)
 
         let filesRemoved = await Task.detached(priority: .utility) {
             let fileManager = FileManager.default

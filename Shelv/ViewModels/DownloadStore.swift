@@ -248,6 +248,13 @@ final class DownloadStore: ObservableObject {
         var names = UserDefaults.standard.dictionary(forKey: namesKey) as? [String: String] ?? [:]
         names.removeValue(forKey: id)
         UserDefaults.standard.set(names, forKey: namesKey)
+        let sid = serverId
+        Task {
+            await DownloadDatabase.shared.unmarkPlaylistDownloaded(
+                id: id,
+                serverId: sid
+            )
+        }
     }
 
     func downloadedCount(for playlistId: String) -> Int {

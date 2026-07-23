@@ -99,8 +99,18 @@ struct AlbumsView: View {
 
         displayRebuildTask = Task.detached(priority: .userInitiated) {
             let baseAlbums: [Album]
-            if isOffline && serverAlbumsEmpty {
-                baseAlbums = downloadedAlbums
+            if isOffline {
+                if serverAlbumsEmpty {
+                    baseAlbums = downloadedAlbums
+                } else {
+                    let fromLibrary = sortedAlbums.filter {
+                        downloadedIds.contains($0.id)
+                    }
+                    let coveredIDs = Set(fromLibrary.map(\.id))
+                    baseAlbums = fromLibrary + downloadedAlbums.filter {
+                        !coveredIDs.contains($0.id)
+                    }
+                }
             } else if downloadsOnly {
                 baseAlbums = sortedAlbums.filter { downloadedIds.contains($0.id) }
             } else {

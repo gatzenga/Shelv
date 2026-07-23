@@ -51,6 +51,10 @@ final class LibraryStore: ObservableObject {
     }
 
     private var loadedStarredCacheIdentity: ServerIdentity?
+    private var loadedStarredCacheSelectionKey: String?
+    private var serverWideStarredSongIDs: Set<String>?
+    private var serverWideStarredAlbumIDs: Set<String>?
+    private var serverWideStarredArtistIDs: Set<String>?
 
     nonisolated private static var starredCacheDir: URL {
         FileManager.default
@@ -62,10 +66,14 @@ final class LibraryStore: ObservableObject {
         songs: [Song],
         albums: [Album],
         artists: [Artist],
-        serverId: String
+        serverId: String,
+        selectionKey: String? = nil
     ) {
         let dir = starredCacheDir
-        let safeServerId = serverId.pathSafeComponent
+        let safeServerId = starredCacheIdentifier(
+            serverId: serverId,
+            selectionKey: selectionKey
+        )
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         try? JSONEncoder().encode(songs).write(
             to: dir.appendingPathComponent("starred_songs_\(safeServerId).json"),
@@ -81,10 +89,16 @@ final class LibraryStore: ObservableObject {
         )
     }
 
-    nonisolated private static func loadStarredCache(serverId: String) -> StarredResult? {
+    nonisolated private static func loadStarredCache(
+        serverId: String,
+        selectionKey: String? = nil
+    ) -> StarredResult? {
         let dir = starredCacheDir
         let decoder = JSONDecoder()
-        let safeServerId = serverId.pathSafeComponent
+        let safeServerId = starredCacheIdentifier(
+            serverId: serverId,
+            selectionKey: selectionKey
+        )
         let songs = (try? Data(contentsOf: dir.appendingPathComponent("starred_songs_\(safeServerId).json")))
             .flatMap { try? decoder.decode([Song].self, from: $0) }
         let albums = (try? Data(contentsOf: dir.appendingPathComponent("starred_albums_\(safeServerId).json")))
@@ -93,6 +107,14 @@ final class LibraryStore: ObservableObject {
             .flatMap { try? decoder.decode([Artist].self, from: $0) }
         guard songs != nil || albums != nil || artists != nil else { return nil }
         return StarredResult(artist: artists, album: albums, song: songs)
+    }
+
+    nonisolated private static func starredCacheIdentifier(
+        serverId: String,
+        selectionKey: String?
+    ) -> String {
+        let identifier = selectionKey.map { "\(serverId)_\($0)" } ?? serverId
+        return identifier.pathSafeComponent
     }
 
     private var activeServerIdentity: ServerIdentity? {
@@ -109,18 +131,29 @@ final class LibraryStore: ObservableObject {
     /// Publishes cached favorites before library rows render, then `loadStarred()`
     /// reconciles the snapshot with the current server state.
     func loadCachedStarred() async {
+        let librarySelection = MusicLibraryStore.shared.snapshot
+        let selectionKey = librarySelection.selectionKey
+        let allowsLegacyFallback = !librarySelection.appliesFilter
         guard let identity = activeServerIdentity,
               loadedStarredCacheIdentity != identity
+                || loadedStarredCacheSelectionKey != selectionKey
         else { return }
 
         let cacheKey = identity.stableId ?? identity.serverKey
         let cached: StarredResult? = await Task.detached(priority: .userInitiated) {
-            LibraryStore.loadStarredCache(serverId: cacheKey)
+            LibraryStore.loadStarredCache(
+                serverId: cacheKey,
+                selectionKey: selectionKey
+            ) ?? (allowsLegacyFallback
+                ? LibraryStore.loadStarredCache(serverId: cacheKey)
+                : nil)
         }.value
 
         guard !Task.isCancelled,
               activeServerIdentity == identity,
+              MusicLibraryStore.shared.snapshot.selectionKey == selectionKey,
               loadedStarredCacheIdentity != identity
+                || loadedStarredCacheSelectionKey != selectionKey
         else { return }
         if let cached {
             let songs = FavoritePresentation.songs(cached.song ?? [])
@@ -129,13 +162,18 @@ final class LibraryStore: ObservableObject {
             if favoriteSongs != songs { favoriteSongs = songs }
             if favoriteAlbums != albums { favoriteAlbums = albums }
             if favoriteArtists != artists { favoriteArtists = artists }
+            if !librarySelection.appliesFilter {
+                applyServerWideStarred(cached)
+            }
         }
         loadedStarredCacheIdentity = identity
+        loadedStarredCacheSelectionKey = selectionKey
     }
 
     private func persistStarredCache(for identity: ServerIdentity) {
         guard activeServerIdentity == identity else { return }
         let cacheKey = identity.stableId ?? identity.serverKey
+        let selectionKey = MusicLibraryStore.shared.snapshot.selectionKey
         let songs = favoriteSongs
         let albums = favoriteAlbums
         let artists = favoriteArtists
@@ -144,9 +182,34 @@ final class LibraryStore: ObservableObject {
                 songs: songs,
                 albums: albums,
                 artists: artists,
-                serverId: cacheKey
+                serverId: cacheKey,
+                selectionKey: selectionKey
             )
         }
+    }
+
+    private func applyServerWideStarred(_ result: StarredResult) {
+        serverWideStarredSongIDs = Set((result.song ?? []).map(\.id))
+        serverWideStarredAlbumIDs = Set((result.album ?? []).map(\.id))
+        serverWideStarredArtistIDs = Set((result.artist ?? []).map(\.id))
+    }
+
+    private func updateServerWideSong(id: String, isStarred: Bool) {
+        var ids = serverWideStarredSongIDs ?? Set(favoriteSongs.map(\.id))
+        if isStarred { ids.insert(id) } else { ids.remove(id) }
+        serverWideStarredSongIDs = ids
+    }
+
+    private func updateServerWideAlbum(id: String, isStarred: Bool) {
+        var ids = serverWideStarredAlbumIDs ?? Set(favoriteAlbums.map(\.id))
+        if isStarred { ids.insert(id) } else { ids.remove(id) }
+        serverWideStarredAlbumIDs = ids
+    }
+
+    private func updateServerWideArtist(id: String, isStarred: Bool) {
+        var ids = serverWideStarredArtistIDs ?? Set(favoriteArtists.map(\.id))
+        if isStarred { ids.insert(id) } else { ids.remove(id) }
+        serverWideStarredArtistIDs = ids
     }
 
     private func isCurrentAlbumLoad(_ generation: Int, identity: ServerIdentity) -> Bool {
@@ -223,6 +286,10 @@ final class LibraryStore: ObservableObject {
         refreshingStarredIdentity = nil
         refreshingPlaylistIdentity = nil
         loadedStarredCacheIdentity = nil
+        loadedStarredCacheSelectionKey = nil
+        serverWideStarredSongIDs = nil
+        serverWideStarredAlbumIDs = nil
+        serverWideStarredArtistIDs = nil
         let waiters = albumRefreshWaiters
             + artistRefreshWaiters
             + starredRefreshWaiters
@@ -244,6 +311,34 @@ final class LibraryStore: ObservableObject {
         reloadID = UUID()
     }
 
+    func resetForMusicLibrarySelection() {
+        albumLoadGeneration &+= 1
+        artistLoadGeneration &+= 1
+        starredLoadGeneration &+= 1
+        isRefreshingAlbums = false
+        isRefreshingArtists = false
+        isRefreshingStarred = false
+        refreshingAlbumIdentity = nil
+        refreshingArtistIdentity = nil
+        refreshingStarredIdentity = nil
+        loadedStarredCacheIdentity = nil
+        loadedStarredCacheSelectionKey = nil
+        let waiters = albumRefreshWaiters + artistRefreshWaiters + starredRefreshWaiters
+        albumRefreshWaiters.removeAll()
+        artistRefreshWaiters.removeAll()
+        starredRefreshWaiters.removeAll()
+        waiters.forEach { $0.resume() }
+        isLoadingAlbums = false
+        isLoadingArtists = false
+        albums = []
+        artists = []
+        favoriteSongs = []
+        favoriteAlbums = []
+        favoriteArtists = []
+        errorMessage = nil
+        reloadID = UUID()
+    }
+
     func loadAlbums(sortBy: String = "alphabeticalByName") async {
         #if DEBUG
         if let count = DemoContent.largeLibraryFixtureAlbumCount {
@@ -252,6 +347,7 @@ final class LibraryStore: ObservableObject {
         }
         #endif
 
+        let librarySelection = await MusicLibraryStore.shared.prepareActiveServer()
         await loadCachedStarred()
         guard !Task.isCancelled else { return }
 
@@ -293,6 +389,7 @@ final class LibraryStore: ObservableObject {
             let cacheSort = LibraryRepository.albumCacheSort(for: sortBy)
             let cached = await libraryRepository.cachedAlbums(
                 serverKey: identity.serverKey,
+                libraryIDs: librarySelection.visibleCacheFolderIDs,
                 sort: cacheSort.0,
                 direction: cacheSort.1
             )
@@ -306,6 +403,8 @@ final class LibraryStore: ObservableObject {
             let result = try await libraryRepository.refreshAlbums(
                 serverKey: identity.serverKey,
                 stableId: identity.stableId,
+                libraryIDs: librarySelection.allCacheFolderIDs,
+                visibleLibraryIDs: librarySelection.visibleCacheFolderIDs,
                 sortBy: sortBy
             )
             guard isCurrentAlbumLoad(generation, identity: identity) else { return }
@@ -335,6 +434,7 @@ final class LibraryStore: ObservableObject {
         let cacheSort = LibraryRepository.albumCacheSort(for: sortBy)
         let cached = await libraryRepository.cachedAlbums(
             serverKey: identity.serverKey,
+            libraryIDs: MusicLibraryStore.shared.snapshot.visibleCacheFolderIDs,
             sort: cacheSort.0,
             direction: cacheSort.1
         )
@@ -357,6 +457,7 @@ final class LibraryStore: ObservableObject {
         }
         #endif
 
+        let librarySelection = await MusicLibraryStore.shared.prepareActiveServer()
         await loadCachedStarred()
         guard !Task.isCancelled else { return }
 
@@ -390,7 +491,10 @@ final class LibraryStore: ObservableObject {
         errorMessage = nil
 
         if artists.isEmpty {
-            let cached = await libraryRepository.cachedArtists(serverKey: identity.serverKey)
+            let cached = await libraryRepository.cachedArtists(
+                serverKey: identity.serverKey,
+                libraryIDs: librarySelection.visibleCacheFolderIDs
+            )
             guard isCurrentArtistLoad(generation, identity: identity) else { return }
             if !cached.isEmpty { artists = cached }
         }
@@ -400,7 +504,9 @@ final class LibraryStore: ObservableObject {
         do {
             let result = try await libraryRepository.refreshArtists(
                 serverKey: identity.serverKey,
-                stableId: identity.stableId
+                stableId: identity.stableId,
+                libraryIDs: librarySelection.allCacheFolderIDs,
+                visibleLibraryIDs: librarySelection.visibleCacheFolderIDs
             )
             guard isCurrentArtistLoad(generation, identity: identity) else { return }
             artists = result
@@ -414,6 +520,7 @@ final class LibraryStore: ObservableObject {
     }
 
     func loadStarred() async {
+        _ = await MusicLibraryStore.shared.prepareActiveServer()
         await loadCachedStarred()
         guard !Task.isCancelled else { return }
 
@@ -442,14 +549,43 @@ final class LibraryStore: ObservableObject {
         guard let identity = requestedIdentity,
               activeServerIdentity == identity
         else { return }
+        guard !OfflineModeService.shared.isOffline else { return }
+        let requestedSelection = MusicLibraryStore.shared.snapshot
+        let requestedSelectionKey = requestedSelection.selectionKey
 
         do {
             let r = try await api.getStarred()
-            guard isCurrentStarredLoad(generation, identity: identity) else { return }
+            guard isCurrentStarredLoad(generation, identity: identity),
+                  !OfflineModeService.shared.isOffline,
+                  MusicLibraryStore.shared.snapshot.selectionKey == requestedSelectionKey
+            else { return }
             favoriteSongs = FavoritePresentation.songs(r.song ?? [])
             favoriteAlbums = FavoritePresentation.albums(r.album ?? [])
             favoriteArtists = FavoritePresentation.artists(r.artist ?? [])
             persistStarredCache(for: identity)
+
+            let serverWideResult: StarredResult?
+            if requestedSelection.appliesFilter {
+                serverWideResult = try? await api.getStarred(libraryFilter: .all)
+                guard isCurrentStarredLoad(generation, identity: identity),
+                      !OfflineModeService.shared.isOffline,
+                      MusicLibraryStore.shared.snapshot.selectionKey == requestedSelectionKey
+                else { return }
+                if let serverWideResult {
+                    LibraryStore.saveStarredCache(
+                        songs: FavoritePresentation.songs(serverWideResult.song ?? []),
+                        albums: FavoritePresentation.albums(serverWideResult.album ?? []),
+                        artists: FavoritePresentation.artists(serverWideResult.artist ?? []),
+                        serverId: identity.stableId ?? identity.serverKey,
+                        selectionKey: requestedSelection.allSelectionKey
+                    )
+                }
+            } else {
+                serverWideResult = r
+            }
+            if let serverWideResult {
+                applyServerWideStarred(serverWideResult)
+            }
         } catch {
             if isCurrentStarredLoad(generation, identity: identity),
                !(error is CancellationError) {
@@ -522,9 +658,20 @@ final class LibraryStore: ObservableObject {
 
     // MARK: - Favoriten (optimistisch + Rollback)
 
-    func isSongStarred(_ song: Song) -> Bool { favoriteSongs.contains { $0.id == song.id } }
-    func isAlbumStarred(_ album: Album) -> Bool { favoriteAlbums.contains { $0.id == album.id } }
-    func isArtistStarred(_ artist: Artist) -> Bool { favoriteArtists.contains { $0.id == artist.id } }
+    func isSongStarred(_ song: Song) -> Bool {
+        serverWideStarredSongIDs?.contains(song.id)
+            ?? (song.starred != nil || favoriteSongs.contains { $0.id == song.id })
+    }
+
+    func isAlbumStarred(_ album: Album) -> Bool {
+        serverWideStarredAlbumIDs?.contains(album.id)
+            ?? (album.starred != nil || favoriteAlbums.contains { $0.id == album.id })
+    }
+
+    func isArtistStarred(_ artist: Artist) -> Bool {
+        serverWideStarredArtistIDs?.contains(artist.id)
+            ?? (artist.starred != nil || favoriteArtists.contains { $0.id == artist.id })
+    }
 
     func toggleStarSong(_ song: Song) async {
         let identity = activeServerIdentity
@@ -536,16 +683,24 @@ final class LibraryStore: ObservableObject {
             favorite.starred = Date()
             favoriteSongs.insert(favorite, at: 0)
         }
+        updateServerWideSong(id: song.id, isStarred: !wasStarred)
         do {
             if wasStarred { try await api.unstar(songId: song.id) }
             else { try await api.star(songId: song.id) }
-            if let identity { persistStarredCache(for: identity) }
+            guard activeServerIdentity == identity else { return }
+            if MusicLibraryStore.shared.snapshot.appliesFilter {
+                await loadStarred()
+            } else if let identity {
+                persistStarredCache(for: identity)
+            }
         } catch {
+            guard activeServerIdentity == identity else { return }
             if wasStarred {
                 favoriteSongs.append(song)
                 favoriteSongs = FavoritePresentation.songs(favoriteSongs)
             }
             else { favoriteSongs.removeAll { $0.id == song.id } }
+            updateServerWideSong(id: song.id, isStarred: wasStarred)
             if let identity { persistStarredCache(for: identity) }
             if !(error is CancellationError) {
                 errorMessage = OfflineModeService.shared.inlineErrorMessage(for: error, userInitiated: true)
@@ -563,16 +718,24 @@ final class LibraryStore: ObservableObject {
             favorite.starred = Date()
             favoriteAlbums.insert(favorite, at: 0)
         }
+        updateServerWideAlbum(id: album.id, isStarred: !wasStarred)
         do {
             if wasStarred { try await api.unstar(albumId: album.id) }
             else { try await api.star(albumId: album.id) }
-            if let identity { persistStarredCache(for: identity) }
+            guard activeServerIdentity == identity else { return }
+            if MusicLibraryStore.shared.snapshot.appliesFilter {
+                await loadStarred()
+            } else if let identity {
+                persistStarredCache(for: identity)
+            }
         } catch {
+            guard activeServerIdentity == identity else { return }
             if wasStarred {
                 favoriteAlbums.append(album)
                 favoriteAlbums = FavoritePresentation.albums(favoriteAlbums)
             }
             else { favoriteAlbums.removeAll { $0.id == album.id } }
+            updateServerWideAlbum(id: album.id, isStarred: wasStarred)
             if let identity { persistStarredCache(for: identity) }
             if !(error is CancellationError) {
                 errorMessage = OfflineModeService.shared.inlineErrorMessage(for: error, userInitiated: true)
@@ -590,16 +753,24 @@ final class LibraryStore: ObservableObject {
             favorite.starred = Date()
             favoriteArtists.insert(favorite, at: 0)
         }
+        updateServerWideArtist(id: artist.id, isStarred: !wasStarred)
         do {
             if wasStarred { try await api.unstar(artistId: artist.id) }
             else { try await api.star(artistId: artist.id) }
-            if let identity { persistStarredCache(for: identity) }
+            guard activeServerIdentity == identity else { return }
+            if MusicLibraryStore.shared.snapshot.appliesFilter {
+                await loadStarred()
+            } else if let identity {
+                persistStarredCache(for: identity)
+            }
         } catch {
+            guard activeServerIdentity == identity else { return }
             if wasStarred {
                 favoriteArtists.append(artist)
                 favoriteArtists = FavoritePresentation.artists(favoriteArtists)
             }
             else { favoriteArtists.removeAll { $0.id == artist.id } }
+            updateServerWideArtist(id: artist.id, isStarred: wasStarred)
             if let identity { persistStarredCache(for: identity) }
             if !(error is CancellationError) {
                 errorMessage = OfflineModeService.shared.inlineErrorMessage(for: error, userInitiated: true)

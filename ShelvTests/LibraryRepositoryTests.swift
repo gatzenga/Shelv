@@ -194,6 +194,106 @@ final class LibraryRepositoryTests: XCTestCase {
         XCTAssertEqual(cachedArtistIds, ["artist-a", "artist-b"])
     }
 
+    func testScopedAlbumRefreshStoresEveryLibraryAndReturnsSelectedLibraries() async throws {
+        let database = try await makeDatabase()
+        let api = ScopedLibraryAPIClient(
+            albumsByFolder: [
+                1: [
+                    album(id: "shared", name: "Shared"),
+                    album(id: "library-a", name: "Library A"),
+                ],
+                2: [
+                    album(id: "shared", name: "Shared"),
+                    album(id: "library-b", name: "Library B"),
+                ],
+            ]
+        )
+        let repository = LibraryRepository(database: database, api: api)
+
+        let visible = try await repository.refreshAlbums(
+            serverKey: "server-a",
+            stableId: "stable-a",
+            libraryIDs: [1, 2],
+            visibleLibraryIDs: [2]
+        )
+
+        XCTAssertEqual(visible.map(\.id), ["library-b", "shared"])
+        XCTAssertEqual(
+            api.albumRequests.map(\.filter),
+            [.folders([1]), .folders([2])]
+        )
+        let libraryAIDs = await repository.cachedAlbums(
+            serverKey: "server-a",
+            libraryIDs: [1]
+        ).map(\.id)
+        let mergedIDs = await repository.cachedAlbums(
+            serverKey: "server-a",
+            libraryIDs: [1, 2]
+        ).map(\.id)
+        XCTAssertEqual(libraryAIDs, ["library-a", "shared"])
+        XCTAssertEqual(mergedIDs, ["library-a", "library-b", "shared"])
+    }
+
+    func testRefreshingOneLibraryDoesNotDeleteAnotherLibraryCache() async throws {
+        let database = try await makeDatabase()
+        let api = ScopedLibraryAPIClient(
+            albumsByFolder: [
+                1: [album(id: "a-old", name: "A Old")],
+                2: [album(id: "b", name: "B")],
+            ]
+        )
+        let repository = LibraryRepository(database: database, api: api)
+        _ = try await repository.refreshAlbums(
+            serverKey: "server-a",
+            stableId: "stable-a",
+            libraryIDs: [1, 2]
+        )
+
+        api.albumsByFolder[1] = [album(id: "a-new", name: "A New")]
+        _ = try await repository.refreshAlbums(
+            serverKey: "server-a",
+            stableId: "stable-a",
+            libraryIDs: [1],
+            visibleLibraryIDs: [1]
+        )
+
+        let libraryAIDs = await repository.cachedAlbums(
+            serverKey: "server-a",
+            libraryIDs: [1]
+        ).map(\.id)
+        let libraryBIDs = await repository.cachedAlbums(
+            serverKey: "server-a",
+            libraryIDs: [2]
+        ).map(\.id)
+        XCTAssertEqual(libraryAIDs, ["a-new"])
+        XCTAssertEqual(libraryBIDs, ["b"])
+    }
+
+    func testScopedArtistCacheMergesArtistAcrossLibraries() async throws {
+        let database = try await makeDatabase()
+        let api = ScopedLibraryAPIClient(
+            artistsByFolder: [
+                1: [Artist(id: "artist", name: "Artist", albumCount: 2)],
+                2: [Artist(id: "artist", name: "Artist", albumCount: 3)],
+            ]
+        )
+        let repository = LibraryRepository(database: database, api: api)
+
+        let artists = try await repository.refreshArtists(
+            serverKey: "server-a",
+            stableId: "stable-a",
+            libraryIDs: [1, 2],
+            visibleLibraryIDs: [1, 2]
+        )
+
+        XCTAssertEqual(artists.map(\.id), ["artist"])
+        XCTAssertEqual(artists.first?.albumCount, 5)
+        XCTAssertEqual(
+            api.artistRequests,
+            [.folders([1]), .folders([2])]
+        )
+    }
+
     func testStableIdentityBackfillCancelsOldRefreshAndRetryPublishesNewIdentity() async throws {
         let database = try await makeDatabase()
         let api = MutableContextLibraryAPIClient(
@@ -395,7 +495,9 @@ private final class FakeLibraryAPIClient: LibraryAPIClient {
     private let artists: [Artist]
     private let failureAfterAlbumRequestCount: Int?
     private let failArtists: Bool
-    private(set) var albumRequests: [(type: String, size: Int, offset: Int)] = []
+    private(set) var albumRequests: [
+        (type: String, size: Int, offset: Int, filter: MusicLibraryRequestFilter)
+    ] = []
 
     init(
         albumPages: [[Album]] = [],
@@ -409,8 +511,15 @@ private final class FakeLibraryAPIClient: LibraryAPIClient {
         self.failArtists = failArtists
     }
 
-    func getAlbumList(type: String, size: Int, offset: Int) async throws -> [Album] {
-        albumRequests.append((type: type, size: size, offset: offset))
+    func getAlbumList(
+        type: String,
+        size: Int,
+        offset: Int,
+        libraryFilter: MusicLibraryRequestFilter
+    ) async throws -> [Album] {
+        albumRequests.append(
+            (type: type, size: size, offset: offset, filter: libraryFilter)
+        )
         if let failureAfterAlbumRequestCount, albumRequests.count > failureAfterAlbumRequestCount {
             throw FakeLibraryAPIError.requestFailed
         }
@@ -419,7 +528,9 @@ private final class FakeLibraryAPIClient: LibraryAPIClient {
         return albumPages[pageIndex]
     }
 
-    func getAllArtists() async throws -> [Artist] {
+    func getAllArtists(
+        libraryFilter: MusicLibraryRequestFilter
+    ) async throws -> [Artist] {
         if failArtists {
             throw FakeLibraryAPIError.requestFailed
         }
@@ -461,7 +572,12 @@ private final class MutableContextLibraryAPIClient: LibraryAPIClient {
             && credentialGeneration == context.credentialGeneration
     }
 
-    func getAlbumList(type: String, size: Int, offset: Int) async throws -> [Album] {
+    func getAlbumList(
+        type: String,
+        size: Int,
+        offset: Int,
+        libraryFilter: MusicLibraryRequestFilter
+    ) async throws -> [Album] {
         if let onNextAlbumRequest {
             self.onNextAlbumRequest = nil
             onNextAlbumRequest()
@@ -469,7 +585,9 @@ private final class MutableContextLibraryAPIClient: LibraryAPIClient {
         return offset == 0 ? albums : []
     }
 
-    func getAllArtists() async throws -> [Artist] {
+    func getAllArtists(
+        libraryFilter: MusicLibraryRequestFilter
+    ) async throws -> [Artist] {
         []
     }
 
@@ -489,14 +607,23 @@ private final class MutableContextLibraryAPIClient: LibraryAPIClient {
 
 private final class GeneratedLibraryAPIClient: LibraryAPIClient {
     private let totalAlbums: Int
-    private(set) var albumRequests: [(type: String, size: Int, offset: Int)] = []
+    private(set) var albumRequests: [
+        (type: String, size: Int, offset: Int, filter: MusicLibraryRequestFilter)
+    ] = []
 
     init(totalAlbums: Int) {
         self.totalAlbums = totalAlbums
     }
 
-    func getAlbumList(type: String, size: Int, offset: Int) async throws -> [Album] {
-        albumRequests.append((type: type, size: size, offset: offset))
+    func getAlbumList(
+        type: String,
+        size: Int,
+        offset: Int,
+        libraryFilter: MusicLibraryRequestFilter
+    ) async throws -> [Album] {
+        albumRequests.append(
+            (type: type, size: size, offset: offset, filter: libraryFilter)
+        )
         guard offset < totalAlbums else { return [] }
 
         let end = min(offset + size, totalAlbums)
@@ -512,8 +639,66 @@ private final class GeneratedLibraryAPIClient: LibraryAPIClient {
         }
     }
 
-    func getAllArtists() async throws -> [Artist] {
+    func getAllArtists(
+        libraryFilter: MusicLibraryRequestFilter
+    ) async throws -> [Artist] {
         []
+    }
+}
+
+private final class ScopedLibraryAPIClient: LibraryAPIClient {
+    var albumsByFolder: [Int: [Album]]
+    var artistsByFolder: [Int: [Artist]]
+    private(set) var albumRequests: [
+        (type: String, size: Int, offset: Int, filter: MusicLibraryRequestFilter)
+    ] = []
+    private(set) var artistRequests: [MusicLibraryRequestFilter] = []
+
+    init(
+        albumsByFolder: [Int: [Album]] = [:],
+        artistsByFolder: [Int: [Artist]] = [:]
+    ) {
+        self.albumsByFolder = albumsByFolder
+        self.artistsByFolder = artistsByFolder
+    }
+
+    func getAlbumList(
+        type: String,
+        size: Int,
+        offset: Int,
+        libraryFilter: MusicLibraryRequestFilter
+    ) async throws -> [Album] {
+        albumRequests.append(
+            (type: type, size: size, offset: offset, filter: libraryFilter)
+        )
+        let albums = albums(for: libraryFilter)
+        guard offset < albums.count else { return [] }
+        return Array(albums[offset..<min(offset + size, albums.count)])
+    }
+
+    func getAllArtists(
+        libraryFilter: MusicLibraryRequestFilter
+    ) async throws -> [Artist] {
+        artistRequests.append(libraryFilter)
+        return artists(for: libraryFilter)
+    }
+
+    private func albums(for filter: MusicLibraryRequestFilter) -> [Album] {
+        switch filter {
+        case .folders(let folderIDs):
+            return folderIDs.flatMap { albumsByFolder[$0] ?? [] }
+        case .active, .all:
+            return albumsByFolder.keys.sorted().flatMap { albumsByFolder[$0] ?? [] }
+        }
+    }
+
+    private func artists(for filter: MusicLibraryRequestFilter) -> [Artist] {
+        switch filter {
+        case .folders(let folderIDs):
+            return folderIDs.flatMap { artistsByFolder[$0] ?? [] }
+        case .active, .all:
+            return artistsByFolder.keys.sorted().flatMap { artistsByFolder[$0] ?? [] }
+        }
     }
 }
 

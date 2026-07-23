@@ -150,6 +150,24 @@ nonisolated enum LocalOfflinePlaylistCatalog {
         )
         #endif
     }
+
+    static func updateSongIds(
+        serverId: String,
+        id: String,
+        songIds updatedSongIds: [String]
+    ) {
+        #if os(iOS) || os(macOS)
+        #if os(iOS)
+        let key = "shelv_offline_playlist_songs_\(serverId)"
+        #else
+        let key = "shelv_mac_playlist_song_ids_\(serverId)"
+        #endif
+        var stored = UserDefaults.standard.dictionary(forKey: key) as? [String: [String]] ?? [:]
+        guard stored[id] != nil else { return }
+        stored[id] = updatedSongIds
+        UserDefaults.standard.set(stored, forKey: key)
+        #endif
+    }
 }
 
 /// Loads, validates and repairs local download records without depending on a

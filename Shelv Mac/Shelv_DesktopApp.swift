@@ -13,10 +13,12 @@ extension Notification.Name {
 struct Shelv_DesktopApp: App {
     @StateObject private var appState = AppState.shared
     @StateObject private var serverStore = ServerStore.shared
+    @StateObject private var offlineMode = OfflineModeService.shared
     private let _playTracker = PlayTracker.shared
     @AppStorage("appColorScheme") private var storedColorScheme: AppColorScheme = .system
     @AppStorage("themeColor") private var themeColorName: String = "violet"
     @Environment(\.scenePhase) private var scenePhase
+    @State private var musicLibraryReloadTask: Task<Void, Never>?
 
     init() {
         NSWindow.allowsAutomaticWindowTabbing = false
@@ -40,7 +42,7 @@ struct Shelv_DesktopApp: App {
                 .environmentObject(RecapStore.shared)
                 .environmentObject(LibraryViewModel.shared)
                 .environmentObject(DownloadStore.shared)
-                .environmentObject(OfflineModeService.shared)
+                .environmentObject(offlineMode)
                 .frame(minWidth: 1000, minHeight: 600)
                 .task { await LyricsStore.shared.setup() }
                 .task {
@@ -83,6 +85,10 @@ struct Shelv_DesktopApp: App {
                     LibraryViewModel.shared.reset()
                     guard let server = serverStore.activeServer else { return }
                     OfflineModeService.shared.prepareInitialServerErrorPresentation()
+                    _ = await MusicLibraryStore.shared.prepareActiveServer(forceRefresh: true)
+                    guard !Task.isCancelled,
+                          revision == serverStore.activeServerRevision
+                    else { return }
                     await LibraryViewModel.shared.loadCachedStarred()
                     guard !Task.isCancelled,
                           revision == serverStore.activeServerRevision
@@ -133,6 +139,14 @@ struct Shelv_DesktopApp: App {
                         Task { await runKeepLibraryOfflineCheck(serverId: active.stableId) }
                     }
                 }
+                .onChange(of: offlineMode.isOffline) { _, isOffline in
+                    Task { @MainActor in
+                        await LibraryViewModel.shared.loadCachedStarred()
+                        if !isOffline {
+                            await LibraryViewModel.shared.loadStarred()
+                        }
+                    }
+                }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
                     Task { await CloudKitSyncService.shared.syncNow() }
                     if let active = appState.serverStore.activeServer {
@@ -142,6 +156,26 @@ struct Shelv_DesktopApp: App {
                 .onReceive(NotificationCenter.default.publisher(for: .recapRegistryUpdated)) { _ in
                     guard let server = appState.serverStore.activeServer else { return }
                     Task { await RecapStore.shared.loadEntries(serverId: server.stableId) }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .musicLibrarySelectionChanged)) { notification in
+                    guard let serverID = notification.object as? UUID,
+                          serverStore.activeServer?.id == serverID
+                    else { return }
+                    musicLibraryReloadTask?.cancel()
+                    musicLibraryReloadTask = Task { @MainActor in
+                        await Task.yield()
+                        guard !Task.isCancelled,
+                              serverStore.activeServer?.id == serverID
+                        else { return }
+                        LibraryViewModel.shared.resetForMusicLibrarySelection()
+                        DiscoverViewModel.shared.reset()
+                        await LibraryViewModel.shared.loadAlbums()
+                        guard !Task.isCancelled else { return }
+                        async let artists: Void = LibraryViewModel.shared.loadArtists()
+                        async let starred: Void = LibraryViewModel.shared.loadStarred()
+                        async let discover: Bool = DiscoverViewModel.shared.load(force: true)
+                        _ = await (artists, starred, discover)
+                    }
                 }
         }
         .windowResizability(.contentMinSize)
@@ -251,17 +285,33 @@ struct Shelv_DesktopApp: App {
 
     @MainActor
     private func runKeepLibraryOfflineCheck(serverId: String, force: Bool = false) async {
+        guard SubsonicAPIService.shared.activeServer?.stableId == serverId else { return }
         guard UserDefaults.standard.bool(forKey: "enableDownloads") else { return }
         guard KeepLibraryOfflineService.shared.isEnabled(serverId: serverId) else { return }
         await DownloadService.shared.waitForRestoredInflightTasks()
+        guard SubsonicAPIService.shared.activeServer?.stableId == serverId else { return }
         await LibraryViewModel.shared.loadAlbums()
+        guard SubsonicAPIService.shared.activeServer?.stableId == serverId else { return }
+        let activeServer = SubsonicAPIService.shared.activeServer
+        let selection = MusicLibraryStore.shared.snapshot
+        let allLibraryAlbums: [Album]
+        if let serverKey = activeServer?.id.uuidString {
+            let cached = await LibraryRepository.shared.cachedAlbums(
+                serverKey: serverKey,
+                libraryIDs: selection.allCacheFolderIDs
+            )
+            allLibraryAlbums = cached.isEmpty ? LibraryViewModel.shared.albums : cached
+        } else {
+            allLibraryAlbums = LibraryViewModel.shared.albums
+        }
+        guard SubsonicAPIService.shared.activeServer?.stableId == serverId else { return }
         let recapIds = UserDefaults.standard.bool(forKey: "recapEnabled")
             ? Array(RecapStore.shared.recapPlaylistIds)
             : []
         let favorites = UserDefaults.standard.object(forKey: "enableFavorites") as? Bool ?? true
         await KeepLibraryOfflineService.shared.checkAndDownload(
             serverId: serverId,
-            libraryAlbums: LibraryViewModel.shared.albums,
+            libraryAlbums: allLibraryAlbums,
             favorites: favorites,
             recapPlaylistIds: recapIds,
             force: force

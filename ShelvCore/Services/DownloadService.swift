@@ -45,6 +45,16 @@ private nonisolated struct BulkDownloadUnit: Sendable {
     let priority: Int
     let songs: [Song]
     let playlistMarker: BulkDownloadPlaylistMarker?
+    let albumMarker: BulkDownloadAlbumMarker?
+}
+
+private nonisolated struct DownloadCollectionRefresh: Sendable {
+    let kind: DownloadCollectionKind
+    let id: String
+    let serverId: String
+    let signature: String
+
+    var key: String { "\(serverId)::\(kind.rawValue)::\(id)" }
 }
 
 private actor DownloadArtworkPipeline {
@@ -163,6 +173,14 @@ actor DownloadService {
     private var batchFailed = 0
     private var didRestoreExistingTasks = false
     private var restoreWaiters: [CheckedContinuation<Void, Never>] = []
+    private var metadataReloadTask: Task<Void, Never>?
+    private var collectionRefreshQueue: [DownloadCollectionRefresh] = []
+    private var collectionRefreshStartIndex = 0
+    private var queuedCollectionRefreshKeys = Set<String>()
+    private var activeCollectionRefreshKeys = Set<String>()
+    private let maxConcurrentCollectionRefreshes = 2
+    private let staleCollectionRefreshInterval: TimeInterval = 24 * 60 * 60
+    private let staleAlbumRefreshLimitPerObservation = 12
 
     private init() {
         coordinator.service = self
@@ -304,6 +322,572 @@ actor DownloadService {
         return try? JSONDecoder().decode(DownloadJob.self, from: data)
     }
 
+    // MARK: - Download Catalog Reconciliation
+
+    private nonisolated static func downloadAlbumMetadata(
+        from detail: AlbumDetail
+    ) -> DownloadAlbumMetadata {
+        DownloadAlbumMetadata(
+            id: detail.id,
+            name: detail.name,
+            artist: detail.artist,
+            artistId: detail.artistId,
+            coverArt: detail.coverArt,
+            songCount: detail.songCount,
+            duration: detail.duration,
+            year: detail.year,
+            genre: detail.genre
+        )
+    }
+
+    func observeAlbumSummaries(
+        _ albums: [Album],
+        serverId: String,
+        schedulesStaleRefresh: Bool = false
+    ) async {
+        #if os(tvOS)
+        return
+        #else
+        guard !serverId.isEmpty, !albums.isEmpty else { return }
+        let metadataUpdate = await DownloadDatabase.shared.updateAlbumSummaries(
+            albums,
+            serverId: serverId
+        )
+        handleMetadataUpdate(metadataUpdate)
+
+        var managedIds = await DownloadDatabase.shared.managedAlbumIds(serverId: serverId)
+        managedIds = await adoptCompleteAlbumDownloads(
+            from: albums,
+            serverId: serverId,
+            managedIds: managedIds
+        )
+
+        for album in albums where managedIds.contains(album.id) {
+            await DownloadDatabase.shared.markAlbumDownloaded(
+                id: album.id,
+                name: album.name,
+                serverId: serverId
+            )
+        }
+
+        let observations = albums.map {
+            DownloadCollectionObservation(
+                id: $0.id,
+                signature: DownloadDatabase.albumSignature($0)
+            )
+        }
+        let staleBefore = schedulesStaleRefresh
+            ? Date().timeIntervalSince1970 - staleCollectionRefreshInterval
+            : nil
+        let candidates = await DownloadDatabase.shared.collectionRefreshCandidates(
+            kind: .album,
+            observations: observations,
+            serverId: serverId,
+            managedIds: managedIds,
+            staleBefore: staleBefore,
+            staleLimit: schedulesStaleRefresh ? staleAlbumRefreshLimitPerObservation : 0
+        )
+        let signaturesByID = Dictionary(
+            observations.map { ($0.id, $0.signature) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        enqueueCollectionRefreshes(
+            candidates.compactMap { id in
+                signaturesByID[id].map {
+                    DownloadCollectionRefresh(
+                        kind: .album,
+                        id: id,
+                        serverId: serverId,
+                        signature: $0
+                    )
+                }
+            },
+            limit: staleAlbumRefreshLimitPerObservation
+        )
+        #endif
+    }
+
+    func adoptCachedAlbumDownloads(_ albums: [Album], serverId: String) async {
+        #if os(tvOS)
+        return
+        #else
+        guard !serverId.isEmpty, !albums.isEmpty else { return }
+        let managedIds = await DownloadDatabase.shared.managedAlbumIds(
+            serverId: serverId
+        )
+        _ = await adoptCompleteAlbumDownloads(
+            from: albums,
+            serverId: serverId,
+            managedIds: managedIds
+        )
+        #endif
+    }
+
+    private func adoptCompleteAlbumDownloads(
+        from albums: [Album],
+        serverId: String,
+        managedIds: Set<String>
+    ) async -> Set<String> {
+        let albumsByID = Dictionary(
+            albums.map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        let records = await DownloadDatabase.shared.records(
+            serverId: serverId,
+            albumIds: Set(albumsByID.keys)
+        )
+        let recordsByAlbum = Dictionary(
+            grouping: records.filter { !$0.albumId.isEmpty },
+            by: \.albumId
+        )
+        let playlistOwnedSongIds = Set(
+            LocalOfflinePlaylistCatalog.songIds(serverId: serverId)
+                .values
+                .flatMap { $0 }
+        )
+        var adoptedIds = managedIds
+
+        // Existing installations did not persist whether an album was downloaded
+        // as a complete collection. The cached pre-refresh song count lets us
+        // retain that intent even when the server has just added another song.
+        for (albumID, albumRecords) in recordsByAlbum {
+            guard !adoptedIds.contains(albumID),
+                  let album = albumsByID[albumID],
+                  let expectedSongCount = album.songCount,
+                  expectedSongCount > 0,
+                  expectedSongCount == albumRecords.count,
+                  albumRecords.contains(where: {
+                      !playlistOwnedSongIds.contains($0.songId)
+                  })
+            else { continue }
+            await DownloadDatabase.shared.markAlbumDownloaded(
+                id: albumID,
+                name: album.name,
+                serverId: serverId
+            )
+            await DownloadDatabase.shared.noteCollectionDetail(
+                kind: .album,
+                id: albumID,
+                serverId: serverId,
+                signature: DownloadDatabase.albumSignature(album),
+                date: 0
+            )
+            adoptedIds.insert(albumID)
+        }
+        return adoptedIds
+    }
+
+    func observeArtistSummaries(_ artists: [Artist], serverId: String) async {
+        #if os(tvOS)
+        return
+        #else
+        guard !serverId.isEmpty, !artists.isEmpty else { return }
+        let update = await DownloadDatabase.shared.updateArtistSummaries(
+            artists,
+            serverId: serverId
+        )
+        handleMetadataUpdate(update)
+        #endif
+    }
+
+    func observeSongs(_ songs: [Song], serverId: String) async {
+        #if os(tvOS)
+        return
+        #else
+        guard !serverId.isEmpty, !songs.isEmpty else { return }
+        let update = await DownloadDatabase.shared.updateObservedSongs(
+            songs,
+            serverId: serverId
+        )
+        handleMetadataUpdate(update)
+        #endif
+    }
+
+    func observeAlbumDetail(_ detail: AlbumDetail, serverId: String) async {
+        #if os(tvOS)
+        return
+        #else
+        guard !serverId.isEmpty else { return }
+        let albumMetadata = Self.downloadAlbumMetadata(from: detail)
+        let summary = Album(
+            id: detail.id,
+            name: detail.name,
+            sortName: detail.sortName,
+            artist: detail.artist,
+            artistId: detail.artistId,
+            coverArt: detail.coverArt,
+            songCount: detail.songCount,
+            duration: detail.duration,
+            year: detail.year,
+            genre: detail.genre
+        )
+        handleMetadataUpdate(
+            await DownloadDatabase.shared.updateAlbumSummaries(
+                [summary],
+                serverId: serverId
+            )
+        )
+
+        guard let songs = detail.song else { return }
+        let localRecords = await DownloadDatabase.shared.records(
+            serverId: serverId,
+            albumId: detail.id
+        )
+        handleMetadataUpdate(
+            await DownloadDatabase.shared.updateObservedSongs(
+                songs,
+                serverId: serverId,
+                albumMetadata: albumMetadata
+            )
+        )
+
+        let managedAlbumIds = await DownloadDatabase.shared.managedAlbumIds(
+            serverId: serverId
+        )
+        var isManaged = managedAlbumIds.contains(detail.id)
+        if !isManaged, !localRecords.isEmpty {
+            let playlistOwnedSongIds = Set(
+                LocalOfflinePlaylistCatalog.songIds(serverId: serverId)
+                    .values
+                    .flatMap { $0 }
+            )
+            let localSongIds = Set(localRecords.map(\.songId))
+            let serverSongIds = Set(songs.map(\.id))
+            if localSongIds == serverSongIds,
+               localRecords.contains(where: {
+                   !playlistOwnedSongIds.contains($0.songId)
+               }) {
+                await DownloadDatabase.shared.markAlbumDownloaded(
+                    id: detail.id,
+                    name: detail.name,
+                    serverId: serverId
+                )
+                isManaged = true
+            }
+        }
+
+        if isManaged {
+            let localSongIds = Set(localRecords.map(\.songId))
+            let serverSongIds = Set(songs.map(\.id))
+            for songID in localSongIds.subtracting(serverSongIds) {
+                await delete(
+                    songId: songID,
+                    serverId: serverId,
+                    preservesManagedAlbum: true
+                )
+            }
+
+            let missingSongs = songs.filter { !localSongIds.contains($0.id) }
+            if !missingSongs.isEmpty,
+               await canMaintainDownloads(serverId: serverId) {
+                await enqueue(
+                    songs: missingSongs,
+                    serverId: serverId,
+                    albumArtistOverride: detail.artist,
+                    albumCoverArtIdOverride: detail.coverArt,
+                    resolvesAlbumMetadata: false
+                )
+            }
+            await DownloadDatabase.shared.noteCollectionDetail(
+                kind: .album,
+                id: detail.id,
+                serverId: serverId,
+                signature: DownloadDatabase.albumSignature(albumMetadata)
+            )
+        }
+        #endif
+    }
+
+    func observePlaylistSummaries(
+        _ playlists: [Playlist],
+        serverId: String
+    ) async {
+        #if os(tvOS)
+        return
+        #else
+        guard !serverId.isEmpty, !playlists.isEmpty else { return }
+        let tracked = LocalOfflinePlaylistCatalog.songIds(serverId: serverId)
+        let managedIds = Set(tracked.keys)
+        guard !managedIds.isEmpty else { return }
+
+        for playlist in playlists where managedIds.contains(playlist.id) {
+            await LocalOfflinePlaylistCatalog.updateName(
+                serverId: serverId,
+                id: playlist.id,
+                name: playlist.name
+            )
+        }
+        let observations = playlists.map {
+            DownloadCollectionObservation(
+                id: $0.id,
+                signature: DownloadDatabase.playlistSignature($0)
+            )
+        }
+        let candidates = await DownloadDatabase.shared.collectionRefreshCandidates(
+            kind: .playlist,
+            observations: observations,
+            serverId: serverId,
+            managedIds: managedIds,
+            staleBefore: nil,
+            staleLimit: 0
+        )
+        let signaturesByID = Dictionary(
+            observations.map { ($0.id, $0.signature) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        enqueueCollectionRefreshes(
+            candidates.compactMap { id in
+                signaturesByID[id].map {
+                    DownloadCollectionRefresh(
+                        kind: .playlist,
+                        id: id,
+                        serverId: serverId,
+                        signature: $0
+                    )
+                }
+            },
+            limit: 12
+        )
+        #endif
+    }
+
+    func observePlaylistDetail(_ playlist: Playlist, serverId: String) async {
+        #if os(tvOS)
+        return
+        #else
+        guard !serverId.isEmpty, let songs = playlist.songs else { return }
+        await observeSongs(songs, serverId: serverId)
+        let tracked = LocalOfflinePlaylistCatalog.songIds(serverId: serverId)
+        guard tracked[playlist.id] != nil else { return }
+
+        let serverSongIds = songs.map(\.id)
+        LocalOfflinePlaylistCatalog.updateSongIds(
+            serverId: serverId,
+            id: playlist.id,
+            songIds: serverSongIds
+        )
+        if SubsonicAPIService.shared.activeServer?.stableId == serverId {
+            await MainActor.run {
+                DownloadStore.shared.syncPlaylistSongIds(
+                    playlist.id,
+                    songIds: serverSongIds
+                )
+            }
+        }
+        if await canMaintainDownloads(serverId: serverId) {
+            let downloadedIds = await DownloadDatabase.shared.allSongIds(serverId: serverId)
+            let missing = songs.filter { !downloadedIds.contains($0.id) }
+            if !missing.isEmpty {
+                Task { [weak self] in
+                    await self?.enqueue(
+                        songs: missing,
+                        serverId: serverId
+                    )
+                }
+            }
+        }
+        await DownloadDatabase.shared.noteCollectionDetail(
+            kind: .playlist,
+            id: playlist.id,
+            serverId: serverId,
+            signature: DownloadDatabase.playlistSignature(playlist)
+        )
+        #endif
+    }
+
+    private func canMaintainDownloads(serverId: String) async -> Bool {
+        await MainActor.run {
+            !OfflineModeService.shared.isOffline
+                && OfflineModeService.shared.downloadsFeatureEnabled
+                && !KeepLibraryOfflineService.shared.isEnabled(serverId: serverId)
+        }
+    }
+
+    private func handleMetadataUpdate(_ update: DownloadMetadataUpdate) {
+        guard !update.isEmpty else { return }
+        guard let serverId = update.changes.first?.updated.serverId,
+              SubsonicAPIService.shared.activeServer?.stableId == serverId
+        else { return }
+        scheduleMetadataReload()
+        let artworkChanges = update.changes.filter {
+            $0.previous.coverArtId != $0.updated.coverArtId
+                || $0.previous.albumCoverArtId != $0.updated.albumCoverArtId
+                || $0.previous.artistCoverArtId != $0.updated.artistCoverArtId
+        }
+        guard !artworkChanges.isEmpty else { return }
+        for change in artworkChanges
+            where change.previous.coverArtId != change.updated.coverArtId {
+            let path = Self.coverPath(forFilePath: change.updated.filePath)
+            LocalArtworkIndex.shared.remove(path: path)
+            try? FileManager.default.removeItem(atPath: path)
+        }
+        Task { [weak self] in
+            await self?.refreshArtwork(for: artworkChanges)
+        }
+    }
+
+    private func scheduleMetadataReload() {
+        guard metadataReloadTask == nil else { return }
+        metadataReloadTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(150))
+            guard !Task.isCancelled else { return }
+            await self?.performMetadataReload()
+        }
+    }
+
+    private func performMetadataReload() async {
+        metadataReloadTask = nil
+        #if !os(tvOS)
+        await DownloadStore.shared.reload()
+        #endif
+    }
+
+    private func refreshArtwork(
+        for changes: [DownloadRecordMetadataChange]
+    ) async {
+        guard let serverId = changes.first?.updated.serverId,
+              let api = await currentAPI(for: serverId)
+        else { return }
+
+        for change in changes {
+            let record = change.updated
+            if change.previous.coverArtId != record.coverArtId,
+               let artId = record.coverArtId,
+               let url = api.api.coverArtURL(
+                   for: artId,
+                   server: api.server,
+                   password: api.password,
+                   size: 600
+               ),
+               let sharedPath = await ensureSharedArtwork(
+                   artId: artId,
+                   url: url,
+                   serverId: serverId
+               ) {
+                let destination = Self.coverPath(forFilePath: record.filePath)
+                try? FileManager.default.removeItem(atPath: destination)
+                do {
+                    try FileManager.default.linkItem(
+                        atPath: sharedPath,
+                        toPath: destination
+                    )
+                } catch {
+                    try? FileManager.default.copyItem(
+                        atPath: sharedPath,
+                        toPath: destination
+                    )
+                }
+                if FileManager.default.fileExists(atPath: destination) {
+                    LocalArtworkIndex.shared.set(artId: artId, path: destination)
+                }
+            }
+            if change.previous.albumCoverArtId != record.albumCoverArtId,
+               let artId = record.albumCoverArtId,
+               let url = api.api.coverArtURL(
+                   for: artId,
+                   server: api.server,
+                   password: api.password,
+                   size: 600
+               ) {
+                _ = await ensureSharedArtwork(
+                    artId: artId,
+                    url: url,
+                    serverId: serverId
+                )
+            }
+            if change.previous.artistCoverArtId != record.artistCoverArtId,
+               let artId = record.artistCoverArtId,
+               let url = api.api.coverArtURL(
+                   for: artId,
+                   server: api.server,
+                   password: api.password,
+                   size: 600
+               ) {
+                _ = await ensureSharedArtwork(
+                    artId: artId,
+                    url: url,
+                    serverId: serverId
+                )
+            }
+        }
+        NotificationCenter.default.post(name: .artworkIndexReady, object: nil)
+    }
+
+    private func enqueueCollectionRefreshes(
+        _ refreshes: [DownloadCollectionRefresh],
+        limit: Int
+    ) {
+        var added = 0
+        for refresh in refreshes {
+            guard !queuedCollectionRefreshKeys.contains(refresh.key),
+                  !activeCollectionRefreshKeys.contains(refresh.key)
+            else { continue }
+            guard added < limit else { break }
+            collectionRefreshQueue.append(refresh)
+            queuedCollectionRefreshKeys.insert(refresh.key)
+            added += 1
+        }
+        startNextCollectionRefreshes()
+    }
+
+    private func startNextCollectionRefreshes() {
+        while activeCollectionRefreshKeys.count < maxConcurrentCollectionRefreshes,
+              collectionRefreshStartIndex < collectionRefreshQueue.count {
+            let refresh = collectionRefreshQueue[collectionRefreshStartIndex]
+            collectionRefreshStartIndex += 1
+            queuedCollectionRefreshKeys.remove(refresh.key)
+            activeCollectionRefreshKeys.insert(refresh.key)
+            Task { [weak self] in
+                await self?.performCollectionRefresh(refresh)
+                await self?.finishCollectionRefresh(refresh)
+            }
+        }
+        compactCollectionRefreshQueueIfNeeded()
+    }
+
+    private func performCollectionRefresh(
+        _ refresh: DownloadCollectionRefresh
+    ) async {
+        guard SubsonicAPIService.shared.activeServer?.stableId == refresh.serverId
+        else { return }
+        let isOffline = await MainActor.run {
+            OfflineModeService.shared.isOffline
+        }
+        guard !isOffline else { return }
+        do {
+            switch refresh.kind {
+            case .album:
+                _ = try await SubsonicAPIService.shared.getAlbum(
+                    id: refresh.id,
+                    retries: 1
+                )
+            case .playlist:
+                _ = try await SubsonicAPIService.shared.getPlaylist(id: refresh.id)
+            }
+            await DownloadDatabase.shared.noteCollectionDetail(
+                kind: refresh.kind,
+                id: refresh.id,
+                serverId: refresh.serverId,
+                signature: refresh.signature
+            )
+        } catch {
+            return
+        }
+    }
+
+    private func finishCollectionRefresh(_ refresh: DownloadCollectionRefresh) {
+        activeCollectionRefreshKeys.remove(refresh.key)
+        startNextCollectionRefreshes()
+    }
+
+    private func compactCollectionRefreshQueueIfNeeded() {
+        guard collectionRefreshStartIndex > 64,
+              collectionRefreshStartIndex * 2 >= collectionRefreshQueue.count
+        else { return }
+        collectionRefreshQueue.removeFirst(collectionRefreshStartIndex)
+        collectionRefreshStartIndex = 0
+    }
+
     // MARK: - Enqueueing
 
     func enqueue(
@@ -311,9 +895,18 @@ actor DownloadService {
         serverId: String,
         albumArtistOverride: String? = nil,
         albumCoverArtIdOverride: String? = nil,
+        managedAlbumMarkers: [BulkDownloadAlbumMarker] = [],
+        resolvesAlbumMetadata: Bool = true,
         requiresKeepLibraryOfflineEnabled: Bool = false
     ) async {
         guard await canStartDownloads() else { return }
+        for marker in managedAlbumMarkers {
+            await DownloadDatabase.shared.markAlbumDownloaded(
+                id: marker.id,
+                name: marker.name,
+                serverId: serverId
+            )
+        }
         guard !songs.isEmpty else { return }
         guard let api = await currentAPI(for: serverId) else { return }
         let downloadedIds = await DownloadDatabase.shared.allSongIds(serverId: serverId)
@@ -334,7 +927,8 @@ actor DownloadService {
         // Das verhindert dass beim Single-Song-/Playlist-Download der erste Song "gewinnt"
         // und das Album mit Track-Künstler/Track-Cover statt Album-Künstler/Album-Cover anlegt.
         var albumDetails: [String: (artist: String?, coverArt: String?)] = [:]
-        if albumArtistOverride == nil || albumCoverArtIdOverride == nil {
+        if resolvesAlbumMetadata
+            && (albumArtistOverride == nil || albumCoverArtIdOverride == nil) {
             let neededIds = Set(songs.compactMap { $0.albumId }).filter { !$0.isEmpty }
             await withTaskGroup(of: (String, String?, String?)?.self) { group in
                 for albumId in neededIds {
@@ -446,6 +1040,19 @@ actor DownloadService {
                 )
             }
             let albumArtist = detail.artist ?? album.artist
+            await DownloadDatabase.shared.markAlbumDownloaded(
+                id: detail.id,
+                name: detail.name,
+                serverId: serverId
+            )
+            await DownloadDatabase.shared.noteCollectionDetail(
+                kind: .album,
+                id: detail.id,
+                serverId: serverId,
+                signature: DownloadDatabase.albumSignature(
+                    Self.downloadAlbumMetadata(from: detail)
+                )
+            )
             await enqueue(songs: songs, serverId: serverId,
                          albumArtistOverride: albumArtist,
                          albumCoverArtIdOverride: detail.coverArt)
@@ -505,20 +1112,38 @@ actor DownloadService {
         if removedRetrying { startNextJobs() }
     }
 
-    func delete(songId: String, serverId: String) async {
+    func delete(
+        songId: String,
+        serverId: String,
+        preservesManagedAlbum: Bool = false
+    ) async {
         cancel(songId: songId, serverId: serverId)
+        let record = await DownloadDatabase.shared.record(
+            songId: songId,
+            serverId: serverId
+        )
         if let path = await DownloadDatabase.shared.filePath(songId: songId, serverId: serverId) {
             LocalArtworkIndex.shared.remove(path: Self.coverPath(forFilePath: path))
             try? FileManager.default.removeItem(atPath: path)
             try? FileManager.default.removeItem(atPath: Self.coverPath(forFilePath: path))
         }
         await DownloadDatabase.shared.delete(songId: songId, serverId: serverId)
+        if !preservesManagedAlbum, let albumId = record?.albumId, !albumId.isEmpty {
+            await DownloadDatabase.shared.unmarkAlbumDownloaded(
+                id: albumId,
+                serverId: serverId
+            )
+        }
         let key = Self.key(songId: songId, serverId: serverId)
         stateSubject.send((key, .none))
         await DownloadStore.shared.removeRecord(songId: songId, serverId: serverId)
     }
 
     func deleteAlbum(albumId: String, serverId: String) async {
+        await DownloadDatabase.shared.unmarkAlbumDownloaded(
+            id: albumId,
+            serverId: serverId
+        )
         let queuedSongIds = jobSongIds(matching: { $0.albumId == albumId && $0.serverId == serverId })
         for songId in queuedSongIds { cancel(songId: songId, serverId: serverId) }
 
@@ -552,6 +1177,12 @@ actor DownloadService {
             records = all.filter { $0.artistName == lookupName }
         } else {
             records = all.filter { $0.artistId == artistId || $0.artistName == artistId }
+        }
+        for albumId in Set(records.map(\.albumId)).filter({ !$0.isEmpty }) {
+            await DownloadDatabase.shared.unmarkAlbumDownloaded(
+                id: albumId,
+                serverId: serverId
+            )
         }
         for r in records {
             cancel(songId: r.songId, serverId: serverId)
@@ -654,9 +1285,21 @@ actor DownloadService {
         let alreadyDownloaded = await DownloadDatabase.shared.allSongIds(serverId: serverId)
         let apiService = api.api
 
-        async let discoverFreqTask = (try? await apiService.getAlbumList(type: "frequent", size: 20)) ?? []
-        async let discoverRecentTask = (try? await apiService.getAlbumList(type: "recent", size: 20)) ?? []
-        async let discoverNewestTask = (try? await apiService.getAlbumList(type: "newest", size: 50)) ?? []
+        async let discoverFreqTask = (try? await apiService.getAlbumList(
+            type: "frequent",
+            size: 20,
+            libraryFilter: .all
+        )) ?? []
+        async let discoverRecentTask = (try? await apiService.getAlbumList(
+            type: "recent",
+            size: 20,
+            libraryFilter: .all
+        )) ?? []
+        async let discoverNewestTask = (try? await apiService.getAlbumList(
+            type: "newest",
+            size: 50,
+            libraryFilter: .all
+        )) ?? []
         async let albumPairsTask = fetchAlbumSongPairs(api: apiService, albums: libraryAlbums)
         async let playlistPairsTask = fetchPlaylistSongPairs(api: apiService, recapPlaylistIds: recapPlaylistIds)
 
@@ -668,6 +1311,10 @@ actor DownloadService {
 
         let albumSongsById = Dictionary(albumPairs.map { ($0.album.id, sortAlbumSongs($0.songs)) },
                                         uniquingKeysWith: { first, _ in first })
+        let libraryAlbumsById = Dictionary(
+            libraryAlbums.map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
 
         var units: [BulkDownloadUnit] = []
         var usedAlbumIds = Set<String>()
@@ -680,7 +1327,14 @@ actor DownloadService {
             units.append(BulkDownloadUnit(
                 priority: priority,
                 songs: songs,
-                playlistMarker: nil
+                playlistMarker: nil,
+                albumMarker: BulkDownloadAlbumMarker(
+                    id: albumId,
+                    name: libraryAlbumsById[albumId]?.name
+                        ?? songs.first?.album
+                        ?? "",
+                    songIds: songs.map(\.id)
+                )
             ))
         }
 
@@ -719,7 +1373,8 @@ actor DownloadService {
                     id: playlist.element.id,
                     name: playlist.element.name,
                     songIds: songs.map(\.id)
-                )
+                ),
+                albumMarker: nil
             ))
         }
 
@@ -733,7 +1388,8 @@ actor DownloadService {
                     id: playlist.element.id,
                     name: playlist.element.name,
                     songIds: songs.map(\.id)
-                )
+                ),
+                albumMarker: nil
             ))
         }
 
@@ -756,11 +1412,18 @@ actor DownloadService {
         var skippedIds = Set<String>()
         var playlistMarkers: [BulkDownloadPlaylistMarker] = []
         var playlistMarkerIds = Set<String>()
+        var albumMarkers: [BulkDownloadAlbumMarker] = []
+        var albumMarkerIds = Set<String>()
         var totalBytes: Int64 = 0
 
         func appendPlaylistMarker(_ marker: BulkDownloadPlaylistMarker?) {
             guard let marker, playlistMarkerIds.insert(marker.id).inserted else { return }
             playlistMarkers.append(marker)
+        }
+
+        func appendAlbumMarker(_ marker: BulkDownloadAlbumMarker?) {
+            guard let marker, albumMarkerIds.insert(marker.id).inserted else { return }
+            albumMarkers.append(marker)
         }
 
         for unit in units.sorted(by: { $0.priority < $1.priority }) {
@@ -769,6 +1432,7 @@ actor DownloadService {
             }
             if missingSongs.isEmpty {
                 appendPlaylistMarker(unit.playlistMarker)
+                appendAlbumMarker(unit.albumMarker)
                 continue
             }
             let packageBytes = missingSongs.reduce(Int64(0)) {
@@ -779,6 +1443,7 @@ actor DownloadService {
                 plannedIds.formUnion(missingSongs.map(\.id))
                 totalBytes += packageBytes
                 appendPlaylistMarker(unit.playlistMarker)
+                appendAlbumMarker(unit.albumMarker)
             } else {
                 for song in missingSongs where skippedIds.insert(song.id).inserted {
                     skipped.append(song)
@@ -792,6 +1457,7 @@ actor DownloadService {
             totalBytes: totalBytes,
             limitBytes: maxBytes,
             playlistMarkers: playlistMarkers,
+            albumMarkers: albumMarkers,
             recapPlaylistSongIds: recapPlaylistSongIdsMap
         )
     }
@@ -825,6 +1491,7 @@ actor DownloadService {
             limitBytes: maxBytes,
             isKeepLibraryOffline: true,
             playlistMarkers: plan.playlistMarkers,
+            albumMarkers: plan.albumMarkers,
             recapPlaylistSongIds: plan.recapPlaylistSongIds
         )
         return plan

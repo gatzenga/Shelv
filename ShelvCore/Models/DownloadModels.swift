@@ -263,6 +263,12 @@ nonisolated struct BulkDownloadPlaylistMarker: Hashable, Sendable {
     let songIds: [String]
 }
 
+nonisolated struct BulkDownloadAlbumMarker: Hashable, Sendable {
+    let id: String
+    let name: String
+    let songIds: [String]
+}
+
 struct BulkDownloadPlan {
     let planned: [Song]
     let skipped: [Song]
@@ -271,6 +277,7 @@ struct BulkDownloadPlan {
     var availableBytes: Int64? = nil
     var isKeepLibraryOffline: Bool = false
     var playlistMarkers: [BulkDownloadPlaylistMarker] = []
+    var albumMarkers: [BulkDownloadAlbumMarker] = []
     var recapPlaylistSongIds: [String: [String]] = [:]
 
     var isEmpty: Bool { planned.isEmpty }

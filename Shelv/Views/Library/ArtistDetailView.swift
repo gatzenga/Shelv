@@ -7,6 +7,7 @@ struct ArtistDetailView: View {
     @Environment(\.personalizationSwipeConfiguration) private var personalization
     private let downloadStore = DownloadStore.shared
     @ObservedObject var offlineMode = OfflineModeService.shared
+    @ObservedObject private var musicLibraries = MusicLibraryStore.shared
     @EnvironmentObject var serverStore: ServerStore
     private let player = AudioPlayerService.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
@@ -159,8 +160,7 @@ struct ArtistDetailView: View {
                 populateFromLocal()
             }
         }
-        .task {
-            guard detail == nil else { return }
+        .task(id: musicLibraries.revision) {
             await loadDetail()
         }
         .task(id: songSearchLoadID) {

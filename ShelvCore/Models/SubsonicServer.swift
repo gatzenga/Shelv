@@ -6,6 +6,108 @@ nonisolated enum ServerURLSlot: String, Codable, Sendable {
     case secondary
 }
 
+nonisolated struct SubsonicMusicFolder: Identifiable, Codable, Hashable, Sendable {
+    let id: Int
+    let name: String
+}
+
+/// Controls whether an API request follows the active online library filter.
+/// Direct ID lookups, playlists, recaps, downloads, and playback history use
+/// `.all` so an item remains reachable outside the currently visible library.
+nonisolated enum MusicLibraryRequestFilter: Equatable, Sendable {
+    case active
+    case all
+    case folders([Int])
+}
+
+nonisolated enum MusicLibraryQueryItems {
+    static func make(folderIDs: [Int]?) -> [URLQueryItem] {
+        guard let folderIDs else { return [] }
+        return Set(folderIDs).sorted().map {
+            URLQueryItem(name: "musicFolderId", value: String($0))
+        }
+    }
+}
+
+nonisolated enum MusicLibrarySelectionMode: Codable, Equatable, Sendable {
+    case all
+    case folders(Set<Int>)
+
+    private enum CodingKeys: String, CodingKey {
+        case kind
+        case folderIDs
+    }
+
+    private enum Kind: String, Codable {
+        case all
+        case folders
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        switch try container.decode(Kind.self, forKey: .kind) {
+        case .all:
+            self = .all
+        case .folders:
+            self = .folders(
+                Set(try container.decode([Int].self, forKey: .folderIDs))
+            )
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case .all:
+            try container.encode(Kind.all, forKey: .kind)
+        case .folders(let folderIDs):
+            try container.encode(Kind.folders, forKey: .kind)
+            try container.encode(folderIDs.sorted(), forKey: .folderIDs)
+        }
+    }
+}
+
+/// Pure selection rules shared by the UI store and logic tests.
+nonisolated enum MusicLibrarySelectionPolicy {
+    static func resolvedIDs(
+        availableIDs: Set<Int>,
+        mode: MusicLibrarySelectionMode?
+    ) -> Set<Int> {
+        guard !availableIDs.isEmpty else { return [] }
+        switch mode {
+        case .folders(let storedIDs):
+            let resolved = storedIDs.intersection(availableIDs)
+            return resolved.isEmpty ? availableIDs : resolved
+        case .all, .none:
+            return availableIDs
+        }
+    }
+
+    static func toggledIDs(
+        _ folderID: Int,
+        selectedIDs: Set<Int>,
+        availableIDs: Set<Int>
+    ) -> Set<Int> {
+        guard availableIDs.contains(folderID) else { return selectedIDs }
+
+        var result = selectedIDs.intersection(availableIDs)
+        if result.contains(folderID) {
+            guard result.count > 1 else { return result }
+            result.remove(folderID)
+        } else {
+            result.insert(folderID)
+        }
+        return result
+    }
+
+    static func persistedMode(
+        selectedIDs: Set<Int>,
+        availableIDs: Set<Int>
+    ) -> MusicLibrarySelectionMode {
+        selectedIDs == availableIDs ? .all : .folders(selectedIDs)
+    }
+}
+
 /// The two URL spellings used by Subsonic-compatible servers. Navidrome and
 /// OpenSubsonic normally accept the extensionless form, while original
 /// Subsonic installations may require the historical `.view` suffix.

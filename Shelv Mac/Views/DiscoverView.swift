@@ -23,6 +23,7 @@ struct DiscoverView: View {
     @ObservedObject var libraryStore = LibraryViewModel.shared
     @ObservedObject var offlineMode = OfflineModeService.shared
     @ObservedObject var downloadStore = DownloadStore.shared
+    @ObservedObject private var musicLibraries = MusicLibraryStore.shared
     @AppStorage("themeColor") private var themeColorName: String = "violet"
     @AppStorage("recapEnabled") private var recapEnabled = false
     @AppStorage(PersonalizationPreferenceKey.showDiscoverInsights) private var showDiscoverInsights = true
@@ -61,6 +62,14 @@ struct DiscoverView: View {
 
     private var canSwitchServerURL: Bool {
         activeServer?.hasSecondaryURL == true
+    }
+
+    private var canSwitchMusicLibrary: Bool {
+        musicLibraries.snapshot.showsSelector
+    }
+
+    private var showsServerMenu: Bool {
+        canSwitchServerURL || canSwitchMusicLibrary
     }
 
     private var visibleSmartMixes: [PersonalizationSmartMix] {
@@ -346,10 +355,20 @@ struct DiscoverView: View {
     @ViewBuilder
     private var discoverHeader: some View {
         Group {
-            if canSwitchServerURL, let activeServer {
+            if showsServerMenu, let activeServer {
                 Menu {
-                    serverURLSlotMenuButton(slot: .primary, server: activeServer)
-                    serverURLSlotMenuButton(slot: .secondary, server: activeServer)
+                    if canSwitchServerURL {
+                        serverURLSlotMenuButton(slot: .primary, server: activeServer)
+                        serverURLSlotMenuButton(slot: .secondary, server: activeServer)
+                    }
+                    if canSwitchServerURL && canSwitchMusicLibrary {
+                        Divider()
+                    }
+                    if canSwitchMusicLibrary {
+                        ForEach(musicLibraries.availableFolders) { folder in
+                            musicLibraryMenuButton(folder)
+                        }
+                    }
                 } label: {
                     HStack(spacing: 6) {
                         Text(discoverTitle)
@@ -371,6 +390,23 @@ struct DiscoverView: View {
                     .minimumScaleFactor(0.8)
             }
         }
+    }
+
+    @ViewBuilder
+    private func musicLibraryMenuButton(_ folder: SubsonicMusicFolder) -> some View {
+        let isSelected = musicLibraries.selectedFolderIDs.contains(folder.id)
+        Button {
+            musicLibraries.toggle(folderID: folder.id)
+        } label: {
+            HStack(spacing: 16) {
+                Text(folder.name)
+                Spacer()
+                if isSelected {
+                    Image(systemName: "checkmark")
+                }
+            }
+        }
+        .disabled(isSelected && musicLibraries.selectedFolderIDs.count == 1)
     }
 
     @ViewBuilder

@@ -96,10 +96,13 @@ struct AlphabetIndexBar: View {
     }
 
     private func letter(at yPosition: CGFloat) -> String? {
-        guard yPosition.isFinite, !letters.isEmpty else { return nil }
-        let rawIndex = yPosition / itemHeight
-        guard rawIndex.isFinite else { return nil }
-        let clampedIndex = min(max(rawIndex, 0), CGFloat(letters.count - 1))
-        return letters[Int(clampedIndex)]
+        guard let index = AlphabetIndexSelection.index(
+            yPosition: Double(yPosition),
+            itemHeight: Double(itemHeight),
+            itemCount: letters.count
+        ) else {
+            return nil
+        }
+        return letters[index]
     }
 }

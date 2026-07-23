@@ -141,7 +141,11 @@ class LyricsStore: ObservableObject {
             var offset = 0
             let pageSize = 500
             while !Task.isCancelled {
-                guard let page = try? await api.getAllAlbums(size: pageSize, offset: offset) else { break }
+                guard let page = try? await api.getAllAlbums(
+                    size: pageSize,
+                    offset: offset,
+                    libraryFilter: .all
+                ) else { break }
                 albums.append(contentsOf: page)
                 if page.count < pageSize { break }
                 offset += pageSize
