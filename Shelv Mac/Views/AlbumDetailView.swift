@@ -114,6 +114,20 @@ struct AlbumDetailView: View {
         }
         .background(Color(NSColor.windowBackgroundColor))
         .navigationTitle(vm.album?.name ?? albumName)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                if enableDownloads,
+                   let album = vm.album,
+                   !offlineMode.isOffline || albumDownloadStatus(for: album) != .none {
+                    Menu {
+                        albumDownloadMenuItems(for: album)
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                            .symbolRenderingMode(.hierarchical)
+                    }
+                }
+            }
+        }
         .searchable(text: $searchQuery, prompt: String(localized: "search_songs"))
         .task(id: albumId) {
             let local = downloadStore.albums.first(where: { $0.albumId == albumId })
@@ -258,10 +272,6 @@ struct AlbumDetailView: View {
             .controlSize(.large)
             .disabled(vm.isLoading || displaySongs.isEmpty)
 
-            if enableDownloads, let album = vm.album {
-                downloadHeaderButton(for: album, iconOnly: iconOnly)
-            }
-
             if showFavoriteActions && !offlineMode.isOffline, let album = vm.album {
                 let albumModel = Album(id: album.id, name: album.name, artist: album.artist,
                                        artistId: album.artistId, coverArt: album.coverArt,
@@ -330,14 +340,13 @@ struct AlbumDetailView: View {
     }
 
     @ViewBuilder
-    private func downloadHeaderButton(for album: AlbumDetail, iconOnly: Bool) -> some View {
-        let total = vm.songs.count
+    private func albumDownloadMenuItems(for album: AlbumDetail) -> some View {
         let albumModel = Album(id: album.id, name: album.name, artist: album.artist,
                                artistId: album.artistId, coverArt: album.coverArt,
                                songCount: album.songCount, duration: album.duration,
                                year: album.year, genre: album.genre,
                                starred: album.starred)
-        let status = downloadStore.albumDownloadStatus(albumId: album.id, totalSongs: total)
+        let status = albumDownloadStatus(for: album)
         switch status {
         case .none:
             if !offlineMode.isOffline {
@@ -345,42 +354,46 @@ struct AlbumDetailView: View {
                     downloadStore.enqueueAlbum(albumModel)
                 } label: {
                     Label(String(localized: "download"), systemImage: "arrow.down.circle")
-                        .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
+                        .foregroundStyle(themeColor)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
+                .tint(themeColor)
             }
-        case .partial(let done, let tot):
+        case .partial(let done, let total):
             if !offlineMode.isOffline {
                 Button {
                     downloadStore.enqueueAlbum(albumModel)
                 } label: {
-                    Label("Rest (\(tot - done))", systemImage: "arrow.down.circle")
-                        .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
+                    Label("Rest (\(total - done))", systemImage: "arrow.down.circle")
+                        .foregroundStyle(themeColor)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
+                .tint(themeColor)
             }
-            Button {
+            Button(role: .destructive) {
                 showDeleteDownloadConfirm = true
             } label: {
-                Label(String(localized: "delete_downloads"), systemImage: DownloadActionSymbols.delete)
-                    .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
-                    .foregroundStyle(.red)
+                Label {
+                    Text(String(localized: "delete_downloads"))
+                } icon: {
+                    DeleteDownloadIcon(tint: .red)
+                }
             }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
+            .tint(.red)
         case .complete:
-            Button {
+            Button(role: .destructive) {
                 showDeleteDownloadConfirm = true
             } label: {
-                Label(String(localized: "delete_downloads"), systemImage: DownloadActionSymbols.delete)
-                    .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
-                    .foregroundStyle(.red)
+                Label {
+                    Text(String(localized: "delete_downloads"))
+                } icon: {
+                    DeleteDownloadIcon(tint: .red)
+                }
             }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
+            .tint(.red)
         }
+    }
+
+    private func albumDownloadStatus(for album: AlbumDetail) -> AlbumDownloadStatus {
+        downloadStore.albumDownloadStatus(albumId: album.id, totalSongs: vm.songs.count)
     }
 }
 

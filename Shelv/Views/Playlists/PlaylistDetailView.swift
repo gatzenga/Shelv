@@ -24,6 +24,8 @@ struct PlaylistDetailView: View {
     @State private var showRenameAlert = false
     @State private var newName = ""
     @State private var newComment = ""
+    @State private var pendingSongDeletionOffsets = IndexSet()
+    @State private var showRemoveSongsConfirm = false
     @State private var showDeleteConfirm = false
     @State private var showDeleteDownloadConfirm = false
     @State private var currentToast: ShelveToast?
@@ -164,26 +166,15 @@ struct PlaylistDetailView: View {
                                 currentToast = ShelveToast(message: String(localized: "added_to_queue"))
                             }
                         )
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            if searchQuery.isEmpty {
-                                Button {
-                                    haptic()
-                                    removeSong(at: songsIndex)
-                                } label: {
-                                    Image(systemName: "trash")
-                                }
-                                .tint(.red)
-                            }
-                        }
                     }
                     .onMove { from, to in
                         songs.move(fromOffsets: from, toOffset: to)
                         Task { await syncOrder() }
                     }
                     .onDelete { offsets in
-                        removeSongs(at: offsets)
+                        requestSongDeletion(at: offsets)
                     }
-                    .deleteDisabled(isEditMode)
+                    .deleteDisabled(!isEditMode)
 
                     PlayerBottomSpacer(activeHeight: 110, inactiveHeight: 0)
                         .listRowInsets(EdgeInsets())
@@ -225,20 +216,6 @@ struct PlaylistDetailView: View {
                         Divider()
 
                         Button {
-                            if !songs.isEmpty { player.play(songs: songs, startIndex: 0) }
-                        } label: {
-                            Label(String(localized: "play"), systemImage: "play.fill")
-                        }
-                        .disabled(songs.isEmpty)
-
-                        Button {
-                            if !songs.isEmpty { player.playShuffled(songs: songs) }
-                        } label: {
-                            Label(String(localized: "shuffle"), systemImage: "shuffle")
-                        }
-                        .disabled(songs.isEmpty)
-
-                        Button {
                             if !songs.isEmpty {
                                 player.addPlayNext(songs)
                                 currentToast = ShelveToast(message: String(localized: "plays_next"))
@@ -257,6 +234,13 @@ struct PlaylistDetailView: View {
                             Label(String(localized: "add_to_queue"), systemImage: "text.badge.plus")
                         }
                         .disabled(songs.isEmpty)
+
+                        if enableDownloads
+                            && !songs.isEmpty
+                            && (!offlineMode.isOffline || isMarkedForOffline) {
+                            Divider()
+                            playlistDownloadMenuItems
+                        }
 
                         Divider()
 
@@ -300,6 +284,21 @@ struct PlaylistDetailView: View {
             Button(String(localized: "cancel"), role: .cancel) {}
         } message: {
             Text(String(localized: "the_downloads_will_be_removed_from_this_device"))
+        }
+        .alert(
+            String(localized: "remove_from_playlist"),
+            isPresented: $showRemoveSongsConfirm
+        ) {
+            Button(String(localized: "delete"), role: .destructive) {
+                let offsets = pendingSongDeletionOffsets
+                pendingSongDeletionOffsets = []
+                removeSongs(at: offsets)
+            }
+            Button(String(localized: "cancel"), role: .cancel) {
+                pendingSongDeletionOffsets = []
+            }
+        } message: {
+            Text(pendingSongDeletionDescription)
         }
         .alert(String(localized: "delete_playlist_2"), isPresented: $showDeleteConfirm) {
             Button(String(localized: "delete"), role: .destructive) {
@@ -374,39 +373,34 @@ struct PlaylistDetailView: View {
             }
             .padding(.horizontal)
 
-            VStack(spacing: 8) {
-                HStack(spacing: 14) {
-                    Button {
-                        if !songs.isEmpty { player.play(songs: songs, startIndex: 0) }
-                    } label: {
-                        Label(String(localized: "play"), systemImage: "play.fill")
-                            .font(.body).bold()
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .background(accentColor)
-                            .clipShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(songs.isEmpty)
+            HStack(spacing: 14) {
+                Button {
+                    if !songs.isEmpty { player.play(songs: songs, startIndex: 0) }
+                } label: {
+                    Label(String(localized: "play"), systemImage: "play.fill")
+                        .font(.body).bold()
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(accentColor)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .disabled(songs.isEmpty)
 
-                    Button {
-                        if !songs.isEmpty { player.playShuffled(songs: songs) }
-                    } label: {
-                        Label(String(localized: "shuffle"), systemImage: "shuffle")
-                            .font(.body).bold()
-                            .foregroundStyle(accentColor)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .background(accentColor.opacity(0.15))
-                            .clipShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(songs.isEmpty)
+                Button {
+                    if !songs.isEmpty { player.playShuffled(songs: songs) }
+                } label: {
+                    Label(String(localized: "shuffle"), systemImage: "shuffle")
+                        .font(.body).bold()
+                        .foregroundStyle(accentColor)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(accentColor.opacity(0.15))
+                        .clipShape(Capsule())
                 }
-                if enableDownloads && !songs.isEmpty {
-                    downloadHeaderButtons()
-                }
+                .buttonStyle(.plain)
+                .disabled(songs.isEmpty)
             }
             .padding(.horizontal)
             .padding(.bottom, 8)
@@ -415,74 +409,51 @@ struct PlaylistDetailView: View {
     }
 
     @ViewBuilder
-    private func downloadHeaderButtons() -> some View {
+    private var playlistDownloadMenuItems: some View {
         let isMarked = isMarkedForOffline
         let remaining = isMarked ? songs.filter { !downloadedSongIDs.contains($0.id) }.count : 0
-        HStack(spacing: 10) {
-            if !isMarked && !offlineMode.isOffline {
-                Button {
-                    haptic()
-                    let missing = songs.filter {
-                        !DownloadUIStateHub.shared.isSongDownloaded($0.id)
-                    }
-                    if !missing.isEmpty { downloadStore.enqueueSongs(missing) }
-                    downloadStore.addOfflinePlaylist(playlist.id, songIds: songs.map(\.id))
-                    currentToast = ShelveToast(message: String(localized: "download_started"))
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "arrow.down.circle")
-                        Text(String(localized: "download"))
-                    }
-                    .font(.subheadline).bold()
+        if !isMarked && !offlineMode.isOffline {
+            Button {
+                haptic()
+                let missing = songs.filter {
+                    !DownloadUIStateHub.shared.isSongDownloaded($0.id)
+                }
+                if !missing.isEmpty { downloadStore.enqueueSongs(missing) }
+                downloadStore.addOfflinePlaylist(playlist.id, songIds: songs.map(\.id))
+                currentToast = ShelveToast(message: String(localized: "download_started"))
+            } label: {
+                Label(String(localized: "download"), systemImage: "arrow.down.circle")
                     .foregroundStyle(accentColor)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(accentColor.opacity(0.12))
-                    .clipShape(Capsule())
-                }
-                .buttonStyle(.plain)
             }
-            if isMarked && remaining > 0 && !offlineMode.isOffline {
-                Button {
-                    haptic()
-                    let missing = songs.filter {
-                        !DownloadUIStateHub.shared.isSongDownloaded($0.id)
-                    }
-                    if !missing.isEmpty { downloadStore.enqueueSongs(missing) }
-                    downloadStore.syncPlaylistSongIds(playlist.id, songIds: songs.map(\.id))
-                    currentToast = ShelveToast(message: String(localized: "download_started"))
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "arrow.down.circle")
-                        Text("Rest (\(remaining))")
-                    }
-                    .font(.subheadline).bold()
+            .tint(accentColor)
+        }
+        if isMarked && remaining > 0 && !offlineMode.isOffline {
+            Button {
+                haptic()
+                let missing = songs.filter {
+                    !DownloadUIStateHub.shared.isSongDownloaded($0.id)
+                }
+                if !missing.isEmpty { downloadStore.enqueueSongs(missing) }
+                downloadStore.syncPlaylistSongIds(playlist.id, songIds: songs.map(\.id))
+                currentToast = ShelveToast(message: String(localized: "download_started"))
+            } label: {
+                Label("Rest (\(remaining))", systemImage: "arrow.down.circle")
                     .foregroundStyle(accentColor)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(accentColor.opacity(0.12))
-                    .clipShape(Capsule())
-                }
-                .buttonStyle(.plain)
             }
-            if isMarked {
-                Button {
-                    haptic()
-                    showDeleteDownloadConfirm = true
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: DownloadActionSymbols.delete)
-                        Text(String(localized: "delete_downloads_2"))
-                    }
-                    .font(.subheadline).bold()
-                    .foregroundStyle(.red)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(Color.red.opacity(0.12))
-                    .clipShape(Capsule())
+            .tint(accentColor)
+        }
+        if isMarked {
+            Button(role: .destructive) {
+                haptic()
+                showDeleteDownloadConfirm = true
+            } label: {
+                Label {
+                    Text(String(localized: "delete_downloads_2"))
+                } icon: {
+                    DeleteDownloadIcon(tint: .red)
                 }
-                .buttonStyle(.plain)
             }
+            .tint(.red)
         }
     }
 
@@ -512,14 +483,20 @@ struct PlaylistDetailView: View {
         isLoading = false
     }
 
-    private func removeSong(at index: Int) {
-        guard !isSyncing, songs.indices.contains(index) else { return }
-        isSyncing = true
-        songs.remove(at: index)
-        Task {
-            await libraryStore.removeSongsFromPlaylist(playlist, indices: [index])
-            isSyncing = false
-        }
+    private var pendingSongDeletionDescription: String {
+        pendingSongDeletionOffsets
+            .compactMap { songs.indices.contains($0) ? songs[$0].title : nil }
+            .map { "\"\($0)\"" }
+            .joined(separator: "\n")
+    }
+
+    private func requestSongDeletion(at offsets: IndexSet) {
+        guard isEditMode, !isSyncing else { return }
+        let validOffsets = IndexSet(offsets.filter { songs.indices.contains($0) })
+        guard !validOffsets.isEmpty else { return }
+        haptic()
+        pendingSongDeletionOffsets = validOffsets
+        showRemoveSongsConfirm = true
     }
 
     private func removeSongs(at offsets: IndexSet) {

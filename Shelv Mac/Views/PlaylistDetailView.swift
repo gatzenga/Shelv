@@ -12,7 +12,7 @@ struct PlaylistDetailView: View {
     @AppStorage("enableDownloads") private var enableDownloads = true
 
     @ViewBuilder
-    private func playlistDownloadButtons(iconOnly: Bool) -> some View {
+    private var playlistDownloadMenuItems: some View {
         let isMarked = downloadStore.downloadedPlaylistIds.contains(playlist.id)
         let remaining = isMarked ? songs.filter { !downloadStore.isDownloaded(songId: $0.id) }.count : 0
         if !isMarked && !offlineMode.isOffline {
@@ -23,10 +23,9 @@ struct PlaylistDetailView: View {
                 NotificationCenter.default.post(name: .showToast, object: String(localized: "download_started"))
             } label: {
                 Label(String(localized: "download"), systemImage: "arrow.down.circle")
-                    .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
+                    .foregroundStyle(themeColor)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
+            .tint(themeColor)
         }
         if isMarked && remaining > 0 && !offlineMode.isOffline {
             Button {
@@ -36,21 +35,21 @@ struct PlaylistDetailView: View {
                 NotificationCenter.default.post(name: .showToast, object: String(localized: "download_started"))
             } label: {
                 Label("Rest (\(remaining))", systemImage: "arrow.down.circle")
-                    .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
+                    .foregroundStyle(themeColor)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
+            .tint(themeColor)
         }
         if isMarked {
-            Button {
+            Button(role: .destructive) {
                 showDeleteDownloadConfirm = true
             } label: {
-                Label(String(localized: "delete_downloads"), systemImage: DownloadActionSymbols.delete)
-                    .labelStyle(AdaptiveLabelStyle(iconOnly: iconOnly))
-                    .foregroundStyle(.red)
+                Label {
+                    Text(String(localized: "delete_downloads"))
+                } icon: {
+                    DeleteDownloadIcon(tint: .red)
+                }
             }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
+            .tint(.red)
         }
     }
 
@@ -102,9 +101,6 @@ struct PlaylistDetailView: View {
             .controlSize(.large)
             .disabled(isLoading || songs.isEmpty)
 
-            if enableDownloads && !songs.isEmpty {
-                playlistDownloadButtons(iconOnly: iconOnly)
-            }
         }
     }
     @Environment(\.themeColor) private var themeColor
@@ -250,6 +246,19 @@ struct PlaylistDetailView: View {
             }
             .help(isEditMode ? String(localized: "finish_editing") : String(localized: "edit_playlist"))
             .disabled(isLoading || isMutatingSongs)
+        }
+        ToolbarItem(placement: .primaryAction) {
+            if enableDownloads
+                && !songs.isEmpty
+                && (!offlineMode.isOffline
+                    || downloadStore.downloadedPlaylistIds.contains(playlist.id)) {
+                Menu {
+                    playlistDownloadMenuItems
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .symbolRenderingMode(.hierarchical)
+                }
+            }
         }
         ToolbarItem(placement: .primaryAction) {
             Button(role: .destructive) {

@@ -247,9 +247,6 @@ struct ArtistDetailView: View {
                 }
             }
 
-            if enableDownloads, !isLoading, !sortedAlbums.isEmpty {
-                downloadHeaderButtons()
-            }
         }
         .padding(.horizontal)
         .padding(.top, 16)
@@ -621,6 +618,12 @@ struct ArtistDetailView: View {
             } label: {
                 Label(String(localized: "sort"), systemImage: "arrow.up.arrow.down")
             }
+
+            if enableDownloads
+                && (!offlineMode.isOffline || artistDownloadStatus != .none) {
+                Divider()
+                artistDownloadMenuItems
+            }
         } label: {
             Image(systemName: "ellipsis.circle")
                 .foregroundStyle(accentColor)
@@ -716,82 +719,60 @@ struct ArtistDetailView: View {
     }
 
     @ViewBuilder
-    private func downloadHeaderButtons() -> some View {
-        HStack(spacing: 10) {
-            switch artistDownloadStatus {
-            case .none:
-                if !offlineMode.isOffline {
-                    Button {
-                        haptic()
-                        Task { await DownloadService.shared.enqueueArtist(artist: artist, serverId: serverStableId()) }
-                        currentToast = ShelveToast(message: String(localized: "download_started"))
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "arrow.down.circle")
-                            Text(String(localized: "download_artist"))
-                        }
-                        .font(.subheadline).bold()
-                        .foregroundStyle(accentColor)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background(accentColor.opacity(0.12))
-                        .clipShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-                }
-            case .partial:
-                if !offlineMode.isOffline {
-                    Button {
-                        haptic()
-                        Task { await DownloadService.shared.enqueueArtist(artist: artist, serverId: serverStableId()) }
-                        currentToast = ShelveToast(message: String(localized: "download_started"))
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "arrow.down.circle")
-                            Text(String(localized: "download_remaining"))
-                        }
-                        .font(.subheadline).bold()
-                        .foregroundStyle(accentColor)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background(accentColor.opacity(0.12))
-                        .clipShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-                }
+    private var artistDownloadMenuItems: some View {
+        switch artistDownloadStatus {
+        case .none:
+            if !offlineMode.isOffline {
                 Button {
-                    haptic(); showDeleteArtistDownloadConfirm = true
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: DownloadActionSymbols.delete)
-                        Text(String(localized: "delete_downloads_2"))
+                    haptic()
+                    Task {
+                        await DownloadService.shared.enqueueArtist(
+                            artist: artist,
+                            serverId: serverStableId()
+                        )
                     }
-                    .font(.subheadline).bold()
-                    .foregroundStyle(.red)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(Color.red.opacity(0.12))
-                    .clipShape(Capsule())
+                    currentToast = ShelveToast(message: String(localized: "download_started"))
+                } label: {
+                    Label(String(localized: "download_artist"), systemImage: "arrow.down.circle")
+                        .foregroundStyle(accentColor)
                 }
-                .buttonStyle(.plain)
-            case .complete:
+                .tint(accentColor)
+            }
+        case .partial:
+            if !offlineMode.isOffline {
                 Button {
-                    haptic(); showDeleteArtistDownloadConfirm = true
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: DownloadActionSymbols.delete)
-                        Text(String(localized: "delete_downloads_2"))
+                    haptic()
+                    Task {
+                        await DownloadService.shared.enqueueArtist(
+                            artist: artist,
+                            serverId: serverStableId()
+                        )
                     }
-                    .font(.subheadline).bold()
-                    .foregroundStyle(.red)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(Color.red.opacity(0.12))
-                    .clipShape(Capsule())
+                    currentToast = ShelveToast(message: String(localized: "download_started"))
+                } label: {
+                    Label(String(localized: "download_remaining"), systemImage: "arrow.down.circle")
+                        .foregroundStyle(accentColor)
                 }
-                .buttonStyle(.plain)
+                .tint(accentColor)
+            }
+            deleteArtistDownloadMenuItem
+        case .complete:
+            deleteArtistDownloadMenuItem
+        }
+    }
+
+    private var deleteArtistDownloadMenuItem: some View {
+        Button(role: .destructive) {
+            haptic()
+            showDeleteArtistDownloadConfirm = true
+        } label: {
+            Label {
+                Text(String(localized: "delete_downloads_2"))
+            } icon: {
+                DeleteDownloadIcon(tint: .red)
             }
         }
+        .tint(.red)
     }
 }
 

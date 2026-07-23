@@ -23,6 +23,7 @@ struct AlbumDetailView: View {
     @State private var artistResolveTask: Task<Void, Never>?
     @State private var searchQuery = ""
     @State private var showDeleteAlbumDownloadConfirm = false
+    @State private var downloadedAlbumSongCount = 0
 
     private struct IndexedSongRow: Identifiable {
         let index: Int
@@ -198,6 +199,12 @@ struct AlbumDetailView: View {
                         }
                         .disabled(detail == nil)
                     }
+
+                    if enableDownloads
+                        && (!offlineMode.isOffline || albumDownloadStatus != .none) {
+                        Divider()
+                        downloadMenuItems(status: albumDownloadStatus)
+                    }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                         .symbolRenderingMode(.hierarchical)
@@ -227,9 +234,11 @@ struct AlbumDetailView: View {
         }
         .onReceive(
             DownloadUIStateHub.shared.albumDownloadedCountPublisher(albumID: album.id)
-        ) { _ in
-            guard offlineMode.isOffline else { return }
-            populateFromLocal()
+        ) { downloadedCount in
+            downloadedAlbumSongCount = downloadedCount
+            if offlineMode.isOffline {
+                populateFromLocal()
+            }
         }
         .onDisappear {
             artistResolveTask?.cancel()
@@ -267,49 +276,38 @@ struct AlbumDetailView: View {
             }
             .padding(.horizontal)
 
-            VStack(spacing: 8) {
-                HStack(spacing: 14) {
-                    Button {
-                        if let songs = detail?.song, !songs.isEmpty {
-                            player.play(songs: songs, startIndex: 0)
-                        }
-                    } label: {
-                        Label(String(localized: "play"), systemImage: "play.fill")
-                            .font(.body).bold()
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .background(accentColor)
-                            .clipShape(Capsule())
+            HStack(spacing: 14) {
+                Button {
+                    if let songs = detail?.song, !songs.isEmpty {
+                        player.play(songs: songs, startIndex: 0)
                     }
-                    .buttonStyle(.plain)
-                    .disabled(detail == nil)
-
-                    Button {
-                        if let songs = detail?.song {
-                            player.playShuffled(songs: songs)
-                        }
-                    } label: {
-                        Label(String(localized: "shuffle"), systemImage: "shuffle")
-                            .font(.body).bold()
-                            .foregroundStyle(accentColor)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 14)
-                            .background(accentColor.opacity(0.15))
-                            .clipShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(detail == nil)
+                } label: {
+                    Label(String(localized: "play"), systemImage: "play.fill")
+                        .font(.body).bold()
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(accentColor)
+                        .clipShape(Capsule())
                 }
+                .buttonStyle(.plain)
+                .disabled(detail == nil)
 
-                if enableDownloads {
-                    AlbumDownloadStatusReader(
-                        albumID: album.id,
-                        totalSongs: detail?.song?.count ?? album.songCount ?? 0
-                    ) { status in
-                        downloadHeaderButtons(status: status)
+                Button {
+                    if let songs = detail?.song {
+                        player.playShuffled(songs: songs)
                     }
+                } label: {
+                    Label(String(localized: "shuffle"), systemImage: "shuffle")
+                        .font(.body).bold()
+                        .foregroundStyle(accentColor)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(accentColor.opacity(0.15))
+                        .clipShape(Capsule())
                 }
+                .buttonStyle(.plain)
+                .disabled(detail == nil)
             }
             .padding(.horizontal)
         }
@@ -318,79 +316,56 @@ struct AlbumDetailView: View {
     }
 
     @ViewBuilder
-    private func downloadHeaderButtons(status: AlbumDownloadStatus) -> some View {
-        HStack(spacing: 10) {
-            switch status {
-            case .none:
-                if !offlineMode.isOffline {
-                    Button {
-                        haptic(); downloadStore.enqueueAlbum(album)
-                        currentToast = ShelveToast(message: String(localized: "download_started"))
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "arrow.down.circle")
-                            Text(String(localized: "download"))
-                        }
-                        .font(.subheadline).bold()
-                        .foregroundStyle(accentColor)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background(accentColor.opacity(0.12))
-                        .clipShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-                }
-            case .partial(let done, let tot):
-                if !offlineMode.isOffline {
-                    Button {
-                        haptic(); downloadStore.enqueueAlbum(album)
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "arrow.down.circle")
-                            Text("Rest (\(tot - done))")
-                        }
-                        .font(.subheadline).bold()
-                        .foregroundStyle(accentColor)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background(accentColor.opacity(0.12))
-                        .clipShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-                }
+    private func downloadMenuItems(status: AlbumDownloadStatus) -> some View {
+        switch status {
+        case .none:
+            if !offlineMode.isOffline {
                 Button {
-                    haptic(); showDeleteAlbumDownloadConfirm = true
+                    haptic()
+                    downloadStore.enqueueAlbum(album)
+                    currentToast = ShelveToast(message: String(localized: "download_started"))
                 } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: DownloadActionSymbols.delete)
-                        Text(String(localized: "delete_downloads_2"))
-                    }
-                    .font(.subheadline).bold()
-                    .foregroundStyle(.red)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(Color.red.opacity(0.12))
-                    .clipShape(Capsule())
+                    Label(String(localized: "download"), systemImage: "arrow.down.circle")
+                        .foregroundStyle(accentColor)
                 }
-                .buttonStyle(.plain)
-            case .complete:
+                .tint(accentColor)
+            }
+        case .partial(let done, let total):
+            if !offlineMode.isOffline {
                 Button {
-                    haptic(); showDeleteAlbumDownloadConfirm = true
+                    haptic()
+                    downloadStore.enqueueAlbum(album)
                 } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: DownloadActionSymbols.delete)
-                        Text(String(localized: "delete_downloads_2"))
-                    }
-                    .font(.subheadline).bold()
-                    .foregroundStyle(.red)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(Color.red.opacity(0.12))
-                    .clipShape(Capsule())
+                    Label("Rest (\(total - done))", systemImage: "arrow.down.circle")
+                        .foregroundStyle(accentColor)
                 }
-                .buttonStyle(.plain)
+                .tint(accentColor)
+            }
+            deleteDownloadMenuItem
+        case .complete:
+            deleteDownloadMenuItem
+        }
+    }
+
+    private var albumDownloadStatus: AlbumDownloadStatus {
+        let totalSongs = detail?.song?.count ?? album.songCount ?? 0
+        if downloadedAlbumSongCount == 0 { return .none }
+        if downloadedAlbumSongCount >= totalSongs { return .complete }
+        return .partial(downloaded: downloadedAlbumSongCount, total: totalSongs)
+    }
+
+    private var deleteDownloadMenuItem: some View {
+        Button(role: .destructive) {
+            haptic()
+            showDeleteAlbumDownloadConfirm = true
+        } label: {
+            Label {
+                Text(String(localized: "delete_downloads_2"))
+            } icon: {
+                DeleteDownloadIcon(tint: .red)
             }
         }
+        .tint(.red)
     }
 
     @ViewBuilder

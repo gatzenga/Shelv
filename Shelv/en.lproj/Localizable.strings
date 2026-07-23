@@ -144,6 +144,7 @@
 "create_add" = "Create & Add";
 "no_songs_in_this_playlist" = "No songs in this playlist.";
 "reorder_delete" = "Reorder / Delete";
+"remove_from_playlist" = "Remove from Playlist";
 "rename" = "Rename";
 "delete_playlist" = "Delete Playlist";
 "rename_playlist" = "Rename Playlist";

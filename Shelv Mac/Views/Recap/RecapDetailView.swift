@@ -81,10 +81,6 @@ struct RecapDetailView: View {
                             }
                             .buttonStyle(.bordered)
                             .controlSize(.large)
-
-                            if enableDownloads {
-                                recapDownloadContentButtons
-                            }
                         }
                         .listRowInsets(EdgeInsets(top: 12, leading: 12, bottom: 8, trailing: 12))
                         .listRowSeparator(.hidden)
@@ -165,6 +161,13 @@ struct RecapDetailView: View {
                         NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_queue"))
                     }
                     .disabled(songs.isEmpty)
+                    if enableDownloads
+                        && !songs.isEmpty
+                        && (!offlineMode.isOffline
+                            || downloadStore.downloadedPlaylistIds.contains(entry.playlistId)) {
+                        Divider()
+                        recapDownloadMenuItems
+                    }
                     Divider()
                     Button(String(localized: "delete_recap"), role: .destructive) {
                         showDeleteRecapConfirm = true
@@ -271,7 +274,7 @@ struct RecapDetailView: View {
     }
 
     @ViewBuilder
-    private var recapDownloadContentButtons: some View {
+    private var recapDownloadMenuItems: some View {
         let isMarked = downloadStore.downloadedPlaylistIds.contains(entry.playlistId)
         let remaining = isMarked ? songs.filter { !downloadStore.isDownloaded(songId: $0.song.id) }.count : 0
         if !isMarked && !offlineMode.isOffline {
@@ -283,9 +286,9 @@ struct RecapDetailView: View {
                 NotificationCenter.default.post(name: .showToast, object: String(localized: "download_started"))
             } label: {
                 Label(String(localized: "download"), systemImage: "arrow.down.circle")
+                    .foregroundStyle(themeColor)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
+            .tint(themeColor)
         }
         if isMarked && remaining > 0 && !offlineMode.isOffline {
             Button {
@@ -296,19 +299,21 @@ struct RecapDetailView: View {
                 NotificationCenter.default.post(name: .showToast, object: String(localized: "download_started"))
             } label: {
                 Label("Rest (\(remaining))", systemImage: "arrow.down.circle")
+                    .foregroundStyle(themeColor)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
+            .tint(themeColor)
         }
         if isMarked {
-            Button {
+            Button(role: .destructive) {
                 showDeleteDownloadConfirm = true
             } label: {
-                Label(String(localized: "delete_downloads"), systemImage: DownloadActionSymbols.delete)
-                    .foregroundStyle(.red)
+                Label {
+                    Text(String(localized: "delete_downloads"))
+                } icon: {
+                    DeleteDownloadIcon(tint: .red)
+                }
             }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
+            .tint(.red)
         }
     }
 
