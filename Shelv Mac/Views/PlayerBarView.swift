@@ -377,14 +377,10 @@ struct PlayerBarView: View {
                                 }
 
                                 Button { player.togglePlayPause() } label: {
-                                    ZStack {
-                                        Circle().fill(themeColor)
-                                        Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                                            .foregroundStyle(.white)
-                                            .font(.system(size: 17, weight: .semibold))
-                                            .offset(x: player.isPlaying ? 0 : 1.5)
-                                    }
-                                    .frame(width: 46, height: 46)
+                                    MacPlayPauseButtonLabel(
+                                        isPlaying: player.isPlaying,
+                                        themeColor: themeColor
+                                    )
                                 }
                                 .buttonStyle(.plain)
                                 .disabled(!player.hasActivePlayback)
@@ -633,14 +629,10 @@ struct PlayerBarView: View {
             .help(String(localized: "previous"))
 
             Button { player.togglePlayPause() } label: {
-                ZStack {
-                    Circle().fill(themeColor)
-                    Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                        .foregroundStyle(.white)
-                        .font(.system(size: 17, weight: .semibold))
-                        .offset(x: player.isPlaying ? 0 : 1.5)
-                }
-                .frame(width: 46, height: 46)
+                MacPlayPauseButtonLabel(
+                    isPlaying: player.isPlaying,
+                    themeColor: themeColor
+                )
             }
             .buttonStyle(.plain)
             .disabled(!player.hasActivePlayback)
@@ -806,6 +798,24 @@ struct PlayerBarView: View {
         return String(format: "%d:%02d", m, s)
     }
 
+}
+
+private struct MacPlayPauseButtonLabel: View {
+    let isPlaying: Bool
+    let themeColor: Color
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(themeColor)
+            Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                .foregroundStyle(.white)
+                .font(.system(size: 17, weight: .semibold))
+                .frame(width: 20, height: 20)
+                .offset(x: isPlaying ? 0 : 0.75)
+        }
+        .frame(width: 46, height: 46)
+    }
 }
 
 private struct MacPlayerUtilityButton: View {
