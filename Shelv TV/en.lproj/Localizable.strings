@@ -26,6 +26,7 @@
 "track_collection_duration_hours_minutes_format" = "%d hr %d min";
 "downloads" = "Downloads";
 "library" = "Library";
+"show_all_libraries" = "Show All Libraries";
 "albums" = "Albums";
 "artists" = "Artists";
 "artist" = "Artist";

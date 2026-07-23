@@ -26,6 +26,7 @@
 "track_collection_duration_hours_minutes_format" = "%d小时%d分钟";
 "downloads" = "下载";
 "library" = "音乐库";
+"show_all_libraries" = "显示所有音乐库";
 "albums" = "专辑";
 "artists" = "艺术家";
 "artist" = "艺术家";

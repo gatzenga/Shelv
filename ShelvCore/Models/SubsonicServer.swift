@@ -30,8 +30,12 @@ nonisolated struct MusicLibrarySelectionSnapshot: Equatable, Sendable {
         availableFolders.count > 1
     }
 
+    var selectsAllLibraries: Bool {
+        !availableFolders.isEmpty && selectedFolderIDs == availableFolderIDs
+    }
+
     var appliesFilter: Bool {
-        showsSelector && selectedFolderIDs != availableFolderIDs
+        showsSelector && !selectsAllLibraries
     }
 
     /// The active request omits `musicFolderId` when every accessible library
@@ -135,34 +139,23 @@ nonisolated enum MusicLibrarySelectionPolicy {
         switch mode {
         case .folders(let storedIDs):
             let resolved = storedIDs.intersection(availableIDs)
-            return resolved.isEmpty ? availableIDs : resolved
+            return resolved.count == 1 ? resolved : availableIDs
         case .all, .none:
             return availableIDs
         }
-    }
-
-    static func toggledIDs(
-        _ folderID: Int,
-        selectedIDs: Set<Int>,
-        availableIDs: Set<Int>
-    ) -> Set<Int> {
-        guard availableIDs.contains(folderID) else { return selectedIDs }
-
-        var result = selectedIDs.intersection(availableIDs)
-        if result.contains(folderID) {
-            guard result.count > 1 else { return result }
-            result.remove(folderID)
-        } else {
-            result.insert(folderID)
-        }
-        return result
     }
 
     static func persistedMode(
         selectedIDs: Set<Int>,
         availableIDs: Set<Int>
     ) -> MusicLibrarySelectionMode {
-        selectedIDs == availableIDs ? .all : .folders(selectedIDs)
+        let validSelectedIDs = selectedIDs.intersection(availableIDs)
+        guard validSelectedIDs.count == 1,
+              validSelectedIDs != availableIDs
+        else {
+            return .all
+        }
+        return .folders(validSelectedIDs)
     }
 }
 

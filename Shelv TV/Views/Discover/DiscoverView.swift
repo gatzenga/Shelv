@@ -77,6 +77,8 @@ struct DiscoverView: View {
                                     Divider()
                                 }
                                 if musicLibraries.snapshot.showsSelector {
+                                    allMusicLibrariesMenuButton
+                                    Divider()
                                     ForEach(musicLibraries.availableFolders) { folder in
                                         musicLibraryMenuButton(folder)
                                     }
@@ -169,10 +171,27 @@ struct DiscoverView: View {
     }
 
     @ViewBuilder
-    private func musicLibraryMenuButton(_ folder: SubsonicMusicFolder) -> some View {
-        let isSelected = musicLibraries.selectedFolderIDs.contains(folder.id)
+    private var allMusicLibrariesMenuButton: some View {
+        let isSelected = musicLibraries.snapshot.selectsAllLibraries
         Button {
-            musicLibraries.toggle(folderID: folder.id)
+            musicLibraries.selectAll()
+        } label: {
+            HStack {
+                Text(String(localized: "show_all_libraries"))
+                Spacer()
+                if isSelected {
+                    Image(systemName: "checkmark")
+                }
+            }
+        }
+        .disabled(isSelected)
+    }
+
+    @ViewBuilder
+    private func musicLibraryMenuButton(_ folder: SubsonicMusicFolder) -> some View {
+        let isSelected = musicLibraries.selectedFolderIDs == Set([folder.id])
+        Button {
+            musicLibraries.selectOnly(folderID: folder.id)
         } label: {
             HStack {
                 Text(folder.name)
@@ -182,7 +201,7 @@ struct DiscoverView: View {
                 }
             }
         }
-        .disabled(isSelected && musicLibraries.selectedFolderIDs.count == 1)
+        .disabled(isSelected)
     }
 
     private func handleRecapNavigationRequest() {

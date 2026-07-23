@@ -117,14 +117,13 @@ final class SubsonicServerTests: XCTestCase {
         )
     }
 
-    func testMusicLibrarySelectionNeverDeselectsLastFolder() {
+    func testMusicLibrarySelectionConvertsLegacySubsetToAllLibraries() {
         XCTAssertEqual(
-            MusicLibrarySelectionPolicy.toggledIDs(
-                1,
-                selectedIDs: [1],
-                availableIDs: [1, 2]
+            MusicLibrarySelectionPolicy.resolvedIDs(
+                availableIDs: [1, 2, 3],
+                mode: .folders([1, 2])
             ),
-            [1]
+            [1, 2, 3]
         )
     }
 
@@ -139,6 +138,16 @@ final class SubsonicServerTests: XCTestCase {
         XCTAssertEqual(
             try JSONDecoder().decode(MusicLibrarySelectionMode.self, from: encoded),
             .all
+        )
+    }
+
+    func testSelectingOneMusicLibraryPersistsSingleFolderMode() {
+        XCTAssertEqual(
+            MusicLibrarySelectionPolicy.persistedMode(
+                selectedIDs: [2],
+                availableIDs: [1, 2, 3]
+            ),
+            .folders([2])
         )
     }
 
@@ -162,6 +171,7 @@ final class SubsonicServerTests: XCTestCase {
         )
 
         XCTAssertTrue(snapshot.showsSelector)
+        XCTAssertTrue(snapshot.selectsAllLibraries)
         XCTAssertFalse(snapshot.appliesFilter)
         XCTAssertNil(snapshot.activeRequestFolderIDs)
         XCTAssertEqual(snapshot.visibleCacheFolderIDs, [1, 2])
@@ -181,6 +191,7 @@ final class SubsonicServerTests: XCTestCase {
         )
 
         XCTAssertTrue(snapshot.appliesFilter)
+        XCTAssertFalse(snapshot.selectsAllLibraries)
         XCTAssertEqual(snapshot.activeRequestFolderIDs, [2])
         XCTAssertEqual(snapshot.visibleCacheFolderIDs, [2])
         XCTAssertEqual(snapshot.allCacheFolderIDs, [1, 2])

@@ -336,6 +336,7 @@
 "user" = "Benutzer";
 "version" = "Version";
 "library" = "Bibliothek";
+"show_all_libraries" = "Alle Bibliotheken anzeigen";
 "synchronisation" = "Synchronisation";
 "last_sync" = "Letzte Synchronisation";
 "never" = "Noch nie";

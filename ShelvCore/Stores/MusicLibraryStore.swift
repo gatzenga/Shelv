@@ -152,24 +152,32 @@ final class MusicLibraryStore: ObservableObject {
         }
     }
 
-    func toggle(folderID: Int) {
+    func selectAll() {
+        applySelection(snapshot.availableFolderIDs)
+    }
+
+    func selectOnly(folderID: Int) {
+        guard snapshot.availableFolderIDs.contains(folderID) else { return }
+        applySelection([folderID])
+    }
+
+    private func applySelection(_ selectedIDs: Set<Int>) {
         guard let serverID = snapshot.serverID else { return }
         let availableIDs = snapshot.availableFolderIDs
-        let selectedIDs = MusicLibrarySelectionPolicy.toggledIDs(
-            folderID,
-            selectedIDs: snapshot.selectedFolderIDs,
-            availableIDs: availableIDs
-        )
-        guard selectedIDs != snapshot.selectedFolderIDs else { return }
-
+        let validSelectedIDs = selectedIDs.intersection(availableIDs)
+        guard !validSelectedIDs.isEmpty,
+              validSelectedIDs != snapshot.selectedFolderIDs
+        else {
+            return
+        }
         let updated = MusicLibrarySelectionSnapshot(
             serverID: serverID,
             availableFolders: snapshot.availableFolders,
-            selectedFolderIDs: selectedIDs
+            selectedFolderIDs: validSelectedIDs
         )
         persist(
             mode: MusicLibrarySelectionPolicy.persistedMode(
-                selectedIDs: selectedIDs,
+                selectedIDs: validSelectedIDs,
                 availableIDs: availableIDs
             ),
             serverID: serverID
