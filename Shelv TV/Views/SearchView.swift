@@ -128,7 +128,9 @@ struct SearchView: View {
                     for: UITextField.textDidBeginEditingNotification
                 )
             ) { notification in
-                guard let searchTextField = notification.object as? UITextField else {
+                guard let searchTextField = notification.object as? UITextField,
+                      isSearchTextField(searchTextField)
+                else {
                     return
                 }
                 activeSearchTextField = searchTextField
@@ -275,12 +277,18 @@ struct SearchView: View {
                   textField.text == expectedQuery
             else { return }
             placeCursorAtEnd(in: textField)
+            historyQueryAwaitingCursorPlacement = nil
         }
     }
 
     private func placeCursorAtEnd(in textField: UITextField) {
         let end = textField.endOfDocument
         textField.selectedTextRange = textField.textRange(from: end, to: end)
+    }
+
+    private func isSearchTextField(_ textField: UITextField) -> Bool {
+        String(describing: type(of: textField))
+            .localizedCaseInsensitiveContains("search")
     }
 
     private func restartSearchAfterServerChange() {
