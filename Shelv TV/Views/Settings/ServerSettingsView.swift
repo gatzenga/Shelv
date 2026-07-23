@@ -76,23 +76,43 @@ struct ServerFormView: View {
                 .listRowBackground(Color.clear)
 
             Section(String(localized: "server")) {
-                TextField(String(localized: "name_optional"), text: $name)
-                    .lineLimit(1)
-                    .frame(maxWidth: .infinity)
-                TextField(String(localized: "server_url"), text: $serverURL)
+                TextField(
+                    "",
+                    text: $name,
+                    prompt: Text(String(localized: "name_optional"))
+                )
+                .accessibilityLabel(String(localized: "name_optional"))
+                .tvServerInputField()
+                TextField(
+                    "",
+                    text: $serverURL,
+                    prompt: Text(String(localized: "server_url"))
+                )
                     .textContentType(.URL)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .keyboardType(.URL)
-                    .lineLimit(1)
-                    .frame(maxWidth: .infinity)
+                    .accessibilityLabel(String(localized: "server_url"))
+                    .tvServerInputField()
             }
 
             Section(String(localized: "account")) {
-                TextField(String(localized: "username"), text: $username)
+                TextField(
+                    "",
+                    text: $username,
+                    prompt: Text(String(localized: "username"))
+                )
                     .textContentType(.username)
-                SecureField(String(localized: "password"), text: $password)
+                    .accessibilityLabel(String(localized: "username"))
+                    .tvServerInputField()
+                SecureField(
+                    "",
+                    text: $password,
+                    prompt: Text(String(localized: "password"))
+                )
                     .textContentType(.password)
+                    .accessibilityLabel(String(localized: "password"))
+                    .tvServerInputField()
             }
 
             Section {
