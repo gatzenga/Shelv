@@ -361,7 +361,10 @@ private struct NativeBottomRoot: View {
                 SettingsView(path: $settingsPath)
             }
             Tab(value: 4, role: .search) {
-                SearchView(resetToken: searchResetToken)
+                SearchView(
+                    resetToken: searchResetToken,
+                    usesSystemSearchTabActivation: true
+                )
             }
         }
         .tabBarMinimizeBehavior(player.hasActivePlayback ? .onScrollDown : .automatic)
