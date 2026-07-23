@@ -3,15 +3,16 @@ import SwiftUI
 struct AlbumContextMenuModifier: ViewModifier {
     let album: Album
     @ObservedObject private var libraryStore = LibraryViewModel.shared
+    @ObservedObject private var personalizationVisibility = MacPersonalizationVisibilityStore.shared
     private let downloadStore = DownloadStore.shared
     @State private var showDeleteConfirm = false
 
     private var offlineMode: OfflineModeService { .shared }
     private var showFavoriteActions: Bool {
-        UserDefaults.standard.object(forKey: PersonalizationPreferenceKey.showFavoriteActions) as? Bool ?? true
+        personalizationVisibility.showFavoriteActions
     }
     private var showPlaylistActions: Bool {
-        UserDefaults.standard.object(forKey: PersonalizationPreferenceKey.showPlaylistActions) as? Bool ?? true
+        personalizationVisibility.showPlaylistActions
     }
     private var showInstantMixActions: Bool {
         UserDefaults.standard.object(forKey: PersonalizationPreferenceKey.showInstantMixActions) as? Bool ?? true

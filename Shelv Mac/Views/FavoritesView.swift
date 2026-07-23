@@ -12,10 +12,14 @@ struct FavoritesView: View {
     @EnvironmentObject var appState: AppState
     @ObservedObject var downloadStore = DownloadStore.shared
     @ObservedObject var offlineMode = OfflineModeService.shared
-    @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
+    @ObservedObject private var personalizationVisibility = MacPersonalizationVisibilityStore.shared
     @AppStorage("downloadsOnlyFilter") private var showDownloadsOnly: Bool = false
     @Environment(\.themeColor) private var themeColor
     private let scope: FavoritesScope
+
+    private var showPlaylistActions: Bool {
+        personalizationVisibility.showPlaylistActions
+    }
 
     init() {
         scope = .overview

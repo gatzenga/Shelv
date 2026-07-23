@@ -10,13 +10,20 @@ struct RecapDetailView: View {
     @Environment(\.themeColor) private var themeColor
     @EnvironmentObject private var appState: AppState
     @Environment(\.dismiss) private var dismiss
-    @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
-    @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
+    @ObservedObject private var personalizationVisibility = MacPersonalizationVisibilityStore.shared
     @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     @AppStorage("enableDownloads") private var enableDownloads = true
     @State private var songs: [SongWithCount] = []
     @State private var isLoading = true
     @State private var errorMessage: String?
+
+    private var showFavoriteActions: Bool {
+        personalizationVisibility.showFavoriteActions
+    }
+
+    private var showPlaylistActions: Bool {
+        personalizationVisibility.showPlaylistActions
+    }
     @State private var showDeleteRecapConfirm = false
     @State private var showDeleteDownloadConfirm = false
 

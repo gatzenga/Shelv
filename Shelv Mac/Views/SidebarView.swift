@@ -10,8 +10,7 @@ struct SidebarView: View {
     @Binding var selection: SidebarItem?
     @Binding var selectedPlaylist: Playlist?
     @Environment(\.themeColor) private var themeColor
-    @AppStorage(PersonalizationPreferenceKey.showFavoritesInLibrary) private var showFavoritesInLibrary = true
-    @AppStorage(PersonalizationPreferenceKey.showPlaylistsTab) private var showPlaylistsInSidebar = true
+    @ObservedObject private var personalizationVisibility = MacPersonalizationVisibilityStore.shared
     @AppStorage(PersonalizationPreferenceKey.showRadio) private var showRadio = true
     @AppStorage("enableDownloads") private var enableDownloads = true
     @AppStorage("recapEnabled") private var recapEnabled = false
@@ -23,6 +22,14 @@ struct SidebarView: View {
 
     @State private var showCreatePlaylist = false
     @State private var newPlaylistName = ""
+
+    private var showFavoritesInLibrary: Bool {
+        personalizationVisibility.showFavoritesInLibrary
+    }
+
+    private var showPlaylistsInSidebar: Bool {
+        personalizationVisibility.showPlaylistsInSidebar
+    }
 
     private var nonRecapPlaylists: [Playlist] {
         guard recapEnabled else { return libraryStore.playlists }

@@ -11,13 +11,20 @@ struct AlbumDetailView: View {
     @ObservedObject var downloadStore = DownloadStore.shared
     @ObservedObject var offlineMode = OfflineModeService.shared
     @ObservedObject private var player = AudioPlayerService.shared
-    @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
-    @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
+    @ObservedObject private var personalizationVisibility = MacPersonalizationVisibilityStore.shared
     @AppStorage(PersonalizationPreferenceKey.showInstantMixActions) private var showInstantMixActions = true
     @AppStorage("enableDownloads") private var enableDownloads = true
     @AppStorage("downloadsOnlyFilter") private var showDownloadsOnly: Bool = false
     @Environment(\.themeColor) private var themeColor
     @State private var showDeleteDownloadConfirm = false
+
+    private var showFavoriteActions: Bool {
+        personalizationVisibility.showFavoriteActions
+    }
+
+    private var showPlaylistActions: Bool {
+        personalizationVisibility.showPlaylistActions
+    }
     @State private var searchQuery = ""
 
     private var effectiveShowDownloadsOnly: Bool {

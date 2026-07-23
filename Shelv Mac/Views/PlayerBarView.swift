@@ -188,12 +188,19 @@ struct PlayerBarView: View {
         player.actualStreamFormat?.displayString
     }
     @Environment(\.themeColor) private var themeColor
-    @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
-    @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
+    @ObservedObject private var personalizationVisibility = MacPersonalizationVisibilityStore.shared
     @AppStorage(PersonalizationPreferenceKey.miniPlayerStyle) private var interfaceStyleRaw = PersonalizationMiniPlayerStyle.shelv.rawValue
     @AppStorage("radioSortDirectionMac") private var radioSortDirectionRaw = SortDirection.ascending.rawValue
     @State private var isDragging: Bool = false
     @State private var dragValue: Double = 0
+
+    private var showFavoriteActions: Bool {
+        personalizationVisibility.showFavoriteActions
+    }
+
+    private var showPlaylistActions: Bool {
+        personalizationVisibility.showPlaylistActions
+    }
     // currentTime ist kein @Published → das Zeit-Label/der Slider werden über den
     // timePublisher gespeist. Ohne das friert die Anzeige ein (z.B. nach einem Seek),
     // obwohl der Ton normal weiterläuft.

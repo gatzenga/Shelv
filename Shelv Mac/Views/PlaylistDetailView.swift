@@ -7,9 +7,16 @@ struct PlaylistDetailView: View {
     @ObservedObject var downloadStore = DownloadStore.shared
     @ObservedObject var offlineMode = OfflineModeService.shared
     @ObservedObject var pinStore = PinnedPlaylistStore.shared
-    @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
-    @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
+    @ObservedObject private var personalizationVisibility = MacPersonalizationVisibilityStore.shared
     @AppStorage("enableDownloads") private var enableDownloads = true
+
+    private var showFavoriteActions: Bool {
+        personalizationVisibility.showFavoriteActions
+    }
+
+    private var showPlaylistActions: Bool {
+        personalizationVisibility.showPlaylistActions
+    }
 
     @ViewBuilder
     private var playlistDownloadMenuItems: some View {
