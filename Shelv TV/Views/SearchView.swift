@@ -40,17 +40,23 @@ struct SearchView: View {
                                 }
                             }
 
-                            HStack(spacing: 20) {
-                                Image(systemName: "trash")
-                                    .frame(width: 48)
-                                Text(String(localized: "clear_search_history"))
+                            HStack {
+                                Button(role: .destructive) {
+                                    clearSearchHistory()
+                                } label: {
+                                    Label(
+                                        String(localized: "clear_search_history"),
+                                        systemImage: "trash"
+                                    )
+                                }
+                                .buttonStyle(.bordered)
+                                .tint(.red)
+
                                 Spacer(minLength: 0)
                             }
-                            .foregroundStyle(.red)
+                            .padding(.horizontal, 50)
                             .padding(.top, 20)
-                            .rowButton {
-                                clearSearchHistory()
-                            }
+                            .focusSection()
                         }
                     } else {
                         if let artists = result?.artist, !artists.isEmpty {
