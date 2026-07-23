@@ -61,9 +61,28 @@ struct DownloadAvailabilityIcon: View {
                 .foregroundStyle(AppTheme.color(for: themeColorName))
                 .frame(width: 14, height: 14)
         case .cover:
+            CoverDownloadAvailabilityIcon(
+                color: AppTheme.color(for: themeColorName)
+            )
+        }
+    }
+}
+
+private struct CoverDownloadAvailabilityIcon: View {
+    let color: Color
+    @ObservedObject private var keepOffline = KeepLibraryOfflineService.shared
+
+    private var keepLibraryOfflineEnabled: Bool {
+        keepOffline.isEnabled(
+            serverId: SubsonicAPIService.shared.activeServer?.stableId
+        )
+    }
+
+    var body: some View {
+        if !keepLibraryOfflineEnabled {
             Image(systemName: "arrow.down.circle.fill")
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(AppTheme.color(for: themeColorName))
+                .foregroundStyle(color)
                 .frame(width: 14, height: 14)
         }
     }
