@@ -333,6 +333,7 @@
 "user" = "Benutzer";
 "version" = "Version";
 "library" = "Bibliothek";
+"urls" = "URLs";
 "synchronisation" = "Synchronisation";
 "last_sync" = "Letzte Synchronisation";
 "never" = "Noch nie";

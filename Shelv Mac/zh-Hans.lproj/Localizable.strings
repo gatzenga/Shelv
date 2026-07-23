@@ -333,6 +333,7 @@
 "user" = "用户";
 "version" = "版本";
 "library" = "音乐库";
+"urls" = "URL";
 "synchronisation" = "同步";
 "last_sync" = "上次同步";
 "never" = "从未";

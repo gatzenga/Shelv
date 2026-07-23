@@ -418,8 +418,12 @@ struct DiscoverView: View {
         Group {
             if canSwitchServerURL, let activeServer {
                 Menu {
-                    serverURLSlotMenuButton(slot: .primary, server: activeServer)
-                    serverURLSlotMenuButton(slot: .secondary, server: activeServer)
+                    Section {
+                        serverURLSlotMenuButton(slot: .primary, server: activeServer)
+                        serverURLSlotMenuButton(slot: .secondary, server: activeServer)
+                    } header: {
+                        Text(String(localized: "urls"))
+                    }
                 } label: {
                     HStack(spacing: 6) {
                         Text(discoverTitle)
@@ -451,10 +455,14 @@ struct DiscoverView: View {
             guard !isActive else { return }
             startServerURLSlotSwitch(slot)
         } label: {
-            Text(title(for: slot))
+            HStack(spacing: 16) {
+                Text(title(for: slot))
+                Spacer()
+                if isActive {
+                    Image(systemName: "checkmark")
+                }
+            }
         }
-            .foregroundStyle(isActive ? .secondary : .primary)
-            .disabled(isActive)
     }
 
     private func activeURLSlot(for server: SubsonicServer) -> ServerURLSlot {
