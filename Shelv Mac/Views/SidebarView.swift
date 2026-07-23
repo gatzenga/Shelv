@@ -290,6 +290,9 @@ struct SidebarView: View {
     private func playlistTreeRow(_ node: PlaylistTreeNode, depth: Int) -> some View {
         let disclosureIndent: CGFloat = 18
         if let playlist = node.playlist {
+            let playlistIndent = depth == 0
+                ? 0
+                : CGFloat(depth + 1) * disclosureIndent
             PlaylistSidebarRow(
                 playlist: playlist,
                 displayName: node.title,
@@ -301,8 +304,8 @@ struct SidebarView: View {
                 selection = nil
                 appState.navigationPath = NavigationPath()
             }
-            // Reserve the disclosure-chevron column so playlist and folder icons align.
-            .padding(.leading, CGFloat(depth + 1) * disclosureIndent)
+            // Only nested playlists reserve the disclosure column of their parent folder.
+            .padding(.leading, playlistIndent)
         } else {
             let isExpanded = expandedPlaylistFolderIDs.contains(node.id)
             Button {
