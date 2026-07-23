@@ -136,7 +136,7 @@ struct ServerManagementView: View {
         let pageSize = 500
         while true {
             guard let page = try? await api.getAlbumList(
-                type: .alphabeticalByName,
+                type: AlbumListType.alphabeticalByName.rawValue,
                 size: pageSize,
                 offset: offset,
                 libraryFilter: .all

@@ -149,4 +149,57 @@ final class SubsonicServerTests: XCTestCase {
         XCTAssertEqual(items.map(\.value), ["2", "9"])
         XCTAssertTrue(MusicLibraryQueryItems.make(folderIDs: nil).isEmpty)
     }
+
+    func testAllSelectedLibrariesUseUnfilteredRequestsAndScopedCaches() {
+        let serverID = UUID()
+        let snapshot = MusicLibrarySelectionSnapshot(
+            serverID: serverID,
+            availableFolders: [
+                SubsonicMusicFolder(id: 2, name: "Audiobooks"),
+                SubsonicMusicFolder(id: 1, name: "Music"),
+            ],
+            selectedFolderIDs: [1, 2]
+        )
+
+        XCTAssertTrue(snapshot.showsSelector)
+        XCTAssertFalse(snapshot.appliesFilter)
+        XCTAssertNil(snapshot.activeRequestFolderIDs)
+        XCTAssertEqual(snapshot.visibleCacheFolderIDs, [1, 2])
+        XCTAssertEqual(snapshot.allCacheFolderIDs, [1, 2])
+        XCTAssertEqual(snapshot.selectionKey, "\(serverID.uuidString)|all")
+    }
+
+    func testSelectedLibrarySubsetScopesRequestsWithoutChangingAllCacheScope() {
+        let serverID = UUID()
+        let snapshot = MusicLibrarySelectionSnapshot(
+            serverID: serverID,
+            availableFolders: [
+                SubsonicMusicFolder(id: 1, name: "Music"),
+                SubsonicMusicFolder(id: 2, name: "Audiobooks"),
+            ],
+            selectedFolderIDs: [2]
+        )
+
+        XCTAssertTrue(snapshot.appliesFilter)
+        XCTAssertEqual(snapshot.activeRequestFolderIDs, [2])
+        XCTAssertEqual(snapshot.visibleCacheFolderIDs, [2])
+        XCTAssertEqual(snapshot.allCacheFolderIDs, [1, 2])
+        XCTAssertEqual(snapshot.allSelectionKey, "\(serverID.uuidString)|all")
+    }
+
+    func testSingleAccessibleLibraryHidesSelectorButKeepsScopedCache() {
+        let snapshot = MusicLibrarySelectionSnapshot(
+            serverID: UUID(),
+            availableFolders: [
+                SubsonicMusicFolder(id: 7, name: "Music")
+            ],
+            selectedFolderIDs: [7]
+        )
+
+        XCTAssertFalse(snapshot.showsSelector)
+        XCTAssertFalse(snapshot.appliesFilter)
+        XCTAssertNil(snapshot.activeRequestFolderIDs)
+        XCTAssertEqual(snapshot.visibleCacheFolderIDs, [7])
+        XCTAssertEqual(snapshot.allCacheFolderIDs, [7])
+    }
 }

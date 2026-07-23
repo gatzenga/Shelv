@@ -1,6 +1,22 @@
 import Foundation
 import GRDB
 
+nonisolated struct DownloadAlbumMembershipReconciliation: Sendable {
+    let removedSongIDs: Set<String>
+    let missingSongs: [Song]
+
+    static func make(
+        localSongIDs: Set<String>,
+        serverSongs: [Song]
+    ) -> DownloadAlbumMembershipReconciliation {
+        let serverSongIDs = Set(serverSongs.map(\.id))
+        return DownloadAlbumMembershipReconciliation(
+            removedSongIDs: localSongIDs.subtracting(serverSongIDs),
+            missingSongs: serverSongs.filter { !localSongIDs.contains($0.id) }
+        )
+    }
+}
+
 // MARK: - Records
 
 nonisolated struct DownloadRecord: Codable, FetchableRecord, PersistableRecord, Sendable, Equatable {

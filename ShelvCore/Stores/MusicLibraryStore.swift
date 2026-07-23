@@ -1,64 +1,6 @@
 import Combine
 import Foundation
 
-nonisolated struct MusicLibrarySelectionSnapshot: Equatable, Sendable {
-    let serverID: UUID?
-    let availableFolders: [SubsonicMusicFolder]
-    let selectedFolderIDs: Set<Int>
-
-    static let empty = MusicLibrarySelectionSnapshot(
-        serverID: nil,
-        availableFolders: [],
-        selectedFolderIDs: []
-    )
-
-    var availableFolderIDs: Set<Int> {
-        Set(availableFolders.map(\.id))
-    }
-
-    var showsSelector: Bool {
-        availableFolders.count > 1
-    }
-
-    var appliesFilter: Bool {
-        showsSelector && selectedFolderIDs != availableFolderIDs
-    }
-
-    /// The active request omits `musicFolderId` when every accessible library
-    /// is selected, preserving compatibility with older Subsonic servers.
-    var activeRequestFolderIDs: [Int]? {
-        appliesFilter ? selectedFolderIDs.sorted() : nil
-    }
-
-    /// Cache reads always retain explicit folder membership, even when every
-    /// available folder is selected.
-    var visibleCacheFolderIDs: [Int]? {
-        availableFolders.isEmpty ? nil : selectedFolderIDs.sorted()
-    }
-
-    var allCacheFolderIDs: [Int]? {
-        availableFolders.isEmpty ? nil : availableFolders.map(\.id)
-    }
-
-    var selectionKey: String {
-        guard let serverID else { return "none" }
-        guard !availableFolders.isEmpty else {
-            return "\(serverID.uuidString)|unfiltered"
-        }
-        if selectedFolderIDs == availableFolderIDs {
-            return "\(serverID.uuidString)|all"
-        }
-        return "\(serverID.uuidString)|\(selectedFolderIDs.sorted().map(String.init).joined(separator: ","))"
-    }
-
-    var allSelectionKey: String {
-        guard let serverID else { return "none" }
-        return availableFolders.isEmpty
-            ? "\(serverID.uuidString)|unfiltered"
-            : "\(serverID.uuidString)|all"
-    }
-}
-
 extension Notification.Name {
     static let musicLibrarySelectionChanged = Notification.Name(
         "musicLibrarySelectionChanged"
@@ -77,8 +19,13 @@ final class MusicLibraryStore: ObservableObject {
         let folders: [SubsonicMusicFolder]
     }
 
+    private struct FolderRefreshResult: Sendable {
+        let folders: [SubsonicMusicFolder]
+        let context: LibraryAPIRequestContext
+    }
+
     private let defaults: UserDefaults
-    private var refreshTask: Task<[SubsonicMusicFolder]?, Never>?
+    private var refreshTask: Task<FolderRefreshResult?, Never>?
     private var refreshTaskServerID: UUID?
     private var refreshToken: UUID?
     private var preparedServerIDs: Set<UUID> = []
@@ -111,14 +58,17 @@ final class MusicLibraryStore: ObservableObject {
 
         if let refreshTask,
            refreshTaskServerID == server.id {
-            let folders = await refreshTask.value
-            guard ServerStore.shared.activeServer?.id == server.id else {
+            let result = await refreshTask.value
+            guard ServerStore.shared.activeServer?.id == server.id,
+                  let result,
+                  SubsonicAPIService.shared.isLibraryRequestContextCurrent(
+                    result.context
+                  )
+            else {
                 return snapshot
             }
-            if let folders {
-                preparedServerIDs.insert(server.id)
-                applyServerFolders(folders, serverID: server.id)
-            }
+            preparedServerIDs.insert(server.id)
+            applyServerFolders(result.folders, serverID: server.id)
             return snapshot
         }
         if !forceRefresh, preparedServerIDs.contains(server.id) {
@@ -131,16 +81,42 @@ final class MusicLibraryStore: ObservableObject {
         }
 
         let expectedServerID = server.id
+        let api = SubsonicAPIService.shared
+        let stableID = server.stableId.isEmpty ? nil : server.stableId
         let token = UUID()
         lastRefreshAttempt[expectedServerID] = Date()
         isRefreshing = true
-        let task = Task<[SubsonicMusicFolder]?, Never> {
-            try? await SubsonicAPIService.shared.getMusicFolders()
+        let task = Task<FolderRefreshResult?, Never> {
+            // The activation path may finish installing the same server's
+            // Keychain credential while the first request is in flight. Retry
+            // that stale epoch once without accepting A-to-B-to-A responses.
+            for attempt in 0..<2 {
+                guard !Task.isCancelled,
+                      let context = api.captureLibraryRequestContext(
+                          serverKey: expectedServerID.uuidString,
+                          stableId: stableID
+                      )
+                else {
+                    return nil
+                }
+                guard let folders = try? await api.getMusicFolders() else {
+                    return nil
+                }
+                if api.isLibraryRequestContextCurrent(context) {
+                    return FolderRefreshResult(
+                        folders: folders,
+                        context: context
+                    )
+                }
+                guard attempt == 0 else { return nil }
+                await Task.yield()
+            }
+            return nil
         }
         refreshTask = task
         refreshTaskServerID = expectedServerID
         refreshToken = token
-        let folders = await task.value
+        let result = await task.value
         if refreshToken == token {
             refreshTask = nil
             refreshTaskServerID = nil
@@ -148,13 +124,17 @@ final class MusicLibraryStore: ObservableObject {
             isRefreshing = false
         }
 
-        guard ServerStore.shared.activeServer?.id == expectedServerID else {
+        guard ServerStore.shared.activeServer?.id == expectedServerID,
+              let result,
+              api.isLibraryRequestContextCurrent(result.context)
+        else {
+            if ServerStore.shared.activeServer?.id == expectedServerID {
+                lastRefreshAttempt.removeValue(forKey: expectedServerID)
+            }
             return snapshot
         }
-        if let folders {
-            preparedServerIDs.insert(expectedServerID)
-            applyServerFolders(folders, serverID: expectedServerID)
-        }
+        preparedServerIDs.insert(expectedServerID)
+        applyServerFolders(result.folders, serverID: expectedServerID)
         return snapshot
     }
 

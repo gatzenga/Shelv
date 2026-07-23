@@ -94,7 +94,10 @@ struct SearchView: View {
                 reloadSearchHistory()
             }
             .onChange(of: serverStore.activeServerID) { _, _ in
-                reloadSearchHistory()
+                restartSearchAfterServerChange()
+            }
+            .onChange(of: serverStore.activeServerRevision) { _, _ in
+                restartSearchAfterServerChange()
             }
             .onChange(of: musicLibraries.revision) { _, _ in
                 guard !OfflineModeService.shared.isOffline else { return }
@@ -103,9 +106,13 @@ struct SearchView: View {
                 guard !trimmed.isEmpty else { return }
                 result = nil
                 let selectionRevision = musicLibraries.revision
+                let requestedServerID = serverStore.activeServerID
+                let requestedServerRevision = serverStore.activeServerRevision
                 searchTask = Task {
                     let response = try? await SubsonicAPIService.shared.search(query: trimmed)
                     guard !Task.isCancelled,
+                          requestedServerID == serverStore.activeServerID,
+                          requestedServerRevision == serverStore.activeServerRevision,
                           selectionRevision == musicLibraries.revision,
                           trimmed == trimmedQuery
                     else { return }
@@ -123,8 +130,12 @@ struct SearchView: View {
                     try? await Task.sleep(for: .milliseconds(400))
                     if Task.isCancelled { return }
                     let selectionRevision = musicLibraries.revision
+                    let requestedServerID = serverStore.activeServerID
+                    let requestedServerRevision = serverStore.activeServerRevision
                     let response = try? await SubsonicAPIService.shared.search(query: trimmed)
                     guard !Task.isCancelled,
+                          requestedServerID == serverStore.activeServerID,
+                          requestedServerRevision == serverStore.activeServerRevision,
                           selectionRevision == musicLibraries.revision,
                           trimmed == trimmedQuery
                     else { return }
@@ -162,5 +173,24 @@ struct SearchView: View {
 
     private func clearSearchHistory() {
         recentSearches = SearchHistoryStore.clear(for: serverStore.activeServerID)
+    }
+
+    private func restartSearchAfterServerChange() {
+        searchTask?.cancel()
+        result = nil
+        reloadSearchHistory()
+        let trimmed = trimmedQuery
+        guard !trimmed.isEmpty else { return }
+        let requestedServerID = serverStore.activeServerID
+        let requestedServerRevision = serverStore.activeServerRevision
+        searchTask = Task {
+            let response = try? await SubsonicAPIService.shared.search(query: trimmed)
+            guard !Task.isCancelled,
+                  requestedServerID == serverStore.activeServerID,
+                  requestedServerRevision == serverStore.activeServerRevision,
+                  trimmed == trimmedQuery
+            else { return }
+            result = response
+        }
     }
 }

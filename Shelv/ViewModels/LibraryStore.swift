@@ -412,8 +412,13 @@ class LibraryStore: ObservableObject {
         }
 
         if let serverId = identity.stableId, !albums.isEmpty {
+            let allCachedAlbums = await libraryRepository.cachedAlbums(
+                serverKey: identity.serverKey,
+                libraryIDs: librarySelection.allCacheFolderIDs
+            )
+            guard isCurrentAlbumLoad(generation, identity: identity) else { return }
             await DownloadService.shared.adoptCachedAlbumDownloads(
-                albums,
+                allCachedAlbums.isEmpty ? albums : allCachedAlbums,
                 serverId: serverId
             )
             guard isCurrentAlbumLoad(generation, identity: identity) else { return }
@@ -433,9 +438,17 @@ class LibraryStore: ObservableObject {
             if albums != result { albums = result }
             UserDefaults.standard.set(result.count, forKey: "shelv_albumCount_\(identity.id)")
             if let serverId = identity.stableId {
+                let allRefreshedAlbums = await libraryRepository.cachedAlbums(
+                    serverKey: identity.serverKey,
+                    libraryIDs: librarySelection.allCacheFolderIDs
+                )
+                guard isCurrentAlbumLoad(generation, identity: identity) else { return }
+                let observedAlbums = allRefreshedAlbums.isEmpty
+                    ? result
+                    : allRefreshedAlbums
                 Task {
                     await DownloadService.shared.observeAlbumSummaries(
-                        result,
+                        observedAlbums,
                         serverId: serverId,
                         schedulesStaleRefresh: true
                     )

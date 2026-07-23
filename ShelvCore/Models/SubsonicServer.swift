@@ -11,6 +11,64 @@ nonisolated struct SubsonicMusicFolder: Identifiable, Codable, Hashable, Sendabl
     let name: String
 }
 
+nonisolated struct MusicLibrarySelectionSnapshot: Equatable, Sendable {
+    let serverID: UUID?
+    let availableFolders: [SubsonicMusicFolder]
+    let selectedFolderIDs: Set<Int>
+
+    static let empty = MusicLibrarySelectionSnapshot(
+        serverID: nil,
+        availableFolders: [],
+        selectedFolderIDs: []
+    )
+
+    var availableFolderIDs: Set<Int> {
+        Set(availableFolders.map(\.id))
+    }
+
+    var showsSelector: Bool {
+        availableFolders.count > 1
+    }
+
+    var appliesFilter: Bool {
+        showsSelector && selectedFolderIDs != availableFolderIDs
+    }
+
+    /// The active request omits `musicFolderId` when every accessible library
+    /// is selected, preserving compatibility with older Subsonic servers.
+    var activeRequestFolderIDs: [Int]? {
+        appliesFilter ? selectedFolderIDs.sorted() : nil
+    }
+
+    /// Cache reads always retain explicit folder membership, even when every
+    /// available folder is selected.
+    var visibleCacheFolderIDs: [Int]? {
+        availableFolders.isEmpty ? nil : selectedFolderIDs.sorted()
+    }
+
+    var allCacheFolderIDs: [Int]? {
+        availableFolders.isEmpty ? nil : availableFolders.map(\.id).sorted()
+    }
+
+    var selectionKey: String {
+        guard let serverID else { return "none" }
+        guard !availableFolders.isEmpty else {
+            return "\(serverID.uuidString)|unfiltered"
+        }
+        if selectedFolderIDs == availableFolderIDs {
+            return "\(serverID.uuidString)|all"
+        }
+        return "\(serverID.uuidString)|\(selectedFolderIDs.sorted().map(String.init).joined(separator: ","))"
+    }
+
+    var allSelectionKey: String {
+        guard let serverID else { return "none" }
+        return availableFolders.isEmpty
+            ? "\(serverID.uuidString)|unfiltered"
+            : "\(serverID.uuidString)|all"
+    }
+}
+
 /// Controls whether an API request follows the active online library filter.
 /// Direct ID lookups, playlists, recaps, downloads, and playback history use
 /// `.all` so an item remains reachable outside the currently visible library.

@@ -176,7 +176,10 @@ struct SearchView: View {
             reloadSearchHistory()
         }
         .onChange(of: serverStore.activeServerID) { _, _ in
-            reloadSearchHistory()
+            restartSearchAfterServerChange()
+        }
+        .onChange(of: serverStore.activeServerRevision) { _, _ in
+            restartSearchAfterServerChange()
         }
         .onChange(of: musicLibraries.revision) { _, _ in
             guard !OfflineModeService.shared.isOffline,
@@ -293,11 +296,28 @@ struct SearchView: View {
         recentSearches = SearchHistoryStore.clear(for: serverStore.activeServerID)
     }
 
+    private func restartSearchAfterServerChange() {
+        searchTask?.cancel()
+        lyricsTask?.cancel()
+        vm.clearResults()
+        lyricsResults = []
+        reloadSearchHistory()
+        let trimmed = trimmedQuery
+        guard trimmed.count >= 2 else { return }
+        searchTask = Task { await vm.search() }
+        lyricsTask = Task { await performLyricsSearch(query: trimmed) }
+    }
+
     private func performLyricsSearch(query: String) async {
+        let requestedServerID = appState.serverStore.activeServerID
+        let requestedServerRevision = appState.serverStore.activeServerRevision
         let serverId = appState.serverStore.activeServerID?.uuidString ?? ""
         guard !serverId.isEmpty else { return }
         var results = await LyricsService.shared.searchLyrics(text: query, serverId: serverId)
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled,
+              requestedServerID == appState.serverStore.activeServerID,
+              requestedServerRevision == appState.serverStore.activeServerRevision
+        else { return }
         if OfflineModeService.shared.isOffline {
             let downloadedIds = Set(DownloadStore.shared.songs.map { $0.songId })
             results = results.filter { downloadedIds.contains($0.songId) }
@@ -318,13 +338,21 @@ struct SearchView: View {
             )
         }
         guard !Task.isCancelled,
+              requestedServerID == appState.serverStore.activeServerID,
+              requestedServerRevision == appState.serverStore.activeServerRevision,
               selection.selectionKey == musicLibraries.snapshot.selectionKey
         else { return }
         lyricsResults = results
         let missing = results.filter { $0.songTitle == nil || $0.duration == nil }
         for item in missing {
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled,
+                  requestedServerID == appState.serverStore.activeServerID,
+                  requestedServerRevision == appState.serverStore.activeServerRevision
+            else { return }
             guard let song = try? await SubsonicAPIService.shared.getSong(id: item.songId) else { continue }
+            guard requestedServerID == appState.serverStore.activeServerID,
+                  requestedServerRevision == appState.serverStore.activeServerRevision
+            else { return }
             await LyricsService.shared.updateMetadata(
                 songId: item.songId, serverId: serverId,
                 title: song.title, artist: song.artist,

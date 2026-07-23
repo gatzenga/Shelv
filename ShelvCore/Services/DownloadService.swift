@@ -568,8 +568,11 @@ actor DownloadService {
 
         if isManaged {
             let localSongIds = Set(localRecords.map(\.songId))
-            let serverSongIds = Set(songs.map(\.id))
-            for songID in localSongIds.subtracting(serverSongIds) {
+            let reconciliation = DownloadAlbumMembershipReconciliation.make(
+                localSongIDs: localSongIds,
+                serverSongs: songs
+            )
+            for songID in reconciliation.removedSongIDs {
                 await delete(
                     songId: songID,
                     serverId: serverId,
@@ -577,11 +580,10 @@ actor DownloadService {
                 )
             }
 
-            let missingSongs = songs.filter { !localSongIds.contains($0.id) }
-            if !missingSongs.isEmpty,
+            if !reconciliation.missingSongs.isEmpty,
                await canMaintainDownloads(serverId: serverId) {
                 await enqueue(
-                    songs: missingSongs,
+                    songs: reconciliation.missingSongs,
                     serverId: serverId,
                     albumArtistOverride: detail.artist,
                     albumCoverArtIdOverride: detail.coverArt,
@@ -855,14 +857,21 @@ actor DownloadService {
         }
         guard !isOffline else { return }
         do {
+            let api = SubsonicAPIService.shared
+            let context = try await api.resolvedActiveRequestContext(
+                expectedServerId: refresh.serverId
+            )
             switch refresh.kind {
             case .album:
-                _ = try await SubsonicAPIService.shared.getAlbum(
+                _ = try await api.getAlbum(
                     id: refresh.id,
-                    retries: 1
+                    context: context
                 )
             case .playlist:
-                _ = try await SubsonicAPIService.shared.getPlaylist(id: refresh.id)
+                _ = try await api.getPlaylist(
+                    id: refresh.id,
+                    context: context
+                )
             }
             await DownloadDatabase.shared.noteCollectionDetail(
                 kind: refresh.kind,

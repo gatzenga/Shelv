@@ -495,6 +495,34 @@ final class DownloadDatabaseTests: XCTestCase {
         XCTAssertEqual(candidates, ["album-c", "album-a"])
     }
 
+    func testAlbumMembershipReconciliationHandlesAddedRemovedAndReidentifiedSongs() {
+        let unchanged = Song(id: "song-kept", title: "Kept")
+        let replacement = Song(id: "song-new-id", title: "Renamed")
+
+        let reconciliation = DownloadAlbumMembershipReconciliation.make(
+            localSongIDs: ["song-old-id", "song-kept"],
+            serverSongs: [unchanged, replacement]
+        )
+
+        XCTAssertEqual(reconciliation.removedSongIDs, ["song-old-id"])
+        XCTAssertEqual(reconciliation.missingSongs.map(\.id), ["song-new-id"])
+    }
+
+    func testAlbumMembershipReconciliationLeavesUnchangedAlbumUntouched() {
+        let songs = [
+            Song(id: "song-1", title: "One"),
+            Song(id: "song-2", title: "Two"),
+        ]
+
+        let reconciliation = DownloadAlbumMembershipReconciliation.make(
+            localSongIDs: ["song-1", "song-2"],
+            serverSongs: songs
+        )
+
+        XCTAssertTrue(reconciliation.removedSongIDs.isEmpty)
+        XCTAssertTrue(reconciliation.missingSongs.isEmpty)
+    }
+
     private func makeDatabase() async -> DownloadDatabase {
         let url = tempDir.appendingPathComponent("downloads-\(UUID().uuidString).db")
         let database = DownloadDatabase(testDatabaseURL: url)
