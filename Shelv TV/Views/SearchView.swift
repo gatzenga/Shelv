@@ -30,7 +30,7 @@ struct SearchView: View {
                                 topPadding: 0
                             )
                             ForEach(recentSearches, id: \.self) { entry in
-                                HStack(spacing: 20) {
+                                HStack(spacing: 4) {
                                     Image(systemName: "clock.arrow.circlepath")
                                         .foregroundStyle(.secondary)
                                         .frame(width: 48)
