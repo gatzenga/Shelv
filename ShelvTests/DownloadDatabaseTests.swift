@@ -264,6 +264,12 @@ final class DownloadDatabaseTests: XCTestCase {
             filePath: "/local/song.flac"
         )
         await database.upsert(original)
+        await database.upsert(record(
+            songId: "song-1",
+            serverId: "server-b",
+            albumId: "album-a",
+            title: "Other Server Song"
+        ))
 
         let observed = Song(
             id: "song-1",
@@ -307,6 +313,10 @@ final class DownloadDatabaseTests: XCTestCase {
             songId: "song-1",
             serverId: "server-a"
         )
+        let otherServer = await database.record(
+            songId: "song-1",
+            serverId: "server-b"
+        )
 
         XCTAssertEqual(update.changes.count, 1)
         XCTAssertEqual(refreshed?.title, "Renamed Song")
@@ -336,6 +346,125 @@ final class DownloadDatabaseTests: XCTestCase {
         XCTAssertEqual(refreshed?.samplingRate, original.samplingRate)
         XCTAssertEqual(refreshed?.channelCount, original.channelCount)
         XCTAssertEqual(refreshed?.addedAt, original.addedAt)
+
+        XCTAssertEqual(otherServer?.title, "Other Server Song")
+        XCTAssertEqual(otherServer?.artistName, "Artist")
+        XCTAssertEqual(otherServer?.coverArtId, "cover-a")
+
+        let offlineSong = refreshed?.toDownloadedSong().asSong()
+        XCTAssertEqual(offlineSong?.title, "Renamed Song")
+        XCTAssertEqual(offlineSong?.artist, "Renamed Artist")
+        XCTAssertEqual(offlineSong?.artistId, "artist-new")
+        XCTAssertEqual(offlineSong?.album, "Renamed Album")
+        XCTAssertEqual(offlineSong?.displayAlbumArtist, "Renamed Album Artist")
+        XCTAssertEqual(offlineSong?.coverArt, "cover-new")
+        XCTAssertEqual(offlineSong?.track, 7)
+        XCTAssertEqual(offlineSong?.discNumber, 2)
+        XCTAssertEqual(offlineSong?.duration, 241)
+        XCTAssertEqual(offlineSong?.year, 2025)
+        XCTAssertEqual(offlineSong?.genre, "Alternative")
+        XCTAssertEqual(offlineSong?.playCount, 12)
+        XCTAssertEqual(offlineSong?.explicitStatus, "explicit")
+        XCTAssertEqual(offlineSong?.bpm, 123)
+        XCTAssertEqual(offlineSong?.replayGain?.trackGain, -4.5)
+        XCTAssertEqual(offlineSong?.replayGain?.albumGain, -3.5)
+        XCTAssertEqual(offlineSong?.contentType, original.contentType)
+        XCTAssertEqual(offlineSong?.suffix, original.fileExtension)
+        XCTAssertEqual(offlineSong?.fileSize, original.bytes)
+        XCTAssertEqual(offlineSong?.bitRate, original.bitRate)
+        XCTAssertEqual(offlineSong?.samplingRate, original.samplingRate)
+        XCTAssertEqual(offlineSong?.channelCount, original.channelCount)
+    }
+
+    func testObservedSongUsesAlbumMetadataFallbackForOfflineRecord() async throws {
+        let database = await makeDatabase()
+        let original = record(
+            songId: "song-1",
+            serverId: "server-a",
+            albumId: "album-old",
+            filePath: "/local/song.flac"
+        )
+        await database.upsert(original)
+
+        let observed = Song(
+            id: "song-1",
+            title: "Renamed Song",
+            albumId: "album-new",
+            track: 4,
+            discNumber: 2,
+            duration: 222
+        )
+        let albumMetadata = DownloadAlbumMetadata(
+            id: "album-new",
+            name: "Renamed Album",
+            artist: "Renamed Artist",
+            artistId: "artist-new",
+            coverArt: "cover-new",
+            songCount: 1,
+            duration: 222,
+            year: 2025,
+            genre: "Ambient"
+        )
+
+        let update = await database.updateObservedSongs(
+            [observed],
+            serverId: "server-a",
+            albumMetadata: albumMetadata
+        )
+        let refreshed = await database.record(
+            songId: "song-1",
+            serverId: "server-a"
+        )
+
+        XCTAssertEqual(update.changes.count, 1)
+        XCTAssertEqual(refreshed?.albumId, "album-new")
+        XCTAssertEqual(refreshed?.title, "Renamed Song")
+        XCTAssertEqual(refreshed?.albumTitle, "Renamed Album")
+        XCTAssertEqual(refreshed?.artistName, "Renamed Artist")
+        XCTAssertEqual(refreshed?.albumArtistName, "Renamed Artist")
+        XCTAssertEqual(refreshed?.albumCoverArtId, "cover-new")
+        XCTAssertEqual(refreshed?.coverArtId, "cover-new")
+        XCTAssertEqual(refreshed?.year, 2025)
+        XCTAssertEqual(refreshed?.genre, "Ambient")
+        XCTAssertEqual(refreshed?.filePath, original.filePath)
+        XCTAssertEqual(refreshed?.bytes, original.bytes)
+        XCTAssertEqual(refreshed?.contentType, original.contentType)
+        XCTAssertEqual(refreshed?.fileExtension, original.fileExtension)
+        XCTAssertEqual(refreshed?.bitRate, original.bitRate)
+        XCTAssertEqual(refreshed?.samplingRate, original.samplingRate)
+        XCTAssertEqual(refreshed?.channelCount, original.channelCount)
+    }
+
+    func testUnchangedObservedSongDoesNotProduceMetadataUpdate() async throws {
+        let database = await makeDatabase()
+        await database.upsert(record(
+            songId: "song-1",
+            serverId: "server-a",
+            albumId: "album-a"
+        ))
+        let unchanged = Song(
+            id: "song-1",
+            title: "Song",
+            artist: "Artist",
+            artistId: "artist-a",
+            album: "Album",
+            albumId: "album-a",
+            track: 1,
+            discNumber: 1,
+            duration: 180,
+            coverArt: "cover-a",
+            year: 2026,
+            genre: "Rock",
+            playCount: 7,
+            displayAlbumArtist: "Artist"
+        )
+
+        let update = await database.updateObservedSongs(
+            [unchanged],
+            serverId: "server-a"
+        )
+
+        XCTAssertTrue(update.isEmpty)
     }
 
     func testAlbumSummaryRefreshIsServerScoped() async throws {
@@ -345,6 +474,13 @@ final class DownloadDatabaseTests: XCTestCase {
             serverId: "server-a",
             albumId: "album-shared"
         ))
+        var inheritedCover = record(
+            songId: "song-a-inherited-cover",
+            serverId: "server-a",
+            albumId: "album-shared"
+        )
+        inheritedCover.coverArtId = inheritedCover.albumCoverArtId
+        await database.upsert(inheritedCover)
         await database.upsert(record(
             songId: "song-b",
             serverId: "server-b",
@@ -367,9 +503,13 @@ final class DownloadDatabaseTests: XCTestCase {
             serverId: "server-a"
         )
         let serverA = await database.record(songId: "song-a", serverId: "server-a")
+        let serverAInheritedCover = await database.record(
+            songId: "song-a-inherited-cover",
+            serverId: "server-a"
+        )
         let serverB = await database.record(songId: "song-b", serverId: "server-b")
 
-        XCTAssertEqual(update.changes.count, 1)
+        XCTAssertEqual(update.changes.count, 2)
         XCTAssertEqual(serverA?.albumTitle, "Renamed Album")
         XCTAssertEqual(serverA?.albumArtistName, "Renamed Artist")
         XCTAssertEqual(serverA?.artistName, "Renamed Artist")
@@ -378,10 +518,48 @@ final class DownloadDatabaseTests: XCTestCase {
         XCTAssertEqual(serverA?.coverArtId, "cover-a")
         XCTAssertEqual(serverA?.year, 2025)
         XCTAssertEqual(serverA?.genre, "Jazz")
+        XCTAssertEqual(serverAInheritedCover?.coverArtId, "album-cover-new")
 
         XCTAssertEqual(serverB?.albumTitle, "Album")
         XCTAssertEqual(serverB?.artistName, "Artist")
         XCTAssertEqual(serverB?.albumCoverArtId, "album-cover-a")
+    }
+
+    func testArtistSummaryRefreshIsServerScopedAndFeedsOfflineRecord() async throws {
+        let database = await makeDatabase()
+        await database.upsert(record(
+            songId: "song-a",
+            serverId: "server-a",
+            albumId: "album-a"
+        ))
+        await database.upsert(record(
+            songId: "song-b",
+            serverId: "server-b",
+            albumId: "album-b"
+        ))
+
+        let update = await database.updateArtistSummaries(
+            [
+                Artist(
+                    id: "artist-a",
+                    name: "Renamed Artist",
+                    coverArt: "artist-cover-new"
+                )
+            ],
+            serverId: "server-a"
+        )
+        let serverA = await database.record(songId: "song-a", serverId: "server-a")
+        let serverB = await database.record(songId: "song-b", serverId: "server-b")
+
+        XCTAssertEqual(update.changes.count, 1)
+        XCTAssertEqual(serverA?.artistName, "Renamed Artist")
+        XCTAssertEqual(serverA?.albumArtistName, "Renamed Artist")
+        XCTAssertEqual(serverA?.artistCoverArtId, "artist-cover-new")
+        XCTAssertEqual(serverA?.toDownloadedSong().asSong().artist, "Renamed Artist")
+
+        XCTAssertEqual(serverB?.artistName, "Artist")
+        XCTAssertEqual(serverB?.albumArtistName, "Artist")
+        XCTAssertEqual(serverB?.artistCoverArtId, "artist-cover-a")
     }
 
     func testManagedAlbumsAndCollectionRefreshStateStayServerScoped() async throws {
