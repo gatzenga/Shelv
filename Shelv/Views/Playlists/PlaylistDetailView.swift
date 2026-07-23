@@ -2,6 +2,24 @@ import Combine
 import SwiftUI
 
 struct PlaylistDetailView: View {
+    private struct PresentedSongRow: Identifiable {
+        struct ID: Hashable {
+            let occurrenceID: IndexedSongOccurrence.ID
+            let deletionRevision: Int
+        }
+
+        let occurrence: IndexedSongOccurrence
+        let deletionRevision: Int
+
+        var id: ID {
+            ID(occurrenceID: occurrence.id, deletionRevision: deletionRevision)
+        }
+
+        var occurrenceID: IndexedSongOccurrence.ID { occurrence.id }
+        var index: Int { occurrence.index }
+        var song: Song { occurrence.song }
+    }
+
     let playlist: Playlist
 
     @ObservedObject var libraryStore = LibraryStore.shared
@@ -26,6 +44,7 @@ struct PlaylistDetailView: View {
     @State private var newComment = ""
     @State private var pendingSongDeletionOffsets = IndexSet()
     @State private var showRemoveSongsConfirm = false
+    @State private var songDeletionRevisions: [IndexedSongOccurrence.ID: Int] = [:]
     @State private var showDeleteConfirm = false
     @State private var showDeleteDownloadConfirm = false
     @State private var currentToast: ShelveToast?
@@ -49,13 +68,23 @@ struct PlaylistDetailView: View {
         )
     }
 
-    private var displayedSongRows: [IndexedSongOccurrence] {
+    private var displayedSongRows: [PresentedSongRow] {
         let rows = IndexedSongOccurrence.rows(for: songs)
-        guard !searchQuery.isEmpty, !isEditMode else { return rows }
-        return rows.filter { row in
-            row.song.title.localizedCaseInsensitiveContains(searchQuery)
-                || (row.song.artist?.localizedCaseInsensitiveContains(searchQuery) ?? false)
-                || (row.song.album?.localizedCaseInsensitiveContains(searchQuery) ?? false)
+        let filteredRows: [IndexedSongOccurrence]
+        if !searchQuery.isEmpty, !isEditMode {
+            filteredRows = rows.filter { row in
+                row.song.title.localizedCaseInsensitiveContains(searchQuery)
+                    || (row.song.artist?.localizedCaseInsensitiveContains(searchQuery) ?? false)
+                    || (row.song.album?.localizedCaseInsensitiveContains(searchQuery) ?? false)
+            }
+        } else {
+            filteredRows = rows
+        }
+        return filteredRows.map { row in
+            PresentedSongRow(
+                occurrence: row,
+                deletionRevision: songDeletionRevisions[row.id, default: 0]
+            )
         }
     }
 
@@ -497,10 +526,22 @@ struct PlaylistDetailView: View {
         guard isEditMode, !isSyncing else { return }
         let validOffsets = IndexSet(offsets.filter { songs.indices.contains($0) })
         guard !validOffsets.isEmpty else { return }
+        let currentRows = displayedSongRows
+        let affectedRowIDs = validOffsets.compactMap { offset in
+            currentRows.indices.contains(offset)
+                ? currentRows[offset].occurrenceID
+                : nil
+        }
         haptic()
         var transaction = Transaction(animation: nil)
         transaction.disablesAnimations = true
         withTransaction(transaction) {
+            // SwiftUI calls onDelete after visually removing the native row.
+            // Refresh only that row's presentation identity so it remains in
+            // place while the unchanged source data awaits confirmation.
+            for rowID in affectedRowIDs {
+                songDeletionRevisions[rowID, default: 0] += 1
+            }
             pendingSongDeletionOffsets = validOffsets
             showRemoveSongsConfirm = true
         }
