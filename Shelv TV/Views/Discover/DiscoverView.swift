@@ -66,48 +66,52 @@ struct DiscoverView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 40) {
-                    HStack {
-                        if showsServerMenu, let activeServer {
-                            Menu {
-                                if activeServer.hasSecondaryURL {
-                                    serverURLMenuButton(.primary, server: activeServer)
-                                    serverURLMenuButton(.secondary, server: activeServer)
-                                }
-                                if activeServer.hasSecondaryURL && musicLibraries.snapshot.showsSelector {
-                                    Divider()
-                                }
-                                if musicLibraries.snapshot.showsSelector {
-                                    allMusicLibrariesMenuButton
-                                    Divider()
-                                    ForEach(musicLibraries.availableFolders) { folder in
-                                        musicLibraryMenuButton(folder)
+                    HStack(spacing: 0) {
+                        HStack(spacing: 12) {
+                            if showsServerMenu, let activeServer {
+                                Menu {
+                                    if activeServer.hasSecondaryURL {
+                                        serverURLMenuButton(.primary, server: activeServer)
+                                        serverURLMenuButton(.secondary, server: activeServer)
                                     }
+                                    if activeServer.hasSecondaryURL && musicLibraries.snapshot.showsSelector {
+                                        Divider()
+                                    }
+                                    if musicLibraries.snapshot.showsSelector {
+                                        allMusicLibrariesMenuButton
+                                        Divider()
+                                        ForEach(musicLibraries.availableFolders) { folder in
+                                            musicLibraryMenuButton(folder)
+                                        }
+                                    }
+                                } label: {
+                                    Label(discoverTitle, systemImage: "server.rack")
+                                }
+                                .buttonStyle(.bordered)
+                            } else {
+                                Text(discoverTitle)
+                                    .font(.title2.bold())
+                            }
+
+                            Button {
+                                Task {
+                                    if await OfflineModeService.shared.beginUserInitiatedServerRefresh() { return }
+                                    defer { OfflineModeService.shared.finishUserInitiatedServerRefresh() }
+                                    Task { await CloudKitSyncService.shared.syncNow() }
+                                    async let discover:  Void = load()
+                                    async let playlists: Void = LibraryStore.shared.loadPlaylists()
+                                    async let radio:     Void = RadioStationStore.shared.refresh()
+                                    async let favorites: Void = LibraryStore.shared.loadStarred()
+                                    _ = await (discover, playlists, radio, favorites)
                                 }
                             } label: {
-                                Label(discoverTitle, systemImage: "server.rack")
+                                Label(String(localized: "refresh"), systemImage: "arrow.clockwise")
                             }
                             .buttonStyle(.bordered)
-                        } else {
-                            Text(discoverTitle)
-                                .font(.title2.bold())
                         }
 
-                        Button {
-                            Task {
-                                if await OfflineModeService.shared.beginUserInitiatedServerRefresh() { return }
-                                defer { OfflineModeService.shared.finishUserInitiatedServerRefresh() }
-                                Task { await CloudKitSyncService.shared.syncNow() }
-                                async let discover:  Void = load()
-                                async let playlists: Void = LibraryStore.shared.loadPlaylists()
-                                async let radio:     Void = RadioStationStore.shared.refresh()
-                                async let favorites: Void = LibraryStore.shared.loadStarred()
-                                _ = await (discover, playlists, radio, favorites)
-                            }
-                        } label: {
-                            Label(String(localized: "refresh"), systemImage: "arrow.clockwise")
-                        }
-                        .buttonStyle(.bordered)
                         Spacer()
+
                         HStack(spacing: 12) {
                             if recapEnabled {
                                 NavigationLink { RecapView() } label: {

@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct SearchView: View {
     @EnvironmentObject private var serverStore: ServerStore
@@ -9,6 +10,9 @@ struct SearchView: View {
     @State private var path = NavigationPath()
     @State private var recentSearches: [String] = []
     @State private var automaticallyRecordedQuery: String?
+    @State private var historyQueryAwaitingCursorPlacement: String?
+    @State private var activeSearchTextField: UITextField?
+    @FocusState private var isClearSearchHistoryFocused: Bool
 
     private let player = AudioPlayerService.shared
 
@@ -51,9 +55,24 @@ struct SearchView: View {
                                         String(localized: "clear_search_history"),
                                         systemImage: "trash"
                                     )
+                                    .foregroundStyle(.red)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background {
+                                        Capsule()
+                                            .fill(
+                                                isClearSearchHistoryFocused
+                                                    ? Color.red.opacity(0.18)
+                                                    : Color.clear
+                                            )
+                                    }
                                 }
-                                .buttonStyle(.bordered)
-                                .tint(.red)
+                                .buttonStyle(PlainRowButtonStyle())
+                                .focused($isClearSearchHistoryFocused)
+                                .animation(
+                                    .easeOut(duration: 0.14),
+                                    value: isClearSearchHistoryFocused
+                                )
 
                                 Spacer(minLength: 0)
                             }
@@ -104,6 +123,33 @@ struct SearchView: View {
             .onAppear {
                 reloadSearchHistory()
             }
+            .onReceive(
+                NotificationCenter.default.publisher(
+                    for: UITextField.textDidBeginEditingNotification
+                )
+            ) { notification in
+                guard let searchTextField = notification.object as? UITextField else {
+                    return
+                }
+                activeSearchTextField = searchTextField
+                guard let expectedQuery = historyQueryAwaitingCursorPlacement,
+                      searchTextField.text == expectedQuery
+                else { return }
+                placeCursorAtEndAfterViewUpdate(
+                    in: searchTextField,
+                    matching: expectedQuery
+                )
+            }
+            .onReceive(
+                NotificationCenter.default.publisher(
+                    for: UITextField.textDidEndEditingNotification
+                )
+            ) { notification in
+                guard let searchTextField = notification.object as? UITextField,
+                      searchTextField === activeSearchTextField
+                else { return }
+                activeSearchTextField = nil
+            }
             .onChange(of: serverStore.activeServerID) { _, _ in
                 restartSearchAfterServerChange()
             }
@@ -134,6 +180,10 @@ struct SearchView: View {
                 }
             }
             .onChange(of: query) { _, q in
+                if let expectedQuery = historyQueryAwaitingCursorPlacement,
+                   q != expectedQuery {
+                    historyQueryAwaitingCursorPlacement = nil
+                }
                 searchTask?.cancel()
                 let trimmed = q.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !trimmed.isEmpty else {
@@ -200,7 +250,14 @@ struct SearchView: View {
             for: serverStore.activeServerID
         )
         automaticallyRecordedQuery = nil
+        historyQueryAwaitingCursorPlacement = entry
         query = entry
+        if let activeSearchTextField {
+            placeCursorAtEndAfterViewUpdate(
+                in: activeSearchTextField,
+                matching: entry
+            )
+        }
     }
 
     private func clearSearchHistory() {
@@ -208,10 +265,29 @@ struct SearchView: View {
         automaticallyRecordedQuery = nil
     }
 
+    private func placeCursorAtEndAfterViewUpdate(
+        in textField: UITextField,
+        matching expectedQuery: String
+    ) {
+        Task { @MainActor in
+            await Task.yield()
+            guard historyQueryAwaitingCursorPlacement == expectedQuery,
+                  textField.text == expectedQuery
+            else { return }
+            placeCursorAtEnd(in: textField)
+        }
+    }
+
+    private func placeCursorAtEnd(in textField: UITextField) {
+        let end = textField.endOfDocument
+        textField.selectedTextRange = textField.textRange(from: end, to: end)
+    }
+
     private func restartSearchAfterServerChange() {
         searchTask?.cancel()
         result = nil
         automaticallyRecordedQuery = nil
+        historyQueryAwaitingCursorPlacement = nil
         reloadSearchHistory()
         let trimmed = trimmedQuery
         guard !trimmed.isEmpty else { return }
