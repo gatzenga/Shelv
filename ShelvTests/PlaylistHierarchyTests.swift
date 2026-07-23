@@ -33,7 +33,7 @@ final class PlaylistHierarchyTests: XCTestCase {
         XCTAssertEqual(whitespace.displayName, " Focus ")
     }
 
-    func testTreeMergesFoldersAndPreservesPlaylistOrder() throws {
+    func testTreeGroupsPlaylistsBeforeFoldersAtEveryLevel() throws {
         let playlists = [
             playlist(id: "1", name: "Loose"),
             playlist(id: "2", name: "Work/Deep/Focus"),
@@ -43,16 +43,34 @@ final class PlaylistHierarchyTests: XCTestCase {
 
         let roots = PlaylistTreeNode.make(from: playlists)
 
-        XCTAssertEqual(roots.map(\.title), ["Loose", "Work", "Later"])
-        XCTAssertEqual(roots[1].playlistCount, 2)
+        XCTAssertEqual(roots.map(\.title), ["Loose", "Later", "Work"])
+        XCTAssertEqual(roots[2].playlistCount, 2)
 
-        let workChildren = try XCTUnwrap(roots[1].children)
-        XCTAssertEqual(workChildren.map(\.title), ["Deep", "Energy"])
+        let workChildren = try XCTUnwrap(roots[2].children)
+        XCTAssertEqual(workChildren.map(\.title), ["Energy", "Deep"])
 
-        let deepChildren = try XCTUnwrap(workChildren[0].children)
+        let deepChildren = try XCTUnwrap(workChildren[1].children)
         XCTAssertEqual(deepChildren.map(\.title), ["Focus"])
         XCTAssertEqual(deepChildren[0].playlist?.id, "2")
-        XCTAssertEqual(workChildren[1].playlist?.id, "3")
+        XCTAssertEqual(workChildren[0].playlist?.id, "3")
+    }
+
+    func testTreePreservesConfiguredOrderWithinPlaylistAndFolderGroups() {
+        let roots = PlaylistTreeNode.make(from: [
+            playlist(id: "folder-b", name: "Folder B/Track"),
+            playlist(id: "loose-b", name: "Loose B"),
+            playlist(id: "folder-a", name: "Folder A/Track"),
+            playlist(id: "loose-a", name: "Loose A")
+        ])
+
+        XCTAssertEqual(
+            roots.compactMap(\.playlist?.id),
+            ["loose-b", "loose-a"]
+        )
+        XCTAssertEqual(
+            roots.compactMap(\.folderPath),
+            ["Folder B", "Folder A"]
+        )
     }
 
     func testPlaylistCanShareItsNameWithANestedFolder() throws {

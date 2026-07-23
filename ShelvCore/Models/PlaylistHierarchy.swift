@@ -68,7 +68,22 @@ nonisolated struct PlaylistTreeNode: Identifiable, Sendable {
             )
         }
 
-        return roots
+        return playlistsBeforeFolders(in: roots)
+    }
+
+    /// Keeps the caller's configured order stable within both groups while
+    /// presenting playlist leaves before virtual folders at every tree level.
+    private static func playlistsBeforeFolders(
+        in nodes: [PlaylistTreeNode]
+    ) -> [PlaylistTreeNode] {
+        let recursivelyOrdered = nodes.map { node in
+            guard let children = node.children else { return node }
+            var folder = node
+            folder.children = playlistsBeforeFolders(in: children)
+            return folder
+        }
+        return recursivelyOrdered.filter { !$0.isFolder }
+            + recursivelyOrdered.filter(\.isFolder)
     }
 
     private static func insert(
