@@ -191,7 +191,19 @@ private nonisolated struct PingInfoBody: Decodable, Sendable {
     let version: String
     let type: String?
     let serverVersion: String?
+    let openSubsonic: Bool?
     let error: StatusCheck.APIError?
+}
+
+private nonisolated struct OpenSubsonicExtensionsBody: Decodable, Sendable {
+    let status: String
+    let error: StatusCheck.APIError?
+    let openSubsonicExtensions: [Extension]?
+
+    struct Extension: Decodable, Sendable {
+        let name: String
+        let versions: [Int]?
+    }
 }
 
 private nonisolated struct GetUserBody: Decodable, Sendable {
@@ -453,6 +465,11 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
 
     private let credentialLock = NSLock()
     private let compatibilityLock = NSLock()
+    private let capabilityLock = NSLock()
+    /// OpenSubsonic extensions per server, learned at connection time and kept
+    /// for the session only: a server that gets upgraded should be re-probed on
+    /// the next launch rather than remembered as it was months ago.
+    nonisolated(unsafe) private var _openSubsonicCapabilities: [String: OpenSubsonicCapabilities] = [:]
     nonisolated(unsafe) private var _activeServer: SubsonicServer?
     nonisolated(unsafe) private var _activePassword: String?
     nonisolated(unsafe) private var _credentialGeneration: UInt64 = 0
@@ -1285,7 +1302,85 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
             responseFormatServerFingerprint(info),
             serverKey: responseFormatServerKey(for: server)
         )
+        // Connecting is the natural moment to learn what the server implements.
+        // A server that answers `openSubsonic: false`, or no flag at all, is a
+        // classic Subsonic server and must never be asked for an extension.
+        if body.openSubsonic == true {
+            await refreshOpenSubsonicCapabilities(server: server, password: password)
+        } else {
+            storeOpenSubsonicCapabilities(.none, for: server)
+        }
         return info
+    }
+
+    /// What the given server advertised through `getOpenSubsonicExtensions`.
+    ///
+    /// Returns `.none` until the server has been probed, which is deliberate:
+    /// an un-probed server must be treated as a classic Subsonic server rather
+    /// than optimistically called with extension-only parameters.
+    nonisolated func openSubsonicCapabilities(for server: SubsonicServer) -> OpenSubsonicCapabilities {
+        capabilityLock.withLock {
+            _openSubsonicCapabilities[responseFormatServerKey(for: server)] ?? .none
+        }
+    }
+
+    /// Capabilities of the server currently in use, probing it once if the app
+    /// has not connected through `ping(server:password:)` in this session.
+    func openSubsonicCapabilities() async -> OpenSubsonicCapabilities {
+        guard let credentials = try? await resolveCredentials() else { return .none }
+        let key = responseFormatServerKey(for: credentials.server)
+        if let known = capabilityLock.withLock({ _openSubsonicCapabilities[key] }) {
+            return known
+        }
+        await refreshOpenSubsonicCapabilities(
+            server: credentials.server,
+            password: credentials.password
+        )
+        return openSubsonicCapabilities(for: credentials.server)
+    }
+
+    /// Asks the server what it implements. Never throws: a server that does not
+    /// know the endpoint answers with an API error or a 404, and that is simply
+    /// the answer "nothing", not a failure worth surfacing to the listener.
+    private func refreshOpenSubsonicCapabilities(server: SubsonicServer, password: String) async {
+        let capabilities: OpenSubsonicCapabilities
+        do {
+            capabilities = try await getOpenSubsonicExtensions(server: server, password: password)
+        } catch {
+            capabilities = .none
+        }
+        storeOpenSubsonicCapabilities(capabilities, for: server)
+    }
+
+    nonisolated private func storeOpenSubsonicCapabilities(
+        _ capabilities: OpenSubsonicCapabilities,
+        for server: SubsonicServer
+    ) {
+        let key = responseFormatServerKey(for: server)
+        capabilityLock.withLock { _openSubsonicCapabilities[key] = capabilities }
+    }
+
+    func getOpenSubsonicExtensions(
+        server: SubsonicServer,
+        password: String
+    ) async throws -> OpenSubsonicCapabilities {
+        #if DEBUG
+        if server.baseURL == DemoContent.serverBaseURL || server.activeBaseURL == DemoContent.serverBaseURL {
+            return .none
+        }
+        #endif
+        let body = try await fetchDecoded(
+            Envelope<OpenSubsonicExtensionsBody>.self,
+            for: server,
+            password: password,
+            path: "getOpenSubsonicExtensions"
+        ).response
+        try check(status: body.status, error: body.error)
+        return OpenSubsonicCapabilities(
+            advertised: (body.openSubsonicExtensions ?? []).map {
+                (name: $0.name, versions: $0.versions ?? [1])
+            }
+        )
     }
 
     /// Whether the given credentials have admin rights on the server. Some operations
