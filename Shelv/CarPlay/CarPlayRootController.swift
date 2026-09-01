@@ -342,7 +342,7 @@ final class CarPlayRootController: NSObject {
         // Instant mix from whatever is playing. Needs the server, so it stays out
         // of the row while offline, like the heart button above.
         if #available(iOS 16.0, *), !OfflineModeService.shared.isOffline, let song {
-            let icon = UIImage(systemName: "wand.and.stars") ?? UIImage()
+            let icon = UIImage(systemName: "sparkles") ?? UIImage()
             buttons.append(CPNowPlayingImageButton(image: icon) { [weak self] _ in
                 self?.startInstantMix(for: song)
             })
