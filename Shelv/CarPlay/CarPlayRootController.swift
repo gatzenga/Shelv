@@ -16,6 +16,7 @@ final class CarPlayRootController: NSObject {
     private var lastShowRadio: Bool = CarPlayRootController.radioTabEnabled
     private var lastRecapTabVisible: Bool = false
     private var isPresentingServerErrorAlert = false
+    private var isBuildingInstantMix = false
 
     // Apple's System-Buttons. EINMAL gebaut und stabil geteilt — Apple liest deren Selected-State
     // autonom aus MPRemoteCommandCenter, der State wird in `applyPlaybackModeToNowPlayingInfo`
@@ -338,7 +339,43 @@ final class CarPlayRootController: NSObject {
                 Task { await LibraryStore.shared.toggleStarSong(song) }
             })
         }
+        // Instant mix from whatever is playing. Needs the server, so it stays out
+        // of the row while offline, like the heart button above.
+        if #available(iOS 16.0, *), !OfflineModeService.shared.isOffline, let song {
+            let icon = UIImage(systemName: "wand.and.stars") ?? UIImage()
+            buttons.append(CPNowPlayingImageButton(image: icon) { [weak self] _ in
+                self?.startInstantMix(for: song)
+            })
+        }
         CPNowPlayingTemplate.shared.updateNowPlayingButtons(buttons)
+    }
+
+    /// Replaces the queue with a mix built around `song`. A tap in the car has to
+    /// answer, so an empty mix says so instead of leaving the button silent.
+    private func startInstantMix(for song: Song) {
+        guard !isBuildingInstantMix else { return }
+        isBuildingInstantMix = true
+        Task { @MainActor in
+            defer { isBuildingInstantMix = false }
+            let mix = await InstantMixService.songMix(for: song)
+            guard !mix.isEmpty else {
+                presentInstantMixUnavailable()
+                return
+            }
+            AudioPlayerService.shared.play(songs: mix, startIndex: 0)
+        }
+    }
+
+    private func presentInstantMixUnavailable() {
+        let alert = CPAlertTemplate(
+            titleVariants: [String(localized: "no_instant_mix_available")],
+            actions: [
+                CPAlertAction(title: String(localized: "ok"), style: .default) { [weak self] _ in
+                    self?.interfaceController.dismissTemplate(animated: true, completion: nil)
+                }
+            ]
+        )
+        interfaceController.presentTemplate(alert, animated: true, completion: nil)
     }
 }
 
