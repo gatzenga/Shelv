@@ -669,6 +669,40 @@ class AudioPlayerService: ObservableObject {
         return true
     }
 
+    /// Swaps the queue out from under the current song without restarting it.
+    ///
+    /// Starting an instant mix from the player is a request for what comes
+    /// *next*: the track already playing is the seed and stays exactly where it
+    /// is. Everywhere else the same mix is a normal start and does restart, so
+    /// the caller decides by calling this or `play(songs:startIndex:)`.
+    ///
+    /// Returns false when the mix does not begin with the current song, or
+    /// while a radio station is playing, so callers can fall back to a normal
+    /// start rather than silently doing nothing.
+    @discardableResult
+    func replaceQueueKeepingCurrentSong(_ songs: [Song]) -> Bool {
+        guard playbackMode != .radio, currentRadioStation == nil,
+              let current = currentSong,
+              songs.first?.id == current.id
+        else { return false }
+
+        playbackBackHistory.removeAll()
+        isShuffled = false
+        queue = songs
+        currentIndex = 0
+        playNextQueue = []
+        userQueue = []
+        truthAlbumQueue = songs
+        truthPlayNextQueue = []
+        truthUserQueue = []
+        infinityPendingSongIds.removeAll()
+        // The playing item is untouched, but what follows it is not: skip-forward
+        // has to reflect the new queue.
+        updateRemoteCommandAvailability()
+        saveState()
+        return true
+    }
+
     @discardableResult
     func playSong(_ song: Song) -> Bool {
         guard rejectUnavailableSelectionIfNeeded(song) == nil else { return false }

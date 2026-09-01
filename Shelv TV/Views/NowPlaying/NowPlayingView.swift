@@ -260,7 +260,10 @@ struct NowPlayingView: View {
     @ViewBuilder
     private func playerSongMenuItems(_ song: Song) -> some View {
         if showInstantMixActions && !offlineMode.isOffline {
-            Button { InstantMixService.playSongMix(for: song, player: player) } label: {
+            // From the player: the seed is already playing, so keep it going.
+            Button {
+                InstantMixService.playSongMix(for: song, player: player, continuingCurrentSong: true)
+            } label: {
                 Label(String(localized: "instant_mix"), systemImage: "sparkles")
             }
         }

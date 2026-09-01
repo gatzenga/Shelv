@@ -362,7 +362,12 @@ final class CarPlayRootController: NSObject {
                 presentInstantMixUnavailable()
                 return
             }
-            AudioPlayerService.shared.play(songs: mix, startIndex: 0)
+            // From the player: the seed is already playing, so keep it going and
+            // only replace what follows.
+            let player = AudioPlayerService.shared
+            if !player.replaceQueueKeepingCurrentSong(mix) {
+                player.play(songs: mix, startIndex: 0)
+            }
         }
     }
 

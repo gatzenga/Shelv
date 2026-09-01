@@ -539,7 +539,8 @@ struct PlayerBarView: View {
         var entries: [SongMenuEntry] = []
         if showInstantMixActions && !offlineMode.isOffline {
             entries.append(.action(title: String(localized: "instant_mix"), systemImage: "sparkles") {
-                InstantMixService.playSongMix(for: song)
+                // From the player: the seed is already playing, so keep it going.
+                InstantMixService.playSongMix(for: song, continuingCurrentSong: true)
             })
             entries.append(.divider)
         }

@@ -1009,7 +1009,8 @@ private struct PlayerSongActionsMenu: View {
                     showInstantMix: showInstantMixActions && !offlineMode.isOffline,
                     showAddToPlaylist: showPlaylistActions && !offlineMode.isOffline,
                     onInstantMix: {
-                        InstantMixService.playSongMix(for: song)
+                        // From the player: the seed is already playing, so keep it going.
+                        InstantMixService.playSongMix(for: song, continuingCurrentSong: true)
                     },
                     onPlayNext: {
                         haptic()

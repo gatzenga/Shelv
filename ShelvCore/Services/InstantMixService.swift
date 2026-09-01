@@ -68,18 +68,39 @@ nonisolated enum InstantMixService {
     }
 
     @MainActor
-    static func playSongMix(for song: Song) {
-        playSongMix(for: song, player: AudioPlayerService.shared)
+    static func playSongMix(for song: Song, continuingCurrentSong: Bool = false) {
+        playSongMix(
+            for: song,
+            player: AudioPlayerService.shared,
+            continuingCurrentSong: continuingCurrentSong
+        )
     }
 
+    /// - Parameter continuingCurrentSong: pass true when the mix is started from
+    ///   the player itself. The seed is then already playing and asking for a mix
+    ///   is a request about what follows, so the queue is replaced underneath it
+    ///   rather than restarted. Anywhere else the same tap is a normal start.
     @MainActor
-    static func playSongMix(for song: Song, player: AudioPlayerService) {
+    static func playSongMix(
+        for song: Song,
+        player: AudioPlayerService,
+        continuingCurrentSong: Bool = false
+    ) {
         guard isEnabled else { return }
         let serverConfigID = SubsonicAPIService.shared.activeServer?.id.uuidString
         Task {
             let songs = await songMix(for: song)
             guard !songs.isEmpty else {
                 NotificationCenter.default.post(name: .instantMixUnavailable, object: nil)
+                return
+            }
+            if continuingCurrentSong, player.replaceQueueKeepingCurrentSong(songs) {
+                await donateSuccessfulMix(
+                    kind: .song,
+                    contentID: song.id,
+                    title: song.title,
+                    serverConfigID: serverConfigID
+                )
                 return
             }
             guard case .started = await player.playAndWait(songs: songs, startIndex: 0) else { return }
