@@ -353,6 +353,8 @@
 "track_gain" = "Track Gain";
 "album_gain" = "Album Gain";
 "transcoding" = "Transkodierung";
+"transcoding_primary_url_exempt" = "Original über primäre URL";
+"transcoding_primary_url_exempt_footer" = "Erreicht Shelv den Server über seine primäre URL, wird die Originaldatei gestreamt und das WLAN-Profil ignoriert. Unterwegs auf die sekundäre URL wechseln.";
 "gapless" = "Gapless";
 "scrobble" = "Scrobble";
 "autofetch_on_playback" = "Beim Abspielen laden";

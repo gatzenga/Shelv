@@ -219,6 +219,8 @@
 "gapless" = "Gapless";
 "scrobble" = "Scrobble";
 "transcoding" = "Transcoding";
+"transcoding_primary_url_exempt" = "Original über primäre URL";
+"transcoding_primary_url_exempt_footer" = "Erreicht Shelv den Server über seine primäre URL, wird die Originaldatei gestreamt und das WLAN-Profil ignoriert. Unterwegs auf die sekundäre URL wechseln.";
 "no_track" = "Kein Titel";
 "shuffle_off" = "Zufallsmodus aus";
 "shuffle_on" = "Zufallsmodus an";

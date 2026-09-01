@@ -6,6 +6,8 @@ struct TranscodingSettingsView: View {
     @AppStorage("transcodingWifiBitrate") private var wifiBitrate: Int = 256
     @AppStorage("transcodingCellularCodec") private var cellularCodecRaw: String = "raw"
     @AppStorage("transcodingCellularBitrate") private var cellularBitrate: Int = 128
+    @AppStorage("transcodingPrimaryURLExempt") private var primaryURLExempt = false
+    @ObservedObject private var serverStore = ServerStore.shared
 
     @State private var showInfo = false
 
@@ -24,6 +26,17 @@ struct TranscodingSettingsView: View {
                 bitrateBinding: $wifiBitrate,
                 options: TranscodingCodec.streamingOptions
             )
+
+            // Only shown for a server that has both URLs: with a single URL the
+            // toggle would just mean "never transcode on Wi-Fi", which the
+            // Wi-Fi profile already says.
+            if serverStore.activeServer?.hasSecondaryURL == true {
+                Section {
+                    Toggle(String(localized: "transcoding_primary_url_exempt"), isOn: $primaryURLExempt)
+                } footer: {
+                    Text(String(localized: "transcoding_primary_url_exempt_footer"))
+                }
+            }
 
             transcodingSection(
                 title: String(localized: "cellular"),

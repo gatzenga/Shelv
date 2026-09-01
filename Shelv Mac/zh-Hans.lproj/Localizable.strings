@@ -219,6 +219,8 @@
 "gapless" = "无缝播放";
 "scrobble" = "Scrobble";
 "transcoding" = "转码";
+"transcoding_primary_url_exempt" = "主地址使用原始文件";
+"transcoding_primary_url_exempt_footer" = "通过主地址连接服务器时，Shelv 会播放原始文件并忽略 Wi-Fi 配置。外出时请切换到备用地址。";
 "no_track" = "无曲目";
 "shuffle_off" = "随机播放：关闭";
 "shuffle_on" = "随机播放：开启";

@@ -206,6 +206,8 @@
 "gapless" = "Enchaînement sans blanc";
 "scrobble" = "Scrobble";
 "transcoding" = "Transcodage";
+"transcoding_primary_url_exempt" = "Original sur l’URL principale";
+"transcoding_primary_url_exempt_footer" = "Quand Shelv joint le serveur par son URL principale, il diffuse le fichier d’origine et ignore le profil Wi-Fi. Basculez sur l’URL secondaire en déplacement.";
 "no_track" = "Aucun morceau";
 "shuffle_off" = "Aléatoire désactivé";
 "shuffle_on" = "Aléatoire activé";

@@ -31,16 +31,43 @@ nonisolated enum TranscodingBitrate: Int, CaseIterable, Identifiable {
 }
 
 nonisolated struct TranscodingPolicy {
+    /// Written by `ServerStore` whenever the active server or its URL slot
+    /// changes, so the streaming policy can tell home from away.
+    static let usingSecondaryURLKey = "activeServerUsesSecondaryURL"
+    /// Whether the active server holds a secondary URL at all. Without one
+    /// there is no away slot, so nothing to exempt.
+    static let hasSecondaryURLKey = "activeServerHasSecondaryURL"
+
     /// Liefert das gewünschte Stream-Format basierend auf aktuellem Netz.
     /// `nil` = kein Transcoding, Original wird angefordert.
     static func currentStreamFormat() -> (codec: TranscodingCodec, bitrate: Int)? {
-        guard UserDefaults.standard.bool(forKey: "transcodingEnabled") else { return nil }
-        // Data-Saver (macOS-Menü): erzwingt das Cellular-Profil auch im WLAN.
-        // Auf iOS ist der Key nie gesetzt → kein Verhaltensunterschied.
-        let dataSaver = UserDefaults.standard.bool(forKey: "dataSaverEnabled")
-        let isWifi = !dataSaver && NetworkStatus.shared.isOnWifi
-        let codecKey = isWifi ? "transcodingWifiCodec" : "transcodingCellularCodec"
-        let bitrateKey = isWifi ? "transcodingWifiBitrate" : "transcodingCellularBitrate"
+        let profile = TranscodingProfileDecision.profile(
+            isEnabled: UserDefaults.standard.bool(forKey: "transcodingEnabled"),
+            // Data-Saver (macOS-Menü): erzwingt das Cellular-Profil auch im WLAN.
+            // Auf iOS ist der Key nie gesetzt → kein Verhaltensunterschied.
+            dataSaver: UserDefaults.standard.bool(forKey: "dataSaverEnabled"),
+            isOnWifi: NetworkStatus.shared.isOnWifi,
+            // Read as a plain flag rather than through SubsonicAPIService:
+            // this file is compiled into ShelvTests, which does not include it.
+            // ServerStore keeps the key in step with the active server.
+            serverHasSecondaryURL: UserDefaults.standard.bool(forKey: TranscodingPolicy.hasSecondaryURLKey),
+            isOnPrimaryServerURL: !UserDefaults.standard.bool(forKey: TranscodingPolicy.usingSecondaryURLKey),
+            exemptsPrimaryServerURL: UserDefaults.standard.bool(forKey: "transcodingPrimaryURLExempt")
+        )
+
+        let codecKey: String
+        let bitrateKey: String
+        switch profile {
+        case .original:
+            return nil
+        case .wifi:
+            codecKey = "transcodingWifiCodec"
+            bitrateKey = "transcodingWifiBitrate"
+        case .cellular:
+            codecKey = "transcodingCellularCodec"
+            bitrateKey = "transcodingCellularBitrate"
+        }
+
         let codecRaw = UserDefaults.standard.string(forKey: codecKey) ?? "raw"
         guard let codec = TranscodingCodec(rawValue: codecRaw), codec != .raw else { return nil }
         let rate = UserDefaults.standard.integer(forKey: bitrateKey)

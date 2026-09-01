@@ -24,6 +24,7 @@
 		BC1001062FFE000000000001 /* ShelvCore/Models/QueueSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001162FFE000000000001 /* ShelvCore/Models/QueueSnapshot.swift */; };
 		BC1001072FFE000000000001 /* ShelvCore/Services/AudioPlayerQueueState.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001172FFE000000000001 /* ShelvCore/Services/AudioPlayerQueueState.swift */; };
 		BC1001082FFE000000000001 /* ShelvCore/Services/TranscodingPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001182FFE000000000001 /* ShelvCore/Services/TranscodingPolicy.swift */; };
+		BBF07A0DEC1D00000000C0DE /* ShelvCore/Services/TranscodingProfileDecision.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAF07A0DEC1D00000000C0DE /* ShelvCore/Services/TranscodingProfileDecision.swift */; };
 		BC1001092FFE000000000001 /* ShelvCore/Services/NetworkStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001192FFE000000000001 /* ShelvCore/Services/NetworkStatus.swift */; };
 		BC10010A2FFE000000000001 /* ShelvCore/Services/URL+QueryParam.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC10011A2FFE000000000001 /* ShelvCore/Services/URL+QueryParam.swift */; };
 		BC10010B2FFE000000000001 /* ShelvCore/Utilities/PathSafe.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC10011B2FFE000000000001 /* ShelvCore/Utilities/PathSafe.swift */; };
@@ -110,6 +111,7 @@
 		BC1001162FFE000000000001 /* ShelvCore/Models/QueueSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Models/QueueSnapshot.swift; sourceTree = "<group>"; };
 		BC1001172FFE000000000001 /* ShelvCore/Services/AudioPlayerQueueState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/AudioPlayerQueueState.swift; sourceTree = "<group>"; };
 		BC1001182FFE000000000001 /* ShelvCore/Services/TranscodingPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/TranscodingPolicy.swift; sourceTree = "<group>"; };
+		AAF07A0DEC1D00000000C0DE /* ShelvCore/Services/TranscodingProfileDecision.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/TranscodingProfileDecision.swift; sourceTree = "<group>"; };
 		BC1001192FFE000000000001 /* ShelvCore/Services/NetworkStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/NetworkStatus.swift; sourceTree = "<group>"; };
 		BC10011A2FFE000000000001 /* ShelvCore/Services/URL+QueryParam.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ShelvCore/Services/URL+QueryParam.swift"; sourceTree = "<group>"; };
 		BC10011B2FFE000000000001 /* ShelvCore/Utilities/PathSafe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Utilities/PathSafe.swift; sourceTree = "<group>"; };
@@ -290,6 +292,7 @@
 				BC1001172FFE000000000001 /* ShelvCore/Services/AudioPlayerQueueState.swift */,
 				BC1001432FFE000000000001 /* ShelvCore/Services/AudioPlayerStreamCacheJob.swift */,
 				BC1001182FFE000000000001 /* ShelvCore/Services/TranscodingPolicy.swift */,
+				AAF07A0DEC1D00000000C0DE /* ShelvCore/Services/TranscodingProfileDecision.swift */,
 				BC1001192FFE000000000001 /* ShelvCore/Services/NetworkStatus.swift */,
 				BC1001292FFE000000000001 /* ShelvCore/Services/OfflineServerErrorPresentationPolicy.swift */,
 				D76D0722C024A55F5646646B /* ShelvCore/Services/RemoteStreamFailureRetryPolicy.swift */,
@@ -644,6 +647,7 @@
 				BC1001072FFE000000000001 /* ShelvCore/Services/AudioPlayerQueueState.swift in Sources */,
 				BC1001422FFE000000000001 /* ShelvCore/Services/AudioPlayerStreamCacheJob.swift in Sources */,
 				BC1001082FFE000000000001 /* ShelvCore/Services/TranscodingPolicy.swift in Sources */,
+				BBF07A0DEC1D00000000C0DE /* ShelvCore/Services/TranscodingProfileDecision.swift in Sources */,
 				BC1001092FFE000000000001 /* ShelvCore/Services/NetworkStatus.swift in Sources */,
 				BC1001282FFE000000000001 /* ShelvCore/Services/OfflineServerErrorPresentationPolicy.swift in Sources */,
 				54755D0F4F7624D1CB2AFAA0 /* ShelvCore/Services/RemoteStreamFailureRetryPolicy.swift in Sources */,

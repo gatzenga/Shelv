@@ -353,6 +353,8 @@
 "track_gain" = "Track Gain";
 "album_gain" = "Album Gain";
 "transcoding" = "Transcoding";
+"transcoding_primary_url_exempt" = "Original on primary URL";
+"transcoding_primary_url_exempt_footer" = "When Shelv reaches the server through its primary URL it streams the original file and ignores the Wi-Fi profile. Switch to the secondary URL when you are away.";
 "gapless" = "Gapless";
 "scrobble" = "Scrobble";
 "autofetch_on_playback" = "Auto-fetch on playback";

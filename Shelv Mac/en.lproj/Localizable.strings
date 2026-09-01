@@ -219,6 +219,8 @@
 "gapless" = "Gapless";
 "scrobble" = "Scrobble";
 "transcoding" = "Transcoding";
+"transcoding_primary_url_exempt" = "Original on primary URL";
+"transcoding_primary_url_exempt_footer" = "When Shelv reaches the server through its primary URL it streams the original file and ignores the Wi-Fi profile. Switch to the secondary URL when you are away.";
 "no_track" = "No track";
 "shuffle_off" = "Shuffle off";
 "shuffle_on" = "Shuffle on";

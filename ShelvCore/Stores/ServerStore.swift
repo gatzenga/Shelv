@@ -191,6 +191,14 @@ class ServerStore: ObservableObject {
     }
 
     private func applyToAPIService(server: SubsonicServer) async {
+        UserDefaults.standard.set(
+            server.isUsingSecondaryURL,
+            forKey: TranscodingPolicy.usingSecondaryURLKey
+        )
+        UserDefaults.standard.set(
+            server.hasSecondaryURL,
+            forKey: TranscodingPolicy.hasSecondaryURLKey
+        )
         activeServerRevision &+= 1
         let revision = activeServerRevision
         if let password = credentialCache[server.id] {
