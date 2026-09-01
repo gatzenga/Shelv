@@ -570,10 +570,19 @@ class ServerStore: ObservableObject {
             let fileManager = FileManager.default
             var succeeded = true
 
-            let libraryDirectory = fileManager
-                .urls(for: .cachesDirectory, in: .userDomainMask)[0]
-                .appendingPathComponent("shelv_library", isDirectory: true)
-            if fileManager.fileExists(atPath: libraryDirectory.path) {
+            // Both locations: the snapshots moved from Caches to Application
+            // Support, and a device that has not migrated yet still has files
+            // in the old one.
+            let libraryDirectories = [
+                fileManager
+                    .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                    .appendingPathComponent("shelv_library", isDirectory: true),
+                fileManager
+                    .urls(for: .cachesDirectory, in: .userDomainMask)[0]
+                    .appendingPathComponent("shelv_library", isDirectory: true),
+            ]
+            for libraryDirectory in libraryDirectories
+            where fileManager.fileExists(atPath: libraryDirectory.path) {
                 do {
                     let suffix = "_\(serverID.uuidString).json"
                     for url in try fileManager.contentsOfDirectory(

@@ -184,6 +184,12 @@ struct ShelvApp: App {
                     Task.detached(priority: .utility) {
                         await StreamCacheService.shared.cleanupOldFiles()
                     }
+                    // Before anything reads a snapshot: lift the library cache out of
+                    // Caches, which iOS purges on its own and which left the offline
+                    // playlist tab empty while the downloads were still there.
+                    await Task.detached(priority: .userInitiated) {
+                        LibraryStore.migrateLibraryCacheIfNeeded()
+                    }.value
                     await PlayLogService.shared.setup()
                     await DownloadDatabase.shared.setup()
                     await DownloadService.shared.setup()

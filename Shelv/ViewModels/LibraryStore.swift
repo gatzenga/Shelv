@@ -63,10 +63,61 @@ class LibraryStore: ObservableObject {
     private var serverWideStarredAlbumIDs: Set<String>?
     private var serverWideStarredArtistIDs: Set<String>?
 
+    /// Where the JSON snapshots live. Application Support rather than Caches:
+    /// iOS purges Caches under storage pressure at any time, even while the app
+    /// is not running, and offline the playlist tab has no other source than
+    /// this directory. Downloaded audio already lives in Application Support,
+    /// so a purge used to empty the playlist tab while every track stayed put.
+    /// tvOS keeps Caches, matching `LibraryDatabase.defaultDBURL`.
     nonisolated static var libraryDir: URL {
+        #if os(tvOS)
+        return legacyCachesLibraryDir
+        #else
+        return FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("shelv_library", isDirectory: true)
+        #endif
+    }
+
+    /// The pre-migration location. Still read once so an update does not throw
+    /// away the very cache this move exists to protect.
+    nonisolated static var legacyCachesLibraryDir: URL {
         FileManager.default
             .urls(for: .cachesDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("shelv_library", isDirectory: true)
+    }
+
+    /// Moves any snapshots left in Caches into Application Support. Idempotent,
+    /// and safe to call from several places: an existing file always wins.
+    nonisolated static func migrateLibraryCacheIfNeeded() {
+        #if !os(tvOS)
+        let fileManager = FileManager.default
+        let source = legacyCachesLibraryDir
+        guard fileManager.fileExists(atPath: source.path) else { return }
+        let destination = libraryDir
+        try? fileManager.createDirectory(at: destination, withIntermediateDirectories: true)
+        let contents = (try? fileManager.contentsOfDirectory(at: source, includingPropertiesForKeys: nil)) ?? []
+        for url in contents {
+            let target = destination.appendingPathComponent(url.lastPathComponent)
+            if fileManager.fileExists(atPath: target.path) {
+                try? fileManager.removeItem(at: url)
+            } else {
+                try? fileManager.moveItem(at: url, to: target)
+            }
+        }
+        try? fileManager.removeItem(at: source)
+        excludeLibraryDirFromBackup()
+        #endif
+    }
+
+    /// Application Support is backed up by default. The snapshots are
+    /// reproducible from the server, so keep them out of iCloud backups the way
+    /// `LibraryDatabase` does for its own directory.
+    nonisolated static func excludeLibraryDirFromBackup() {
+        var url = libraryDir
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try? url.setResourceValues(values)
     }
 
     nonisolated static func diskURL(name: String, serverID: UUID) -> URL {
@@ -75,6 +126,7 @@ class LibraryStore: ObservableObject {
 
     nonisolated static func diskCacheSizeBytes() -> Int {
         FileManager.default.directorySize(at: libraryDir)
+            + FileManager.default.directorySize(at: legacyCachesLibraryDir)
             + FileManager.default.directorySize(at: LibraryDatabase.defaultDBURL.deletingLastPathComponent())
     }
 
@@ -83,6 +135,7 @@ class LibraryStore: ObservableObject {
         Task.detached(priority: .utility) {
             guard let data = try? JSONEncoder().encode(value) else { return }
             try? FileManager.default.createDirectory(at: Self.libraryDir, withIntermediateDirectories: true)
+            Self.excludeLibraryDirFromBackup()
             try? data.write(to: url, options: .atomic)
         }
     }
@@ -693,6 +746,7 @@ class LibraryStore: ObservableObject {
     func clearCache() {
         resetInMemory()
         try? FileManager.default.removeItem(at: Self.libraryDir)
+        try? FileManager.default.removeItem(at: Self.legacyCachesLibraryDir)
         Task {
             do {
                 try await LibraryDatabase.shared.removeAllFiles()
