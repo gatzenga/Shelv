@@ -32,6 +32,9 @@
 "library" = "Bibliothèque";
 "show_all_libraries" = "Toutes les bibliothèques";
 "albums" = "Albums";
+"latest_release" = "Dernière sortie";
+"release_group_singles_eps" = "Singles et EP";
+"discography" = "Discographie";
 "artists" = "Artistes";
 "artist" = "Artiste";
 "favorites" = "Favoris";

@@ -48,6 +48,22 @@ struct ArtistDetailView: View {
         )
     }
 
+    /// Albums and short releases on their own shelves, or one shelf for the whole
+    /// discography when splitting would say nothing about it. Same rule as iPhone
+    /// and Mac, so an artist reads the same on every screen.
+    private var shelves: [(group: ArtistReleaseGroup, albums: [Album])] {
+        ArtistDiscography.shelfGroups(for: displayAlbums).compactMap { group in
+            let albums = ArtistDiscography.filter(displayAlbums, to: group)
+            return albums.isEmpty ? nil : (group, albums)
+        }
+    }
+
+    private var latestRelease: Album? {
+        displayAlbums.max {
+            ($0.year ?? 0, $0.created ?? .distantPast) < ($1.year ?? 0, $1.created ?? .distantPast)
+        }
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 30) {
@@ -56,20 +72,27 @@ struct ArtistDetailView: View {
                 if !topSongs.isEmpty {
                     topSongsSection
                 }
-                VStack(alignment: .leading, spacing: 12) {
-                    Text(String(localized: "albums"))
-                        .font(.title3).bold()
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    Group {
-                        if isGrid {
-                            LazyVGrid(columns: coverGridColumns, alignment: .leading, spacing: 50) {
-                                ForEach(displayAlbums) { AlbumCard(album: $0, showsArtist: false) }
+                if let latestRelease {
+                    latestReleaseCard(latestRelease)
+                }
+                ForEach(shelves, id: \.group.rawValue) { shelf in
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text(shelf.group.shelfTitle)
+                            .font(.title3).bold()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Group {
+                            if isGrid {
+                                // Every release on screen at once. A television has the
+                                // room, so there is nothing to hide behind a "show all".
+                                LazyVGrid(columns: coverGridColumns, alignment: .leading, spacing: 50) {
+                                    ForEach(shelf.albums) { AlbumCard(album: $0, showsArtist: false) }
+                                }
+                            } else {
+                                albumList(shelf.albums)
                             }
-                        } else {
-                            albumList
                         }
+                        .focusSection()
                     }
-                    .focusSection()
                 }
                 if !similarArtists.isEmpty {
                     similarArtistsSection
@@ -266,11 +289,53 @@ struct ArtistDetailView: View {
         .focusSection()
     }
 
-    private var albumList: some View {
+    private func albumList(_ albums: [Album]) -> some View {
         LazyVStack(spacing: 4) {
-            ForEach(displayAlbums) { album in
+            ForEach(albums) { album in
                 AlbumListRow(album: album, showsArtist: false) { navAlbum = album }
             }
+        }
+    }
+
+    /// The newest release, called out above the shelves. Sorting never moves it,
+    /// so it sits above the sort control's reach, the way it does on the Mac.
+    private func latestReleaseCard(_ album: Album) -> some View {
+        NavigationLink {
+            AlbumDetailView(album: album)
+        } label: {
+            HStack(spacing: 24) {
+                CoverArtView(url: album.coverURL(500), size: 140, cornerRadius: 8)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(String(localized: "latest_release"))
+                        .font(.caption).bold()
+                        .foregroundStyle(.secondary)
+                    Text(album.name)
+                        .font(.title3).bold()
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                    if !album.displayYear.isEmpty {
+                        Text(album.displayYear)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(20)
+        }
+        .buttonStyle(.card)
+        .focusSection()
+    }
+}
+
+extension ArtistReleaseGroup {
+    /// Shelf heading. `.all` carries the whole discography, so it takes the
+    /// discography wording rather than asserting a release type nobody declared.
+    var shelfTitle: String {
+        switch self {
+        case .all: String(localized: "discography")
+        case .albums: String(localized: "albums")
+        case .singlesAndEPs: String(localized: "release_group_singles_eps")
         }
     }
 }

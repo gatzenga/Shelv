@@ -32,6 +32,9 @@
 "library" = "音乐库";
 "show_all_libraries" = "显示所有音乐库";
 "albums" = "专辑";
+"latest_release" = "最新发行";
+"release_group_singles_eps" = "单曲和 EP";
+"discography" = "作品";
 "artists" = "艺术家";
 "artist" = "艺术家";
 "favorites" = "收藏";
