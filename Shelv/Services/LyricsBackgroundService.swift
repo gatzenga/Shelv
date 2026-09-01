@@ -462,14 +462,8 @@ actor LyricsBackgroundService {
 
         var lrc: String? = nil
         if entry.synced {
-            let lrcLines = lines.compactMap { line -> String? in
-                guard let ms = line.start else { return nil }
-                let min = (ms / 1000) / 60
-                let sec = (ms / 1000) % 60
-                let cs  = (ms % 1000) / 10
-                return String(format: "[%02d:%02d.%02d] %@", min, sec, cs, line.value)
-            }
-            lrc = lrcLines.isEmpty ? nil : lrcLines.joined(separator: "\n")
+            let timed = entry.timedLines
+            lrc = timed.isEmpty ? nil : EnhancedLyricsParser.serialize(timed)
         }
 
         return LyricsRecord(

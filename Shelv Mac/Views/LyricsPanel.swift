@@ -728,59 +728,13 @@ struct LyricsPanel: View {
         }
     }
 
+    /// Enhanced LRC is a superset of LRC, so one parser reads both, and the
+    /// word tags of a karaoke file never leak into the visible text. Shared
+    /// with the other platforms and covered by tests.
     private func parseLRC(_ lrc: String) -> [LyricLine] {
-        var result: [(timeMs: Int, text: String)] = []
-        let pattern = #"\[(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?\]"#
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
-
-        for rawLine in lrc.components(separatedBy: "\n") {
-            let line = rawLine.trimmingCharacters(in: .whitespaces)
-            let nsLine = line as NSString
-            let range = NSRange(location: 0, length: nsLine.length)
-
-            let matches = regex.matches(in: line, range: range)
-            guard !matches.isEmpty, let lastMatch = matches.last else { continue }
-
-            let textStart = lastMatch.range.location + lastMatch.range.length
-            guard textStart <= nsLine.length else { continue }
-
-            let text = nsLine.substring(from: textStart).trimmingCharacters(in: .whitespaces)
-            guard !text.isEmpty else { continue }
-
-            for match in matches {
-                guard match.numberOfRanges >= 4 else { continue }
-
-                func group(_ index: Int) -> String {
-                    let groupRange = match.range(at: index)
-                    guard groupRange.location != NSNotFound else { return "" }
-                    return nsLine.substring(with: groupRange)
-                }
-
-                let minutes = Int(group(1)) ?? 0
-                let seconds = Int(group(2)) ?? 0
-                let fraction = group(3)
-                let fractionValue = Int(fraction) ?? 0
-                let fractionMs: Int
-                switch fraction.count {
-                case 1:
-                    fractionMs = fractionValue * 100
-                case 2:
-                    fractionMs = fractionValue * 10
-                default:
-                    fractionMs = fractionValue
-                }
-
-                let totalMs = (minutes * 60 + seconds) * 1000 + fractionMs
-                result.append((timeMs: totalMs, text: text))
-            }
-        }
-
-        return result
-            .sorted { $0.timeMs < $1.timeMs }
+        EnhancedLyricsParser.parse(lrc)
             .enumerated()
-            .map { offset, line in
-                LyricLine(id: offset, timeMs: line.timeMs, text: line.text)
-            }
+            .map { offset, line in LyricLine(id: offset, timeMs: line.start, text: line.text) }
     }
 
     private func plainText(for record: LyricsRecord) -> String? {
@@ -805,19 +759,10 @@ struct LyricsPanel: View {
             .filter { !$0.isEmpty }
     }
 
+    /// Plain text out of an LRC document, word tags included.
     private func stripLRCTimestamps(from lrc: String) -> String {
-        let pattern = #"\[\d{1,2}:\d{2}(?:\.\d{1,3})?\]"#
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return lrc }
-
-        return lrc
-            .components(separatedBy: "\n")
-            .map { rawLine in
-                let range = NSRange(rawLine.startIndex..<rawLine.endIndex, in: rawLine)
-                return regex
-                    .stringByReplacingMatches(in: rawLine, range: range, withTemplate: "")
-                    .trimmingCharacters(in: .whitespaces)
-            }
-            .filter { !$0.isEmpty }
+        EnhancedLyricsParser.parse(lrc)
+            .map(\.text)
             .joined(separator: "\n")
     }
 }

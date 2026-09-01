@@ -8,8 +8,11 @@ private let lyricsNativeActiveLineAnchor = UnitPoint(x: 0.5, y: 0.12)
 
 private struct LyricLine: Identifiable {
     let id: Int
-    let timeMs: Int
-    let text: String
+    let timed: TimedLyricLine
+
+    var timeMs: Int { timed.start }
+    var text: String { timed.text }
+    var hasWordTiming: Bool { timed.hasWordTiming }
 }
 
 private struct LyricLineRow: View {
@@ -58,6 +61,7 @@ private struct NativeLyricLineRow: View {
     let isActive: Bool
     let distance: Int
     let isUserScrolling: Bool
+    let currentTimeMs: Int
     let onTap: () -> Void
 
     private var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
@@ -95,9 +99,28 @@ private struct NativeLyricLineRow: View {
         }
     }
 
+    /// Words already sung stay lit while the rest of the line waits its turn.
+    /// A per-word `foregroundColor` inside a concatenated `Text` beats the outer
+    /// style, and concatenation keeps normal line wrapping.
+    private var styledText: Text {
+        guard isActive,
+              line.hasWordTiming,
+              let active = LyricsKaraokeTiming.activeWordIndex(in: line.timed, at: currentTimeMs)
+        else {
+            return Text(line.text)
+        }
+        let words = line.timed.words
+        return words.enumerated().reduce(Text("")) { partial, entry in
+            let (index, word) = entry
+            let separator = index == words.count - 1 ? "" : " "
+            return partial + Text(word.value + separator)
+                .foregroundColor(Color.primary.opacity(index <= active ? 1 : 0.32))
+        }
+    }
+
     var body: some View {
         Button(action: onTap) {
-            Text(line.text)
+            styledText
                 .font(lyricFont)
                 .lineSpacing(isPad ? 5 : 4)
                 .foregroundStyle(Color.primary.opacity(opacity))
@@ -410,6 +433,10 @@ struct LyricsSheetView: View {
                             isActive: isActive,
                             distance: distance,
                             isUserScrolling: isUserScrolling,
+                            // Only the active row reads the clock. Handing the
+                            // live value to every row would re-render the whole
+                            // stack on each tick for nothing.
+                            currentTimeMs: isActive ? currentTimeMs : 0,
                             onTap: {
                                 let seconds = Double(line.timeMs) / 1000.0
                                 player.seek(to: seconds)
@@ -743,59 +770,13 @@ struct LyricsSheetView: View {
         }
     }
 
+    /// Enhanced LRC is a superset of LRC, so one parser reads both: a file
+    /// without word tags simply yields lines with no words. Shared with the
+    /// lyrics writer and covered by tests, rather than a second regex here.
     private func parseLRC(_ lrc: String) -> [LyricLine] {
-        var result: [(timeMs: Int, text: String)] = []
-        let pattern = #"\[(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?\]"#
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
-
-        for rawLine in lrc.components(separatedBy: "\n") {
-            let line = rawLine.trimmingCharacters(in: .whitespaces)
-            let nsLine = line as NSString
-            let range = NSRange(location: 0, length: nsLine.length)
-
-            let matches = regex.matches(in: line, range: range)
-            guard !matches.isEmpty, let lastMatch = matches.last else { continue }
-
-            let textStart = lastMatch.range.location + lastMatch.range.length
-            guard textStart <= nsLine.length else { continue }
-
-            let text = nsLine.substring(from: textStart).trimmingCharacters(in: .whitespaces)
-            guard !text.isEmpty else { continue }
-
-            for match in matches {
-                guard match.numberOfRanges >= 4 else { continue }
-
-                func group(_ index: Int) -> String {
-                    let groupRange = match.range(at: index)
-                    guard groupRange.location != NSNotFound else { return "" }
-                    return nsLine.substring(with: groupRange)
-                }
-
-                let minutes = Int(group(1)) ?? 0
-                let seconds = Int(group(2)) ?? 0
-                let fraction = group(3)
-                let fractionValue = Int(fraction) ?? 0
-                let fractionMs: Int
-                switch fraction.count {
-                case 1:
-                    fractionMs = fractionValue * 100
-                case 2:
-                    fractionMs = fractionValue * 10
-                default:
-                    fractionMs = fractionValue
-                }
-
-                let totalMs = (minutes * 60 + seconds) * 1000 + fractionMs
-                result.append((timeMs: totalMs, text: text))
-            }
-        }
-
-        return result
-            .sorted { $0.timeMs < $1.timeMs }
+        EnhancedLyricsParser.parse(lrc)
             .enumerated()
-            .map { offset, line in
-                LyricLine(id: offset, timeMs: line.timeMs, text: line.text)
-            }
+            .map { offset, line in LyricLine(id: offset, timed: line) }
     }
 
     private func plainText(for record: LyricsRecord) -> String? {
@@ -820,19 +801,10 @@ struct LyricsSheetView: View {
             .filter { !$0.isEmpty }
     }
 
+    /// Plain text out of an LRC document, word tags included.
     private func stripLRCTimestamps(from lrc: String) -> String {
-        let pattern = #"\[\d{1,2}:\d{2}(?:\.\d{1,3})?\]"#
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return lrc }
-
-        return lrc
-            .components(separatedBy: "\n")
-            .map { rawLine in
-                let range = NSRange(rawLine.startIndex..<rawLine.endIndex, in: rawLine)
-                return regex
-                    .stringByReplacingMatches(in: rawLine, range: range, withTemplate: "")
-                    .trimmingCharacters(in: .whitespaces)
-            }
-            .filter { !$0.isEmpty }
+        EnhancedLyricsParser.parse(lrc)
+            .map(\.text)
             .joined(separator: "\n")
     }
 }

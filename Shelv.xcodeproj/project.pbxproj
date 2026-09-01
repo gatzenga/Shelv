@@ -9,10 +9,12 @@
 /* Begin PBXBuildFile section */
 		11F3AAFBB4684ECFABA0E3E5 /* ShelvCore/Models/RecapPeriod.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3481C1649E04481CA0F35E60 /* ShelvCore/Models/RecapPeriod.swift */; };
 		4B666BEAD970D72DFCFF9C7E /* ShelvCore/Services/RadioStationChangeLogic.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8C9F16F5098EE7158A393F2 /* ShelvCore/Services/RadioStationChangeLogic.swift */; };
+		BBF00507000000000000C0DE /* ShelvCore/Support/OpenSubsonicCapabilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAF00507000000000000C0DE /* ShelvCore/Support/OpenSubsonicCapabilities.swift */; };
 		4C9CE80450C542811BFC06B9 /* ShelvCore/Services/ArtistTopSongsRanking.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2D3956FCB8E5BA0EA7B365B /* ShelvCore/Services/ArtistTopSongsRanking.swift */; };
 		BBF091A70FDE00000000C0DE /* ShelvCore/Services/ArtistPlayOrder.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAF091A70FDE00000000C0DE /* ShelvCore/Services/ArtistPlayOrder.swift */; };
 		54755D0F4F7624D1CB2AFAA0 /* ShelvCore/Services/RemoteStreamFailureRetryPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = D76D0722C024A55F5646646B /* ShelvCore/Services/RemoteStreamFailureRetryPolicy.swift */; };
 		767C48F98385493A929D3CF5 /* ShelvCore/Services/PlaylistDuplicateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7032627BABC540CC8752182E /* ShelvCore/Services/PlaylistDuplicateChecker.swift */; };
+		BBF01471C500000000000000 /* ShelvCore/Services/EnhancedLyrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAF01471C500000000000000 /* ShelvCore/Services/EnhancedLyrics.swift */; };
 		A3BC3F4796D89CE06D73AEBA /* ShelvCore/Services/ArtistDiscography.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFBB0EAEC930A6AA93845AF6 /* ShelvCore/Services/ArtistDiscography.swift */; };
 		A6370E2FCC02E636B1CE06BB /* ShelvCore/Services/PlayLogReconciliationLogic.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EB765BFF905DC588F357EC2 /* ShelvCore/Services/PlayLogReconciliationLogic.swift */; };
 		BC10000C2FFE000000000001 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC10000D2FFE000000000001 /* GRDB */; };
@@ -101,6 +103,7 @@
 		1EB765BFF905DC588F357EC2 /* ShelvCore/Services/PlayLogReconciliationLogic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/PlayLogReconciliationLogic.swift; sourceTree = "<group>"; };
 		3481C1649E04481CA0F35E60 /* ShelvCore/Models/RecapPeriod.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Models/RecapPeriod.swift; sourceTree = "<group>"; };
 		7032627BABC540CC8752182E /* ShelvCore/Services/PlaylistDuplicateChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/PlaylistDuplicateChecker.swift; sourceTree = "<group>"; };
+		AAF01471C500000000000000 /* ShelvCore/Services/EnhancedLyrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/EnhancedLyrics.swift; sourceTree = "<group>"; };
 		BC1000012FFE000000000001 /* ShelvTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ShelvTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC1001112FFE000000000001 /* ShelvCore/Models/Album.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Models/Album.swift; sourceTree = "<group>"; };
 		BC1001122FFE000000000001 /* ShelvCore/Models/Artist.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Models/Artist.swift; sourceTree = "<group>"; };
@@ -149,6 +152,7 @@
 		BC7B83F52FDB17700058CB78 /* Shelv.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Shelv.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC9C59382F8E9FB000FF4D25 /* Shelv.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Shelv.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C8C9F16F5098EE7158A393F2 /* ShelvCore/Services/RadioStationChangeLogic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/RadioStationChangeLogic.swift; sourceTree = "<group>"; };
+		AAF00507000000000000C0DE /* ShelvCore/Support/OpenSubsonicCapabilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Support/OpenSubsonicCapabilities.swift; sourceTree = "<group>"; };
 		D602F58338426465B1E367C5 /* ShelvCore/Services/RecapExpectedSongsLogic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/RecapExpectedSongsLogic.swift; sourceTree = "<group>"; };
 		D76D0722C024A55F5646646B /* ShelvCore/Services/RemoteStreamFailureRetryPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/RemoteStreamFailureRetryPolicy.swift; sourceTree = "<group>"; };
 		DB776033CC96417A93CA66DB /* ShelvCore/Services/ConcurrencyLimiter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/ConcurrencyLimiter.swift; sourceTree = "<group>"; };
@@ -278,7 +282,9 @@
 				BC1001232FFE000000000001 /* ShelvCore/Models/RadioStation.swift */,
 				BC1001272FFE000000000001 /* ShelvCore/Models/SubsonicServer.swift */,
 				C8C9F16F5098EE7158A393F2 /* ShelvCore/Services/RadioStationChangeLogic.swift */,
+				AAF00507000000000000C0DE /* ShelvCore/Support/OpenSubsonicCapabilities.swift */,
 				7032627BABC540CC8752182E /* ShelvCore/Services/PlaylistDuplicateChecker.swift */,
+				AAF01471C500000000000000 /* ShelvCore/Services/EnhancedLyrics.swift */,
 				FFBB0EAEC930A6AA93845AF6 /* ShelvCore/Services/ArtistDiscography.swift */,
 				F2D3956FCB8E5BA0EA7B365B /* ShelvCore/Services/ArtistTopSongsRanking.swift */,
 				AAF091A70FDE00000000C0DE /* ShelvCore/Services/ArtistPlayOrder.swift */,
@@ -631,7 +637,9 @@
 				BC1001222FFE000000000001 /* ShelvCore/Models/RadioStation.swift in Sources */,
 				BC1001262FFE000000000001 /* ShelvCore/Models/SubsonicServer.swift in Sources */,
 				4B666BEAD970D72DFCFF9C7E /* ShelvCore/Services/RadioStationChangeLogic.swift in Sources */,
+				BBF00507000000000000C0DE /* ShelvCore/Support/OpenSubsonicCapabilities.swift in Sources */,
 				767C48F98385493A929D3CF5 /* ShelvCore/Services/PlaylistDuplicateChecker.swift in Sources */,
+				BBF01471C500000000000000 /* ShelvCore/Services/EnhancedLyrics.swift in Sources */,
 				A3BC3F4796D89CE06D73AEBA /* ShelvCore/Services/ArtistDiscography.swift in Sources */,
 				4C9CE80450C542811BFC06B9 /* ShelvCore/Services/ArtistTopSongsRanking.swift in Sources */,
 				BBF091A70FDE00000000C0DE /* ShelvCore/Services/ArtistPlayOrder.swift in Sources */,

@@ -570,7 +570,15 @@ actor LyricsService {
 
     private func fetchFromNavidrome(song: Song, serverId: String) async -> LyricsRecord? {
         DBErrorLog.logLyrics("Request → Navidrome: \(song.title)")
-        guard let entry = try? await SubsonicAPIService.shared.getLyricsBySongId(songId: song.id),
+        // Word timing is only asked for when the server says it can answer:
+        // older servers do not know the `enhanced` parameter.
+        let capabilities = await SubsonicAPIService.shared.openSubsonicCapabilities()
+        let wantsWordTiming = capabilities.supports(OpenSubsonicExtension.songLyrics, version: 2)
+
+        guard let entry = try? await SubsonicAPIService.shared.getLyricsBySongId(
+                songId: song.id,
+                enhanced: wantsWordTiming
+              ),
               let lines = entry.line, !lines.isEmpty else {
             DBErrorLog.logLyrics("No match → Navidrome: \(song.title)")
             return nil
@@ -581,14 +589,13 @@ actor LyricsService {
 
         var lrc: String? = nil
         if entry.synced {
-            let lrcLines = lines.compactMap { line -> String? in
-                guard let ms = line.start else { return nil }
-                let min = (ms / 1000) / 60
-                let sec = (ms / 1000) % 60
-                let cs  = (ms % 1000) / 10
-                return String(format: "[%02d:%02d.%02d] %@", min, sec, cs, line.value)
+            // Enhanced LRC is a superset of LRC, so a track without word timing
+            // still comes out as an ordinary [mm:ss.xxx] file.
+            let timed = entry.timedLines
+            lrc = timed.isEmpty ? nil : EnhancedLyricsParser.serialize(timed)
+            if timed.contains(where: \.hasWordTiming) {
+                DBErrorLog.logLyrics("Word timing → Navidrome: \(song.title)")
             }
-            lrc = lrcLines.isEmpty ? nil : lrcLines.joined(separator: "\n")
         }
 
         return LyricsRecord(
