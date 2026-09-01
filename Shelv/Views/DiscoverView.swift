@@ -306,8 +306,15 @@ struct DiscoverView: View {
                 }
                 defer { offlineMode.finishUserInitiatedServerRefresh() }
                 Task { await CloudKitSyncService.shared.syncNow() }
-                await loadOnlineDiscoverContent(refreshRandom: true)
-                await RadioStationStore.shared.refresh()
+                // SwiftUI tears down the refresh control's task as soon as the first
+                // publish re-renders the body, and `isLoadingDiscover` publishes right
+                // at the start of the load. The cancellation reached the request, so a
+                // pull left Discover showing the albums it already had. The load has to
+                // outlive the gesture: run it unstructured and wait for that instead.
+                await Task { @MainActor in
+                    await loadOnlineDiscoverContent(refreshRandom: true)
+                    await RadioStationStore.shared.refresh()
+                }.value
             }
             .task(id: contentObserver.library.reloadID) {
                 await loadOnlineDiscoverContent()
