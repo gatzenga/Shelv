@@ -244,6 +244,17 @@ struct ArtistDetailView: View {
                                 .padding(.horizontal, 20)
                             }
 
+                            if vm.isShowingDownloadsOnly, !offlineMode.isOffline {
+                                Label(
+                                    String(localized: "showing_downloads_only"),
+                                    systemImage: "wifi.exclamationmark"
+                                )
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 20)
+                            }
+
                             if isGrid && searchQuery.isEmpty {
                                 VStack(alignment: .leading, spacing: 24) {
                                     ForEach(shelves, id: \.group.rawValue) { shelf in
@@ -760,6 +771,10 @@ class ArtistDetailViewModel: ObservableObject {
     @Published var isLoading: Bool = false
     @Published var isLoadingSongs: Bool = false
     @Published var errorMessage: String?
+    /// True while the page shows only what is downloaded on this Mac, because
+    /// the server could not be reached. Without saying so, a failed
+    /// `getArtist` looks like a small but complete discography.
+    @Published var isShowingDownloadsOnly = false
 
     private let api = SubsonicAPIService.shared
     private let maxSongs = 200
@@ -804,6 +819,7 @@ class ArtistDetailViewModel: ObservableObject {
             }
 
             artist = detail
+            isShowingDownloadsOnly = false
             albums = (detail.album ?? []).sorted { ($0.year ?? 0) > ($1.year ?? 0) }
             topSongs = loadedTopSongs
             biography = info?.biography?.strippingHTML
@@ -830,6 +846,7 @@ class ArtistDetailViewModel: ObservableObject {
                               coverArt: local.coverArtId,
                               album: albumsAsModel)
         albums = albumsAsModel
+        isShowingDownloadsOnly = true
     }
 
     func fetchSongs(albums: [Album]) async -> [Song] {

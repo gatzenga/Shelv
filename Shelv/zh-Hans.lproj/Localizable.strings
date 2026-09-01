@@ -36,6 +36,7 @@
 "discography" = "作品";
 "release_group_all" = "全部";
 "release_group_singles_eps" = "单曲和 EP";
+"showing_downloads_only" = "无法连接服务器，仅显示已下载的内容。";
 "fans_also_like" = "相似艺人";
 "more_actions" = "更多操作";
 "more_info" = "更多信息";

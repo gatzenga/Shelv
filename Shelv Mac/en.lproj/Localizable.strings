@@ -158,6 +158,7 @@
 "discography" = "Discography";
 "release_group_all" = "All";
 "release_group_singles_eps" = "Singles & EPs";
+"showing_downloads_only" = "Server unreachable. Showing your downloads only.";
 "fans_also_like" = "Similar Artists";
 "more_info" = "More Info";
 "show_more" = "Show more";
