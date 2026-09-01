@@ -25,6 +25,9 @@ final class CarPlayLibraryController {
     private weak var albumsTemplate: CPListTemplate?
     private weak var artistsTemplate: CPListTemplate?
     private weak var favoritesTemplate: CPListTemplate?
+    /// Playlists are no longer a tab of their own (CarPlay caps audio apps at four
+    /// tabs), so the library menu owns the entry point. Supplied by CarPlayRootController.
+    var playlistsTemplateProvider: (() -> CPListTemplate?)?
 
     init(interfaceController: CPInterfaceController) {
         self.interfaceController = interfaceController
@@ -153,12 +156,22 @@ final class CarPlayLibraryController {
                 c(); self?.pushArtistsList()
             },
         ]
+        if playlistsTemplateProvider != nil {
+            items.append(menuListItem(title: String(localized: "playlists"), systemImage: "music.note.list") { [weak self] _, c in
+                c(); self?.pushPlaylists()
+            })
+        }
         if UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showFavoritesInLibrary) {
             items.append(menuListItem(title: String(localized: "favorites"), systemImage: "heart") { [weak self] _, c in
                 c(); self?.pushFavorites()
             })
         }
         rootTemplate.updateSections([CPListSection(items: items, header: nil, sectionIndexTitle: nil)])
+    }
+
+    private func pushPlaylists() {
+        guard let template = playlistsTemplateProvider?() else { return }
+        CarPlayNavigation.safePush(template, on: interfaceController)
     }
 
     // MARK: - Albums (alphabetische Abschnitte + Buchstabenleiste)

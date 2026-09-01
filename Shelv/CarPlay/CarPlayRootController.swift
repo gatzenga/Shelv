@@ -13,7 +13,6 @@ final class CarPlayRootController: NSObject {
     private var tabBar: CPTabBarTemplate?
     private var cancellables = Set<AnyCancellable>()
     private var lastRecapEnabled: Bool = UserDefaults.standard.bool(forKey: "recapEnabled")
-    private var lastShowPlaylistsTab: Bool = UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showPlaylistsTab)
     private var lastShowRadio: Bool = CarPlayRootController.radioTabEnabled
     private var lastRecapTabVisible: Bool = false
     private var isPresentingServerErrorAlert = false
@@ -48,6 +47,10 @@ final class CarPlayRootController: NSObject {
         radioController     = radio
         recapController     = recap
         queueController     = queue
+
+        // CarPlay erlaubt Audio-Apps nur vier Tabs (CPTabBarTemplate.maximumTabCount).
+        // Playlists sind deshalb kein eigener Tab mehr, sondern eine Zeile in der Library.
+        library.playlistsTemplateProvider = { [weak self] in self?.playlistsController?.rootTemplate }
 
         // Warteschlange ist kein Tab — sie wird über den Up-Next-Button im NowPlaying-Template geöffnet
         lastRecapTabVisible = recapTabVisible
@@ -132,14 +135,13 @@ final class CarPlayRootController: NSObject {
 
     // MARK: - Tab Visibility
 
+    /// Höchstens vier Tabs — `CPTabBarTemplate.maximumTabCount` ist für Apps mit
+    /// carplay-audio-Entitlement 4 (statt 5), und `validateTemplates:` wirft eine
+    /// NSException statt die Liste zu kappen. Playlists leben deshalb in der Library.
     private func visibleTabTemplates() -> [CPTemplate] {
         var templates: [CPTemplate] = []
         if let t = discoverController?.rootTemplate  { templates.append(t) }
         if let t = libraryController?.rootTemplate   { templates.append(t) }
-        if UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showPlaylistsTab),
-           let t = playlistsController?.rootTemplate {
-            templates.append(t)
-        }
         if recapTabVisible, let t = recapController?.rootTemplate {
             templates.append(t)
         }
@@ -188,18 +190,16 @@ final class CarPlayRootController: NSObject {
             }
             .store(in: &cancellables)
 
-        // recapEnabled und showPlaylistsTab via UserDefaults — nur bei Änderung reagieren.
-        // lastRecapEnabled/lastShowPlaylistsTab werden ausschliesslich in refreshTabs() upgedated,
+        // recapEnabled und showRadio via UserDefaults — nur bei Änderung reagieren.
+        // lastRecapEnabled/lastShowRadio werden ausschliesslich in refreshTabs() upgedated,
         // damit der Vergleich dort funktioniert (sonst sind sie schon gleich, bevor refreshTabs läuft).
         NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 guard let self else { return }
                 let currentRecap = UserDefaults.standard.bool(forKey: "recapEnabled")
-                let currentPlaylists = UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showPlaylistsTab)
                 let currentRadio = Self.radioTabEnabled
                 guard currentRecap != self.lastRecapEnabled
-                      || currentPlaylists != self.lastShowPlaylistsTab
                       || currentRadio != self.lastShowRadio
                 else { return }
                 self.refreshTabs()
@@ -253,15 +253,12 @@ final class CarPlayRootController: NSObject {
         // Nur tatsächlichen Tab-Wechsel rendern — sonst unnötige IPC-Roundtrips zu CarPlay.
         let recapVisible = recapTabVisible
         let recapEnabled = UserDefaults.standard.bool(forKey: "recapEnabled")
-        let playlistsEnabled = UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showPlaylistsTab)
         let radioEnabled = Self.radioTabEnabled
         guard recapVisible != lastRecapTabVisible
               || recapEnabled != lastRecapEnabled
-              || playlistsEnabled != lastShowPlaylistsTab
               || radioEnabled != lastShowRadio else { return }
         lastRecapTabVisible = recapVisible
         lastRecapEnabled = recapEnabled
-        lastShowPlaylistsTab = playlistsEnabled
         lastShowRadio = radioEnabled
         tabBar?.updateTemplates(visibleTabTemplates())
     }
