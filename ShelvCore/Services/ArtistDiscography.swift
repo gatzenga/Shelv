@@ -54,6 +54,25 @@ nonisolated enum ArtistDiscography {
         return albums.filter { self.group(for: $0) == group }
     }
 
+    /// The shelves the grid layouts render, in order.
+    ///
+    /// Splitting says something only when the artist has both kinds of
+    /// release. With one kind, one shelf carries the whole discography, and
+    /// naming it depends on where the answer came from: a server that declared
+    /// `releaseTypes` can be quoted, a track-count guess cannot. A library that
+    /// holds a single downloaded track of an album looks exactly like a pile of
+    /// singles, and shelving it under "Singles & EPs" leaves the albums shelf
+    /// empty on an artist whose albums the listener owns.
+    static func shelfGroups(for albums: [Album]) -> [ArtistReleaseGroup] {
+        guard let first = albums.first else { return [] }
+        guard availableGroups(for: albums).isEmpty else { return [.albums, .singlesAndEPs] }
+
+        let onlyGroup = group(for: first)
+        let serverStayedSilent = albums.allSatisfy { declaredGroup(for: $0) == nil }
+        if onlyGroup == .singlesAndEPs, serverStayedSilent { return [.all] }
+        return [onlyGroup]
+    }
+
     /// The filter is only worth showing when the artist actually has both kinds
     /// of release. One button that filters nothing is noise.
     static func availableGroups(for albums: [Album]) -> [ArtistReleaseGroup] {

@@ -9,6 +9,12 @@ extension ArtistReleaseGroup {
         case .singlesAndEPs: String(localized: "release_group_singles_eps")
         }
     }
+
+    /// Title of a grid shelf. `.all` carries the whole discography there, so it
+    /// takes the discography heading rather than the picker's "All".
+    var shelfTitle: String {
+        self == .all ? String(localized: "discography") : label
+    }
 }
 
 /// Album / singles filter of the discography section. Only shown when the

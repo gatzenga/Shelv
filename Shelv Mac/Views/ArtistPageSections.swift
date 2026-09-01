@@ -9,6 +9,13 @@ extension ArtistReleaseGroup {
         case .singlesAndEPs: String(localized: "release_group_singles_eps")
         }
     }
+
+    /// Title of a grid shelf, or `nil` when the page has already titled it.
+    /// `.all` is the whole discography on one shelf, which is exactly what the
+    /// standing "Discography" heading above it says.
+    var shelfTitle: String? {
+        self == .all ? nil : label
+    }
 }
 
 /// Identifies the full, sortable album list behind a release shelf's title:
@@ -23,25 +30,31 @@ struct ArtistAlbumGroup: Hashable {
 /// sortable list, with the same grid/list and sort options as the Library's
 /// own Albums screen.
 struct ArtistReleaseShelf: View {
-    let title: String
+    /// `nil` drops the header row, and with it the link to the full list. A
+    /// shelf the page has already titled holds every release the artist has,
+    /// and the sort and grid/list controls right above it do what that list
+    /// would have offered.
+    let title: String?
     let albums: [Album]
 
     private let itemWidth: CGFloat = 170
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            NavigationLink(value: ArtistAlbumGroup(title: title, albums: albums)) {
-                HStack(spacing: 4) {
-                    Text(title)
-                        .font(.title3.bold())
-                        .foregroundStyle(.primary)
-                    Image(systemName: "chevron.right")
-                        .font(.subheadline.bold())
-                        .foregroundStyle(.secondary)
+            if let title {
+                NavigationLink(value: ArtistAlbumGroup(title: title, albums: albums)) {
+                    HStack(spacing: 4) {
+                        Text(title)
+                            .font(.title3.bold())
+                            .foregroundStyle(.primary)
+                        Image(systemName: "chevron.right")
+                            .font(.subheadline.bold())
+                            .foregroundStyle(.secondary)
+                    }
                 }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 24)
             }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 24)
 
             ScrollView(.horizontal) {
                 LazyHStack(alignment: .top, spacing: 16) {

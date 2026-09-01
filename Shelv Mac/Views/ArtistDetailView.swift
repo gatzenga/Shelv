@@ -76,12 +76,13 @@ struct ArtistDetailView: View {
         searchQuery.isEmpty ? ArtistDiscography.availableGroups(for: availableAlbums) : []
     }
 
-    private var albumsOnly: [Album] {
-        ArtistDiscography.filter(displayAlbums, to: .albums)
-    }
-
-    private var shortReleases: [Album] {
-        ArtistDiscography.filter(displayAlbums, to: .singlesAndEPs)
+    /// Albums and short releases on their own shelves, or one shelf for the
+    /// whole discography when splitting would say nothing about it.
+    private var shelves: [(group: ArtistReleaseGroup, albums: [Album])] {
+        ArtistDiscography.shelfGroups(for: displayAlbums).compactMap { group in
+            let albums = ArtistDiscography.filter(displayAlbums, to: group)
+            return albums.isEmpty ? nil : (group, albums)
+        }
     }
 
     private var latestRelease: Album? {
@@ -245,16 +246,10 @@ struct ArtistDetailView: View {
 
                             if isGrid && searchQuery.isEmpty {
                                 VStack(alignment: .leading, spacing: 24) {
-                                    if !albumsOnly.isEmpty {
+                                    ForEach(shelves, id: \.group.rawValue) { shelf in
                                         ArtistReleaseShelf(
-                                            title: String(localized: "albums"),
-                                            albums: albumsOnly
-                                        )
-                                    }
-                                    if !shortReleases.isEmpty {
-                                        ArtistReleaseShelf(
-                                            title: String(localized: "release_group_singles_eps"),
-                                            albums: shortReleases
+                                            title: shelf.group.shelfTitle,
+                                            albums: shelf.albums
                                         )
                                     }
                                 }

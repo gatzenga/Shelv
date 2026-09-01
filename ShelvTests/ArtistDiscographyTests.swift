@@ -60,4 +60,49 @@ final class ArtistDiscographyTests: XCTestCase {
         XCTAssertTrue(ArtistDiscography.availableGroups(for: []).isEmpty)
         XCTAssertEqual(ArtistDiscography.availableGroups(for: mixed), ArtistReleaseGroup.allCases)
     }
+
+    // MARK: - Shelves
+
+    func testTwoShelvesWhenTheArtistHasBothKindsOfRelease() {
+        let albums = [
+            album(id: "1", songCount: 12, duration: 3_000),
+            album(id: "2", songCount: 1, duration: 240)
+        ]
+
+        XCTAssertEqual(ArtistDiscography.shelfGroups(for: albums), [.albums, .singlesAndEPs])
+    }
+
+    /// A library holding one downloaded track of an album looks exactly like a
+    /// pile of singles. Naming the shelf "Singles & EPs" then asserts something
+    /// the server never said, and leaves the albums shelf empty.
+    func testOneNeutralShelfWhenEveryShortReleaseWasGuessed() {
+        let albums = [
+            album(id: "1", songCount: 1, duration: 240),
+            album(id: "2", songCount: 2, duration: 420)
+        ]
+
+        XCTAssertEqual(ArtistDiscography.shelfGroups(for: albums), [.all])
+    }
+
+    func testOneSinglesShelfWhenTheServerDeclaredThem() {
+        let albums = [
+            album(id: "1", songCount: 1, duration: 240, releaseTypes: ["single"]),
+            album(id: "2", songCount: 2, duration: 420)
+        ]
+
+        XCTAssertEqual(ArtistDiscography.shelfGroups(for: albums), [.singlesAndEPs])
+    }
+
+    func testOneAlbumsShelfWhenEveryReleaseIsAnAlbum() {
+        let albums = [
+            album(id: "1", songCount: 12, duration: 3_000),
+            album(id: "2", songCount: 1, duration: 240, releaseTypes: ["album"])
+        ]
+
+        XCTAssertEqual(ArtistDiscography.shelfGroups(for: albums), [.albums])
+    }
+
+    func testNoShelfWithoutReleases() {
+        XCTAssertEqual(ArtistDiscography.shelfGroups(for: []), [])
+    }
 }

@@ -96,12 +96,13 @@ struct ArtistDetailView: View {
         searchQuery.isEmpty ? ArtistDiscography.availableGroups(for: sortedAlbums) : []
     }
 
-    private var albumsOnly: [Album] {
-        ArtistDiscography.filter(sortedAlbums, to: .albums)
-    }
-
-    private var shortReleases: [Album] {
-        ArtistDiscography.filter(sortedAlbums, to: .singlesAndEPs)
+    /// Albums and short releases on their own shelves, or one shelf for the
+    /// whole discography when splitting would say nothing about it.
+    private var shelves: [(group: ArtistReleaseGroup, albums: [Album])] {
+        ArtistDiscography.shelfGroups(for: sortedAlbums).compactMap { group in
+            let albums = ArtistDiscography.filter(sortedAlbums, to: group)
+            return albums.isEmpty ? nil : (group, albums)
+        }
     }
 
     /// Newest by release year, then by the date the server first saw it.
@@ -430,35 +431,22 @@ struct ArtistDetailView: View {
                     }
                 }
 
-                if !albumsOnly.isEmpty {
+                ForEach(Array(shelves.enumerated()), id: \.element.group.rawValue) { index, shelf in
                     Section {
                         ArtistReleaseShelf(
-                            title: String(localized: "albums"),
-                            albums: albumsOnly,
+                            title: shelf.group.shelfTitle,
+                            albums: shelf.albums,
                             personalization: personalization,
                             sortRaw: $sortRaw,
                             directionRaw: $directionRaw,
                             isOffline: offlineMode.isOffline,
                             accentColor: accentColor
                         )
-                        .listRowInsets(EdgeInsets(top: 16, leading: 0, bottom: 0, trailing: 0))
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
-                    }
-                }
-
-                if !shortReleases.isEmpty {
-                    Section {
-                        ArtistReleaseShelf(
-                            title: String(localized: "release_group_singles_eps"),
-                            albums: shortReleases,
-                            personalization: personalization,
-                            sortRaw: $sortRaw,
-                            directionRaw: $directionRaw,
-                            isOffline: offlineMode.isOffline,
-                            accentColor: accentColor
+                        .listRowInsets(
+                            index == 0
+                                ? EdgeInsets(top: 16, leading: 0, bottom: 0, trailing: 0)
+                                : EdgeInsets()
                         )
-                        .listRowInsets(EdgeInsets())
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
                     }
