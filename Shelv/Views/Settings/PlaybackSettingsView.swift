@@ -6,7 +6,7 @@ struct PlaybackSettingsView: View {
     @AppStorage("transcodingEnabled") private var transcodingEnabled = false
     @AppStorage("replayGainEnabled") private var replayGainEnabled = false
     @AppStorage("replayGainMode") private var replayGainMode = "track"
-    @AppStorage("playThreshold") private var playThreshold = 30
+    @AppStorage(RemovedFeatureCleanup.playThresholdKey) private var playThreshold = 30
     @AppStorage("queueSyncMode") private var queueSyncMode = "off"
     @AppStorage("infinityMixAheadCount") private var infinityMixAheadCount = 1
     @AppStorage("infinityMixSeededEnabled") private var infinityMixSeededEnabled = true

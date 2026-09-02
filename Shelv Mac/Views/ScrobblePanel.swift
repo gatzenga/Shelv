@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ScrobblePanel: View {
-    @AppStorage("playThreshold") private var playThreshold = 30
+    @AppStorage(RemovedFeatureCleanup.playThresholdKey) private var playThreshold = 30
 
     var body: some View {
         Form {

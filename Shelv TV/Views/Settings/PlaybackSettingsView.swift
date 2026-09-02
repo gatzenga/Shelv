@@ -4,7 +4,7 @@ struct PlaybackSettingsView: View {
     @AppStorage("gaplessEnabled") private var gaplessEnabled = false
     @AppStorage("replayGainEnabled") private var replayGainEnabled = false
     @AppStorage("replayGainMode") private var replayGainMode = "track"
-    @AppStorage("playThreshold") private var playThreshold = 30
+    @AppStorage(RemovedFeatureCleanup.playThresholdKey) private var playThreshold = 30
     // Apple TV kennt kein Mobilfunk → ein einziges (WLAN/Ethernet-)Profil reicht.
     @AppStorage("transcodingEnabled") private var transcodingEnabled = false
     @AppStorage("transcodingWifiCodec") private var streamCodec = "raw"
