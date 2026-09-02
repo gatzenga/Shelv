@@ -735,10 +735,13 @@ actor CloudKitSyncService {
         var records: [CKRecord] = []
         var token: CKServerChangeToken?
         while true {
-            let result = try await withCKTimeout { [db, legacyZoneID] in
+            // Explizit kopieren: die Closure ist Sendable und `token` wird nach
+            // dem Aufruf weitergeschrieben.
+            let pageToken = token
+            let result = try await withCKTimeout { [db, legacyZoneID, pageToken] in
                 try await db.recordZoneChanges(
                     inZoneWith: legacyZoneID,
-                    since: token
+                    since: pageToken
                 )
             }
             for change in result.modificationResultsByID.values {
