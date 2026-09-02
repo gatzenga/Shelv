@@ -5,7 +5,6 @@ import SwiftUI
 
 let appLang: String = Locale.preferredLanguages.first?.hasPrefix("de") == true ? "de" : "en"
 
-// .recapRegistryUpdated ist nach ShelvCore (DownloadService.swift) gewandert —
 // der Name wird von allen drei Plattformen gebraucht.
 
 final class BackgroundDownloadHandler {
@@ -54,6 +53,9 @@ struct ShelvApp: App {
     @State private var musicLibraryReloadTask: Task<Void, Never>?
 
     init() {
+        // Vor registerDefaults: der Cleanup trägt die Play-Schwelle auf ihren
+        // neuen Key um, bevor irgendetwas den alten liest.
+        RemovedFeatureCleanup.runIfNeeded()
         // AAC-Transcoding bleibt deaktiviert — Migration falls vorher gesetzt.
         let d = UserDefaults.standard
         if d.string(forKey: "transcodingWifiCodec") == "aac" { d.set("raw", forKey: "transcodingWifiCodec") }
@@ -84,7 +86,6 @@ struct ShelvApp: App {
                 .environmentObject(LibraryStore.shared)
                 .environmentObject(AudioPlayerService.shared)
                 .environmentObject(LyricsStore.shared)
-                .environmentObject(RecapStore.shared)
                 .environmentObject(CloudKitSyncService.shared.status)
                 .environmentObject(DownloadStore.shared)
                 .environmentObject(offlineMode)
@@ -127,7 +128,6 @@ struct ShelvApp: App {
                           revision == serverStore.activeServerRevision
                     else { return }
                     await Task(priority: .utility) {
-                        await RecapStore.shared.setup(serverId: currentServer.stableId)
                     }.value
                     guard !Task.isCancelled,
                           revision == serverStore.activeServerRevision
@@ -278,10 +278,6 @@ struct ShelvApp: App {
                         }
                     }
                 }
-                .onReceive(NotificationCenter.default.publisher(for: .recapRegistryUpdated)) { _ in
-                    guard let server = serverStore.activeServer else { return }
-                    Task { await RecapStore.shared.loadEntries(serverId: server.stableId) }
-                }
                 .onReceive(NotificationCenter.default.publisher(for: .musicLibrarySelectionChanged)) { notification in
                     guard let serverID = notification.object as? UUID,
                           serverStore.activeServer?.id == serverID
@@ -347,15 +343,11 @@ struct ShelvApp: App {
             allLibraryAlbums = LibraryStore.shared.albums
         }
         guard SubsonicAPIService.shared.activeServer?.stableId == serverId else { return }
-        let recapIds = UserDefaults.standard.bool(forKey: "recapEnabled")
-            ? Array(RecapStore.shared.recapPlaylistIds)
-            : []
         let favorites = UserDefaults.standard.object(forKey: "enableFavorites") as? Bool ?? true
         await KeepLibraryOfflineService.shared.checkAndDownload(
             serverId: serverId,
             libraryAlbums: allLibraryAlbums,
             favorites: favorites,
-            recapPlaylistIds: recapIds,
             force: force
         )
     }

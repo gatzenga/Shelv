@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct RecapPlayLogView: View {
+struct PlayLogView: View {
     let serverId: String
     @AppStorage("themeColor") private var themeColorName = "violet"
 

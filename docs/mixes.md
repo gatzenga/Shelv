@@ -2,7 +2,7 @@
 
 Shelv offers curated mixes in both online and offline mode. All mixes start playback immediately. Online Smart Mixes are shown from the Discover tab in the app and from Discover in CarPlay, unless the user hides individual Smart Mixes in UI Customizations. CarPlay mirrors the same Discover customization and uses the exact same mix logic as the in-app Discover page.
 
-The local play log (SQLite) is independent of Recap — it records plays whenever a track passes the listening threshold, regardless of whether the Recap feature is enabled. Recap is just one of several consumers of that database.
+The local play log (SQLite) records plays whenever a track passes the listening threshold. Mixes are built from that database.
 
 **Mixes from database (toggle):** A setting in Settings → Database (`mixUseDatabase`, **default off**) decides whether **Frequently Played** and **Recently Played** are built from your local play log or from the server. When on, the database is only used if it holds **at least 50 unique songs**; otherwise the server method is used (so early on, before enough has been logged, mixes still work). **Newest Tracks** and **Shuffle All** ignore this toggle entirely.
 

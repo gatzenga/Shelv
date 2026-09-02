@@ -267,19 +267,9 @@ nonisolated enum DemoContent {
         }
     }
 
-    /// Was `getPlaylists()` liefert: die kuratierten User-Playlists *plus* die Recap-Playlist-Stubs.
-    /// Letztere müssen enthalten sein, damit `RecapView` sie nicht als "fehlend" (oranges Warndreieck)
-    /// markiert. In der normalen Playlist-Liste werden sie über `recapPlaylistIds` wieder gefiltert.
-    static var playlists: [Playlist] { userPlaylists + recapPlaylists }
+    static var playlists: [Playlist] { userPlaylists }
 
     static func playlist(id: String) -> Playlist? {
-        if id.hasPrefix("demo-recap-") {
-            let s = recapTopSongs
-            var p = Playlist(id: id, name: "Recap", comment: nil, songCount: s.count,
-                             duration: s.reduce(0) { $0 + ($1.duration ?? 0) }, coverArt: "demo_cover_depth_unknown")
-            p.songs = s
-            return p
-        }
         guard let spec = playlistSpecs.first(where: { "demo-playlist-\($0.key)" == id }) else { return nil }
         let s = songs(forPlaylist: spec)
         var p = Playlist(id: id, name: spec.name, comment: nil, songCount: s.count,
@@ -288,47 +278,9 @@ nonisolated enum DemoContent {
         return p
     }
 
-    // MARK: - Recap (reine Anzeige für Screenshots)
-
-    /// Deterministischer UTC-Mittags-Timestamp — reproduzierbar und zeitzonenstabil für die
-    /// Datums-Labels in der Recap-Liste.
-    private static func ts(_ y: Int, _ mo: Int, _ d: Int) -> Double {
-        var c = DateComponents(); c.year = y; c.month = mo; c.day = d; c.hour = 12
-        var cal = Calendar(identifier: .gregorian)
-        cal.timeZone = TimeZone(identifier: "UTC")!
-        return cal.date(from: c)!.timeIntervalSince1970
-    }
-
-    private static func recap(_ key: String, _ period: String,
-                              _ sY: Int, _ sM: Int, _ sD: Int,
-                              _ eY: Int, _ eM: Int, _ eD: Int) -> RecapRegistryRecord {
-        RecapRegistryRecord(playlistId: "demo-recap-\(key)", serverId: serverID.uuidString,
-                            periodType: period, periodStart: ts(sY, sM, sD), periodEnd: ts(eY, eM, eD),
-                            ckRecordName: nil, isTest: false)
-    }
-
-    /// 2 wöchentliche, 4 monatliche und 1 jährlicher Recap — feste, realistische Zeiträume.
-    static let recapEntries: [RecapRegistryRecord] = [
-        recap("week-1", "week", 2026, 4, 27, 2026, 5, 3),
-        recap("week-2", "week", 2026, 4, 20, 2026, 4, 26),
-        recap("month-apr", "month", 2026, 4, 15, 2026, 4, 15),
-        recap("month-mar", "month", 2026, 3, 15, 2026, 3, 15),
-        recap("month-feb", "month", 2026, 2, 15, 2026, 2, 15),
-        recap("month-jan", "month", 2026, 1, 15, 2026, 1, 15),
-        recap("year-2025", "year", 2025, 6, 15, 2025, 6, 15),
-    ]
-
-    static var recapPlaylists: [Playlist] {
-        let s = recapTopSongs
-        return recapEntries.map {
-            Playlist(id: $0.playlistId, name: "Recap", comment: nil, songCount: s.count,
-                     duration: s.reduce(0) { $0 + ($1.duration ?? 0) }, coverArt: "demo_cover_depth_unknown")
-        }
-    }
-
-    /// Top-Tracks der Recaps — bewusst aus verschiedenen Alben (gemischte Cover), mit
-    /// absteigenden Wiedergabezahlen. (albumKey, Track-Index 0-basiert, Plays).
-    private static let recapTracks: [(String, Int, Int)] = [
+    /// Meistgespielte Demo-Tracks — bewusst aus verschiedenen Alben (gemischte
+    /// Cover), mit absteigenden Wiedergabezahlen. (albumKey, Track-Index 0-basiert, Plays).
+    private static let mostPlayedTracks: [(String, Int, Int)] = [
         ("depth_unknown", 1, 47), ("recovery", 1, 41), ("peripheral", 1, 38),
         ("no_signal_left", 1, 33), ("hollow_season", 1, 29), ("drift", 1, 26),
         ("ruins_of_quiet", 1, 22), ("relapse", 0, 19), ("after_last_light", 1, 17),
@@ -336,18 +288,18 @@ nonisolated enum DemoContent {
         ("drift", 0, 7), ("hollow_season", 3, 5), ("no_signal_left", 4, 3),
     ]
 
-    private static func recapTrack(_ key: String, _ idx: Int) -> Song? {
+    private static func mostPlayedTrack(_ key: String, _ idx: Int) -> Song? {
         let arr = songsByAlbumId["demo-album-\(key)"] ?? []
         return idx < arr.count ? arr[idx] : nil
     }
 
-    static var recapTopSongs: [Song] { recapTracks.compactMap { recapTrack($0.0, $0.1) } }
+    static var mostPlayedSongs: [Song] { mostPlayedTracks.compactMap { mostPlayedTrack($0.0, $0.1) } }
 
-    /// Play-Counts für die Recap-Tracks (ersetzt im Demo-Modus die DB-Abfrage `topSongs`).
-    static func recapSongCounts() -> [RecapSongCount] {
-        recapTracks.compactMap { t in
-            guard let s = recapTrack(t.0, t.1) else { return nil }
-            return RecapSongCount(songId: s.id, count: t.2)
+    /// Play-Counts (ersetzt im Demo-Modus die DB-Abfrage `topSongs`).
+    static func playSongCounts() -> [PlaySongCount] {
+        mostPlayedTracks.compactMap { t in
+            guard let s = mostPlayedTrack(t.0, t.1) else { return nil }
+            return PlaySongCount(songId: s.id, count: t.2)
         }
     }
 

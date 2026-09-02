@@ -35,8 +35,7 @@ Settings → Downloads → **Download Everything** queues your entire library fo
 1. Albums you play most frequently
 2. Albums you played most recently
 3. Starred / favourited items, when Favorites are enabled
-4. Recap playlists, when Recap is enabled and Recap playlists exist
-5. Everything else, alphabetically by artist → album → track
+4. Everything else, alphabetically by artist → album → track
 
 A configurable storage limit (default: 10 GB) acts as a ceiling. Once the limit is reached, Shelv stops queuing new songs — already-queued downloads finish normally.
 

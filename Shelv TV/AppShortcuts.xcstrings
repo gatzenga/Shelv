@@ -80,44 +80,6 @@
         }
       }
     },
-    "Open Recap in ${applicationName}": {
-      "extractionState": "extracted_with_value",
-      "localizations": {
-        "de": {
-          "stringSet": {
-            "state": "translated",
-            "values": [
-              "Recap in ${applicationName} öffnen",
-              "Recap in ${applicationName} anzeigen",
-              "Meinen Recap in ${applicationName} öffnen",
-              "Meinen Recap in ${applicationName} anzeigen"
-            ]
-          }
-        },
-        "en": {
-          "stringSet": {
-            "state": "new",
-            "values": [
-              "Open Recap in ${applicationName}",
-              "Show Recap in ${applicationName}",
-              "Open my Recap in ${applicationName}",
-              "Show my Recap in ${applicationName}"
-            ]
-          }
-        },
-        "zh-Hans": {
-          "stringSet": {
-            "state": "translated",
-            "values": [
-              "在 ${applicationName} 中打开回顾",
-              "在 ${applicationName} 中显示回顾",
-              "在 ${applicationName} 中打开我的回顾",
-              "在 ${applicationName} 中显示我的回顾"
-            ]
-          }
-        }
-      }
-    },
     "Open library in ${applicationName}": {
       "extractionState": "extracted_with_value",
       "localizations": {

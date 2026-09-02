@@ -25,18 +25,6 @@ struct PlayLogSongEntry: Equatable {
     let album: String?
 }
 
-nonisolated struct RecapRegistryRecord: Codable, FetchableRecord, PersistableRecord, Hashable, Sendable {
-    var playlistId: String
-    var serverId: String
-    var periodType: String     // "week" | "month" | "year"
-    var periodStart: Double    // Date.timeIntervalSince1970
-    var periodEnd: Double      // Date.timeIntervalSince1970
-    var ckRecordName: String?  // nil = noch nicht in CloudKit gespiegelt
-    var isTest: Bool = false
-
-    static let databaseTableName = "recap_registry"
-}
-
 struct ScrobbleQueueRecord: Codable, FetchableRecord, PersistableRecord {
     var id: Int64?
     var songId: String
@@ -50,7 +38,7 @@ struct ScrobbleQueueRecord: Codable, FetchableRecord, PersistableRecord {
 
 // MARK: - Query Result
 
-struct RecapSongCount {
+struct PlaySongCount {
     let songId: String
     let count: Int
 }
@@ -107,11 +95,18 @@ actor PlayLogService {
                 at: url.deletingLastPathComponent(),
                 withIntermediateDirectories: true
             )
-            // Migrate from legacy caches path
-            let legacy = Self.legacyDbURL
-            if FileManager.default.fileExists(atPath: legacy.path),
-               !FileManager.default.fileExists(atPath: url.path) {
-                try? FileManager.default.moveItem(at: legacy, to: url)
+            // Umzug von einem früheren Ablageort. Die WAL- und SHM-Dateien müssen
+            // mitkommen, sonst gehen die zuletzt geschriebenen Plays verloren.
+            let fm = FileManager.default
+            if !fm.fileExists(atPath: url.path),
+               let legacy = Self.legacyDbURLs.first(where: { fm.fileExists(atPath: $0.path) }) {
+                for suffix in ["", "-wal", "-shm"] {
+                    let from = URL(fileURLWithPath: legacy.path + suffix)
+                    let to = URL(fileURLWithPath: url.path + suffix)
+                    guard fm.fileExists(atPath: from.path) else { continue }
+                    try? fm.moveItem(at: from, to: to)
+                }
+                try? fm.removeItem(at: legacy.deletingLastPathComponent())
             }
             var config = Configuration()
             config.label = "shelv.db.playlog"
@@ -129,13 +124,6 @@ actor PlayLogService {
                     t.column("serverId",     .text).notNull()
                     t.column("playedAt",     .double).notNull()
                     t.column("songDuration", .double).notNull()
-                }
-                try db.create(table: "recap_registry", ifNotExists: true) { t in
-                    t.column("playlistId",   .text).primaryKey()
-                    t.column("serverId",     .text).notNull()
-                    t.column("periodType",   .text).notNull()
-                    t.column("periodStart",  .double).notNull()
-                    t.column("periodEnd",    .double).notNull()
                 }
             }
             m.registerMigration("v2_cloudkit_play_log") { db in
@@ -159,9 +147,12 @@ actor PlayLogService {
                 """)
             }
             m.registerMigration("v3_cloudkit_registry") { db in
-                let cols = try db.columns(in: "recap_registry").map(\.name)
+                // Historisch: erweiterte eine Tabelle, die es nur in Installationen
+                // von vor v8 gibt. Auf allen anderen ein No-op.
+                guard try db.tableExists(RemovedFeatureCleanup.legacyDatabaseTable) else { return }
+                let cols = try db.columns(in: RemovedFeatureCleanup.legacyDatabaseTable).map(\.name)
                 guard !cols.contains("ckRecordName") else { return }
-                try db.alter(table: "recap_registry") { t in
+                try db.alter(table: RemovedFeatureCleanup.legacyDatabaseTable) { t in
                     t.add(column: "ckRecordName", .text)
                 }
             }
@@ -175,9 +166,10 @@ actor PlayLogService {
                 }
             }
             m.registerMigration("v5_registry_is_test") { db in
-                let cols = try db.columns(in: "recap_registry").map(\.name)
+                guard try db.tableExists(RemovedFeatureCleanup.legacyDatabaseTable) else { return }
+                let cols = try db.columns(in: RemovedFeatureCleanup.legacyDatabaseTable).map(\.name)
                 guard !cols.contains("isTest") else { return }
-                try db.alter(table: "recap_registry") { t in
+                try db.alter(table: RemovedFeatureCleanup.legacyDatabaseTable) { t in
                     t.add(column: "isTest", .boolean).notNull().defaults(to: false)
                 }
             }
@@ -203,6 +195,9 @@ actor PlayLogService {
                         t.add(column: column, .text)
                     }
                 }
+            }
+            m.registerMigration("v8_drop_removed_registry") { db in
+                try db.execute(sql: "DROP TABLE IF EXISTS \(RemovedFeatureCleanup.legacyDatabaseTable)")
             }
             try m.migrate(p)
             pool = p
@@ -237,18 +232,27 @@ actor PlayLogService {
         // persistent beschreibbar. Application Support liefert „You don't have permission".
         return FileManager.default
             .urls(for: .cachesDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("shelv_recap/recap.db")
+            .appendingPathComponent("shelv_playlog/playlog.db")
         #else
         return FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("shelv_recap/recap.db")
+            .appendingPathComponent("shelv_playlog/playlog.db")
         #endif
     }
 
-    private static var legacyDbURL: URL {
-        FileManager.default
-            .urls(for: .cachesDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("shelv_recap/recap.db")
+    /// Frühere Ablageorte der Datenbank, neueste zuerst. `setup()` zieht die erste
+    /// gefundene an den aktuellen Ort um, damit niemand seine Wiedergabe-Historie
+    /// verliert.
+    private static var legacyDbURLs: [URL] {
+        let fm = FileManager.default
+        var urls: [URL] = []
+        #if !os(tvOS)
+        urls.append(fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent(RemovedFeatureCleanup.legacyDatabaseSubpath))
+        #endif
+        urls.append(fm.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent(RemovedFeatureCleanup.legacyDatabaseSubpath))
+        return urls
     }
 
     nonisolated static func diskSizeBytes() -> Int {
@@ -327,7 +331,7 @@ actor PlayLogService {
             retries: 0
         )
         #if os(tvOS) && !SHELV_LOGIC_TESTS
-        // Outbox-first: selbst wenn die purgeable Recap-DB direkt danach ausfällt
+        // Outbox-first: selbst wenn die purgeable Play-DB direkt danach ausfällt
         // oder entfernt wird, bleibt der Server-Scrobble dauerhaft vorgemerkt.
         var journal = loadTVScrobbleJournal()
         var durablePending = pending
@@ -347,9 +351,9 @@ actor PlayLogService {
         #endif
     }
 
-    func topSongs(serverId: String, from start: Date, to end: Date, limit: Int) -> [RecapSongCount] {
+    func topSongs(serverId: String, from start: Date, to end: Date, limit: Int) -> [PlaySongCount] {
         #if DEBUG && !SHELV_LOGIC_TESTS
-        if SubsonicAPIService.shared.isDemoActive { return Array(DemoContent.recapSongCounts().prefix(limit)) }
+        if SubsonicAPIService.shared.isDemoActive { return Array(DemoContent.playSongCounts().prefix(limit)) }
         #endif
         guard let pool else { return [] }
         return (try? pool.read { db in
@@ -363,7 +367,7 @@ actor PlayLogService {
                 ORDER BY cnt DESC, MAX(playedAt) DESC, songId ASC
                 LIMIT ?
                 """, arguments: [serverId, start.timeIntervalSince1970, end.timeIntervalSince1970, limit])
-            .map { RecapSongCount(songId: $0["songId"], count: $0["cnt"]) }
+            .map { PlaySongCount(songId: $0["songId"], count: $0["cnt"]) }
         }) ?? []
     }
 
@@ -485,42 +489,6 @@ actor PlayLogService {
         return (try? pool.read { db in
             try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM play_log WHERE uuid IS NOT NULL AND syncedAt IS NULL")
         }) ?? 0
-    }
-
-    // MARK: - CloudKit Sync – Registry
-
-    func updateRegistryCKRecordName(playlistId: String, ckRecordName: String) {
-        
-        safeWrite { db in
-            try db.execute(
-                sql: "UPDATE recap_registry SET ckRecordName = ? WHERE playlistId = ?",
-                arguments: [ckRecordName, playlistId]
-            )
-        }
-    }
-
-    func registryEntry(serverId: String, periodType: String, periodStart: Double, isTest: Bool? = nil) -> RecapRegistryRecord? {
-        guard let pool else { return nil }
-        return try? pool.read { db in
-            var filter = Column("serverId") == serverId
-                && Column("periodType") == periodType
-                && Column("periodStart") == periodStart
-            if let isTest {
-                filter = filter && Column("isTest") == isTest
-            }
-            return try RecapRegistryRecord
-                .filter(filter)
-                .fetchOne(db)
-        }
-    }
-
-    func registryEntry(byCKRecordName ckRecordName: String) -> RecapRegistryRecord? {
-        guard let pool else { return nil }
-        return try? pool.read { db in
-            try RecapRegistryRecord
-                .filter(Column("ckRecordName") == ckRecordName)
-                .fetchOne(db)
-        }
     }
 
     // MARK: - Scrobble Queue
@@ -717,7 +685,6 @@ actor PlayLogService {
                 sql: "UPDATE play_log SET serverId = ?, syncedAt = NULL WHERE serverId = ?",
                 arguments: [newId, oldId]
             )
-            try db.execute(sql: "UPDATE recap_registry SET serverId = ? WHERE serverId = ?", arguments: [newId, oldId])
             #if !(os(tvOS) && !SHELV_LOGIC_TESTS)
             try db.execute(sql: "UPDATE scrobble_queue SET serverId = ? WHERE serverId = ?", arguments: [newId, oldId])
             #endif
@@ -811,110 +778,7 @@ actor PlayLogService {
                 sql: "UPDATE play_log SET uuid = NULL, syncedAt = NULL WHERE serverId = ?",
                 arguments: [serverId]
             )
-            try db.execute(
-                sql: "UPDATE recap_registry SET ckRecordName = NULL WHERE serverId = ?",
-                arguments: [serverId]
-            )
         }
-    }
-
-    // MARK: - Registry
-
-    func registerPlaylist(_ record: RecapRegistryRecord) {
-        
-        safeWrite { db in try record.insert(db, onConflict: .replace) }
-    }
-
-    func deleteRegistryEntry(playlistId: String) {
-        
-        safeWrite { db in
-            try db.execute(sql: "DELETE FROM recap_registry WHERE playlistId = ?", arguments: [playlistId])
-        }
-    }
-
-    func deleteRegistryEntry(byCKRecordName ckRecordName: String) {
-        
-        safeWrite { db in
-            try db.execute(sql: "DELETE FROM recap_registry WHERE ckRecordName = ?", arguments: [ckRecordName])
-        }
-    }
-
-    func deleteRegistryEntries(playlistIds: [String]) {
-        guard pool != nil, !playlistIds.isEmpty else { return }
-        safeWrite { db in
-            for start in stride(from: 0, to: playlistIds.count, by: 500) {
-                let chunk = Array(playlistIds[start..<min(start + 500, playlistIds.count)])
-                let placeholders = chunk.map { _ in "?" }.joined(separator: ",")
-                try db.execute(
-                    sql: "DELETE FROM recap_registry WHERE playlistId IN (\(placeholders))",
-                    arguments: StatementArguments(chunk)
-                )
-            }
-        }
-    }
-
-    func markRecapMarkersUnsyncedForReUpload(serverId: String) {
-        guard pool != nil else { return }
-        safeWrite { db in
-            try db.execute(
-                sql: "UPDATE recap_registry SET ckRecordName = NULL WHERE serverId = ?",
-                arguments: [serverId]
-            )
-        }
-    }
-
-    @discardableResult
-    func keepOnlyRegistryEntryForSamePeriod(_ record: RecapRegistryRecord) -> [String] {
-        guard pool != nil else { return [] }
-        var removed: [String] = []
-        safeWrite { db in
-            removed = try String.fetchAll(db, sql: """
-                SELECT playlistId FROM recap_registry
-                WHERE serverId = ?
-                  AND periodType = ?
-                  AND periodStart = ?
-                  AND isTest = ?
-                  AND playlistId != ?
-                """, arguments: [
-                    record.serverId,
-                    record.periodType,
-                    record.periodStart,
-                    record.isTest,
-                    record.playlistId
-                ])
-
-            if !removed.isEmpty {
-                let placeholders = removed.map { _ in "?" }.joined(separator: ",")
-                try db.execute(
-                    sql: "DELETE FROM recap_registry WHERE playlistId IN (\(placeholders))",
-                    arguments: StatementArguments(removed)
-                )
-            }
-
-            try record.insert(db, onConflict: .replace)
-        }
-        return removed
-    }
-
-    func allRegistryEntries(serverId: String) -> [RecapRegistryRecord] {
-        guard let pool else { return [] }
-        return (try? pool.read { db in
-            try RecapRegistryRecord
-                .filter(Column("serverId") == serverId)
-                .order(Column("periodStart").desc)
-                .fetchAll(db)
-        }) ?? []
-    }
-
-    func registryEntry(playlistId: String) -> RecapRegistryRecord? {
-        guard let pool else { return nil }
-        return try? pool.read { db in
-            try RecapRegistryRecord.fetchOne(db, key: playlistId)
-        }
-    }
-
-    func isRecapPlaylist(playlistId: String) -> Bool {
-        registryEntry(playlistId: playlistId) != nil
     }
 
     func recentUniqueSongIds(serverId: String, limit: Int = 50) -> [String] {
@@ -1097,7 +961,7 @@ actor PlayLogService {
 
     private static var importRollbackURL: URL {
         FileManager.default.temporaryDirectory
-            .appendingPathComponent("shelv_recap_import_rollback.db")
+            .appendingPathComponent("shelv_playlog_import_rollback.db")
     }
 
     /// Hält den PlayLog-Actor während Snapshot, Dateiaustausch und
@@ -1176,7 +1040,7 @@ actor PlayLogService {
     }
 
     /// Entfernt nur die transportbezogene Queue aus einer gerade kopierten,
-    /// noch geschlossenen Recap-Datenbank. Sie gehört zum Quellgerät und darf
+    /// noch geschlossenen Play-Datenbank. Sie gehört zum Quellgerät und darf
     /// weder migriert noch an eine lokale Serverkonfiguration umgeschrieben werden.
     func discardImportedScrobbleQueueBeforeSetup() throws {
         guard pool == nil else {
@@ -1242,7 +1106,7 @@ actor PlayLogService {
                           userInfo: [NSLocalizedDescriptionKey: "Database not initialized"])
         }
         let dest = FileManager.default.temporaryDirectory
-            .appendingPathComponent("shelv_recap_export.db")
+            .appendingPathComponent("shelv_playlog_export.db")
         for suffix in ["", "-wal", "-shm"] {
             let path = dest.path + suffix
             if FileManager.default.fileExists(atPath: path) {
@@ -1274,7 +1138,6 @@ actor PlayLogService {
         
         safeWrite { db in
             try db.execute(sql: "UPDATE play_log SET syncedAt = NULL WHERE uuid IS NOT NULL")
-            try db.execute(sql: "UPDATE recap_registry SET ckRecordName = NULL")
         }
     }
 
@@ -1282,8 +1145,6 @@ actor PlayLogService {
         
         safeWrite { db in
             try db.execute(sql: "UPDATE play_log SET syncedAt = NULL WHERE serverId = ? AND uuid IS NOT NULL",
-                           arguments: [serverId])
-            try db.execute(sql: "UPDATE recap_registry SET ckRecordName = NULL WHERE serverId = ?",
                            arguments: [serverId])
         }
     }
@@ -1293,9 +1154,7 @@ actor PlayLogService {
         safeWrite { db in
             try db.execute(sql: "UPDATE play_log SET serverId = ?, syncedAt = NULL WHERE serverId != ?",
                            arguments: [newId, newId])
-            try db.execute(sql: "UPDATE recap_registry SET serverId = ?, ckRecordName = NULL WHERE serverId != ?",
-                           arguments: [newId, newId])
-            // Ein Recap-DB-Import darf keine transportbezogene Outbox des
+            // Ein DB-Import darf keine transportbezogene Outbox des
             // Quellgeräts übernehmen. Deren Zielkonfiguration ist nicht Teil des
             // Backups und ein Rewrite könnte Plays an den falschen Server senden.
             try db.execute(sql: "DELETE FROM scrobble_queue")
@@ -1303,10 +1162,4 @@ actor PlayLogService {
         syncTVScrobbleBackup()
     }
 
-    func resetRegistry(serverId: String) {
-        
-        safeWrite { db in
-            try db.execute(sql: "DELETE FROM recap_registry WHERE serverId = ?", arguments: [serverId])
-        }
-    }
 }

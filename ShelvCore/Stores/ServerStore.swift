@@ -418,7 +418,6 @@ class ServerStore: ObservableObject {
         Task.detached(priority: .utility) {
             if shouldDeleteStableData {
                 await PlayLogService.shared.resetLog(serverId: serverStableId)
-                await PlayLogService.shared.resetRegistry(serverId: serverStableId)
                 await DownloadService.shared.deleteAllForServer(serverStableId)
             }
             // Neue Outbox-Zeilen sind an die lokale Konfiguration gebunden. Nur
@@ -426,7 +425,6 @@ class ServerStore: ObservableObject {
             await PlayLogService.shared.removeScrobbles(serverConfigId: serverConfigID)
             await CloudKitSyncService.shared.updatePendingCounts()
             await MainActor.run {
-                NotificationCenter.default.post(name: .recapRegistryUpdated, object: nil)
                 NotificationCenter.default.post(name: .downloadsLibraryChanged, object: nil)
             }
         }
@@ -716,7 +714,6 @@ class ServerStore: ObservableObject {
         Task.detached(priority: .utility) {
             for sid in stableIds {
                 await PlayLogService.shared.resetLog(serverId: sid)
-                await PlayLogService.shared.resetRegistry(serverId: sid)
             }
             if allServersCleared {
                 await PlayLogService.shared.removeAllScrobbles()
@@ -729,7 +726,6 @@ class ServerStore: ObservableObject {
             }
             await CloudKitSyncService.shared.updatePendingCounts()
             await MainActor.run {
-                NotificationCenter.default.post(name: .recapRegistryUpdated, object: nil)
             }
         }
         return retainedServers.isEmpty

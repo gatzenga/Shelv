@@ -33,7 +33,7 @@ nonisolated enum PlayLogReconciliationOutcome: Equatable, Sendable {
 /// Reine Entscheidungslogik für den Database-Cleanup-Task: pro Song wird die ID und das
 /// Titel+Artist+Album-Paket als zwei unabhängige Wege behandelt, denselben Song zu finden.
 /// Netzwerk/DB sind über injizierte Closures entkoppelt, damit sich jeder Fall ohne echten
-/// Server/echte Datenbank testen lässt (gleiches Muster wie RecapSyncLogic).
+/// Server/echte Datenbank testen lässt (gleiches Muster wie CloudKitDeletionLogic).
 nonisolated enum PlayLogReconciliationLogic {
     static func reconcile(
         songId: String,

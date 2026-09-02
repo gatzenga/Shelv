@@ -1,17 +1,14 @@
 import SwiftUI
 
 struct DiscoverView: View {
-    let recapNavigationRequest: Int
 
-    init(recapNavigationRequest: Int = 0) {
-        self.recapNavigationRequest = recapNavigationRequest
+    init() {
     }
 
     @ObservedObject var library = LibraryStore.shared
     @EnvironmentObject private var serverStore: ServerStore
     @ObservedObject private var musicLibraries = MusicLibraryStore.shared
     @AppStorage("themeColor") private var themeColor = "violet"
-    @AppStorage("recapEnabled") private var recapEnabled = false
     @AppStorage(PersonalizationPreferenceKey.showDiscoverInsights) private var showDiscoverInsights = true
     @AppStorage(PersonalizationPreferenceKey.showSmartMixNewest) private var showSmartMixNewest = true
     @AppStorage(PersonalizationPreferenceKey.showSmartMixFrequent) private var showSmartMixFrequent = true
@@ -59,8 +56,6 @@ struct DiscoverView: View {
     @State private var recent: [Album] = []
     @State private var frequent: [Album] = []
     @State private var random: [Album] = []
-    @State private var showRequestedRecap = false
-    @State private var handledRecapNavigationRequest = 0
 
     var body: some View {
         NavigationStack {
@@ -113,12 +108,6 @@ struct DiscoverView: View {
                         Spacer()
 
                         HStack(spacing: 12) {
-                            if recapEnabled {
-                                NavigationLink { RecapView() } label: {
-                                    Label(String(localized: "recap"), systemImage: "sparkles.rectangle.stack")
-                                }
-                                .buttonStyle(.bordered)
-                            }
                             if showDiscoverInsights {
                                 NavigationLink { InsightsView() } label: {
                                     Label(String(localized: "insights"), systemImage: "chart.bar.xaxis")
@@ -137,17 +126,8 @@ struct DiscoverView: View {
                 .padding(.vertical, 50)
             }
             .task(id: library.reloadID) { await load() }
-            .navigationDestination(isPresented: $showRequestedRecap) {
-                RecapView()
-            }
-            .onChange(of: recapNavigationRequest) { _, _ in
-                handleRecapNavigationRequest()
-            }
             .onChange(of: musicLibraries.revision) { _, _ in
                 Task { await load() }
-            }
-            .onAppear {
-                handleRecapNavigationRequest()
             }
         }
     }
@@ -206,12 +186,6 @@ struct DiscoverView: View {
             }
         }
         .disabled(isSelected)
-    }
-
-    private func handleRecapNavigationRequest() {
-        guard recapNavigationRequest != handledRecapNavigationRequest else { return }
-        handledRecapNavigationRequest = recapNavigationRequest
-        showRequestedRecap = true
     }
 
     // MARK: - Daten

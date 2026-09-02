@@ -419,6 +419,5 @@ nonisolated enum ShelvShortcutDestination: String, Sendable {
     case discover
     case library
     case search
-    case recap
     case nowPlaying
 }

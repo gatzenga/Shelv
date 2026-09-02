@@ -264,8 +264,6 @@ struct MainWindowView: View {
         case .search:
             resetMainNavigation()
             appState.selectedSidebar = .search
-        case .recap:
-            openWindow(id: "recap")
         case .nowPlaying:
             appState.activePanel = nil
         }

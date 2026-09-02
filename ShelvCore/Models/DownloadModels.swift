@@ -278,7 +278,6 @@ struct BulkDownloadPlan {
     var isKeepLibraryOffline: Bool = false
     var playlistMarkers: [BulkDownloadPlaylistMarker] = []
     var albumMarkers: [BulkDownloadAlbumMarker] = []
-    var recapPlaylistSongIds: [String: [String]] = [:]
 
     var isEmpty: Bool { planned.isEmpty }
 }

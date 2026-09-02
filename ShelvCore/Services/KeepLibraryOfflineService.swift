@@ -141,7 +141,6 @@ final class KeepLibraryOfflineService: ObservableObject {
         serverId: String,
         libraryAlbums: [Album],
         favorites: Bool,
-        recapPlaylistIds: [String],
         force: Bool = false
     ) async {
         guard canContinueCheck(serverId: serverId) else { return }
@@ -180,7 +179,6 @@ final class KeepLibraryOfflineService: ObservableObject {
             serverId: serverId,
             maxBytes: maxBytes,
             favorites: favorites,
-            recapPlaylistIds: recapPlaylistIds,
             libraryAlbums: libraryAlbums
         )
         guard canContinueCheck(serverId: serverId) else { return }
@@ -193,7 +191,6 @@ final class KeepLibraryOfflineService: ObservableObject {
             isKeepLibraryOffline: true,
             playlistMarkers: plan.playlistMarkers,
             albumMarkers: plan.albumMarkers,
-            recapPlaylistSongIds: plan.recapPlaylistSongIds
         )
         markCoveredPlaylists(plan.playlistMarkers)
         await markCoveredAlbums(plan.albumMarkers, serverId: serverId)

@@ -179,20 +179,6 @@ struct ShelvOpenLibraryIntent: AppIntent {
     }
 }
 
-struct ShelvOpenRecapIntent: AppIntent {
-    static let title: LocalizedStringResource = "shortcut_open_recap_title"
-    static let description = IntentDescription("shortcut_open_recap_description")
-    static let openAppWhenRun = true
-
-    @available(iOS 26.0, *)
-    static let supportedModes: IntentModes = .foreground(.immediate)
-
-    func perform() async throws -> some IntentResult {
-        await requestShortcutDestination(.recap)
-        return .result()
-    }
-}
-
 struct ShelvAppShortcuts: AppShortcutsProvider {
     static var shortcutTileColor: ShortcutTileColor { .purple }
 
@@ -318,16 +304,5 @@ struct ShelvAppShortcuts: AppShortcutsProvider {
             systemImageName: "books.vertical.fill"
         )
 
-        AppShortcut(
-            intent: ShelvOpenRecapIntent(),
-            phrases: [
-                "Open Recap in \(.applicationName)",
-                "Show Recap in \(.applicationName)",
-                "Open my Recap in \(.applicationName)",
-                "Show my Recap in \(.applicationName)",
-            ],
-            shortTitle: "shortcut_recap_short",
-            systemImageName: "calendar.badge.clock"
-        )
     }
 }

@@ -27,7 +27,7 @@ Once enabled, Shelv checks the library automatically when:
 - The app returns to the foreground
 - The macOS app becomes active
 
-Before the check, Shelv waits for restored background download tasks, loads the album list, and reads the current Favorites and Recap settings.
+Before the check, Shelv waits for restored background download tasks, loads the album list, and reads the current Favorites setting.
 
 A check does not run when:
 
@@ -60,11 +60,8 @@ Missing songs are planned in this order:
 2. Recently played albums (`recent`, up to 20)
 3. Starred / favourited albums, when Favorites are enabled
 4. Recently added albums (`newest`, up to 50)
-5. Recap playlists, when Recap is enabled
-6. Normal playlists
-7. Remaining albums, sorted by artist -> album
-
-Recap playlists only get their own priority bucket when Recap is enabled. If Recap is off, Shelv does not pass those IDs as special Recap units; any playlist returned by the server is handled with the normal playlist group.
+5. Playlists
+6. Remaining albums, sorted by artist -> album
 
 Album songs are sorted by disc, track, then title. Playlist songs keep the server order.
 
@@ -142,11 +139,11 @@ Cancelling the batch removes pending jobs and cancels in-flight jobs. If the use
 
 ---
 
-## Playlist and Recap Markers
+## Playlist Markers
 
-Offline Mode only shows playlists and Recaps that have an offline marker. Keep Library Offline keeps those markers in sync while it plans downloads.
+Offline Mode only shows playlists that have an offline marker. Keep Library Offline keeps those markers in sync while it plans downloads.
 
-When a playlist is fully covered by already downloaded songs plus songs accepted into the current plan, Shelv marks it as downloaded. Recap playlists are handled before normal playlists, so Recaps can stay visible offline once their songs are local.
+When a playlist is fully covered by already downloaded songs plus songs accepted into the current plan, Shelv marks it as downloaded.
 
 Markers include the playlist ID and song IDs. On reload, Shelv removes a marker only when none of its saved songs are still local. A partially downloaded playlist keeps its marker, so the UI can still offer the remaining songs.
 
@@ -161,7 +158,7 @@ Keep Library Offline never runs while Offline Mode is active. It needs the serve
 Offline Mode uses the result:
 
 - The library shows only downloaded albums and artists
-- Playlists and Recaps are filtered by offline markers
+- Playlists are filtered by offline markers
 - Playback uses the local download database
 - Server-only actions are hidden or skipped
 
@@ -192,7 +189,6 @@ Leaving Offline Mode does not change the Keep Library Offline toggle. If it is e
 | Offline Mode | Blocks Keep Library Offline checks because server access is disabled. |
 | Download format / bitrate | Controls the files saved by Keep Library Offline. |
 | Favorites | Adds starred/favourited albums to the priority order. |
-| Recap | Adds Recap playlists to the priority order and offline marker handling. |
 | Max Storage | Used by Download Everything only. Keep Library Offline uses the 15% reserve. |
 | Delete All Downloads | Clears downloaded files and playlist markers, and cancels active downloads. |
 

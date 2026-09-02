@@ -64,11 +64,7 @@ final class PersonalizationSettingsTests: XCTestCase {
 
     func testSharedAppDefaultsMatchFreshInstallPolicy() {
         let expectedKeys: Set<String> = [
-            "recapEnabled",
-            "recapWeeklyEnabled",
-            "recapMonthlyEnabled",
-            "recapYearlyEnabled",
-            "recapThreshold",
+            "playCountThreshold",
             "enableDownloads",
             "offlineModeEnabled",
             "preventSleepDuringDownloads",
@@ -93,7 +89,6 @@ final class PersonalizationSettingsTests: XCTestCase {
             "infinityMixAheadCount",
             "iCloudSyncEnabled",
             "iCloudSyncPlayHistoryEnabled",
-            "iCloudSyncRecapEnabled",
             "iCloudSyncLyricsServerEnabled",
             "iCloudSyncRadioStationsEnabled",
             "iCloudSyncUICustomizationsEnabled",
@@ -104,7 +99,6 @@ final class PersonalizationSettingsTests: XCTestCase {
 
         ShelvDefaultSettings.registerDefaults(in: defaults)
 
-        XCTAssertFalse(defaults.bool(forKey: "recapEnabled"))
         #if os(tvOS)
         XCTAssertFalse(defaults.bool(forKey: "enableDownloads"))
         #else
@@ -114,7 +108,6 @@ final class PersonalizationSettingsTests: XCTestCase {
         XCTAssertTrue(defaults.bool(forKey: "includeNavidromeLyrics"))
         XCTAssertTrue(defaults.bool(forKey: "lrcLibOnlineFallbackEnabled"))
         XCTAssertTrue(defaults.bool(forKey: "iCloudSyncPlayHistoryEnabled"))
-        XCTAssertTrue(defaults.bool(forKey: "iCloudSyncRecapEnabled"))
         XCTAssertTrue(defaults.bool(forKey: "iCloudSyncLyricsServerEnabled"))
         XCTAssertTrue(defaults.bool(forKey: "iCloudSyncRadioStationsEnabled"))
         XCTAssertTrue(defaults.bool(forKey: "iCloudSyncUICustomizationsEnabled"))
@@ -129,7 +122,7 @@ final class PersonalizationSettingsTests: XCTestCase {
         XCTAssertFalse(defaults.bool(forKey: "iCloudSyncEnabled"))
         XCTAssertFalse(defaults.bool(forKey: "mixUseDatabase"))
 
-        XCTAssertEqual(defaults.integer(forKey: "recapThreshold"), 30)
+        XCTAssertEqual(defaults.integer(forKey: "playCountThreshold"), 30)
         XCTAssertEqual(defaults.integer(forKey: "maxBulkDownloadStorageGB"), 10)
         XCTAssertEqual(defaults.integer(forKey: "transcodingWifiBitrate"), 256)
         XCTAssertEqual(defaults.integer(forKey: "transcodingCellularBitrate"), 128)

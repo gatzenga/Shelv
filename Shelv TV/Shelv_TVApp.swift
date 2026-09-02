@@ -12,6 +12,7 @@ struct Shelv_TVApp: App {
     @State private var musicLibraryReloadTask: Task<Void, Never>?
 
     init() {
+        RemovedFeatureCleanup.runIfNeeded()
         PersonalizationSettings.registerDefaults()
         ShelvDefaultSettings.registerDefaults()
         SiriMediaAppSelectionService.shared.updateUserContext(numberOfLibraryItems: 0)
@@ -30,7 +31,6 @@ struct Shelv_TVApp: App {
             ContentView()
                 .environmentObject(serverStore)
                 .environmentObject(AudioPlayerService.shared)
-                .environmentObject(RecapStore.shared)
                 .environmentObject(CloudKitSyncService.shared.status)
                 .preferredColorScheme(preferredScheme)
                 .onContinueUserActivity("INPlayMediaIntent") { userActivity in
@@ -41,7 +41,7 @@ struct Shelv_TVApp: App {
                         await TVSiriMediaPlaybackRouter.handleForeground(intent)
                     }
                 }
-                // Pro aktivem Server: Tracking-DB + Recap-Registry (NUR laden, nie generieren) + Pins.
+                // Pro aktivem Server: Tracking-DB + Pins.
                 .task(id: serverStore.activeServerRevision) {
                     await serverStore.waitUntilReady()
                     let revision = serverStore.activeServerRevision
@@ -68,7 +68,6 @@ struct Shelv_TVApp: App {
                     guard !Task.isCancelled,
                           revision == serverStore.activeServerRevision
                     else { return }
-                    await RecapStore.shared.loadEntries(serverId: server.stableId)
                     guard !Task.isCancelled,
                           revision == serverStore.activeServerRevision
                     else { return }
@@ -176,10 +175,6 @@ struct Shelv_TVApp: App {
                     #endif
                     // syncNow prüft die Remote-Queue automatisch mit.
                     Task { await CloudKitSyncService.shared.syncNow() }
-                }
-                .onReceive(NotificationCenter.default.publisher(for: .recapRegistryUpdated)) { _ in
-                    guard let server = serverStore.activeServer else { return }
-                    Task { await RecapStore.shared.loadEntries(serverId: server.stableId) }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .musicLibrarySelectionChanged)) { notification in
                     guard let serverID = notification.object as? UUID,

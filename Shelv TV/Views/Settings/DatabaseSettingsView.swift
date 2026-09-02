@@ -21,7 +21,7 @@ struct DatabaseSettingsView: View {
             Section(String(localized: "logs")) {
                 if let sid = serverStore.activeServer?.stableId, !sid.isEmpty {
                     NavigationLink(String(localized: "recent_plays")) {
-                        RecapPlayLogView(serverId: sid)
+                        PlayLogView(serverId: sid)
                     }
                 }
                 NavigationLink(String(localized: "database_errors")) {
@@ -32,9 +32,6 @@ struct DatabaseSettingsView: View {
         .toolbar(.hidden, for: .tabBar)
         .task { await refresh() }
         .onChange(of: syncStatus.lastSyncDate) { _, _ in
-            Task { await refresh() }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .recapRegistryUpdated)) { _ in
             Task { await refresh() }
         }
     }
@@ -52,7 +49,6 @@ struct ICloudSyncSettingsView: View {
 
     @AppStorage("iCloudSyncEnabled") private var iCloudSyncEnabled = false
     @AppStorage("iCloudSyncPlayHistoryEnabled") private var playHistorySyncEnabled = true
-    @AppStorage("iCloudSyncRecapEnabled") private var recapSyncEnabled = true
     @AppStorage("iCloudSyncLyricsServerEnabled") private var lyricsServerSyncEnabled = true
     @AppStorage("iCloudSyncRadioStationsEnabled") private var radioStationsSyncEnabled = true
     @AppStorage("iCloudSyncUICustomizationsEnabled") private var uiCustomizationsSyncEnabled = true
@@ -96,10 +92,6 @@ struct ICloudSyncSettingsView: View {
                 Section(String(localized: "what_to_sync")) {
                     Toggle(String(localized: "play_history"), isOn: $playHistorySyncEnabled)
                         .onChange(of: playHistorySyncEnabled) { _, _ in
-                            Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
-                        }
-                    Toggle(String(localized: "recap"), isOn: $recapSyncEnabled)
-                        .onChange(of: recapSyncEnabled) { _, _ in
                             Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
                         }
                     Toggle(String(localized: "lyrics_server"), isOn: $lyricsServerSyncEnabled)

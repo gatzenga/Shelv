@@ -4,7 +4,6 @@ private enum SettingsTab: Hashable {
     case server
     case uiCustomizations
     case appearance
-    case recap
     case playback
     case downloads
     case lyrics
@@ -18,7 +17,6 @@ private enum SettingsTab: Hashable {
         case .uiCustomizations: return "slider.horizontal.3"
         case .server: return "server.rack"
         case .appearance: return "paintpalette"
-        case .recap: return "calendar.badge.clock"
         case .playback: return "play.circle"
         case .downloads: return "arrow.down.circle"
         case .lyrics: return "text.bubble"
@@ -34,7 +32,6 @@ private enum SettingsTab: Hashable {
         case .uiCustomizations: return String(localized: "ui_customizations")
         case .server: return String(localized: "server")
         case .appearance: return String(localized: "appearance")
-        case .recap: return String(localized: "recap")
         case .playback: return String(localized: "playback")
         case .downloads: return String(localized: "downloads")
         case .lyrics: return String(localized: "lyrics")
@@ -50,7 +47,6 @@ private let settingsTabs: [SettingsTab] = [
     .server,
     .uiCustomizations,
     .appearance,
-    .recap,
     .playback,
     .downloads,
     .lyrics,
@@ -103,8 +99,6 @@ struct SettingsView: View {
             ServerTab()
         case .appearance:
             AppearanceTab(colorScheme: $colorScheme)
-        case .recap:
-            RecapTab()
         case .playback:
             PlaybackTab()
         case .downloads:

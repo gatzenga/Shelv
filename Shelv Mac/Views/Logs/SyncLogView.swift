@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct RecapSyncLogView: View {
+struct SyncLogView: View {
     @StateObject private var ckStatus = CloudKitSyncService.shared.status
     @Environment(\.dismiss) private var dismiss
 

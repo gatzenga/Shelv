@@ -401,7 +401,7 @@ class LibraryViewModel: ObservableObject {
     }
 
     /// Clears only online content controlled by the active Navidrome library
-    /// filter. Playlists, recaps, play history, and downloads stay server-wide.
+    /// filter. Playlists, play history, and downloads stay server-wide.
     func resetForMusicLibrarySelection() {
         albumLoadGeneration &+= 1
         artistLoadGeneration &+= 1
@@ -1104,14 +1104,6 @@ class LibraryViewModel: ObservableObject {
         do {
             try await api.deletePlaylist(id: playlist.id)
             playlists.removeAll { $0.id == playlist.id }
-            if let entry = await PlayLogService.shared.registryEntry(playlistId: playlist.id) {
-                CloudKitSyncService.debugLog("[LibraryDelete] playlistId=\(playlist.id) was recap, deleting marker=\(entry.ckRecordName ?? "nil")")
-                if let ckName = entry.ckRecordName {
-                    await CloudKitSyncService.shared.queueRecapMarkerDeletion(ckRecordName: ckName)
-                }
-                await PlayLogService.shared.deleteRegistryEntry(playlistId: playlist.id)
-                NotificationCenter.default.post(name: .recapRegistryUpdated, object: nil)
-            }
         } catch {
             errorMessage = OfflineModeService.shared.inlineErrorMessage(for: error, userInitiated: true)
         }

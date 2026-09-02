@@ -510,16 +510,6 @@ struct ShelvPlatformOpenLibraryIntent: ShelvPlatformNavigationIntent {
     static let destination = ShelvShortcutDestination.library
 }
 
-@available(iOS, unavailable)
-struct ShelvPlatformOpenRecapIntent: ShelvPlatformNavigationIntent {
-    static let title: LocalizedStringResource = "shortcut_open_recap_title"
-    static let description = IntentDescription("shortcut_open_recap_description")
-    static let openAppWhenRun = true
-    @available(macOS 26.0, tvOS 26.0, *)
-    static let supportedModes: IntentModes = .foreground(.immediate)
-    static let destination = ShelvShortcutDestination.recap
-}
-
 struct ShelvPlatformAppShortcuts: AppShortcutsProvider {
     static var shortcutTileColor: ShortcutTileColor { .purple }
 
@@ -652,17 +642,6 @@ struct ShelvPlatformAppShortcuts: AppShortcutsProvider {
             systemImageName: "books.vertical.fill"
         )
 
-        AppShortcut(
-            intent: ShelvPlatformOpenRecapIntent(),
-            phrases: [
-                "Open Recap in \(.applicationName)",
-                "Show Recap in \(.applicationName)",
-                "Open my Recap in \(.applicationName)",
-                "Show my Recap in \(.applicationName)",
-            ],
-            shortTitle: "shortcut_recap_short",
-            systemImageName: "calendar.badge.clock"
-        )
     }
 }
 #endif

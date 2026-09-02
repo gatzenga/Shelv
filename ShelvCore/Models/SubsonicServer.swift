@@ -74,7 +74,7 @@ nonisolated struct MusicLibrarySelectionSnapshot: Equatable, Sendable {
 }
 
 /// Controls whether an API request follows the active online library filter.
-/// Direct ID lookups, playlists, recaps, downloads, and playback history use
+/// Direct ID lookups, playlists, downloads, and playback history use
 /// `.all` so an item remains reachable outside the currently visible library.
 nonisolated enum MusicLibraryRequestFilter: Equatable, Sendable {
     case active

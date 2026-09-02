@@ -8,13 +8,11 @@ final class CarPlayRootController: NSObject {
     private var libraryController:   CarPlayLibraryController?
     private var playlistsController: CarPlayPlaylistsController?
     private var radioController:     CarPlayRadioController?
-    private var recapController:     CarPlayRecapController?
     private var queueController:     CarPlayQueueController?
     private var tabBar: CPTabBarTemplate?
     private var cancellables = Set<AnyCancellable>()
-    private var lastRecapEnabled: Bool = UserDefaults.standard.bool(forKey: "recapEnabled")
     private var lastShowRadio: Bool = CarPlayRootController.radioTabEnabled
-    private var lastRecapTabVisible: Bool = false
+    private var lastShowPlaylists: Bool = CarPlayRootController.playlistsTabEnabled
     private var isPresentingServerErrorAlert = false
     private var isBuildingInstantMix = false
 
@@ -39,22 +37,15 @@ final class CarPlayRootController: NSObject {
         let library   = CarPlayLibraryController(interfaceController: interfaceController)
         let playlists = CarPlayPlaylistsController(interfaceController: interfaceController)
         let radio     = CarPlayRadioController(interfaceController: interfaceController)
-        let recap     = CarPlayRecapController(interfaceController: interfaceController)
         let queue     = CarPlayQueueController(interfaceController: interfaceController)
 
         discoverController  = discover
         libraryController   = library
         playlistsController = playlists
         radioController     = radio
-        recapController     = recap
         queueController     = queue
 
-        // CarPlay erlaubt Audio-Apps nur vier Tabs (CPTabBarTemplate.maximumTabCount).
-        // Playlists sind deshalb kein eigener Tab mehr, sondern eine Zeile in der Library.
-        library.playlistsTemplateProvider = { [weak self] in self?.playlistsController?.rootTemplate }
-
         // Warteschlange ist kein Tab — sie wird über den Up-Next-Button im NowPlaying-Template geöffnet
-        lastRecapTabVisible = recapTabVisible
         let tabs = CPTabBarTemplate(templates: visibleTabTemplates())
         tabBar = tabs
         interfaceController.setRootTemplate(tabs, animated: false, completion: nil)
@@ -73,12 +64,11 @@ final class CarPlayRootController: NSObject {
             await PlayLogService.shared.setup()
             if let server = carPlayServerStore.activeServer, !server.stableId.isEmpty {
                 await DownloadStore.shared.setActiveServer(server.stableId)
-                // Offline-Modus: Playlists und Recap aus Disk-Cache / SQLite laden,
-                // da ShelvApp's .task bei reinem CarPlay-Start ggf. nicht läuft.
+                // Offline-Modus: Playlists aus Disk-Cache laden, da ShelvApp's
+                // .task bei reinem CarPlay-Start ggf. nicht läuft.
                 if OfflineModeService.shared.isOffline {
                     await LibraryStore.shared.loadPlaylists()
                 }
-                await RecapStore.shared.loadEntries(serverId: server.stableId)
             }
         }
 
@@ -86,7 +76,6 @@ final class CarPlayRootController: NSObject {
         library.load()
         playlists.load()
         radio.load()
-        recap.load()
         queue.load()
 
         AudioPlayerService.shared.isCarPlayActive = true
@@ -98,7 +87,6 @@ final class CarPlayRootController: NSObject {
         }
 
         setupNowPlayingTemplate()
-        observeRecapVisibility()
         prefetchHeavyData()
     }
 
@@ -123,27 +111,26 @@ final class CarPlayRootController: NSObject {
         libraryController?.cancel()
         playlistsController?.cancel()
         radioController?.cancel()
-        recapController?.cancel()
         queueController?.cancel()
         discoverController  = nil
         libraryController   = nil
         playlistsController = nil
         radioController     = nil
-        recapController     = nil
         queueController     = nil
         tabBar              = nil
     }
 
     // MARK: - Tab Visibility
 
-    /// Höchstens vier Tabs — `CPTabBarTemplate.maximumTabCount` ist für Apps mit
-    /// carplay-audio-Entitlement 4 (statt 5), und `validateTemplates:` wirft eine
-    /// NSException statt die Liste zu kappen. Playlists leben deshalb in der Library.
+    /// Höchstens vier Tabs: `CPTabBarTemplate.maximumTabCount` ist für Apps mit
+    /// carplay-audio-Entitlement auf iOS 26 und älter 4, und `validateTemplates:`
+    /// wirft eine NSException statt die Liste zu kappen. Discover, Library,
+    /// Playlists und Radio sind genau vier.
     private func visibleTabTemplates() -> [CPTemplate] {
         var templates: [CPTemplate] = []
         if let t = discoverController?.rootTemplate  { templates.append(t) }
         if let t = libraryController?.rootTemplate   { templates.append(t) }
-        if recapTabVisible, let t = recapController?.rootTemplate {
+        if Self.playlistsTabEnabled, let t = playlistsController?.rootTemplate {
             templates.append(t)
         }
         if Self.radioTabEnabled, let t = radioController?.rootTemplate {
@@ -152,60 +139,17 @@ final class CarPlayRootController: NSObject {
         return templates
     }
 
+    /// Wie beim Radio-Tab: ein ungeschriebener Key heisst "an", passend zum
+    /// `true`-Default der Einstellung auf dem iPhone.
+    private static var playlistsTabEnabled: Bool {
+        guard UserDefaults.standard.object(forKey: PersonalizationPreferenceKey.showPlaylistsTab) != nil else { return true }
+        return UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showPlaylistsTab)
+    }
+
     private static var radioTabEnabled: Bool {
         guard !OfflineModeService.shared.isOffline else { return false }
         guard UserDefaults.standard.object(forKey: PersonalizationPreferenceKey.showRadio) != nil else { return true }
         return UserDefaults.standard.bool(forKey: PersonalizationPreferenceKey.showRadio)
-    }
-
-    private var recapTabVisible: Bool {
-        guard UserDefaults.standard.bool(forKey: "recapEnabled") else { return false }
-        let entries = RecapStore.shared.entries
-        guard !entries.isEmpty else { return false }
-        if OfflineModeService.shared.isOffline {
-            let downloaded = DownloadStore.shared.offlinePlaylistIds
-            return entries.contains { downloaded.contains($0.playlistId) }
-        }
-        return true
-    }
-
-    private func observeRecapVisibility() {
-        RecapStore.shared.$entries
-            .receive(on: DispatchQueue.main)
-            .dropFirst()
-            .sink { [weak self] _ in self?.refreshTabs() }
-            .store(in: &cancellables)
-
-        OfflineModeService.shared.$isOffline
-            .receive(on: DispatchQueue.main)
-            .dropFirst()
-            .sink { [weak self] _ in self?.refreshTabs() }
-            .store(in: &cancellables)
-
-        DownloadStore.shared.$offlinePlaylistIds
-            .receive(on: DispatchQueue.main)
-            .dropFirst()
-            .sink { [weak self] _ in
-                guard OfflineModeService.shared.isOffline else { return }
-                self?.refreshTabs()
-            }
-            .store(in: &cancellables)
-
-        // recapEnabled und showRadio via UserDefaults — nur bei Änderung reagieren.
-        // lastRecapEnabled/lastShowRadio werden ausschliesslich in refreshTabs() upgedated,
-        // damit der Vergleich dort funktioniert (sonst sind sie schon gleich, bevor refreshTabs läuft).
-        NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                guard let self else { return }
-                let currentRecap = UserDefaults.standard.bool(forKey: "recapEnabled")
-                let currentRadio = Self.radioTabEnabled
-                guard currentRecap != self.lastRecapEnabled
-                      || currentRadio != self.lastShowRadio
-                else { return }
-                self.refreshTabs()
-            }
-            .store(in: &cancellables)
     }
 
     private func observeServerErrors() {
@@ -252,15 +196,12 @@ final class CarPlayRootController: NSObject {
 
     private func refreshTabs() {
         // Nur tatsächlichen Tab-Wechsel rendern — sonst unnötige IPC-Roundtrips zu CarPlay.
-        let recapVisible = recapTabVisible
-        let recapEnabled = UserDefaults.standard.bool(forKey: "recapEnabled")
         let radioEnabled = Self.radioTabEnabled
-        guard recapVisible != lastRecapTabVisible
-              || recapEnabled != lastRecapEnabled
-              || radioEnabled != lastShowRadio else { return }
-        lastRecapTabVisible = recapVisible
-        lastRecapEnabled = recapEnabled
+        let playlistsEnabled = Self.playlistsTabEnabled
+        guard radioEnabled != lastShowRadio
+              || playlistsEnabled != lastShowPlaylists else { return }
         lastShowRadio = radioEnabled
+        lastShowPlaylists = playlistsEnabled
         tabBar?.updateTemplates(visibleTabTemplates())
     }
 

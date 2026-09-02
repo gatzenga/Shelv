@@ -58,9 +58,6 @@
 "up_next" = "Up Next";
 "your_queue" = "Your Queue";
 "queue_is_empty" = "Queue is empty";
-"recap" = "Recap";
-"no_offline_recaps" = "No offline recaps";
-"no_recaps" = "No recaps";
 "not_available_offline" = "Not available offline";
 "settings" = "Settings";
 "no_track" = "No Track";
@@ -167,11 +164,7 @@
 "testing" = "Testing";
 "playlist_created" = "Playlist created.";
 "no_plays_logged_yet_skip_songs_first" = "No plays logged yet — skip songs first.";
-"generate_test_recap_last_7_days" = "Generate test recap (last 7 days)";
 "resetting" = "Resetting…";
-"reset_latest_weekly_recap" = "Reset latest weekly recap";
-"reset_latest_monthly_recap" = "Reset latest monthly recap";
-"reset_latest_yearly_recap" = "Reset latest yearly recap";
 "mixes_from_database" = "Mixes from database";
 "mixes_from_database_footer" = "Frequently & Recently Played use your local play history (needs at least 50 unique songs, otherwise the server is used). Newest and Shuffle All are unaffected.";
 "destructive_actions" = "Destructive actions";
@@ -194,25 +187,14 @@
 "reset_local_database_2" = "Reset local database?";
 "reset" = "Reset";
 "delete_icloud_data_2" = "Delete iCloud data?";
-"reset_latest_weekly_recap_2" = "Reset latest weekly recap?";
-"reset_latest_monthly_recap_2" = "Reset latest monthly recap?";
-"reset_latest_yearly_recap_2" = "Reset latest yearly recap?";
 "delete_everything_2" = "Delete everything?";
 "removed_restart_the_app_to_regenerate" = "Removed — restart the app to regenerate.";
-"no_weekly_recap_to_reset" = "No weekly recap to reset.";
-"no_monthly_recap_to_reset" = "No monthly recap to reset.";
-"no_yearly_recap_to_reset" = "No yearly recap to reset.";
-"no_recap_activity_yet" = "No recap activity yet.";
-"recap_log" = "Recap log";
 "play_log_db" = "Play Log DB";
 "lyrics_db" = "Lyrics DB";
 "no_database_errors" = "No database errors.";
 "database_errors" = "Database";
 "no_songs" = "No Songs";
 "no_songs_found_for_this_period" = "No songs found for this period.";
-"delete_recap" = "Delete Recap";
-"delete_recap_2" = "Delete Recap?";
-"could_not_delete_recap" = "Could not delete recap";
 "playlist_could_not_be_loaded" = "Playlist could not be loaded.";
 "weekly_last_4_weeks" = "Weekly — last 4 weeks";
 "monthly_last_month" = "Monthly — last month";
@@ -233,7 +215,6 @@
 "recent_plays" = "Recent plays";
 "no_plays_recorded_yet" = "No plays recorded yet.";
 "registry" = "Registry";
-"no_recap_playlists_yet" = "No recap playlists yet.";
 "no_log_entries_yet" = "No log entries yet.";
 "sync_log" = "Sync log";
 "checking_playlists" = "Checking playlists…";
@@ -249,9 +230,6 @@
 "playlist_updated" = "Playlist updated";
 "new_playlist_created" = "New playlist created";
 "enable_at_least_one_period_in_settings" = "Enable at least one period in Settings.";
-"no_recap_generated_yet_for_this_period" = "No recap generated yet for this period.";
-"recap_is_disabled" = "Recap is disabled";
-"enable_recap_in_settings_to_start_tracking_your_listening_history" = "Enable Recap in Settings to start tracking your listening history.";
 "weekly" = "Weekly";
 "monthly" = "Monthly";
 "yearly" = "Yearly";
@@ -279,7 +257,6 @@
 "frequently_played_first" = "Frequently played first";
 "then_recently_played" = "Then recently played";
 "then_favorites" = "Then favorites";
-"then_recap_playlists" = "Then recap playlists";
 "then_playlists" = "Then playlists";
 "then_alphabetical_by_artist" = "Then alphabetical by artist";
 "no_cache_events_yet" = "No cache events yet.";
@@ -300,13 +277,8 @@
 "pending_scrobbles" = "Pending scrobbles";
 "sync_now" = "Sync now";
 "logs" = "Logs";
-"recap_settings" = "Recap Settings";
 "export_failed" = "Export failed";
 "keep" = "Keep";
-"weekly_recaps" = "weekly recaps";
-"monthly_recaps" = "monthly recaps";
-"yearly_recaps" = "yearly recaps";
-"recap_sync" = "Recap Sync";
 "full_scan" = "Full Scan";
 "last_sync_2" = "Last sync: ";
 "never_synced" = "Never synced";
@@ -381,17 +353,11 @@
 "create_a_playlist_to_get_started" = "Create a playlist to get started.";
 "clears_the_local_cache_only_icloud_and_navidrome_s" = "Clears the local cache only. iCloud and Navidrome stay untouched. Next sync will re-fetch from iCloud.";
 "all_icloud_records_for_this_server_will_be_deleted" = "All iCloud records for this server will be deleted. Local database and Navidrome playlists stay untouched.";
-"deletes_the_newest_weekly_recap_playlist_icloud_ma" = "Deletes the newest weekly recap (playlist, iCloud marker, local entry) and clears the auto-generation timestamp. Restart the app to trigger regeneration.";
-"deletes_the_newest_monthly_recap_and_clears_its_au" = "Deletes the newest monthly recap and clears its auto-generation timestamp. Restart the app to trigger regeneration.";
-"deletes_the_newest_yearly_recap_and_clears_its_aut" = "Deletes the newest yearly recap and clears its auto-generation timestamp. Restart the app to trigger regeneration.";
-"all_recap_playlists_on_navidrome_local_play_logs_a" = "All recap playlists on Navidrome, local play logs and iCloud records for this server will be permanently deleted. This bypasses the iCloud sync toggle.";
 "a_week_is_marked_processed_when_generate_succeeds_" = "A week is marked ✓ processed when generate() succeeds. An unprocessed week will be retried on next app start.";
-"all_recap_playlists_match_the_database" = "All recap playlists match the database.";
 "search_for_artists_albums_or_songs" = "Search for artists, albums, songs and lyrics";
 "nothing_new_fits_in_the_configured_storage_limit" = "Nothing new fits in the configured storage limit.";
 "these_playlists_will_be_permanently_deleted_from_n" = "These playlists will be permanently deleted from Navidrome and iCloud.";
 "precache_original_file_recommendedntranscoded_stre" = "Pre-cache Original File recommended.\nTranscoded streams are pre-cached automatically.";
-"data_stays_local_multiple_devices_may_create_dupli" = "Data stays local. Multiple devices may create duplicate recap playlists.";
 "stable_networkindependent_playback_with_seamless_g" = "Stable, network-independent playback with seamless gapless transitions. The first song may take longer to load.\n\n• Downloads the current song fully before playback\n• Pre-caches the selected number of upcoming songs in the background\n• Keeps that window filled as playback advances\n• Cached files outside the current window are removed\n\nTranscoded streams always cache the current song. When Pre-cache is off, one upcoming transcoded song is cached; when Pre-cache is on, the selected amount applies.";
 "shelv_is_an_unofficial_navidrome_client_and_has_no" = "Shelv is an unofficial Navidrome client and has no affiliation with Navidrome or its developers.";
 "all_downloaded_lyrics_will_be_removed" = "All downloaded lyrics will be removed.";
@@ -433,7 +399,6 @@
 
 "no_lyrics" = "No lyrics available";
 
-"recaps" = "Recaps";
 
 "auto_fetch_lyrics" = "Auto-fetch lyrics";
 
@@ -443,7 +408,6 @@
 
 "queue_empty" = "Queue is empty";
 
-"no_recaps_yet" = "No recaps yet";
 
 "remove_server" = "Remove Server";
 "about" = "About";
@@ -570,12 +534,6 @@
 "song_info_groupings" = "Groupings";
 "song_info_works" = "Works";
 "song_info_movements" = "Movements";
-"recap_about_server_playlists" = "Recap creates playlists on your Navidrome server.";
-"recap_about_icloud_recommended" = "If you use Recap on multiple devices, strongly enable iCloud Sync. Otherwise each device can create its own playlist for the same period.";
-"recap_about_icloud_benefits" = "With iCloud Sync, Shelv combines play history from your devices, keeps Recap playlists consistent and avoids duplicate server playlists.";
-"tvos_recap_about_display" = "On Apple TV, Recap displays Recap playlists synced through iCloud.";
-"tvos_recap_about_manage" = "Create and manage your Recaps on iPhone or Mac. iCloud Sync must be enabled.";
-"tvos_recap_about_history" = "Plays from Apple TV are added to your shared listening history through iCloud.";
 "sync_status" = "Status";
 "sync_status_syncing" = "Syncing";
 "sync_status_pending_format" = "%d pending";
@@ -587,15 +545,6 @@
 "sync_status_uploading_plays_format" = "Uploading %d plays...";
 "sync_status_merging_play_history" = "Merging play history...";
 "sync_status_cleaning_play_database" = "Cleaning play database...";
-"sync_status_downloading_recaps" = "Downloading Recaps...";
-"sync_status_downloading_recaps_format" = "Downloading %d Recaps...";
-"sync_status_uploading_recaps" = "Uploading Recaps...";
-"sync_status_uploading_recaps_format" = "Uploading %d Recaps...";
-"sync_status_syncing_recaps" = "Syncing Recaps...";
-"sync_status_resolving_recap_conflicts" = "Resolving Recap conflicts...";
-"sync_status_updating_recap_playlists" = "Updating Recap playlists...";
-"sync_status_updating_recap_playlists_format" = "Updating %d Recap playlists...";
-"sync_status_cleaning_duplicate_recaps" = "Cleaning duplicate Recap playlists...";
 "sync_status_verifying_icloud" = "Verifying iCloud Sync...";
 "sync_status_complete" = "Sync complete";
 
@@ -663,8 +612,6 @@
 "shortcut_open_search_description" = "Open Shelv and focus search.";
 "shortcut_open_library_title" = "Open Shelv Library";
 "shortcut_open_library_description" = "Open Shelv to the library.";
-"shortcut_open_recap_title" = "Open Shelv Recap";
-"shortcut_open_recap_description" = "Open Shelv and show Recap.";
 "shortcut_shuffle_all_short" = "Shuffle All";
 "shortcut_play_short" = "Play";
 "shortcut_shuffle_playable_short" = "Shuffle Music";
@@ -676,7 +623,6 @@
 "shortcut_now_playing_short" = "Now Playing";
 "shortcut_search_short" = "Search";
 "shortcut_library_short" = "Library";
-"shortcut_recap_short" = "Recap";
 "shortcut_error_no_server" = "No active server is configured in Shelv.";
 "shortcut_error_server_changed" = "The active server changed. Please run the shortcut again.";
 "shortcut_error_no_network" = "Shelv could not reach the server. Check your connection and try again.";

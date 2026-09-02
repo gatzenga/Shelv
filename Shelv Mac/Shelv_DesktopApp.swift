@@ -6,7 +6,6 @@ let appLang: String = Locale.preferredLanguages.first?.hasPrefix("de") == true ?
 extension Notification.Name {
     static let addSongsToPlaylist = Notification.Name("shelv.addSongsToPlaylist")
     static let showToast = Notification.Name("shelv.showToast")
-    // .recapRegistryUpdated liegt jetzt geteilt in ShelvCore (DownloadService.swift).
 }
 
 @main
@@ -21,6 +20,7 @@ struct Shelv_DesktopApp: App {
     @State private var musicLibraryReloadTask: Task<Void, Never>?
 
     init() {
+        RemovedFeatureCleanup.runIfNeeded()
         NSWindow.allowsAutomaticWindowTabbing = false
         // AAC-Transcoding bleibt deaktiviert — Migration falls vorher gesetzt.
         let d = UserDefaults.standard
@@ -39,7 +39,6 @@ struct Shelv_DesktopApp: App {
                 .environmentObject(serverStore)
                 .environmentObject(LyricsStore.shared)
                 .environmentObject(CloudKitSyncService.shared.status)
-                .environmentObject(RecapStore.shared)
                 .environmentObject(LibraryViewModel.shared)
                 .environmentObject(DownloadStore.shared)
                 .environmentObject(offlineMode)
@@ -138,7 +137,6 @@ struct Shelv_DesktopApp: App {
                     guard !Task.isCancelled,
                           revision == serverStore.activeServerRevision
                     else { return }
-                    await RecapStore.shared.setup(serverId: currentServer.stableId)
                     guard !Task.isCancelled,
                           revision == serverStore.activeServerRevision
                     else { return }
@@ -179,10 +177,6 @@ struct Shelv_DesktopApp: App {
                     if let active = appState.serverStore.activeServer {
                         Task { await runKeepLibraryOfflineCheck(serverId: active.stableId) }
                     }
-                }
-                .onReceive(NotificationCenter.default.publisher(for: .recapRegistryUpdated)) { _ in
-                    guard let server = appState.serverStore.activeServer else { return }
-                    Task { await RecapStore.shared.loadEntries(serverId: server.stableId) }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .musicLibrarySelectionChanged)) { notification in
                     guard let serverID = notification.object as? UUID,
@@ -280,16 +274,6 @@ struct Shelv_DesktopApp: App {
         }
         .windowResizability(.contentSize)
 
-        Window(String(localized: "recap"), id: "recap") {
-            RecapView()
-                .environmentObject(appState)
-                .environmentObject(appState.serverStore)
-                .environmentObject(RecapStore.shared)
-                .environmentObject(LibraryViewModel.shared)
-                .tint(AppTheme.color(for: themeColorName))
-                .environment(\.themeColor, AppTheme.color(for: themeColorName))
-                .frame(width: 720, height: 660)
-        }
         .windowResizability(.contentSize)
 
         Window(String(localized: "manage_servers"), id: "server-management") {
@@ -332,15 +316,11 @@ struct Shelv_DesktopApp: App {
             allLibraryAlbums = LibraryViewModel.shared.albums
         }
         guard SubsonicAPIService.shared.activeServer?.stableId == serverId else { return }
-        let recapIds = UserDefaults.standard.bool(forKey: "recapEnabled")
-            ? Array(RecapStore.shared.recapPlaylistIds)
-            : []
         let favorites = UserDefaults.standard.object(forKey: "enableFavorites") as? Bool ?? true
         await KeepLibraryOfflineService.shared.checkAndDownload(
             serverId: serverId,
             libraryAlbums: allLibraryAlbums,
             favorites: favorites,
-            recapPlaylistIds: recapIds,
             force: force
         )
     }
@@ -362,16 +342,6 @@ struct InsightsMenuItem: View {
     var body: some View {
         Button(String(localized: "insights_2")) {
             openWindow(id: "insights")
-        }
-    }
-}
-
-struct RecapMenuItem: View {
-    @Environment(\.openWindow) private var openWindow
-
-    var body: some View {
-        Button(String(localized: "recap_2")) {
-            openWindow(id: "recap")
         }
     }
 }

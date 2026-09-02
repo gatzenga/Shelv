@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct RecapPlayLogView: View {
+struct PlayLogView: View {
     let serverId: String
     @Environment(\.dismiss) private var dismiss
     @Environment(\.themeColor) private var themeColor

@@ -15,10 +15,8 @@ private struct DuplicateSongsPrompt: Identifiable {
 }
 
 struct AddToPlaylistPanel: View {
-    @AppStorage("recapEnabled") private var recapEnabled = false
     let songIds: [String]
     @ObservedObject var libraryStore = LibraryViewModel.shared
-    @StateObject private var recapStore = RecapStore.shared
     @Environment(\.dismiss) private var dismiss
     @Environment(\.themeColor) private var themeColor
 
@@ -26,11 +24,7 @@ struct AddToPlaylistPanel: View {
     @State private var showDuplicatePrompt = false
     @State private var duplicatePrompt: DuplicateSongsPrompt?
 
-    private var nonRecapPlaylists: [Playlist] {
-        recapEnabled
-            ? libraryStore.playlists.filter { !recapStore.recapPlaylistIds.contains($0.id) }
-            : libraryStore.playlists
-    }
+    private var visiblePlaylists: [Playlist] { libraryStore.playlists }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -53,9 +47,9 @@ struct AddToPlaylistPanel: View {
 
             List {
                 // Existing playlists
-                if !nonRecapPlaylists.isEmpty {
+                if !visiblePlaylists.isEmpty {
                     Section(String(localized: "existing_playlists")) {
-                        ForEach(Array(nonRecapPlaylists.enumerated()), id: \.element.id) { index, playlist in
+                        ForEach(Array(visiblePlaylists.enumerated()), id: \.element.id) { index, playlist in
                             Button {
                                 Task {
                                     let duplicateIds = await libraryStore.songIdsAlreadyInPlaylist(playlist, songIds: songIds)

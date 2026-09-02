@@ -4,7 +4,7 @@ import UniformTypeIdentifiers
 
 struct DatabaseTab: View {
     @EnvironmentObject var appState: AppState
-    @StateObject private var recapStore = RecapStore.shared
+    @StateObject private var backupStore = PlayLogBackupStore.shared
     @StateObject private var ckStatus = CloudKitSyncService.shared.status
     @Environment(\.themeColor) private var themeColor
 
@@ -43,7 +43,7 @@ struct DatabaseTab: View {
                     Task {
                         defer { isPreparingExport = false }
                         do {
-                            let url = try await recapStore.exportBackupURL()
+                            let url = try await backupStore.exportBackupURL()
                             runExportSavePanel(sourceURL: url)
                         } catch {
                             exportError = error.localizedDescription
@@ -117,16 +117,13 @@ struct DatabaseTab: View {
         .onChange(of: ckStatus.lastSyncDate) { _, _ in
             Task { await refreshTotalPlays() }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .recapRegistryUpdated)) { _ in
-            Task { await refreshTotalPlays() }
-        }
         .sheet(isPresented: $showPlayLog) {
             if let sid = appState.serverStore.activeServer?.stableId {
-                RecapPlayLogView(serverId: sid)
+                PlayLogView(serverId: sid)
             }
         }
         .sheet(isPresented: $showDBLog) {
-            RecapDBLogView()
+            DatabaseErrorLogView()
         }
         .alert(
             String(localized: "export_failed"),
@@ -223,8 +220,8 @@ struct DatabaseTab: View {
 
     private func runExportSavePanel(sourceURL: URL) {
         let panel = NSSavePanel()
-        panel.title = String(localized: "save_recap_database")
-        panel.nameFieldStringValue = "shelv_recap_export.db"
+        panel.title = String(localized: "save_database")
+        panel.nameFieldStringValue = "shelv_playlog_export.db"
         guard panel.runModal() == .OK, let dest = panel.url else { return }
         do {
             if FileManager.default.fileExists(atPath: dest.path) {
@@ -238,13 +235,13 @@ struct DatabaseTab: View {
 
     private func runImportOpenPanel() {
         let panel = NSOpenPanel()
-        panel.title = String(localized: "import_recap_database")
+        panel.title = String(localized: "import_database")
         panel.allowedContentTypes = [.data]
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         guard panel.runModal() == .OK, let url = panel.url,
               let sid = appState.serverStore.activeServer?.stableId else { return }
-        Task { await recapStore.importDatabase(from: url, serverId: sid) }
+        Task { await backupStore.importDatabase(from: url, serverId: sid) }
     }
 }
 
@@ -255,7 +252,6 @@ struct ICloudSyncTab: View {
 
     @AppStorage("iCloudSyncEnabled") private var iCloudSyncEnabled = false
     @AppStorage("iCloudSyncPlayHistoryEnabled") private var playHistorySyncEnabled = true
-    @AppStorage("iCloudSyncRecapEnabled") private var recapSyncEnabled = true
     @AppStorage("iCloudSyncLyricsServerEnabled") private var lyricsServerSyncEnabled = true
     @AppStorage("iCloudSyncRadioStationsEnabled") private var radioStationsSyncEnabled = true
     @AppStorage("iCloudSyncUICustomizationsEnabled") private var uiCustomizationsSyncEnabled = true
@@ -334,10 +330,6 @@ struct ICloudSyncTab: View {
                         .onChange(of: playHistorySyncEnabled) { _, _ in
                             Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
                         }
-                    Toggle(String(localized: "recap"), isOn: $recapSyncEnabled)
-                        .onChange(of: recapSyncEnabled) { _, _ in
-                            Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
-                        }
                     Toggle(String(localized: "lyrics_server"), isOn: $lyricsServerSyncEnabled)
                         .onChange(of: lyricsServerSyncEnabled) { _, _ in
                             Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
@@ -379,7 +371,7 @@ struct ICloudSyncTab: View {
         .formStyle(.grouped)
         .padding()
         .sheet(isPresented: $showSyncLog) {
-            RecapSyncLogView()
+            SyncLogView()
         }
         .confirmationDialog(
             String(localized: "delete_icloud_data_2"),

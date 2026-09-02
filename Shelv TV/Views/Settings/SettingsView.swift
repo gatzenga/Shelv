@@ -4,7 +4,6 @@ struct SettingsView: View {
     @EnvironmentObject var serverStore: ServerStore
     @AppStorage("appAppearance") private var appAppearance = "system"
     @AppStorage("themeColor") private var themeColor = "violet"
-    @AppStorage("recapEnabled") private var recapEnabled = false
 
     private var isGerman: Bool { Locale.preferredLanguages.first?.hasPrefix("de") == true }
     private var appearanceOptions: [TVSettingsChoiceOption<String>] {
@@ -50,12 +49,6 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Toggle(String(localized: "recaps"), isOn: $recapEnabled)
-                    if recapEnabled {
-                        NavigationLink(String(localized: "about")) {
-                            TVRecapAboutView()
-                        }
-                    }
                     NavigationLink(String(localized: "ui_customizations")) { TVUICustomizationsSettingsView() }
                     NavigationLink(String(localized: "playback")) { PlaybackSettingsView() }
                     NavigationLink(String(localized: "cache")) { CacheSettingsView() }
@@ -77,32 +70,6 @@ struct SettingsView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .focusable()
                 }
-            }
-        }
-    }
-}
-
-private struct TVRecapAboutView: View {
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 28) {
-                Text(String(localized: "tvos_recap_about_display"))
-                Text(String(localized: "tvos_recap_about_manage"))
-                Text(String(localized: "tvos_recap_about_history"))
-                Spacer()
-            }
-            .font(.body)
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: 900, alignment: .leading)
-            .padding(60)
-        }
-        .navigationTitle(String(localized: "about"))
-        .toolbar(.hidden, for: .tabBar)
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button(String(localized: "done")) { dismiss() }
             }
         }
     }

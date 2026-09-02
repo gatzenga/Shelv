@@ -6,7 +6,7 @@ struct PlaybackSettingsView: View {
     @AppStorage("transcodingEnabled") private var transcodingEnabled = false
     @AppStorage("replayGainEnabled") private var replayGainEnabled = false
     @AppStorage("replayGainMode") private var replayGainMode = "track"
-    @AppStorage("recapThreshold") private var recapThreshold = 30
+    @AppStorage("playThreshold") private var playThreshold = 30
     @AppStorage("queueSyncMode") private var queueSyncMode = "off"
     @AppStorage("infinityMixAheadCount") private var infinityMixAheadCount = 1
     @AppStorage("infinityMixSeededEnabled") private var infinityMixSeededEnabled = true
@@ -68,7 +68,7 @@ struct PlaybackSettingsView: View {
             }
 
             Section(String(localized: "scrobble")) {
-                Picker(selection: $recapThreshold) {
+                Picker(selection: $playThreshold) {
                     ForEach([10, 20, 30, 40, 50], id: \.self) { pct in
                         Text("\(pct)%").tag(pct)
                     }

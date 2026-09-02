@@ -60,14 +60,6 @@ final class CarPlayPlaylistsController {
             }
             .store(in: &cancellables)
 
-        // Recap-Playlists werden separat im Recap-Tab angezeigt — Liste neu bauen,
-        // sobald sich die Menge der Recap-IDs ändert.
-        RecapStore.shared.$recapPlaylistIds
-            .receive(on: DispatchQueue.main)
-            .dropFirst()
-            .sink { [weak self] _ in self?.reload() }
-            .store(in: &cancellables)
-
         // DownloadStore räumt offlinePlaylistIds jetzt selbst in reload() auf — der
         // direkte $offlinePlaylistIds-Subscriber oben deckt den Delete-All-Pfad mit ab.
 
@@ -104,10 +96,7 @@ final class CarPlayPlaylistsController {
             buildOfflineList()
             return
         }
-        let recapIds = UserDefaults.standard.bool(forKey: "recapEnabled")
-            ? RecapStore.shared.recapPlaylistIds
-            : []
-        let playlists = LibraryStore.shared.playlists.filter { !recapIds.contains($0.id) }
+        let playlists = LibraryStore.shared.playlists
         if playlists.isEmpty {
             let empty = CPListItem(text: String(localized: "no_playlists"), detailText: nil)
             rootTemplate.updateSections([CPListSection(items: [empty])])
@@ -118,14 +107,11 @@ final class CarPlayPlaylistsController {
 
     private func buildOfflineList() {
         let offlineIds = DownloadStore.shared.offlinePlaylistIds
-        let recapIds = UserDefaults.standard.bool(forKey: "recapEnabled")
-            ? RecapStore.shared.recapPlaylistIds
-            : []
         let hasDownloads = !DownloadStore.shared.songs.isEmpty
         // Falls lokale Daten extern oder während einer Migration verschwinden, keine
         // Offline-Playlist anbieten, die nicht mehr abgespielt werden kann.
         let playlists: [Playlist] = hasDownloads
-            ? LibraryStore.shared.playlists.filter { offlineIds.contains($0.id) && !recapIds.contains($0.id) }
+            ? LibraryStore.shared.playlists.filter { offlineIds.contains($0.id) }
             : []
         if playlists.isEmpty {
             let empty = CPListItem(text: String(localized: "no_offline_playlists"), detailText: nil)

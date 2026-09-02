@@ -396,12 +396,10 @@ struct BulkDownloadSheet: View {
     @EnvironmentObject var appState: AppState
     @ObservedObject var libraryStore = LibraryViewModel.shared
     @ObservedObject var downloadStore = DownloadStore.shared
-    @ObservedObject var recapStore = RecapStore.shared
     @ObservedObject private var keepOffline = KeepLibraryOfflineService.shared
     @ObservedObject private var offlineMode = OfflineModeService.shared
     @Environment(\.dismiss) private var dismiss
     @AppStorage("enableFavorites") private var enableFavorites = true
-    @AppStorage("recapEnabled") private var recapEnabled = false
 
     @State private var plan: BulkDownloadPlan?
     @State private var planServerID: UUID?
@@ -475,10 +473,6 @@ struct BulkDownloadSheet: View {
                             }
                             Label(String(localized: "then_recently_added"),
                                   systemImage: "sparkles")
-                            if recapEnabled && !recapStore.recapPlaylistIds.isEmpty {
-                                Label(String(localized: "then_recap_playlists"),
-                                      systemImage: "calendar.badge.clock")
-                            }
                             Label(String(localized: "then_playlists"),
                                   systemImage: "music.note.list")
                             Label(String(localized: "then_alphabetical_by_artist"),
@@ -595,14 +589,12 @@ struct BulkDownloadSheet: View {
             libraryIDs: selection.allCacheFolderIDs
         )
         let libraryAlbums = cachedAll.isEmpty ? libraryStore.albums : cachedAll
-        let recapIds = recapEnabled ? Array(recapStore.recapPlaylistIds) : []
         let computed: BulkDownloadPlan
         switch mode {
         case .limited(let maxBytes):
             computed = await DownloadService.shared.planBulkDownload(
                 serverId: stable, maxBytes: maxBytes,
                 favorites: enableFavorites,
-                recapPlaylistIds: recapIds,
                 libraryAlbums: libraryAlbums
             )
         case .keepLibraryOffline:
@@ -615,7 +607,6 @@ struct BulkDownloadSheet: View {
                 serverId: stable,
                 maxBytes: maxBytes,
                 favorites: enableFavorites,
-                recapPlaylistIds: recapIds,
                 libraryAlbums: libraryAlbums
             )
             computed = BulkDownloadPlan(
@@ -627,7 +618,6 @@ struct BulkDownloadSheet: View {
                 isKeepLibraryOffline: true,
                 playlistMarkers: planned.playlistMarkers,
                 albumMarkers: planned.albumMarkers,
-                recapPlaylistSongIds: planned.recapPlaylistSongIds
             )
         }
         guard !Task.isCancelled,

@@ -4,7 +4,7 @@ struct PlaybackSettingsView: View {
     @AppStorage("gaplessEnabled") private var gaplessEnabled = false
     @AppStorage("replayGainEnabled") private var replayGainEnabled = false
     @AppStorage("replayGainMode") private var replayGainMode = "track"
-    @AppStorage("recapThreshold") private var recapThreshold = 30
+    @AppStorage("playThreshold") private var playThreshold = 30
     // Apple TV kennt kein Mobilfunk → ein einziges (WLAN/Ethernet-)Profil reicht.
     @AppStorage("transcodingEnabled") private var transcodingEnabled = false
     @AppStorage("transcodingWifiCodec") private var streamCodec = "raw"
@@ -37,7 +37,7 @@ struct PlaybackSettingsView: View {
             TVSettingsChoiceOption(value: "album", title: String(localized: "album_gain")),
         ]
     }
-    private var recapThresholdOptions: [TVSettingsChoiceOption<Int>] {
+    private var playThresholdOptions: [TVSettingsChoiceOption<Int>] {
         [10, 20, 30, 40, 50].map { pct in
             TVSettingsChoiceOption(value: pct, title: "\(pct)%")
         }
@@ -96,8 +96,8 @@ struct PlaybackSettingsView: View {
             Section(String(localized: "scrobble")) {
                 TVSettingsChoiceRow(
                     title: String(localized: "count_from"),
-                    selection: $recapThreshold,
-                    options: recapThresholdOptions
+                    selection: $playThreshold,
+                    options: playThresholdOptions
                 )
             }
 

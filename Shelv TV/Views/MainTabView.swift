@@ -23,7 +23,6 @@ struct MainTabView: View {
     @State private var showIdleNowPlaying = false
     @State private var nowPlayingSidePanel: TVNowPlayingPanel?
     @State private var nowPlayingRootVisible = false
-    @State private var recapNavigationRequest = 0
     @State private var idleNowPlayingTask: Task<Void, Never>?
 
     private var serverErrorAlertTitle: String {
@@ -178,7 +177,7 @@ struct MainTabView: View {
             }
 
             Tab(String(localized: "discover"), systemImage: "sparkles", value: Self.discoverTab) {
-                DiscoverView(recapNavigationRequest: recapNavigationRequest)
+                DiscoverView()
             }
 
             Tab(String(localized: "library"), systemImage: "square.stack", value: "library") {
@@ -221,9 +220,6 @@ struct MainTabView: View {
             selection = "library"
         case .search:
             selection = "search"
-        case .recap:
-            selection = Self.discoverTab
-            recapNavigationRequest &+= 1
         case .nowPlaying:
             selection = Self.nowPlayingTab
         }

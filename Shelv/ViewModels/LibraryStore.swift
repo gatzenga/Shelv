@@ -1190,14 +1190,6 @@ class LibraryStore: ObservableObject {
     func deletePlaylist(_ playlist: Playlist) async throws {
         try await api.deletePlaylist(id: playlist.id)
         playlists.removeAll { $0.id == playlist.id }
-        if let entry = await PlayLogService.shared.registryEntry(playlistId: playlist.id) {
-            CloudKitSyncService.debugLog("[LibraryDelete] playlistId=\(playlist.id) was recap, deleting marker=\(entry.ckRecordName ?? "nil")")
-            if let ckName = entry.ckRecordName {
-                await CloudKitSyncService.shared.queueRecapMarkerDeletion(ckRecordName: ckName)
-            }
-            await PlayLogService.shared.deleteRegistryEntry(playlistId: playlist.id)
-            NotificationCenter.default.post(name: .recapRegistryUpdated, object: nil)
-        }
         if let id = activeServerID { save(playlists, name: "playlists", serverID: id) }
     }
 

@@ -402,16 +402,12 @@ private struct AddToPlaylistDialogModifier: ViewModifier {
     @Binding var isPresented: Bool
     let songIds: [String]
     @ObservedObject private var store = LibraryStore.shared
-    @ObservedObject private var recap = RecapStore.shared
-    @AppStorage("recapEnabled") private var recapEnabled = false
     @State private var showCreate = false
     @State private var showDuplicatePrompt = false
     @State private var duplicatePrompt: DuplicateSongsPrompt?
 
     private var playlists: [Playlist] {
-        recapEnabled
-            ? store.playlists.filter { !recap.recapPlaylistIds.contains($0.id) }
-            : store.playlists
+        store.playlists
     }
 
     private func add(_ ids: [String], to playlist: Playlist) async {
@@ -581,17 +577,17 @@ struct DetailSongRow: View {
     let number: Int
     var showArtwork: Bool = false
     var showsFavoriteBadge = true
-    /// Rang-Zahl links vom Cover (Playlists/Recap). nil = keine Zahl (z.B. Queue).
+    /// Rang-Zahl links vom Cover. nil = keine Zahl (z.B. Queue).
     var rank: Int? = nil
-    /// Recap goes up to two digits (25/50 per period) and lines up with the
+    /// Two digits line up with the
     /// playcount/duration columns further right, so it needs the wider,
     /// trailing-aligned column; the artist Top Songs shelf is capped at a
     /// single digit and wants to sit flush with its section title instead.
     var rankColumnWidth: CGFloat = 50
     var rankColumnAlignment: Alignment = .trailing
-    /// Recap: erste drei Ränge fett in Akzentfarbe hervorheben.
+    /// Erste drei Ränge fett in Akzentfarbe hervorheben.
     var rankAccent: Bool = false
-    /// Recap: Playcount des Songs (Periodenwert) anzeigen. nil = kein Badge.
+    /// Playcount des Songs anzeigen. nil = kein Badge.
     var playCount: Int? = nil
     /// In der Warteschlange kein Longpress-Menü (die Optionen sind dort sinnlos).
     var showContextMenu: Bool = true

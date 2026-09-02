@@ -2,12 +2,10 @@ import SwiftUI
 
 struct PlaylistsView: View {
     @ObservedObject var store = LibraryStore.shared
-    @ObservedObject var recap = RecapStore.shared
     @ObservedObject var pins = PinnedPlaylistStore.shared
     @AppStorage("playlistSortOption") private var sortRaw = "alphabetical"
     @AppStorage("playlistSortDirection") private var dirRaw = "ascending"
     @AppStorage("playlistViewIsGrid") private var isGrid = true
-    @AppStorage("recapEnabled") private var recapEnabled = false
 
     @State private var showCreate = false
     @State private var showPlaylistFolderInfo = false
@@ -15,11 +13,9 @@ struct PlaylistsView: View {
     private var sort: PlaylistSortOption { PlaylistSortOption(rawValue: sortRaw) ?? .alphabetical }
     private var dir: SortDirection { SortDirection(rawValue: dirRaw) ?? .ascending }
 
-    /// Recap-Playlists raus, dann sortiert; angepinnte immer oben (nach pinRank).
+    /// Sortiert; angepinnte immer oben (nach pinRank).
     private var displayPlaylists: [Playlist] {
-        var base = recapEnabled
-            ? store.playlists.filter { !recap.recapPlaylistIds.contains($0.id) }
-            : store.playlists
+        var base = store.playlists
         switch sort {
         case .alphabetical: base.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         case .lastModified: base.sort { ($0.changed ?? .distantPast) < ($1.changed ?? .distantPast) }
@@ -303,18 +299,16 @@ struct PlaylistCard: View {
     let playlist: Playlist
     var size: CGFloat = 240
     var displayNameOverride: String? = nil
-    /// Gesetzt bei Recap-Playlists → Periodentitel statt „Recap" + Periode-Detailansicht.
-    var recapPeriod: RecapPeriod? = nil
     @ObservedObject private var pins = PinnedPlaylistStore.shared
 
     private var displayName: String {
-        recapPeriod?.playlistName ?? displayNameOverride ?? playlist.hierarchyDisplayName
+        displayNameOverride ?? playlist.hierarchyDisplayName
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             NavigationLink {
-                PlaylistDetailView(playlist: playlist, recapPeriod: recapPeriod)
+                PlaylistDetailView(playlist: playlist)
             } label: {
                 CoverArtView(url: playlist.coverURL(500), size: size, cornerRadius: 8)
             }
@@ -340,25 +334,20 @@ struct PlaylistCard: View {
 /// rechts die scrollende Songliste mit eigenem Fokus-Highlight.
 struct PlaylistDetailView: View {
     let playlist: Playlist
-    /// Gesetzt für Recap-Playlists → Periodentitel + Periode-Playcounts + Top-3 in Akzentfarbe.
-    var recapPeriod: RecapPeriod? = nil
     private let player = AudioPlayerService.shared
     @ObservedObject private var store = LibraryStore.shared
     @Environment(\.dismiss) private var dismiss
 
     @State private var songs: [Song] = []
-    @State private var recapCounts: [String: Int] = [:]
     @State private var showRename = false
     @State private var showDeleteConfirm = false
 
-    private var isRecap: Bool { recapPeriod != nil }
 
     /// Aktueller Stand (Name/Comment nach Umbenennen) aus dem Store, sonst das übergebene Objekt.
     private var current: Playlist { store.playlists.first { $0.id == playlist.id } ?? playlist }
 
-    /// Recap zeigt den Periodentitel (wie iOS), normale Playlists ihren Namen.
     private var displayName: String {
-        recapPeriod?.playlistName ?? current.hierarchyDisplayName
+        current.hierarchyDisplayName
     }
 
     var body: some View {
@@ -371,13 +360,6 @@ struct PlaylistDetailView: View {
         .toolbar(.hidden, for: .tabBar)
         .task {
             songs = await LibraryStore.shared.playlistSongs(playlist)
-            // Recap: Periode-Playcounts wie iOS (im Demo liefert topSongs die Recap-Counts).
-            if let p = recapPeriod {
-                let sid = SubsonicAPIService.shared.activeServer?.stableId ?? ""
-                let counts = await PlayLogService.shared.topSongs(
-                    serverId: sid, from: p.start, to: p.end, limit: p.type.songLimit)
-                recapCounts = Dictionary(counts.map { ($0.songId, $0.count) }, uniquingKeysWith: { a, _ in a })
-            }
         }
         .sheet(isPresented: $showRename) {
             PlaylistEditSheet(title: String(localized: "rename"),
@@ -457,8 +439,8 @@ struct PlaylistDetailView: View {
                     let index = row.index
                     let song = row.song
                     DetailSongRow(song: song, number: index, showArtwork: true,
-                                  rank: index + 1, rankAccent: isRecap,
-                                  playCount: isRecap ? (recapCounts[song.id] ?? 0) : nil) {
+                                  rank: index + 1, rankAccent: false,
+                                  playCount: nil) {
                         player.play(songs: songs, startIndex: index)
                     }
                 }

@@ -5,7 +5,7 @@
 
 # Shelv
 
-A native, album and artist focused iOS, iPadOS, macOS, and tvOS client for [Navidrome](https://www.navidrome.org/) and Subsonic-compatible music servers, built with SwiftUI. Stream your own music library, add radio stations, and create **Recap** playlists — automatic weekly, monthly, and yearly playlists of your most-played songs, with optional iCloud sync across iPhone, iPad, Mac, and Apple TV.
+A native, album and artist focused iOS, iPadOS, macOS, and tvOS client for [Navidrome](https://www.navidrome.org/) and Subsonic-compatible music servers, built with SwiftUI. Stream your own music library, add radio stations, and build instant mixes from your own listening history, with optional iCloud sync across iPhone, iPad, Mac, and Apple TV.
 
 [![Download on the App Store](https://developer.apple.com/app-store/marketing/guidelines/images/badge-download-on-the-app-store.svg)](https://apps.apple.com/us/app/shelv-player/id6762255865)
 
@@ -89,16 +89,8 @@ A native, album and artist focused iOS, iPadOS, macOS, and tvOS client for [Navi
 - Falls back to `raw` automatically if the server doesn't support the chosen format
 - Can be enabled or disabled independently of Downloads
 
-### Recap
-- Automatic weekly, monthly, and yearly playlists of your most-played songs, created directly on your Navidrome server
-- Configurable play threshold (10–50%): a track only counts once you've heard enough of it
-- Plays are recorded locally and can be synced across your devices via iCloud — offline plays are queued and uploaded as soon as the network is available
-- Duplicate-safe: an iCloud marker prevents multiple devices from creating the same Recap playlist when Recap sync is enabled
-- **Playlog Sync** — checks whether existing Recap playlists on the server still match the database and lets you apply fixes or create a new playlist
-- Database can be exported and imported; after an import a sync check runs automatically with rollback on cancel
-
 ### Siri & Shortcuts
-- **Siri Voice Commands** — Ask Siri to play artists, albums, songs, radio stations, recaps, and mixes across iOS, macOS, and tvOS (via dedicated Siri extension)
+- **Siri Voice Commands** — Ask Siri to play artists, albums, songs, radio stations, and mixes across iOS, macOS, and tvOS (via dedicated Siri extension)
 - **App Intents & Shortcuts** — System media intents and customizable App Shortcuts for native iOS automation
 - **Native Audio Schemas** *(iOS 27, macOS 27)* — Shelv adopts Apple's audio intent schemas, so Siri resolves songs, albums, artists, playlists, radio stations, and Instant Mixes against your own library instead of a streaming catalogue
 - **Voice Library Edits** *(iOS 27, macOS 27)* — Mark a song, album, or artist as a favourite, or add music to one of your playlists, by voice
@@ -106,7 +98,7 @@ A native, album and artist focused iOS, iPadOS, macOS, and tvOS client for [Navi
 - Playback runs in the background without opening the app; spoken transport commands (pause, next, previous) are handled through the system's media controls
 
 ### CarPlay
-- Browse Discover, Library, Radio, Playlists, Favorites, Recaps, and the current queue from CarPlay
+- Browse Discover, Library, Radio, Playlists, Favorites, and the current queue from CarPlay
 - Play, shuffle, queue, favorite, and open Now Playing using CarPlay-native templates
 - Cover art is streamed in small batches so lists stay responsive while artwork loads
 
@@ -121,8 +113,7 @@ A native, album and artist focused iOS, iPadOS, macOS, and tvOS client for [Navi
 - **Cache** — See the current cover art cache size and clear it with a single tap
 - **Downloads** — Enable downloads, set storage limit, run a bulk download, toggle Keep Library Offline and Offline Mode, manage downloaded content
 - **Playback** — Configure gapless playback, transcoding, replay gain, scrobble threshold, lyrics, and Queue Sync; offline scrobbles are queued locally and submitted automatically when reconnected
-- **iCloud** — Enable iCloud sync and choose what to sync: Play History, Recap, Lyrics Server, Queue Sync, and Radio Stations
-- **Recap** — Configure periods (weekly, monthly, yearly), retention, play threshold, and database export/import
+- **iCloud** — Enable iCloud sync and choose what to sync: Play History, Lyrics Server, Queue Sync, and Radio Stations
 - **Favorites, Playlists & Radio** — Toggle each feature on or off independently
 
 ### Cover Art
@@ -161,7 +152,7 @@ ShelvApp  (@main)
 ├── RadioMetadataService.shared — ICY and AzuraCast now-playing metadata polling
 ├── QueueSyncService.shared   — optional iCloud/Subsonic queue handoff
 ├── ScrobbleService.shared    — offline-resilient play logging & Subsonic scrobbling
-└── CloudKitSyncService.shared — Play History, Recap, Lyrics Server, Queue Sync, and Radio records
+└── CloudKitSyncService.shared — Play History, Lyrics Server, Queue Sync, and Radio records
 ```
 
 All API communication goes through `SubsonicAPIService.shared` using MD5 token authentication. Cover art is handled exclusively by `ImageCacheService` (actor-isolated, NSCache + disk, concurrent deduplication) — `AsyncImage` is never used directly.
@@ -216,7 +207,6 @@ See [LICENSE](LICENSE) for details.
 <table>
   <tr>
     <td><img src="screenshots_iPhone/home.png" width="220"/></td>
-    <td><img src="screenshots_iPhone/recap.png" width="220"/></td>
     <td><img src="screenshots_iPhone/player.png" width="220"/></td>
   </tr>
   <tr>
@@ -237,7 +227,6 @@ See [LICENSE](LICENSE) for details.
 <table>
   <tr>
     <td><img src="screenshots_iPad/home.png" width="220"/></td>
-    <td><img src="screenshots_iPad/recap.png" width="220"/></td>
     <td><img src="screenshots_iPad/player.png" width="220"/></td>
   </tr>
   <tr>
@@ -258,7 +247,6 @@ See [LICENSE](LICENSE) for details.
 <table>
   <tr>
     <td><img src="screenshots_mac/home.png" width="360"/></td>
-    <td><img src="screenshots_mac/recap.png" width="360"/></td>
   </tr>
   <tr>
     <td><img src="screenshots_mac/albums.png" width="360"/></td>
@@ -275,7 +263,6 @@ See [LICENSE](LICENSE) for details.
 <table>
   <tr>
     <td><img src="screenshots_TV/home.png" width="250"/></td>
-    <td><img src="screenshots_TV/recap.png" width="250"/></td>
     <td><img src="screenshots_TV/player.png" width="250"/></td>
   </tr>
   <tr>

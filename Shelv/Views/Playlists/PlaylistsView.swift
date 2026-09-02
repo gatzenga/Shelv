@@ -31,14 +31,12 @@ struct OfflinePlaylistAvailabilityReader<Content: View>: View {
 
 struct PlaylistsView: View {
     @ObservedObject var libraryStore = LibraryStore.shared
-    @EnvironmentObject var recapStore: RecapStore
     private let downloadStore = DownloadStore.shared
     @ObservedObject var offlineMode = OfflineModeService.shared
     @ObservedObject var pinStore = PinnedPlaylistStore.shared
     private let player = AudioPlayerService.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage("enableDownloads") private var enableDownloads = true
-    @AppStorage("recapEnabled") private var recapEnabled = false
     @AppStorage(PersonalizationPreferenceKey.showPlaylistActions) private var showPlaylistActions = true
     @AppStorage("playlistSortOption") private var sortOptionRaw: String = PlaylistSortOption.alphabetical.rawValue
     private var sortOption: PlaylistSortOption { PlaylistSortOption(rawValue: sortOptionRaw) ?? .alphabetical }
@@ -47,13 +45,11 @@ struct PlaylistsView: View {
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
     private var visiblePlaylists: [Playlist] {
-        var noRecap = recapEnabled
-            ? libraryStore.playlists.filter { !recapStore.recapPlaylistIds.contains($0.id) }
-            : libraryStore.playlists
+        var visible = libraryStore.playlists
         if offlineMode.isOffline {
-            noRecap = noRecap.filter { offlinePlaylistIDs.contains($0.id) }
+            visible = visible.filter { offlinePlaylistIDs.contains($0.id) }
         }
-        return sortedPlaylists(noRecap)
+        return sortedPlaylists(visible)
     }
 
     private var visiblePlaylistTree: [PlaylistTreeNode] {

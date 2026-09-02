@@ -24,21 +24,16 @@ private struct DiscoverLibrarySnapshot: Equatable {
 @MainActor
 private final class DiscoverContentObserver: ObservableObject {
     @Published private(set) var library: DiscoverLibrarySnapshot
-    @Published private(set) var recapPlaylistIDs: Set<String>
 
     private let libraryStore: LibraryStore
-    private let recapStore: RecapStore
     private var isActive: Bool
     private var cancellables: Set<AnyCancellable> = []
 
     init(isActive: Bool) {
         let libraryStore = LibraryStore.shared
-        let recapStore = RecapStore.shared
         self.isActive = isActive
         self.libraryStore = libraryStore
-        self.recapStore = recapStore
         library = DiscoverLibrarySnapshot(store: libraryStore)
-        recapPlaylistIDs = recapStore.recapPlaylistIds
         subscribeToRelevantChanges()
     }
 
@@ -76,13 +71,6 @@ private final class DiscoverContentObserver: ObservableObject {
             .removeDuplicates()
             .sink { [weak self] value in self?.update(\.reloadID, to: value) }
             .store(in: &cancellables)
-        recapStore.$recapPlaylistIds
-            .removeDuplicates()
-            .sink { [weak self] value in
-                guard let self, isActive, recapPlaylistIDs != value else { return }
-                recapPlaylistIDs = value
-            }
-            .store(in: &cancellables)
     }
 
     private func update<Value: Equatable>(
@@ -100,10 +88,6 @@ private final class DiscoverContentObserver: ObservableObject {
         if library != currentLibrary {
             library = currentLibrary
         }
-        let currentRecapPlaylistIDs = recapStore.recapPlaylistIds
-        if recapPlaylistIDs != currentRecapPlaylistIDs {
-            recapPlaylistIDs = currentRecapPlaylistIDs
-        }
     }
 }
 
@@ -118,7 +102,6 @@ struct DiscoverView: View {
     @Environment(\.personalizationSwipeConfiguration) private var personalization
     private let player = AudioPlayerService.shared
     @AppStorage("themeColor") private var themeColorName = "violet"
-    @AppStorage("recapEnabled") private var recapEnabled = false
     @AppStorage(PersonalizationPreferenceKey.showRadio) private var showRadio = true
     @AppStorage(PersonalizationPreferenceKey.showDiscoverInsights) private var showDiscoverInsights = true
     @AppStorage(PersonalizationPreferenceKey.showDiscoverAirPlay) private var showDiscoverAirPlay = false
@@ -134,14 +117,6 @@ struct DiscoverView: View {
         _contentObserver = StateObject(
             wrappedValue: DiscoverContentObserver(isActive: isActive)
         )
-    }
-
-    private var recapButtonVisible: Bool {
-        // Wenn Recap deaktiviert ist, soll der Eintrag komplett aus der UI verschwinden.
-        guard recapEnabled else { return false }
-        if !offlineMode.isOffline { return true }
-        // Offline: nur wenn mindestens eine Recap-Playlist heruntergeladen ist.
-        return !contentObserver.recapPlaylistIDs.isDisjoint(with: offlinePlaylistIDs)
     }
 
     private var visibleSmartMixes: [PersonalizationSmartMix] {
@@ -161,7 +136,6 @@ struct DiscoverView: View {
     @State private var showError = false
     @State private var randomRefreshing = false
     @State private var showInsights = false
-    @State private var showRecap = false
     @State private var showRadioSheet = false
     @State private var deviceHasNetwork = true
     @State private var showConnectionRecoveryState = false
@@ -249,13 +223,6 @@ struct DiscoverView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
-                    if recapButtonVisible {
-                        Button {
-                            showRecap = true
-                        } label: {
-                            Image(systemName: "calendar.badge.clock")
-                        }
-                    }
                     if showDiscoverInsights && !offlineMode.isOffline && deviceHasNetwork {
                         Button {
                             showInsights = true
@@ -279,13 +246,6 @@ struct DiscoverView: View {
             }
             .sheet(isPresented: $showInsights) {
                 InsightsView()
-                    .presentationDetents([.large])
-                    .presentationCornerRadius(24)
-                    .presentationBackground(Color(uiColor: .systemBackground))
-                    .tint(accentColor)
-            }
-            .sheet(isPresented: $showRecap) {
-                RecapView()
                     .presentationDetents([.large])
                     .presentationCornerRadius(24)
                     .presentationBackground(Color(uiColor: .systemBackground))

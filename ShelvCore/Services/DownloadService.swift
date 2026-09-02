@@ -10,7 +10,6 @@ extension Notification.Name {
     nonisolated static let artworkIndexReady = Notification.Name("shelv.artworkIndexReady")
     nonisolated static let instantMixUnavailable = Notification.Name("shelv.instantMixUnavailable")
     // Geteilt statt pro Plattform definiert (tvOS braucht den Namen ebenfalls).
-    nonisolated static let recapRegistryUpdated = Notification.Name("shelv.recapRegistryUpdated")
 }
 
 // MARK: - DownloadJob
@@ -1286,7 +1285,6 @@ actor DownloadService {
 
     func planBulkDownload(serverId: String, maxBytes: Int64,
                           favorites enabled: Bool,
-                          recapPlaylistIds: [String] = [],
                           libraryAlbums: [Album]) async -> BulkDownloadPlan {
         guard let api = await currentAPI(for: serverId) else {
             return BulkDownloadPlan(planned: [], skipped: [], totalBytes: 0, limitBytes: maxBytes)
@@ -1310,7 +1308,7 @@ actor DownloadService {
             libraryFilter: .all
         )) ?? []
         async let albumPairsTask = fetchAlbumSongPairs(api: apiService, albums: libraryAlbums)
-        async let playlistPairsTask = fetchPlaylistSongPairs(api: apiService, recapPlaylistIds: recapPlaylistIds)
+        async let playlistPairsTask = fetchNormalPlaylistDetails(api: apiService, excluding: [])
 
         let discoverFreq = await discoverFreqTask
         let discoverRecent = await discoverRecentTask
@@ -1370,24 +1368,7 @@ actor DownloadService {
             addAlbumUnit(albumId: album.element.id, priority: 3_000 + album.offset)
         }
 
-        var recapPlaylistSongIdsMap: [String: [String]] = [:]
-        for playlist in playlistPairs.recap.enumerated() {
-            let songs = playlist.element.songs
-            recapPlaylistSongIdsMap[playlist.element.id] = songs.map(\.id)
-            guard !songs.isEmpty else { continue }
-            units.append(BulkDownloadUnit(
-                priority: 4_000 + playlist.offset,
-                songs: songs,
-                playlistMarker: BulkDownloadPlaylistMarker(
-                    id: playlist.element.id,
-                    name: playlist.element.name,
-                    songIds: songs.map(\.id)
-                ),
-                albumMarker: nil
-            ))
-        }
-
-        for playlist in playlistPairs.normal.enumerated() {
+        for playlist in playlistPairs.enumerated() {
             let songs = playlist.element.songs
             guard !songs.isEmpty else { continue }
             units.append(BulkDownloadUnit(
@@ -1467,7 +1448,6 @@ actor DownloadService {
             limitBytes: maxBytes,
             playlistMarkers: playlistMarkers,
             albumMarkers: albumMarkers,
-            recapPlaylistSongIds: recapPlaylistSongIdsMap
         )
     }
 
@@ -1475,7 +1455,6 @@ actor DownloadService {
         serverId: String,
         maxBytes: Int64,
         favorites enabled: Bool,
-        recapPlaylistIds: [String] = [],
         libraryAlbums: [Album],
         forceFullScan: Bool = false
     ) async -> BulkDownloadPlan {
@@ -1490,7 +1469,6 @@ actor DownloadService {
             serverId: serverId,
             maxBytes: maxBytes,
             favorites: enabled,
-            recapPlaylistIds: recapPlaylistIds,
             libraryAlbums: candidateAlbums
         )
         plan = BulkDownloadPlan(
@@ -1501,7 +1479,6 @@ actor DownloadService {
             isKeepLibraryOffline: true,
             playlistMarkers: plan.playlistMarkers,
             albumMarkers: plan.albumMarkers,
-            recapPlaylistSongIds: plan.recapPlaylistSongIds
         )
         return plan
     }
@@ -1525,16 +1502,6 @@ actor DownloadService {
             }
             return result
         }
-    }
-
-    private func fetchPlaylistSongPairs(
-        api: SubsonicAPIService,
-        recapPlaylistIds: [String]
-    ) async -> (recap: [(id: String, name: String, songs: [Song])], normal: [(id: String, name: String, songs: [Song])]) {
-        let recapIdSet = Set(recapPlaylistIds)
-        async let recapTask = fetchPlaylistDetails(api: api, playlists: recapPlaylistIds.map { (id: $0, name: "") })
-        async let normalTask = fetchNormalPlaylistDetails(api: api, excluding: recapIdSet)
-        return (await recapTask, await normalTask)
     }
 
     private func fetchNormalPlaylistDetails(

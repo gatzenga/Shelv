@@ -16,7 +16,7 @@ private struct ActivityView: UIViewControllerRepresentable {
 
 struct DatabaseSettingsView: View {
     @EnvironmentObject var serverStore: ServerStore
-    @EnvironmentObject var recapStore: RecapStore
+    @ObservedObject private var backupStore = PlayLogBackupStore.shared
     @EnvironmentObject var ckStatus: CloudKitSyncStatus
     @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage("mixUseDatabase") private var mixUseDatabase = false
@@ -74,7 +74,7 @@ struct DatabaseSettingsView: View {
                     Task {
                         defer { isPreparingExport = false }
                         do {
-                            let url = try await recapStore.exportBackupURL()
+                            let url = try await backupStore.exportBackupURL()
                             exportItem = ShareableFileWrap(url: url)
                         } catch {
                             exportError = error.localizedDescription
@@ -102,12 +102,12 @@ struct DatabaseSettingsView: View {
             // MARK: Logs
             if let sid = serverStore.activeServer?.stableId {
                 Section(String(localized: "logs")) {
-                    NavigationLink(destination: RecapPlayLogView(serverId: sid)) {
+                    NavigationLink(destination: PlayLogView(serverId: sid)) {
                         Label { Text(String(localized: "recent_plays")) } icon: {
                             Image(systemName: "list.bullet.clipboard").foregroundStyle(accentColor)
                         }
                     }
-                    NavigationLink(destination: RecapDBLogView()) {
+                    NavigationLink(destination: DatabaseErrorLogView()) {
                         Label { Text(String(localized: "database_errors")) } icon: {
                             Image(systemName: "tablecells").foregroundStyle(accentColor)
                         }
@@ -179,13 +179,13 @@ struct DatabaseSettingsView: View {
         .fileImporter(isPresented: $showImportFilePicker, allowedContentTypes: [.item]) { result in
             guard let url = try? result.get(),
                   let sid = serverStore.activeServer?.stableId else { return }
-            Task { await recapStore.importDatabase(from: url, serverId: sid) }
+            Task { await backupStore.importDatabase(from: url, serverId: sid) }
         }
         .sheet(isPresented: $showSyncReport) {
             syncReportSheet
         }
-        .onChange(of: recapStore.showSyncReport) { _, show in
-            if show { showSyncReport = true; recapStore.showSyncReport = false }
+        .onChange(of: backupStore.showReport) { _, show in
+            if show { showSyncReport = true; backupStore.showReport = false }
         }
         .alert(
             String(localized: "reset_local_database_2"),
@@ -216,9 +216,6 @@ struct DatabaseSettingsView: View {
         }
         .task(id: serverStore.activeServerID) { await refreshTotalPlays() }
         .onChange(of: ckStatus.lastSyncDate) { _, _ in
-            Task { await refreshTotalPlays() }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .recapRegistryUpdated)) { _ in
             Task { await refreshTotalPlays() }
         }
     }
@@ -281,14 +278,14 @@ struct DatabaseSettingsView: View {
 
     private var syncReportSheet: some View {
         NavigationStack {
-            List(recapStore.syncReports) { report in
+            List(backupStore.reports) { report in
                 HStack(alignment: .top, spacing: 10) {
                     Image(systemName: report.isError ? "exclamationmark.circle" : "checkmark.circle")
                         .foregroundStyle(report.isError ? .red : accentColor)
                     Text(report.message).font(.subheadline)
                 }
             }
-            .navigationTitle(String(localized: "recap_sync"))
+            .navigationTitle(String(localized: "database"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -307,7 +304,6 @@ struct ICloudSyncSettingsView: View {
     @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage("iCloudSyncEnabled") private var iCloudSyncEnabled = false
     @AppStorage("iCloudSyncPlayHistoryEnabled") private var playHistorySyncEnabled = true
-    @AppStorage("iCloudSyncRecapEnabled") private var recapSyncEnabled = true
     @AppStorage("iCloudSyncLyricsServerEnabled") private var lyricsServerSyncEnabled = true
     @AppStorage("iCloudSyncRadioStationsEnabled") private var radioStationsSyncEnabled = true
     @AppStorage("iCloudSyncUICustomizationsEnabled") private var uiCustomizationsSyncEnabled = true
@@ -404,16 +400,6 @@ struct ICloudSyncSettingsView: View {
                         Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
                     }
 
-                    Toggle(isOn: $recapSyncEnabled) {
-                        Label { Text(String(localized: "recap")) } icon: {
-                            Image(systemName: "calendar.badge.clock").foregroundStyle(accentColor)
-                        }
-                    }
-                    .tint(accentColor)
-                    .onChange(of: recapSyncEnabled) { _, _ in
-                        Task { await CloudKitSyncService.shared.handleSyncCategoryChange() }
-                    }
-
                     Toggle(isOn: $lyricsServerSyncEnabled) {
                         Label { Text(String(localized: "lyrics_server")) } icon: {
                             Image(systemName: "text.bubble").foregroundStyle(accentColor)
@@ -447,7 +433,7 @@ struct ICloudSyncSettingsView: View {
 
                 Section(String(localized: "logs")) {
                     NavigationLink(destination:
-                        RecapSyncLogView()
+                        SyncLogView()
                             .environmentObject(ckStatus)
                     ) {
                         Label { Text(String(localized: "sync_log")) } icon: {

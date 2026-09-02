@@ -4,7 +4,6 @@ struct SidebarView: View {
     @EnvironmentObject var appState: AppState
     @ObservedObject var libraryStore = LibraryViewModel.shared
     @ObservedObject var offlineMode = OfflineModeService.shared
-    @StateObject private var recapStore = RecapStore.shared
     @ObservedObject private var downloadStore = DownloadStore.shared
     @ObservedObject private var pinStore = PinnedPlaylistStore.shared
     @Binding var selection: SidebarItem?
@@ -14,7 +13,6 @@ struct SidebarView: View {
     @ObservedObject private var personalizationVisibility = MacPersonalizationVisibilityStore.shared
     @AppStorage(PersonalizationPreferenceKey.showRadio) private var showRadio = true
     @AppStorage("enableDownloads") private var enableDownloads = true
-    @AppStorage("recapEnabled") private var recapEnabled = false
     @AppStorage("downloadsOnlyFilter") private var showDownloadsOnly: Bool = false
     @AppStorage("playlistSortOption") private var sortOptionRaw: String = PlaylistSortOption.alphabetical.rawValue
     private var sortOption: PlaylistSortOption { PlaylistSortOption(rawValue: sortOptionRaw) ?? .alphabetical }
@@ -41,13 +39,8 @@ struct SidebarView: View {
         var id: String { node.id }
     }
 
-    private var nonRecapPlaylists: [Playlist] {
-        guard recapEnabled else { return libraryStore.playlists }
-        return libraryStore.playlists.filter { !recapStore.recapPlaylistIds.contains($0.id) }
-    }
-
     private var visiblePlaylists: [Playlist] {
-        var base = nonRecapPlaylists
+        var base = libraryStore.playlists
         if offlineMode.isOffline || showDownloadsOnly {
             base = base.filter { downloadStore.downloadedPlaylistIds.contains($0.id) }
         }

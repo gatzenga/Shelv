@@ -15,10 +15,8 @@ private struct DuplicateSongsPrompt: Identifiable {
 }
 
 struct AddToPlaylistSheet: View {
-    @AppStorage("recapEnabled") private var recapEnabled = false
     let songIds: [String]
     @ObservedObject var libraryStore = LibraryStore.shared
-    @EnvironmentObject var recapStore: RecapStore
     @AppStorage("themeColor") private var themeColorName = "violet"
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
     @Environment(\.dismiss) private var dismiss
@@ -31,11 +29,7 @@ struct AddToPlaylistSheet: View {
     @State private var showDuplicatePrompt = false
     @State private var duplicatePrompt: DuplicateSongsPrompt?
 
-    private var visiblePlaylists: [Playlist] {
-        recapEnabled
-            ? libraryStore.playlists.filter { !recapStore.recapPlaylistIds.contains($0.id) }
-            : libraryStore.playlists
-    }
+    private var visiblePlaylists: [Playlist] { libraryStore.playlists }
 
     var body: some View {
         NavigationStack {

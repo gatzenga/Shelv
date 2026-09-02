@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct RecapSyncLogView: View {
+struct SyncLogView: View {
     @EnvironmentObject var ckStatus: CloudKitSyncStatus
 
     var body: some View {

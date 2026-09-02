@@ -8,7 +8,7 @@ final class PlayLogServiceTests: XCTestCase {
         tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("ShelvPlayLogServiceTests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
-        PlayLogService.testDatabaseURL = tempDir.appendingPathComponent("recap.db")
+        PlayLogService.testDatabaseURL = tempDir.appendingPathComponent("playlog.db")
     }
 
     override func tearDown() async throws {
@@ -177,49 +177,6 @@ final class PlayLogServiceTests: XCTestCase {
         XCTAssertEqual(topSongs.map(\.count), [2, 2, 2, 1])
     }
 
-    /// Ersetzt die alte "Stabilization"-Erwartung: ein toter Top-Song darf die Recap-Playlist
-    /// nicht kaputt machen, aber die Datenbank selbst bleibt unangetastet — Löschen/Reparieren
-    /// ist ausschließlich Aufgabe des manuellen Database-Cleanups (siehe PlayLogReconciliationLogicTests).
-    func testExpectedSongsLogicSkipsDeadTopSongsInMemoryWithoutTouchingDatabase() async throws {
-        let service = try await makeService()
-        let start = Date(timeIntervalSince1970: 1_750_000_000)
-        let end = Date(timeIntervalSince1970: 1_750_001_000)
-
-        for offset in [10.0, 20.0, 30.0] {
-            await service.insertLegacyPlayForTesting(
-                songId: "dead-a", serverId: "server-a",
-                playedAt: start.timeIntervalSince1970 + offset, songDuration: 180
-            )
-        }
-        for offset in [40.0, 50.0] {
-            await service.insertLegacyPlayForTesting(
-                songId: "dead-b", serverId: "server-a",
-                playedAt: start.timeIntervalSince1970 + offset, songDuration: 180
-            )
-        }
-        await service.insertLegacyPlayForTesting(
-            songId: "valid", serverId: "server-a",
-            playedAt: start.timeIntervalSince1970 + 60, songDuration: 180
-        )
-
-        let deadSongIds = Set(["dead-a", "dead-b"])
-        let candidatePool = await service.topSongs(serverId: "server-a", from: start, to: end, limit: 3).map(\.songId)
-        XCTAssertEqual(candidatePool, ["dead-a", "dead-b", "valid"])
-
-        let resolution = try await RecapExpectedSongsLogic.resolveExpectedIds(
-            initial: Array(candidatePool.prefix(1)),
-            backups: Array(candidatePool.dropFirst(1)),
-            alreadyKnownAlive: { _ in false },
-            resolve: { id in deadSongIds.contains(id) ? nil : id }
-        )
-
-        XCTAssertEqual(resolution.finalIds, ["valid"])
-
-        // Kein Löschvorgang wurde je aufgerufen — die toten Zeilen sind unverändert noch da.
-        let remainingSongIds = Set(await service.allPlayLogs(serverId: "server-a").map(\.songId))
-        XCTAssertEqual(remainingSongIds, ["dead-a", "dead-b", "valid"])
-    }
-
     func testDistinctSongEntriesFoldsRowsAndPicksUpAnyNonNilMetadata() async throws {
         let service = try await makeService()
         let now = Date(timeIntervalSince1970: 1_750_000_000).timeIntervalSince1970
@@ -284,69 +241,6 @@ final class PlayLogServiceTests: XCTestCase {
         XCTAssertNil(logs.first?.syncedAt)
     }
 
-    func testKeepOnlyRegistryEntryForSamePeriodKeepsCanonicalRecordOnlyForMatchingBucket() async throws {
-        let service = try await makeService()
-        let monthStart = Date(timeIntervalSince1970: 1_746_144_000).timeIntervalSince1970
-
-        await service.registerPlaylist(registryRecord("local-a", periodStart: monthStart))
-        await service.registerPlaylist(registryRecord("local-b", periodStart: monthStart, ckRecordName: "ck-local-b"))
-        await service.registerPlaylist(registryRecord("test-a", periodStart: monthStart, ckRecordName: "ck-test", isTest: true))
-        await service.registerPlaylist(registryRecord("other-month", periodStart: monthStart + 31 * 86_400, ckRecordName: "ck-other"))
-        await service.registerPlaylist(registryRecord("other-server", serverId: "server-b", periodStart: monthStart, ckRecordName: "ck-server-b"))
-
-        let canonical = registryRecord("cloud-a", periodStart: monthStart, ckRecordName: "ck-cloud-a")
-        let removed = await service.keepOnlyRegistryEntryForSamePeriod(canonical)
-
-        XCTAssertEqual(Set(removed), ["local-a", "local-b"])
-
-        let serverAIds = Set(await service.allRegistryEntries(serverId: "server-a").map(\.playlistId))
-        XCTAssertEqual(serverAIds, ["cloud-a", "test-a", "other-month"])
-
-        let canonicalEntry = await service.registryEntry(
-            serverId: "server-a",
-            periodType: "month",
-            periodStart: monthStart,
-            isTest: false
-        )
-        XCTAssertEqual(canonicalEntry?.playlistId, "cloud-a")
-        XCTAssertEqual(canonicalEntry?.ckRecordName, "ck-cloud-a")
-
-        let testEntry = await service.registryEntry(playlistId: "test-a")
-        XCTAssertEqual(testEntry?.ckRecordName, "ck-test")
-
-        let otherServerEntry = await service.registryEntry(playlistId: "other-server")
-        XCTAssertEqual(otherServerEntry?.serverId, "server-b")
-    }
-
-    func testRecapMarkerReuploadResetAndBulkDeleteStayScoped() async throws {
-        let service = try await makeService()
-        let monthStart = Date(timeIntervalSince1970: 1_746_144_000).timeIntervalSince1970
-
-        await service.registerPlaylist(registryRecord("server-a-one", periodStart: monthStart, ckRecordName: "ck-a-one"))
-        await service.registerPlaylist(registryRecord("server-a-two", periodStart: monthStart + 31 * 86_400, ckRecordName: "ck-a-two"))
-        await service.registerPlaylist(registryRecord("server-b-one", serverId: "server-b", periodStart: monthStart, ckRecordName: "ck-b-one"))
-
-        await service.markRecapMarkersUnsyncedForReUpload(serverId: "server-a")
-
-        let serverAOne = await service.registryEntry(playlistId: "server-a-one")
-        let serverATwo = await service.registryEntry(playlistId: "server-a-two")
-        let serverBOne = await service.registryEntry(playlistId: "server-b-one")
-
-        XCTAssertNil(serverAOne?.ckRecordName)
-        XCTAssertNil(serverATwo?.ckRecordName)
-        XCTAssertEqual(serverBOne?.ckRecordName, "ck-b-one")
-
-        await service.deleteRegistryEntries(playlistIds: ["server-a-two", "server-b-one", "missing"])
-
-        let remainingServerAOne = await service.registryEntry(playlistId: "server-a-one")
-        let removedServerATwo = await service.registryEntry(playlistId: "server-a-two")
-        let removedServerBOne = await service.registryEntry(playlistId: "server-b-one")
-
-        XCTAssertNotNil(remainingServerAOne)
-        XCTAssertNil(removedServerATwo)
-        XCTAssertNil(removedServerBOne)
-    }
-
     func testRecordPlayAndQueueScrobblePersistsBothAtomically() async throws {
         let service = try await makeService()
         let playedAt = 1_750_000_123.5
@@ -393,7 +287,7 @@ final class PlayLogServiceTests: XCTestCase {
         XCTAssertTrue(remaining.isEmpty)
     }
 
-    func testRecapImportRewriteDropsForeignOutboxAndRestoresLocalPendingEvents() async throws {
+    func testImportRewriteDropsForeignOutboxAndRestoresLocalPendingEvents() async throws {
         let service = try await makeService()
         _ = await service.addPendingScrobble(
             songId: "local-offline-song",
@@ -425,21 +319,4 @@ final class PlayLogServiceTests: XCTestCase {
         return PlayLogService.shared
     }
 
-    private func registryRecord(
-        _ playlistId: String,
-        serverId: String = "server-a",
-        periodStart: Double,
-        ckRecordName: String? = nil,
-        isTest: Bool = false
-    ) -> RecapRegistryRecord {
-        RecapRegistryRecord(
-            playlistId: playlistId,
-            serverId: serverId,
-            periodType: "month",
-            periodStart: periodStart,
-            periodEnd: periodStart + 31 * 86_400,
-            ckRecordName: ckRecordName,
-            isTest: isTest
-        )
-    }
 }

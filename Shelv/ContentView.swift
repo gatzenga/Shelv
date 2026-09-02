@@ -15,7 +15,6 @@ struct ContentView: View {
     @State private var selectedTab = 0
     @State private var searchResetToken = 0
     @State private var showPlayer = false
-    @State private var showRecap = false
     @State private var playlistSongIds: [String]? = nil
     @State private var offlineToast: ShelveToast?
     @State private var settingsPath = NavigationPath()
@@ -79,14 +78,6 @@ struct ContentView: View {
                     .presentationBackgroundInteraction(.enabled)
                     .presentationCornerRadius(24)
                     .presentationDragIndicator(.visible)
-                    .tint(accentColor)
-            }
-            .sheet(isPresented: $showRecap) {
-                RecapView()
-                    .environmentObject(serverStore)
-                    .presentationDetents([.large])
-                    .presentationCornerRadius(24)
-                    .presentationBackground(Color(uiColor: .systemBackground))
                     .tint(accentColor)
             }
             .sheet(item: Binding(
@@ -184,7 +175,6 @@ struct ContentView: View {
             selectedTab = 0
             settingsPath = NavigationPath()
             showPlayer = false
-            showRecap = false
             playlistSongIds = nil
         }
         #if DEBUG
@@ -226,9 +216,6 @@ struct ContentView: View {
         case .search:
             searchResetToken += 1
             selectedTab = 4
-        case .recap:
-            selectedTab = 0
-            showRecap = true
         case .nowPlaying:
             if AudioPlayerService.shared.hasActivePlayback {
                 dismissKeyboard()

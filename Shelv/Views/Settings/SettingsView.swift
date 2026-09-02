@@ -11,7 +11,6 @@ struct SettingsView: View {
     @EnvironmentObject var serverStore: ServerStore
     @AppStorage("appAppearance") private var appAppearance = "system"
     @AppStorage("themeColor") private var themeColorName = "violet"
-    @AppStorage("recapEnabled") private var recapEnabled = false
     @Environment(\.openURL) private var openURL
 
     @State private var showAddServer = false
@@ -20,7 +19,6 @@ struct SettingsView: View {
     @State private var showDeleteConfirm = false
     @State private var serverToDelete: SubsonicServer?
     @State private var showCredentialStorageError = false
-    @State private var showAboutRecap = false
     @Binding private var path: NavigationPath
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
@@ -65,39 +63,6 @@ struct SettingsView: View {
                     .id(themeColorName)
                 }
 
-                Section(String(localized: "recap")) {
-                    Toggle(isOn: $recapEnabled) {
-                        Label { Text(String(localized: "recap")) } icon: {
-                            Image(systemName: "calendar.badge.clock").foregroundStyle(accentColor)
-                        }
-                    }
-                    .tint(accentColor)
-                    .onChange(of: recapEnabled) { _, enabled in
-                        guard enabled, let server = serverStore.activeServer else { return }
-                        Task { await RecapStore.shared.setup(serverId: server.stableId) }
-                    }
-
-                    if recapEnabled {
-                        Button {
-                            showAboutRecap = true
-                        } label: {
-                            Label {
-                                Text(String(localized: "about")).foregroundStyle(.primary)
-                            } icon: {
-                                Image(systemName: "info.circle").foregroundStyle(accentColor)
-                            }
-                        }
-
-                        NavigationLink(destination:
-                            RecapSettingsView()
-                                .environmentObject(serverStore)
-                        ) {
-                            Label { Text(String(localized: "settings")) } icon: {
-                                Image(systemName: "slider.horizontal.3").foregroundStyle(accentColor)
-                            }
-                        }
-                    }
-                }
 
                 Section {
                     NavigationLink(value: SettingsRoute.uiCustomizations) {
@@ -250,9 +215,6 @@ struct SettingsView: View {
                 case .uiCustomizations:
                     UICustomizationsSettingsView()
                 }
-            }
-            .sheet(isPresented: $showAboutRecap) {
-                RecapAboutSheet()
             }
             .sheet(isPresented: $showAddServer) {
                 AddServerView()
@@ -961,39 +923,6 @@ private struct SwipeActionIcon: View {
             .symbolRenderingMode(.monochrome)
             .foregroundStyle(action.displayColor(accentColor: accentColor))
             .frame(width: size, height: 24, alignment: .center)
-    }
-}
-
-private struct RecapAboutSheet: View {
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                RecapAboutContent()
-                    .padding()
-            }
-            .navigationTitle(String(localized: "recap"))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(String(localized: "done")) { dismiss() }
-                }
-            }
-        }
-        .presentationDetents([.medium, .large])
-    }
-}
-
-private struct RecapAboutContent: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(String(localized: "recap_about_server_playlists"))
-            Text(String(localized: "recap_about_icloud_recommended"))
-            Text(String(localized: "recap_about_icloud_benefits"))
-        }
-        .font(.body)
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

@@ -123,7 +123,7 @@ final class PlayTracker {
               trackedDuration > 0
         else { return }
 
-        let configuredPercent = Double(UserDefaults.standard.integer(forKey: "recapThreshold"))
+        let configuredPercent = Double(UserDefaults.standard.integer(forKey: RemovedFeatureCleanup.playThresholdKey))
         let threshold = configuredPercent > 0 ? configuredPercent / 100.0 : 0.3
         guard playedSeconds / trackedDuration >= threshold else { return }
 

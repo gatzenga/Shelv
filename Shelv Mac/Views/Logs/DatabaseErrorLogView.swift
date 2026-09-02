@@ -1,7 +1,8 @@
 import SwiftUI
 
-struct RecapDBLogView: View {
+struct DatabaseErrorLogView: View {
     @StateObject private var dbLog = DBErrorLog.shared
+    @Environment(\.dismiss) private var dismiss
     @State private var segment: LogTab = .playLog
 
     enum LogTab: String, CaseIterable {
@@ -29,8 +30,9 @@ struct RecapDBLogView: View {
                 }
             }
             .pickerStyle(.segmented)
-            .padding(.horizontal)
-            .padding(.vertical, 12)
+            .padding(.horizontal, 20)
+            .padding(.top, 16)
+            .padding(.bottom, 12)
 
             if entries.isEmpty {
                 VStack(spacing: 8) {
@@ -39,7 +41,6 @@ struct RecapDBLogView: View {
                         .foregroundStyle(.tertiary)
                     Text(String(localized: "no_database_errors"))
                         .foregroundStyle(.secondary)
-                        .font(.subheadline)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -48,18 +49,21 @@ struct RecapDBLogView: View {
                         ForEach(Array(entries.enumerated()), id: \.offset) { _, entry in
                             Text(entry)
                                 .font(.system(.caption2, design: .monospaced))
-                                .foregroundStyle(.primary)
                                 .textSelection(.enabled)
                                 .fixedSize(horizontal: false, vertical: true)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 12)
+                    .padding(12)
                 }
             }
         }
+        .frame(width: 640, height: 520)
         .navigationTitle(String(localized: "database_errors"))
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button(String(localized: "done")) { dismiss() }
+            }
+        }
     }
 }

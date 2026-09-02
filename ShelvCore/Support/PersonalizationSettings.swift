@@ -346,11 +346,7 @@ nonisolated enum PersonalizationMiniPlayerStyle: String, CaseIterable {
 
 nonisolated enum ShelvDefaultSettings {
     static let values: [String: Any] = [
-        "recapEnabled": false,
-        "recapWeeklyEnabled": true,
-        "recapMonthlyEnabled": true,
-        "recapYearlyEnabled": true,
-        "recapThreshold": 30,
+        RemovedFeatureCleanup.playThresholdKey: 30,
         "enableDownloads": true,
         "offlineModeEnabled": false,
         "preventSleepDuringDownloads": false,
@@ -375,7 +371,6 @@ nonisolated enum ShelvDefaultSettings {
         "infinityMixAheadCount": 1,
         "iCloudSyncEnabled": false,
         "iCloudSyncPlayHistoryEnabled": true,
-        "iCloudSyncRecapEnabled": true,
         "iCloudSyncLyricsServerEnabled": true,
         "iCloudSyncRadioStationsEnabled": true,
         "iCloudSyncUICustomizationsEnabled": true,

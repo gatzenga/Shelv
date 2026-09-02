@@ -25,7 +25,6 @@ struct DiscoverView: View {
     @ObservedObject var downloadStore = DownloadStore.shared
     @ObservedObject private var musicLibraries = MusicLibraryStore.shared
     @AppStorage("themeColor") private var themeColorName: String = "violet"
-    @AppStorage("recapEnabled") private var recapEnabled = false
     @AppStorage(PersonalizationPreferenceKey.showDiscoverInsights) private var showDiscoverInsights = true
     @AppStorage(PersonalizationPreferenceKey.showSmartMixNewest) private var showSmartMixNewest = true
     @AppStorage(PersonalizationPreferenceKey.showSmartMixFrequent) private var showSmartMixFrequent = true
@@ -105,7 +104,7 @@ struct DiscoverView: View {
     }
 
     private var hasLeadingToolbarActions: Bool {
-        recapEnabled || showDiscoverInsights
+        showDiscoverInsights
     }
 
     @ViewBuilder
@@ -128,7 +127,6 @@ struct DiscoverView: View {
             .navigationTitle(String(localized: "discover"))
             .toolbar {
                 ToolbarItem(placement: .automatic) {
-                    OfflineRecapToolbarItem()
                 }
                 ToolbarItem(placement: .primaryAction) {
                     ThemePickerButton()
@@ -255,11 +253,6 @@ struct DiscoverView: View {
         }
         .navigationTitle(String(localized: "discover"))
         .toolbar {
-            if recapEnabled {
-                ToolbarItem(placement: .automatic) {
-                    RecapToolbarButton()
-                }
-            }
             if showDiscoverInsights {
                 ToolbarItem(placement: .automatic) {
                     InsightsToolbarButton()
@@ -1037,21 +1030,6 @@ struct InsightsToolbarButton: View {
     }
 }
 
-struct RecapToolbarButton: View {
-    @Environment(\.openWindow) private var openWindow
-    @Environment(\.themeColor) private var themeColor
-
-    var body: some View {
-        Button {
-            openWindow(id: "recap")
-        } label: {
-            Image(systemName: "calendar.badge.clock")
-                .foregroundStyle(themeColor)
-        }
-        .help(String(localized: "recap"))
-    }
-}
-
 struct ThemePickerButton: View {
     @AppStorage("themeColor") private var themeColorName: String = "violet"
     @State private var showPicker = false
@@ -1104,18 +1082,6 @@ struct ThemePickerPopover: View {
         }
         .padding(16)
         .frame(width: 240)
-    }
-}
-
-private struct OfflineRecapToolbarItem: View {
-    @ObservedObject private var downloadStore = DownloadStore.shared
-    @ObservedObject private var recapStore = RecapStore.shared
-    @AppStorage("recapEnabled") private var recapEnabled = false
-
-    var body: some View {
-        if recapEnabled && !downloadStore.downloadedPlaylistIds.isDisjoint(with: recapStore.recapPlaylistIds) {
-            RecapToolbarButton()
-        }
     }
 }
 
