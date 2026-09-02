@@ -5,6 +5,7 @@ struct PlaybackSettingsView: View {
     @AppStorage("replayGainEnabled") private var replayGainEnabled = false
     @AppStorage("replayGainMode") private var replayGainMode = "track"
     @AppStorage(RemovedFeatureCleanup.playThresholdKey) private var playThreshold = 30
+    @ObservedObject private var ckStatus = CloudKitSyncService.shared.status
     // Apple TV kennt kein Mobilfunk → ein einziges (WLAN/Ethernet-)Profil reicht.
     @AppStorage("transcodingEnabled") private var transcodingEnabled = false
     @AppStorage("transcodingWifiCodec") private var streamCodec = "raw"
@@ -99,6 +100,13 @@ struct PlaybackSettingsView: View {
                     selection: $playThreshold,
                     options: playThresholdOptions
                 )
+                HStack {
+                    Text(String(localized: "pending_scrobbles"))
+                    Spacer()
+                    Text("\(ckStatus.pendingScrobbles)")
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
             }
 
             Section(String(localized: "lyrics")) {
@@ -173,6 +181,14 @@ struct PlaybackSettingsView: View {
                 customLrcLibBaseURL = draftLrcLibBaseURL
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                 Task { await CloudKitSyncService.shared.recordLyricsServerSettingsChange() }
+            }
+        }
+        // Die Warteschlange leert sich ohne Zutun, sobald wieder gesendet werden
+        // darf. Solange die Seite offen ist, wird der Stand deshalb nachgeführt.
+        .task {
+            while !Task.isCancelled {
+                await CloudKitSyncService.shared.updatePendingCounts()
+                try? await Task.sleep(for: .seconds(2))
             }
         }
     }

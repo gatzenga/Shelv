@@ -7,6 +7,7 @@ struct PlaybackSettingsView: View {
     @AppStorage("replayGainEnabled") private var replayGainEnabled = false
     @AppStorage("replayGainMode") private var replayGainMode = "track"
     @AppStorage(RemovedFeatureCleanup.playThresholdKey) private var playThreshold = 30
+    @ObservedObject private var ckStatus = CloudKitSyncService.shared.status
     @AppStorage("queueSyncMode") private var queueSyncMode = "off"
     @AppStorage("infinityMixAheadCount") private var infinityMixAheadCount = 1
     @AppStorage("infinityMixSeededEnabled") private var infinityMixSeededEnabled = true
@@ -76,6 +77,16 @@ struct PlaybackSettingsView: View {
                     Label { Text(String(localized: "count_from")) } icon: {
                         Image(systemName: "checkmark.seal").foregroundStyle(accentColor)
                     }
+                }
+
+                HStack {
+                    Label { Text(String(localized: "pending_scrobbles")) } icon: {
+                        Image(systemName: "clock.arrow.circlepath").foregroundStyle(accentColor)
+                    }
+                    Spacer()
+                    Text("\(ckStatus.pendingScrobbles)")
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
                 }
             }
 
@@ -175,5 +186,13 @@ struct PlaybackSettingsView: View {
         .scrollIndicators(.hidden)
         .navigationTitle(String(localized: "playback"))
         .navigationBarTitleDisplayMode(.inline)
+        // Die Warteschlange leert sich ohne Zutun, sobald wieder gesendet werden
+        // darf. Solange die Seite offen ist, wird der Stand deshalb nachgeführt.
+        .task {
+            while !Task.isCancelled {
+                await CloudKitSyncService.shared.updatePendingCounts()
+                try? await Task.sleep(for: .seconds(2))
+            }
+        }
     }
 }
