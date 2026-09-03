@@ -172,6 +172,8 @@ struct ArtistAllAlbumsView: View {
                         }
                     }
                     .padding()
+                    // Sonst verdeckt der Mini-Player die letzte Reihe.
+                    PlayerBottomSpacer()
                 }
             } else {
                 List {
@@ -197,6 +199,9 @@ struct ArtistAllAlbumsView: View {
                         }
                         .listRowSeparator(index == 0 ? .hidden : .visible, edges: .top)
                     }
+                    PlayerBottomSpacer()
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
                 }
                 .listStyle(.plain)
             }
