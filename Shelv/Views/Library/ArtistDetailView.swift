@@ -356,6 +356,29 @@ struct ArtistDetailView: View {
         .disabled(isLoading)
     }
 
+    /// Actions for the Top Songs shelf as a whole. The individual rows already
+    /// expose Play Next / Add to Queue through their own "..." button, but the
+    /// whole ranked set can only be queued from here: long-pressing the
+    /// "Top Songs" header reveals this menu.
+    @ViewBuilder
+    private var topSongsHeaderMenu: some View {
+        Button {
+            haptic()
+            player.addPlayNext(topSongs)
+            currentToast = ShelveToast(message: String(localized: "plays_next"))
+        } label: {
+            Label(String(localized: "play_next"), systemImage: "text.insert")
+        }
+
+        Button {
+            haptic()
+            player.addToQueue(topSongs)
+            currentToast = ShelveToast(message: String(localized: "added_to_queue"))
+        } label: {
+            Label(String(localized: "add_to_queue"), systemImage: "text.badge.plus")
+        }
+    }
+
     /// A real List, not a ScrollView: Top Songs needs genuine List rows for
     /// its swipe actions and long-press menu to render correctly, the same
     /// way they already do for album titles. The album shelves keep their own
@@ -419,6 +442,10 @@ struct ArtistDetailView: View {
                         Spacer()
                     }
                     .padding(.leading, 0)
+                    .contentShape(Rectangle())
+                    .contextMenu {
+                        topSongsHeaderMenu
+                    }
                 }
             }
 
