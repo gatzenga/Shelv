@@ -19,6 +19,10 @@ struct SettingsView: View {
     @State private var showDeleteConfirm = false
     @State private var serverToDelete: SubsonicServer?
     @State private var showCredentialStorageError = false
+    /// Hidden easter egg: tapping the Info section's version row a few times
+    /// in a row reveals a small thank-you message.
+    @State private var showHiddenEasterEgg = false
+    @State private var versionTapCount = 0
     @Binding private var path: NavigationPath
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
@@ -197,6 +201,14 @@ struct SettingsView: View {
                     let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "–"
                     let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "–"
                     Text("Shelv \(version) (\(build))")
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            versionTapCount += 1
+                            if versionTapCount >= 5 {
+                                versionTapCount = 0
+                                showHiddenEasterEgg = true
+                            }
+                        }
                     Text(String(localized: "shelv_is_an_unofficial_navidrome_client_and_has_no"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -236,6 +248,9 @@ struct SettingsView: View {
                     .environmentObject(LibraryStore.shared)
                     .tint(accentColor)
                 }
+            }
+            .alert("Coole App!", isPresented: $showHiddenEasterEgg) {
+                Button("OK", role: .cancel) {}
             }
             .alert(
                 String(localized: "delete_server"),
