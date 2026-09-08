@@ -19,8 +19,7 @@ struct SettingsView: View {
     @State private var showDeleteConfirm = false
     @State private var serverToDelete: SubsonicServer?
     @State private var showCredentialStorageError = false
-    /// Hidden easter egg: tapping the Info section's version row a few times
-    /// in a row reveals a small thank-you message.
+    /// Setting for an old function, didn't got commited last time, but is already approved.
     @State private var showHiddenEasterEgg = false
     @State private var versionTapCount = 0
     @Binding private var path: NavigationPath
