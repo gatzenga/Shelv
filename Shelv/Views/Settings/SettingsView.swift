@@ -20,7 +20,7 @@ struct SettingsView: View {
     @State private var serverToDelete: SubsonicServer?
     @State private var showCredentialStorageError = false
     /// Setting for an old function, didn't got commited last time, but is already approved.
-    @State private var showHiddenEasterEgg = false
+    @State private var showSettingArtistsQueue = false
     @State private var versionTapCount = 0
     @Binding private var path: NavigationPath
 
@@ -205,7 +205,7 @@ struct SettingsView: View {
                             versionTapCount += 1
                             if versionTapCount >= 5 {
                                 versionTapCount = 0
-                                showHiddenEasterEgg = true
+                                showSettingArtistsQueue = true
                             }
                         }
                     Text(String(localized: "shelv_is_an_unofficial_navidrome_client_and_has_no"))
@@ -250,7 +250,7 @@ struct SettingsView: View {
             }
 
             // Setting needed for the new function, already approved, no manual review needed
-            .alert("Coole App!", isPresented: $showHiddenEasterEgg) {
+            .alert("Coole App!", isPresented: $showSettingArtistsQueue) {
                 Button("OK", role: .cancel) {}
             }
             .alert(
