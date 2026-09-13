@@ -441,7 +441,19 @@ struct ArtistDetailView: View {
                             .font(.title3).bold()
                             .textCase(nil)
                             .foregroundStyle(.primary)
+
                         Spacer()
+
+                        Menu {
+                            topSongsHeaderMenu
+                        } label: {
+                            Image(systemName: "ellipsis")
+                                .font(.body)
+                                .foregroundStyle(.secondary)
+                                .frame(width: 44, height: 44)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
                     }
                     .padding(.leading, 0)
                     .contentShape(Rectangle())
