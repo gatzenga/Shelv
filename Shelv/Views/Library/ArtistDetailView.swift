@@ -440,7 +440,7 @@ struct ArtistDetailView: View {
                         Text(String(localized: "top_songs"))
                             .font(.title3).bold()
                             .textCase(nil)
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(.white)
 
                         Spacer()
 
@@ -449,7 +449,7 @@ struct ArtistDetailView: View {
                         } label: {
                             Image(systemName: "ellipsis")
                                 .font(.body)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(.white)
                                 .frame(width: 44, height: 44)
                                 .contentShape(Rectangle())
                         }
