@@ -209,8 +209,13 @@ struct AlbumContextMenuModifier: ViewModifier {
 }
 
 extension View {
-    func albumContextMenu(_ album: Album, showPreview: Bool = true) -> some View {
-        modifier(AlbumContextMenuModifier(album: album, showPreview: showPreview))
+    @ViewBuilder
+    func albumContextMenu(_ album: Album, showPreview: Bool = true, isEnabled: Bool = true) -> some View {
+        if isEnabled {
+            modifier(AlbumContextMenuModifier(album: album, showPreview: showPreview))
+        } else {
+            self
+        }
     }
 }
 

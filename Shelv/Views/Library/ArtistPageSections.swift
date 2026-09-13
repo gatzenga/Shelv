@@ -112,13 +112,17 @@ struct ArtistReleaseShelf: View {
                                 album: album,
                                 personalization: personalization,
                                 showArtist: false,
-                                showYear: true
+                                showYear: true,
+                                showsContextMenu: false
                             )
                             .equatable()
                             .frame(width: itemWidth)
                         }
                         .buttonStyle(.plain)
-                        .albumContextMenu(album, showPreview: false)
+                        // No per-card context menu here on purpose. The shelf is a
+                        // single List row, so a long press lifts the whole row and
+                        // opens the first card's menu whatever card was pressed.
+                        // The album's own page carries these actions instead.
                     }
                 }
                 .padding(.horizontal)
@@ -198,6 +202,7 @@ struct ArtistAllAlbumsView: View {
                             .padding(.vertical, 4)
                         }
                         .listRowSeparator(index == 0 ? .hidden : .visible, edges: .top)
+                        .albumContextMenu(album)
                     }
                     PlayerBottomSpacer()
                         .listRowBackground(Color.clear)

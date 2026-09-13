@@ -6,6 +6,9 @@ struct AlbumCardView: View, Equatable {
     var fixedSize: CGFloat? = nil
     var showArtist: Bool = true
     var showYear: Bool = false
+    /// Off where the card sits inside a List row that holds a whole shelf: UIKit
+    /// lifts the entire row and opens the first card's menu whatever was pressed.
+    var showsContextMenu: Bool = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -42,7 +45,7 @@ struct AlbumCardView: View, Equatable {
             }
         }
         .frame(width: fixedSize)
-        .albumContextMenu(album)
+        .albumContextMenu(album, isEnabled: showsContextMenu)
         .environment(\.personalizationSwipeConfiguration, personalization)
     }
 }
