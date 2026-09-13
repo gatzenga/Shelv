@@ -190,6 +190,7 @@
 "database_cleanup_2" = "Clean up database?";
 "clean_up" = "Clean up";
 "checks_every_song_against_the_server_and_permanent" = "Checks every song in the log against the server. If the song still exists, its title/artist/album are refreshed; if its ID changed but a title+artist+album match is found, it's repaired in place. Only removed — locally and in iCloud — if neither the ID nor a metadata match resolves. Temporary network errors and ambiguous matches never delete anything.";
+"checking" = "Checking…";
 "checking_count_format" = "Checking %d/%d…";
 "cleaning_up" = "Cleaning up…";
 "no_entries_to_check" = "No entries to check";

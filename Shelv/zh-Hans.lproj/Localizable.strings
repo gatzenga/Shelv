@@ -190,6 +190,7 @@
 "database_cleanup_2" = "清理数据库？";
 "clean_up" = "清理";
 "checks_every_song_against_the_server_and_permanent" = "对照服务器检查日志中的每首歌曲。若歌曲仍存在，则更新标题/艺术家/专辑；若 ID 已变但按标题+艺术家+专辑找到匹配，则原位修复。仅当 ID 和元数据匹配均无法解析时——才会本地和 iCloud 一并移除。临时网络错误和有歧义的匹配绝不会删除任何内容。";
+"checking" = "正在检查…";
 "checking_count_format" = "正在检查 %d/%d…";
 "cleaning_up" = "正在清理…";
 "no_entries_to_check" = "没有可检查的条目";

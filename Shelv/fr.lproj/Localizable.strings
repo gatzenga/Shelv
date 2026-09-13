@@ -190,6 +190,7 @@
 "database_cleanup_2" = "Nettoyer la base ?";
 "clean_up" = "Nettoyer";
 "checks_every_song_against_the_server_and_permanent" = "Chaque morceau du journal est vérifié auprès du serveur. S’il existe toujours, son titre, son artiste et son album sont rafraîchis ; si son identifiant a changé mais qu’une correspondance titre + artiste + album est trouvée, la fiche est réparée sur place. Un morceau n’est supprimé, localement et dans iCloud, que si ni l’identifiant ni les métadonnées ne permettent de le retrouver. Une erreur réseau passagère ou une correspondance ambiguë ne supprime jamais rien.";
+"checking" = "Vérification…";
 "checking_count_format" = "Vérification %d/%d…";
 "cleaning_up" = "Nettoyage…";
 "no_entries_to_check" = "Aucune entrée à vérifier";

@@ -259,6 +259,7 @@
 "database_cleanup_2" = "Datenbank bereinigen?";
 "clean_up" = "Bereinigen";
 "checks_every_song_against_the_server_and_permanent" = "Prüft jeden Song im Log gegen den Server. Existiert er noch, werden Titel/Artist/Album aktualisiert; hat sich nur die ID geändert aber ein Titel+Artist+Album-Treffer gefunden, wird er repariert. Gelöscht wird — lokal und in iCloud — nur, wenn weder die ID noch ein Metadaten-Treffer auflöst. Vorübergehende Netzwerkfehler und mehrdeutige Treffer löschen nie etwas.";
+"checking" = "Prüfe…";
 "checking_count_format" = "Prüfe %d/%d…";
 "cleaning_up" = "Bereinige…";
 "no_entries_to_check" = "Keine Einträge zu prüfen";
