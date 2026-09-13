@@ -571,7 +571,7 @@ actor CloudKitSyncService {
         let monitor = NWPathMonitor()
         monitor.pathUpdateHandler = { path in
             guard path.status == .satisfied else { return }
-            Task(priority: .utility) {
+            Task {
                 await BackgroundWorkCoordinator.shared.run(.cloudSync) {
                     await CloudKitSyncService.shared.syncNow()
                 }

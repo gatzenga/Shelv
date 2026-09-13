@@ -16,7 +16,7 @@ final class AudioPlayerLyricsAutoFetcher {
               let serverId = SubsonicAPIService.shared.activeServer?.id.uuidString
         else { return }
 
-        task = Task(priority: .utility) { [song, serverId] in
+        task = Task { [song, serverId] in
             await LyricsService.shared.setup()
             guard !Task.isCancelled else { return }
             _ = await LyricsService.shared.fetchAndSave(song: song, serverId: serverId)

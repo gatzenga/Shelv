@@ -176,7 +176,7 @@ nonisolated enum LocalOfflinePlaylistCatalog {
 nonisolated enum LocalDownloadCatalog {
     static func load(serverId: String) async -> LocalDownloadSnapshot {
         let rawRecords = await DownloadDatabase.shared.allRecords(serverId: serverId)
-        let result = await Task.detached(priority: .utility) {
+        let result = await Task.detached {
             () -> (records: [DownloadRecord], updates: [(DownloadRecord, String)], deletions: [DownloadRecord]) in
             var records: [DownloadRecord] = []
             var updates: [(DownloadRecord, String)] = []
@@ -229,7 +229,7 @@ nonisolated enum LocalDownloadCatalog {
         // authoritative rows so the returned snapshot and in-memory index can
         // never overwrite that fresher record with the original scan.
         let currentRecords = await DownloadDatabase.shared.allRecords(serverId: serverId)
-        let validRecords = await Task.detached(priority: .utility) {
+        let validRecords = await Task.detached {
             currentRecords.filter { FileManager.default.fileExists(atPath: $0.filePath) }
         }.value
         let paths = Dictionary(

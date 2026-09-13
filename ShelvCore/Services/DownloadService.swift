@@ -2160,7 +2160,7 @@ private nonisolated final class DownloadSessionCoordinator: NSObject, URLSession
         super.init()
         progressCoalescer.setEmit { [weak self] samples in
             guard let service = self?.service else { return }
-            Task.detached(priority: .utility) {
+            Task.detached {
                 await service.handleProgress(samples)
             }
         }

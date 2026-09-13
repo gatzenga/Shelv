@@ -43,7 +43,7 @@ actor BackgroundWorkCoordinator {
                 )
             }
         } onCancel: {
-            Task.detached(priority: .utility) {
+            Task.detached {
                 await self.cancelWaiter(waiterID)
             }
         }
@@ -70,7 +70,7 @@ actor BackgroundWorkCoordinator {
 
         guard !isDraining else { return }
         isDraining = true
-        Task.detached(priority: .utility) { [self] in
+        Task.detached { [self] in
             await drain()
         }
     }
