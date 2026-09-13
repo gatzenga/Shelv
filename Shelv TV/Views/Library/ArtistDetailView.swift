@@ -165,14 +165,43 @@ struct ArtistDetailView: View {
         count: 4
     )
 
+    /// Actions for the Top Songs shelf as a whole, the same set the iPhone and
+    /// the Mac offer behind the "..." in their own Top Songs header. The rows
+    /// play a single song; the whole ranked set can only be queued from here.
+    @ViewBuilder
+    private var topSongsHeaderMenu: some View {
+        Button {
+            player.addPlayNext(topSongs)
+        } label: {
+            Label(String(localized: "play_next"), systemImage: "text.insert")
+        }
+
+        Button {
+            player.addToQueue(topSongs)
+        } label: {
+            Label(String(localized: "add_to_queue"), systemImage: "text.badge.plus")
+        }
+    }
+
     /// Same ranking as iOS/macOS: two columns of four, spanning the screen's
     /// full, fixed 16:9 width instead of a fixed card width, since a TV
     /// screen doesn't resize, so there's no case where this needs to scroll.
     private var topSongsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(String(localized: "top_songs"))
-                .font(.title3).bold()
-                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack {
+                Text(String(localized: "top_songs"))
+                    .font(.title3).bold()
+
+                Spacer()
+
+                Menu {
+                    topSongsHeaderMenu
+                } label: {
+                    Image(systemName: "ellipsis")
+                }
+                .disabled(topSongs.isEmpty)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
             GeometryReader { geo in
                 let columnWidth = (geo.size.width - Self.topSongsColumnSpacing) / 2
                 LazyHGrid(rows: Self.topSongsGridRows, spacing: Self.topSongsColumnSpacing) {

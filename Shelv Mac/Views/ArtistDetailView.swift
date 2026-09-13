@@ -452,6 +452,26 @@ struct ArtistDetailView: View {
         max(1, Int(ceil(Double(vm.topSongs.count) / Double(Self.topSongsStep))))
     }
 
+    /// Actions for the Top Songs shelf as a whole, the same set the iPhone
+    /// offers behind the "..." in its own Top Songs header. The rows queue a
+    /// single song; the whole ranked set can only be queued from here.
+    @ViewBuilder
+    private var topSongsHeaderMenu: some View {
+        Button {
+            appState.player.addPlayNext(vm.topSongs)
+            NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_play_next"))
+        } label: {
+            Label(String(localized: "play_next"), systemImage: "text.insert")
+        }
+
+        Button {
+            appState.player.addToQueue(vm.topSongs)
+            NotificationCenter.default.post(name: .showToast, object: String(localized: "added_to_queue"))
+        } label: {
+            Label(String(localized: "add_to_queue"), systemImage: "text.badge.plus")
+        }
+    }
+
     private var topSongsSection: some View {
         GeometryReader { geo in
             let columnGaps = CGFloat(max(0, topSongsColumnCount - 1)) * 24
@@ -480,6 +500,19 @@ struct ArtistDetailView: View {
                             }
                         }
                     }
+
+                    Menu {
+                        topSongsHeaderMenu
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+                            .contentShape(Rectangle())
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .disabled(vm.topSongs.isEmpty)
                 }
                 .padding(.horizontal, 20)
 
