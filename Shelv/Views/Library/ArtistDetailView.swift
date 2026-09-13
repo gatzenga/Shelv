@@ -396,70 +396,72 @@ struct ArtistDetailView: View {
 
             if showsTopSongs {
                 Section {
-                    ScrollView(.horizontal) {
-                        LazyHGrid(rows: Self.topSongsGridRows, spacing: 24) {
-                            ForEach(Array(topSongs.enumerated()), id: \.element.id) { index, song in
-                                ArtistTopSongCell(
-                                    rank: index + 1,
-                                    song: song,
-                                    accentColor: accentColor,
-                                    isOffline: offlineMode.isOffline,
-                                    isFavorite: libraryStore.isSongStarred(song),
-                                    onPlay: {
-                                        player.play(songs: topSongs, startIndex: index)
-                                    },
-                                    onFavorite: {
-                                        haptic(.medium)
-                                        Task { await libraryStore.toggleStarSong(song) }
-                                    },
-                                    onAddToPlaylist: {
-                                        songPlaylistIds = SongPlaylistIds(ids: [song.id])
-                                    },
-                                    onPlayNext: {
-                                        haptic()
-                                        player.addPlayNext(song)
-                                        currentToast = ShelveToast(message: String(localized: "plays_next"))
-                                    },
-                                    onAddToQueue: {
-                                        haptic()
-                                        player.addToQueue(song)
-                                        currentToast = ShelveToast(message: String(localized: "added_to_queue"))
-                                    }
-                                )
-                                .frame(width: 300)
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Text(String(localized: "top_songs"))
+                                .font(.title3).bold()
+                                .textCase(nil)
+                                .foregroundStyle(.white)
+
+                            Spacer()
+
+                            Menu {
+                                topSongsHeaderMenu
+                            } label: {
+                                Image(systemName: "ellipsis")
+                                    .font(.body)
+                                    .foregroundStyle(.white)
+                                    .frame(width: 44, height: 44)
+                                    .contentShape(Rectangle())
                             }
+                            .buttonStyle(.plain)
                         }
                         .padding(.horizontal)
+                        .contentShape(Rectangle())
+                        .contextMenu {
+                            topSongsHeaderMenu
+                        }
+
+                        ScrollView(.horizontal) {
+                            LazyHGrid(rows: Self.topSongsGridRows, spacing: 24) {
+                                ForEach(Array(topSongs.enumerated()), id: \.element.id) { index, song in
+                                    ArtistTopSongCell(
+                                        rank: index + 1,
+                                        song: song,
+                                        accentColor: accentColor,
+                                        isOffline: offlineMode.isOffline,
+                                        isFavorite: libraryStore.isSongStarred(song),
+                                        onPlay: {
+                                            player.play(songs: topSongs, startIndex: index)
+                                        },
+                                        onFavorite: {
+                                            haptic(.medium)
+                                            Task { await libraryStore.toggleStarSong(song) }
+                                        },
+                                        onAddToPlaylist: {
+                                            songPlaylistIds = SongPlaylistIds(ids: [song.id])
+                                        },
+                                        onPlayNext: {
+                                            haptic()
+                                            player.addPlayNext(song)
+                                            currentToast = ShelveToast(message: String(localized: "plays_next"))
+                                        },
+                                        onAddToQueue: {
+                                            haptic()
+                                            player.addToQueue(song)
+                                            currentToast = ShelveToast(message: String(localized: "added_to_queue"))
+                                        }
+                                    )
+                                    .frame(width: 300)
+                                }
+                            }
+                            .padding(.horizontal)
+                        }
+                        .scrollIndicators(.hidden)
                     }
-                    .scrollIndicators(.hidden)
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
-                } header: {
-                    HStack {
-                        Text(String(localized: "top_songs"))
-                            .font(.title3).bold()
-                            .textCase(nil)
-                            .foregroundStyle(.white)
-
-                        Spacer()
-
-                        Menu {
-                            topSongsHeaderMenu
-                        } label: {
-                            Image(systemName: "ellipsis")
-                                .font(.body)
-                                .foregroundStyle(.white)
-                                .frame(width: 44, height: 44)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.leading, 0)
-                    .contentShape(Rectangle())
-                    .contextMenu {
-                        topSongsHeaderMenu
-                    }
                 }
             }
 
@@ -517,19 +519,21 @@ struct ArtistDetailView: View {
 
             if showsSimilarArtists {
                 Section {
-                    ArtistSimilarArtistsRow(artists: similarArtists)
-                        .listRowInsets(EdgeInsets())
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
-                } header: {
-                    HStack {
-                        Text(String(localized: "fans_also_like"))
-                            .font(.title3).bold()
-                            .textCase(nil)
-                            .foregroundStyle(.primary)
-                        Spacer()
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Text(String(localized: "fans_also_like"))
+                                .font(.title3).bold()
+                                .textCase(nil)
+                                .foregroundStyle(.white)
+                            Spacer()
+                        }
+                        .padding(.horizontal)
+
+                        ArtistSimilarArtistsRow(artists: similarArtists)
                     }
-                    .padding(.leading, 0)
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
                 }
             }
 
@@ -671,18 +675,21 @@ struct ArtistDetailView: View {
 
             if showsSimilarArtists {
                 Section {
-                    ArtistSimilarArtistsRow(artists: similarArtists)
-                        .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 0, trailing: 0))
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
-                } header: {
-                    HStack {
-                        Text(String(localized: "fans_also_like"))
-                            .font(.title3).bold()
-                            .textCase(nil)
-                            .foregroundStyle(.primary)
-                        Spacer()
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Text(String(localized: "fans_also_like"))
+                                .font(.title3).bold()
+                                .textCase(nil)
+                                .foregroundStyle(.white)
+                            Spacer()
+                        }
+                        .padding(.horizontal)
+
+                        ArtistSimilarArtistsRow(artists: similarArtists)
                     }
+                    .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 0, trailing: 0))
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
                 }
             }
 
