@@ -84,6 +84,15 @@ final class KeepLibraryOfflineService: ObservableObject {
 
     func prepare(serverId: String) {
         activeServerId = serverId
+
+        if DownloadIdentityRepairService.prepareScopeMigration(serverId: serverId) != nil {
+            Task {
+                await DownloadIdentityRepairService.shared.migratePendingServerScopeIfNeeded(
+                    serverId: serverId
+                )
+            }
+        }
+
         guard isEnabled(serverId: serverId) else {
             status = .inactive
             setLowStorageBannerVisible(false)
@@ -155,6 +164,32 @@ final class KeepLibraryOfflineService: ObservableObject {
             setLowStorageBannerVisible(false)
         }
         defer { checkingServerIds.remove(serverId) }
+
+        _ = DownloadIdentityRepairService.prepareScopeMigration(serverId: serverId)
+        let scopeMigrationCompleted = await DownloadIdentityRepairService.shared
+            .migratePendingServerScopeIfNeeded(serverId: serverId)
+        guard scopeMigrationCompleted else {
+            status = .failed(
+                "Offline library migration is still pending. Existing downloads were preserved and automatic re-download was stopped."
+            )
+            return
+        }
+        guard canContinueCheck(serverId: serverId) else { return }
+
+        let identityRepair = await DownloadIdentityRepairService.shared.repairLibraryIdentityIfNeeded(
+            serverId: serverId,
+            libraryAlbums: libraryAlbums
+        )
+        switch identityRepair {
+        case .unchanged, .repaired:
+            break
+        case .blocked(let unresolvedSongs, let totalSongs):
+            status = .failed(
+                "Library identity changed (\(unresolvedSongs)/\(totalSongs) downloads could not be safely matched). Existing files were preserved and automatic re-download was stopped."
+            )
+            return
+        }
+        guard canContinueCheck(serverId: serverId) else { return }
 
         let availableBytes = Self.availableDiskBytes()
         let existingPause = storagePause(serverId: serverId)
