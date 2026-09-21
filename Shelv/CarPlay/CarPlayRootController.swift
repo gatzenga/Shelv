@@ -270,7 +270,7 @@ final class CarPlayRootController: NSObject {
         nowPlaying.isUpNextButtonEnabled = !player.isRadioPlayback
         
         if player.isRadioPlayback {
-            CPNowPlayingTemplate.shared.updateNowPlayingButtons([])
+            nowPlaying.updateNowPlayingButtons([])
             return
         }
 
