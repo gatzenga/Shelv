@@ -261,18 +261,19 @@ final class CarPlayRootController: NSObject {
         
         let nowPlaying = CPNowPlayingTemplate.shared
         let song = player.currentSong
+        
         nowPlaying.isAlbumArtistButtonEnabled =
             !player.isRadioPlayback &&
             song != nil &&
             (song?.albumId != nil || song?.artistId != nil)
         
         nowPlaying.isUpNextButtonEnabled = !player.isRadioPlayback
+        
         if player.isRadioPlayback {
             CPNowPlayingTemplate.shared.updateNowPlayingButtons([])
             return
         }
 
-        let song = player.currentSong
         let starred = song.map { LibraryStore.shared.isSongStarred($0) } ?? false
 
         // Geteilte System-Buttons (immer dieselben Instanzen) + frisch gebauter Heart-Button
