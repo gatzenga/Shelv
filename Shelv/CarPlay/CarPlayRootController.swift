@@ -82,7 +82,6 @@ final class CarPlayRootController: NSObject {
 
         // FIX 4: Korrupten Player-State nach Crash sauber zurücksetzen
         let player = AudioPlayerService.shared
-        
         if player.currentSong == nil && player.currentIndex > 0 {
             player.stop()
         }
