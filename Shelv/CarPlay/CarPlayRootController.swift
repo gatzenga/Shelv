@@ -367,31 +367,24 @@ final class CarPlayRootController: NSObject {
         )
     }
 
-    private func nowPlayingArtist(for song: Song) -> Artist? {
-        if let artist = song.artists?.first {
-            return artist
-        }
-
-        guard let artistId = song.artistId,
-              let artistName = song.artist
-        else {
-            return song.albumArtists?.first
-        }
+    /// The album artist, not the track artist. On a compilation the track
+    /// artist usually isn't album artist anywhere, so their page would be
+    /// empty, while the album artist is how the server files the album.
+    private func nowPlayingArtist(for song: Song, album: Album?) -> Artist? {
+        let albumArtist = song.albumArtists?.first
+        guard let artistId = albumArtist?.id ?? album?.artistId ?? song.artistId,
+              let artistName = albumArtist?.name ?? album?.artist ?? song.displayAlbumArtist ?? song.artist
+        else { return nil }
 
         if let artist = LibraryStore.shared.artists.first(where: { $0.id == artistId }) {
             return artist
         }
-
         if let artist = DownloadStore.shared.artists
             .first(where: { $0.artistId == artistId })?
             .asArtist() {
             return artist
         }
-
-        return Artist(
-            id: artistId,
-            name: artistName
-        )
+        return albumArtist ?? Artist(id: artistId, name: artistName)
     }
 
     private func presentNowPlayingAlbumArtistActions() {
@@ -399,7 +392,7 @@ final class CarPlayRootController: NSObject {
         guard !player.isRadioPlayback, let song = player.currentSong else { return }
 
         let album = nowPlayingAlbum(for: song)
-        let artist = nowPlayingArtist(for: song)
+        let artist = nowPlayingArtist(for: song, album: album)
         guard album != nil || artist != nil else { return }
 
         var actions: [CPAlertAction] = []
