@@ -258,13 +258,22 @@ final class CarPlayRootController: NSObject {
 
     private func updateNowPlayingButtons() {
         let player = AudioPlayerService.shared
-        CPNowPlayingTemplate.shared.isUpNextButtonEnabled = !player.isRadioPlayback
+
+        let nowPlaying = CPNowPlayingTemplate.shared
+        let song = player.currentSong
+
+        nowPlaying.isAlbumArtistButtonEnabled =
+            !player.isRadioPlayback &&
+            song != nil &&
+            (song?.albumId != nil || song?.artistId != nil)
+
+        nowPlaying.isUpNextButtonEnabled = !player.isRadioPlayback
+
         if player.isRadioPlayback {
-            CPNowPlayingTemplate.shared.updateNowPlayingButtons([])
+            nowPlaying.updateNowPlayingButtons([])
             return
         }
 
-        let song = player.currentSong
         let starred = song.map { LibraryStore.shared.isSongStarred($0) } ?? false
 
         // Geteilte System-Buttons (immer dieselben Instanzen) + frisch gebauter Heart-Button
@@ -323,6 +332,106 @@ final class CarPlayRootController: NSObject {
         )
         interfaceController.presentTemplate(alert, animated: true, completion: nil)
     }
+
+    // MARK: - Album/Artist Navigation
+
+    private func nowPlayingAlbum(for song: Song) -> Album? {
+        guard let albumId = song.albumId,
+              let albumName = song.album
+        else {
+            return nil
+        }
+
+        if let album = LibraryStore.shared.albums.first(where: { $0.id == albumId }) {
+            return album
+        }
+
+        if let album = DownloadStore.shared.albums
+            .first(where: { $0.albumId == albumId })?
+            .asAlbum() {
+            return album
+        }
+
+        let albumArtist = song.albumArtists?.first
+
+        return Album(
+            id: albumId,
+            name: albumName,
+            artist: song.displayAlbumArtist
+                ?? albumArtist?.name
+                ?? song.artist,
+            artistId: albumArtist?.id
+                ?? song.artistId,
+            coverArt: song.coverArt,
+            year: song.year
+        )
+    }
+
+    private func nowPlayingArtist(for song: Song) -> Artist? {
+        if let artist = song.artists?.first {
+            return artist
+        }
+
+        guard let artistId = song.artistId,
+              let artistName = song.artist
+        else {
+            return song.albumArtists?.first
+        }
+
+        if let artist = LibraryStore.shared.artists.first(where: { $0.id == artistId }) {
+            return artist
+        }
+
+        if let artist = DownloadStore.shared.artists
+            .first(where: { $0.artistId == artistId })?
+            .asArtist() {
+            return artist
+        }
+
+        return Artist(
+            id: artistId,
+            name: artistName
+        )
+    }
+
+    private func presentNowPlayingAlbumArtistActions() {
+        let player = AudioPlayerService.shared
+        guard !player.isRadioPlayback, let song = player.currentSong else { return }
+
+        let album = nowPlayingAlbum(for: song)
+        let artist = nowPlayingArtist(for: song)
+        guard album != nil || artist != nil else { return }
+
+        var actions: [CPAlertAction] = []
+        if let album {
+            actions.append(CPAlertAction(title: String(localized: "view_album"), style: .default) { [weak self] _ in
+                self?.dismissSheet { ic in CarPlayNavigation.openAlbum(album, from: ic) }
+            })
+        }
+        if let artist {
+            actions.append(CPAlertAction(title: String(localized: "view_artist"), style: .default) { [weak self] _ in
+                self?.dismissSheet { ic in CarPlayNavigation.openArtist(artist, from: ic) }
+            })
+        }
+        actions.append(CPAlertAction(title: String(localized: "cancel"), style: .cancel) { [weak self] _ in
+            self?.dismissSheet(then: nil)
+        })
+
+        let sheet = CPActionSheetTemplate(title: nil, message: nil, actions: actions)
+        interfaceController.presentTemplate(sheet, animated: true, completion: nil)
+    }
+
+    /// Dismisses the sheet before navigating, so a push never lands underneath
+    /// a modal that is still on screen.
+    private func dismissSheet(then next: (@MainActor (CPInterfaceController) -> Void)?) {
+        Task { @MainActor in
+            let ic = self.interfaceController
+            await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+                ic.dismissTemplate(animated: true) { _, _ in cont.resume() }
+            }
+            next?(ic)
+        }
+    }
 }
 
 // MARK: - CPNowPlayingTemplateObserver
@@ -358,5 +467,11 @@ extension CarPlayRootController: CPNowPlayingTemplateObserver {
         }
     }
 
-    nonisolated func nowPlayingTemplateAlbumArtistButtonTapped(_ nowPlayingTemplate: CPNowPlayingTemplate) {}
+    nonisolated func nowPlayingTemplateAlbumArtistButtonTapped(
+        _ nowPlayingTemplate: CPNowPlayingTemplate
+    ) {
+        Task { @MainActor [weak self] in
+            self?.presentNowPlayingAlbumArtistActions()
+        }
+    }
 }
