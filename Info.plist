@@ -4,8 +4,6 @@
 <dict>
 	<key>CFBundleSpokenName</key>
 	<string>Shelf</string>
-	<key>ITSAppUsesNonExemptEncryption</key>
-	<false/>
 	<key>INAlternativeAppNames</key>
 	<array>
 		<dict>
@@ -30,16 +28,6 @@
 		<string>INMediaCategoryMusic</string>
 		<string>INMediaCategoryRadio</string>
 	</array>
-	<!-- Undocumented but required: without NSAppleMusicUsageDescription the
-	     system does not load an INPlayMediaIntent handler, even though Shelv
-	     never touches the Apple Music library. Siri answers that it cannot play
-	     anything from the app. See Apple Developer Forums thread 124605. -->
-	<key>NSAppleMusicUsageDescription</key>
-	<string>Shelv needs media access so Siri can start playback from your library.</string>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>Shelv uses your local network to connect to your Navidrome server.</string>
-	<key>NSSiriUsageDescription</key>
-	<string>Use Siri to play music from your Shelv library.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>

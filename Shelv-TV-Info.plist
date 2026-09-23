@@ -19,21 +19,11 @@
 			<string>Shells</string>
 		</dict>
 	</array>
-	<key>ITSAppUsesNonExemptEncryption</key>
-	<false/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
-	<!-- Undocumented but required: without NSAppleMusicUsageDescription the Siri
-	     extension handling INPlayMediaIntent is not loaded at all. -->
-	<key>NSAppleMusicUsageDescription</key>
-	<string>Shelv needs media access so Siri can start playback from your library.</string>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>Shelv uses your local network to connect to your Navidrome server.</string>
-	<key>NSSiriUsageDescription</key>
-	<string>Shelv uses Siri to find and play music from your media server.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>

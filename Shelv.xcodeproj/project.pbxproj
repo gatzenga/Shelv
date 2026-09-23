@@ -9,11 +9,14 @@
 /* Begin PBXBuildFile section */
 		4B666BEAD970D72DFCFF9C7E /* ShelvCore/Services/RadioStationChangeLogic.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8C9F16F5098EE7158A393F2 /* ShelvCore/Services/RadioStationChangeLogic.swift */; };
 		4C9CE80450C542811BFC06B9 /* ShelvCore/Services/ArtistTopSongsRanking.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2D3956FCB8E5BA0EA7B365B /* ShelvCore/Services/ArtistTopSongsRanking.swift */; };
-		BBF091A70FDE00000000C0DE /* ShelvCore/Services/ArtistPlayOrder.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAF091A70FDE00000000C0DE /* ShelvCore/Services/ArtistPlayOrder.swift */; };
 		54755D0F4F7624D1CB2AFAA0 /* ShelvCore/Services/RemoteStreamFailureRetryPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = D76D0722C024A55F5646646B /* ShelvCore/Services/RemoteStreamFailureRetryPolicy.swift */; };
 		767C48F98385493A929D3CF5 /* ShelvCore/Services/PlaylistDuplicateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7032627BABC540CC8752182E /* ShelvCore/Services/PlaylistDuplicateChecker.swift */; };
 		A3BC3F4796D89CE06D73AEBA /* ShelvCore/Services/ArtistDiscography.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFBB0EAEC930A6AA93845AF6 /* ShelvCore/Services/ArtistDiscography.swift */; };
 		A6370E2FCC02E636B1CE06BB /* ShelvCore/Services/PlayLogReconciliationLogic.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EB765BFF905DC588F357EC2 /* ShelvCore/Services/PlayLogReconciliationLogic.swift */; };
+		BBF091A70FDE00000000C0DE /* ShelvCore/Services/ArtistPlayOrder.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAF091A70FDE00000000C0DE /* ShelvCore/Services/ArtistPlayOrder.swift */; };
+		BBF0B00D0000000000000000 /* ShelvCore/Support/ArtworkZoomGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAF0B00D0000000000000000 /* ShelvCore/Support/ArtworkZoomGeometry.swift */; };
+		BBF0DE1D0000000000000001 /* ShelvCore/Services/CloudKitDeletionLogic.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAF0DE1D0000000000000001 /* ShelvCore/Services/CloudKitDeletionLogic.swift */; };
+		BBF0DE1E0000000000000002 /* ShelvCore/Support/RemovedFeatureCleanup.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAF0DE1E0000000000000002 /* ShelvCore/Support/RemovedFeatureCleanup.swift */; };
 		BC10000C2FFE000000000001 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC10000D2FFE000000000001 /* GRDB */; };
 		BC1001012FFE000000000001 /* ShelvCore/Models/Album.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001112FFE000000000001 /* ShelvCore/Models/Album.swift */; };
 		BC1001022FFE000000000001 /* ShelvCore/Models/Artist.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001122FFE000000000001 /* ShelvCore/Models/Artist.swift */; };
@@ -39,10 +42,6 @@
 		BC1001302FFE000000000001 /* ShelvCore/Services/DBErrorLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001312FFE000000000001 /* ShelvCore/Services/DBErrorLog.swift */; };
 		BC1001322FFE000000000001 /* ShelvCore/Services/DownloadPayloadValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001332FFE000000000001 /* ShelvCore/Services/DownloadPayloadValidator.swift */; };
 		BC1001342FFE000000000001 /* ShelvCore/Services/PlayLogService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001352FFE000000000001 /* ShelvCore/Services/PlayLogService.swift */; };
-		BBF0DE1E0000000000000002 /* ShelvCore/Support/RemovedFeatureCleanup.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAF0DE1E0000000000000002 /* ShelvCore/Support/RemovedFeatureCleanup.swift */; };
-		BBF0DE1D0000000000000001 /* ShelvCore/Services/CloudKitDeletionLogic.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAF0DE1D0000000000000001 /* ShelvCore/Services/CloudKitDeletionLogic.swift */; };
-		AAF0DE1E0000000000000002 /* ShelvCore/Support/RemovedFeatureCleanup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Support/RemovedFeatureCleanup.swift; sourceTree = "<group>"; };
-		AAF0DE1D0000000000000001 /* ShelvCore/Services/CloudKitDeletionLogic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/CloudKitDeletionLogic.swift; sourceTree = "<group>"; };
 		BC1001382FFE000000000001 /* ShelvCore/Services/ScrobbleDeliveryCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001392FFE000000000001 /* ShelvCore/Services/ScrobbleDeliveryCoordinator.swift */; };
 		BC10013A2FFE000000000001 /* ShelvCore/Utilities/ShelvIntentSearchVocabulary.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC10013B2FFE000000000001 /* ShelvCore/Utilities/ShelvIntentSearchVocabulary.swift */; };
 		BC10013C2FFE000000000001 /* ShelvCore/Models/ShortcutPlaybackModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC10013D2FFE000000000001 /* ShelvCore/Models/ShortcutPlaybackModels.swift */; };
@@ -64,7 +63,6 @@
 		BC5A00012FFF000000000001 /* Shelv TV Siri Extension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = BC5A00032FFF000000000001 /* Shelv TV Siri Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		BC7B84A72FDB17F90058CB78 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC7B84A62FDB17F90058CB78 /* GRDB */; };
 		D65A40B16B924F709F912515 /* ShelvCore/Services/ConcurrencyLimiter.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB776033CC96417A93CA66DB /* ShelvCore/Services/ConcurrencyLimiter.swift */; };
-		BBF0B00D0000000000000000 /* ShelvCore/Support/ArtworkZoomGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAF0B00D0000000000000000 /* ShelvCore/Support/ArtworkZoomGeometry.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -101,6 +99,10 @@
 /* Begin PBXFileReference section */
 		1EB765BFF905DC588F357EC2 /* ShelvCore/Services/PlayLogReconciliationLogic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/PlayLogReconciliationLogic.swift; sourceTree = "<group>"; };
 		7032627BABC540CC8752182E /* ShelvCore/Services/PlaylistDuplicateChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/PlaylistDuplicateChecker.swift; sourceTree = "<group>"; };
+		AAF091A70FDE00000000C0DE /* ShelvCore/Services/ArtistPlayOrder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/ArtistPlayOrder.swift; sourceTree = "<group>"; };
+		AAF0B00D0000000000000000 /* ShelvCore/Support/ArtworkZoomGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Support/ArtworkZoomGeometry.swift; sourceTree = "<group>"; };
+		AAF0DE1D0000000000000001 /* ShelvCore/Services/CloudKitDeletionLogic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/CloudKitDeletionLogic.swift; sourceTree = "<group>"; };
+		AAF0DE1E0000000000000002 /* ShelvCore/Support/RemovedFeatureCleanup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Support/RemovedFeatureCleanup.swift; sourceTree = "<group>"; };
 		BC1000012FFE000000000001 /* ShelvTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ShelvTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC1001112FFE000000000001 /* ShelvCore/Models/Album.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Models/Album.swift; sourceTree = "<group>"; };
 		BC1001122FFE000000000001 /* ShelvCore/Models/Artist.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Models/Artist.swift; sourceTree = "<group>"; };
@@ -150,9 +152,7 @@
 		C8C9F16F5098EE7158A393F2 /* ShelvCore/Services/RadioStationChangeLogic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/RadioStationChangeLogic.swift; sourceTree = "<group>"; };
 		D76D0722C024A55F5646646B /* ShelvCore/Services/RemoteStreamFailureRetryPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/RemoteStreamFailureRetryPolicy.swift; sourceTree = "<group>"; };
 		DB776033CC96417A93CA66DB /* ShelvCore/Services/ConcurrencyLimiter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/ConcurrencyLimiter.swift; sourceTree = "<group>"; };
-		AAF0B00D0000000000000000 /* ShelvCore/Support/ArtworkZoomGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Support/ArtworkZoomGeometry.swift; sourceTree = "<group>"; };
 		F2D3956FCB8E5BA0EA7B365B /* ShelvCore/Services/ArtistTopSongsRanking.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/ArtistTopSongsRanking.swift; sourceTree = "<group>"; };
-		AAF091A70FDE00000000C0DE /* ShelvCore/Services/ArtistPlayOrder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/ArtistPlayOrder.swift; sourceTree = "<group>"; };
 		FFBB0EAEC930A6AA93845AF6 /* ShelvCore/Services/ArtistDiscography.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/ArtistDiscography.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -831,13 +831,17 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Shelv-TV-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Shelv;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_NSAppleMusicUsageDescription = "Shelv needs media access so Siri can start playback from your library.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Shelv uses your local network to connect to your Navidrome server.";
+				INFOPLIST_KEY_NSSiriUsageDescription = "Shelv uses Siri to find and play music from your media server.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIUserInterfaceStyle = Automatic;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.5;
+				MARKETING_VERSION = 1.6;
 				PRODUCT_BUNDLE_IDENTIFIER = ch.vkugler.Shelv;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = appletvos;
@@ -865,13 +869,17 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Shelv-TV-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = Shelv;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_NSAppleMusicUsageDescription = "Shelv needs media access so Siri can start playback from your library.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Shelv uses your local network to connect to your Navidrome server.";
+				INFOPLIST_KEY_NSSiriUsageDescription = "Shelv uses Siri to find and play music from your media server.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIUserInterfaceStyle = Automatic;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.5;
+				MARKETING_VERSION = 1.6;
 				PRODUCT_BUNDLE_IDENTIFIER = ch.vkugler.Shelv;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = appletvos;
@@ -901,7 +909,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.5;
+				MARKETING_VERSION = 1.6;
 				PRODUCT_BUNDLE_IDENTIFIER = ch.vkugler.Shelv.Siri;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = appletvos;
@@ -930,7 +938,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.5;
+				MARKETING_VERSION = 1.6;
 				PRODUCT_BUNDLE_IDENTIFIER = ch.vkugler.Shelv.Siri;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = appletvos;
@@ -980,7 +988,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.6;
-				MARKETING_VERSION = 1.5;
+				MARKETING_VERSION = 1.6;
 				PRODUCT_BUNDLE_IDENTIFIER = ch.vkugler.Shelv;
 				PRODUCT_NAME = Shelv;
 				REGISTER_APP_GROUPS = YES;
@@ -1029,7 +1037,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.6;
-				MARKETING_VERSION = 1.5;
+				MARKETING_VERSION = 1.6;
 				PRODUCT_BUNDLE_IDENTIFIER = ch.vkugler.Shelv;
 				PRODUCT_NAME = Shelv;
 				REGISTER_APP_GROUPS = YES;
@@ -1180,7 +1188,11 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Shelv;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
+				INFOPLIST_KEY_NSAppleMusicUsageDescription = "Shelv needs media access so Siri can start playback from your library.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Shelv uses your local network to connect to your Navidrome server.";
+				INFOPLIST_KEY_NSSiriUsageDescription = "Use Siri to play music from your Shelv library.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = NO;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = NO;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -1195,7 +1207,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.4;
-				MARKETING_VERSION = 1.5;
+				MARKETING_VERSION = 1.6;
 				PRODUCT_BUNDLE_IDENTIFIER = ch.vkugler.Shelv;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -1230,7 +1242,11 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Shelv;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
+				INFOPLIST_KEY_NSAppleMusicUsageDescription = "Shelv needs media access so Siri can start playback from your library.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Shelv uses your local network to connect to your Navidrome server.";
+				INFOPLIST_KEY_NSSiriUsageDescription = "Use Siri to play music from your Shelv library.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = NO;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = NO;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -1245,7 +1261,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.4;
-				MARKETING_VERSION = 1.5;
+				MARKETING_VERSION = 1.6;
 				PRODUCT_BUNDLE_IDENTIFIER = ch.vkugler.Shelv;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
