@@ -361,6 +361,7 @@
 "offline_mode" = "Offline Mode";
 "prevent_sleep_during_downloads" = "Keep Screen On During Downloads";
 "allow_cellular_downloads" = "Allow Downloads on Cellular";
+"cellular_downloads_disabled" = "Downloads on cellular are turned off";
 "max_storage" = "Max Storage";
 "delete_all_downloads" = "Delete All Downloads";
 "delete_all_downloads_2" = "Delete all downloads?";

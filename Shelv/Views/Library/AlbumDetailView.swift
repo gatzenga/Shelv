@@ -331,6 +331,10 @@ struct AlbumDetailView: View {
             if !offlineMode.isOffline {
                 Button {
                     haptic()
+                    guard !DownloadNetworkPolicy.isBlockedOnCellular else {
+                        currentToast = .cellularDownloadsDisabled
+                        return
+                    }
                     downloadStore.enqueueAlbum(album)
                     currentToast = ShelveToast(message: String(localized: "download_started"))
                 } label: {

@@ -305,6 +305,10 @@ struct PlaylistsView: View {
             Divider()
             if !offlineMode.isOffline && !isMarkedForOffline {
                 Button {
+                    guard !DownloadNetworkPolicy.isBlockedOnCellular else {
+                        currentToast = .cellularDownloadsDisabled
+                        return
+                    }
                     Task {
                         let loaded = await libraryStore.loadPlaylistDetail(id: playlist.id)
                         libraryStore.errorMessage = nil
@@ -359,6 +363,10 @@ struct PlaylistsView: View {
             haptic(); playlistToDeleteDownloads = playlist
         } else if !offlineMode.isOffline, enableDownloads {
             haptic()
+            guard !DownloadNetworkPolicy.isBlockedOnCellular else {
+                currentToast = .cellularDownloadsDisabled
+                return
+            }
             Task {
                 let loaded = await libraryStore.loadPlaylistDetail(id: playlist.id)
                 libraryStore.errorMessage = nil

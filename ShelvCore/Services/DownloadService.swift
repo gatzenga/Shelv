@@ -9,7 +9,32 @@ extension Notification.Name {
     nonisolated static let libraryArtistsLoaded = Notification.Name("shelv.libraryArtistsLoaded")
     nonisolated static let artworkIndexReady = Notification.Name("shelv.artworkIndexReady")
     nonisolated static let instantMixUnavailable = Notification.Name("shelv.instantMixUnavailable")
+    nonisolated static let downloadsBlockedOnCellular = Notification.Name("shelv.downloadsBlockedOnCellular")
     // Geteilt statt pro Plattform definiert (tvOS braucht den Namen ebenfalls).
+}
+
+// MARK: - DownloadNetworkPolicy
+
+/// iOS only. With cellular downloads turned off, nothing starts off Wi-Fi at
+/// all, rather than a download that only sits there waiting. Keep Library
+/// Offline catches up on its next check, which runs whenever the app opens.
+nonisolated enum DownloadNetworkPolicy {
+    static var isBlockedOnCellular: Bool {
+        #if os(iOS)
+        let network = NetworkStatus.shared
+        return network.hasNetwork
+            && !network.isOnWifi
+            && !UserDefaults.standard.bool(forKey: DownloadService.allowCellularDownloadsKey)
+        #else
+        return false
+        #endif
+    }
+
+    static func announceBlocked() {
+        Task { @MainActor in
+            NotificationCenter.default.post(name: .downloadsBlockedOnCellular, object: nil)
+        }
+    }
 }
 
 // MARK: - DownloadJob
@@ -685,7 +710,8 @@ actor DownloadService {
                 Task { [weak self] in
                     await self?.enqueue(
                         songs: missing,
-                        serverId: serverId
+                        serverId: serverId,
+                        userInitiated: false
                     )
                 }
             }
@@ -908,9 +934,16 @@ actor DownloadService {
         albumCoverArtIdOverride: String? = nil,
         managedAlbumMarkers: [BulkDownloadAlbumMarker] = [],
         resolvesAlbumMetadata: Bool = true,
-        requiresKeepLibraryOfflineEnabled: Bool = false
+        requiresKeepLibraryOfflineEnabled: Bool = false,
+        userInitiated: Bool = true
     ) async {
         guard await canStartDownloads() else { return }
+        if DownloadNetworkPolicy.isBlockedOnCellular {
+            if userInitiated && !requiresKeepLibraryOfflineEnabled {
+                DownloadNetworkPolicy.announceBlocked()
+            }
+            return
+        }
         for marker in managedAlbumMarkers {
             await DownloadDatabase.shared.markAlbumDownloaded(
                 id: marker.id,
@@ -1026,6 +1059,10 @@ actor DownloadService {
 
     func enqueueAlbum(album: Album, serverId: String) async {
         guard await canStartDownloads() else { return }
+        guard !DownloadNetworkPolicy.isBlockedOnCellular else {
+            DownloadNetworkPolicy.announceBlocked()
+            return
+        }
         guard let api = await currentAPI(for: serverId) else { return }
         do {
             let detail = try await api.api.getAlbum(id: album.id)
@@ -1074,6 +1111,10 @@ actor DownloadService {
 
     func enqueueArtist(artist: Artist, serverId: String) async {
         guard await canStartDownloads() else { return }
+        guard !DownloadNetworkPolicy.isBlockedOnCellular else {
+            DownloadNetworkPolicy.announceBlocked()
+            return
+        }
         guard let api = await currentAPI(for: serverId) else { return }
         do {
             let detail = try await api.api.getArtist(id: artist.id)

@@ -68,6 +68,17 @@ struct BulkDownloadSheet: View {
                               planServerID == server.id
                         else { return }
                         let stable = server.stableId
+                        // Off Wi-Fi without cellular downloads nothing starts.
+                        // Keep Library Offline still turns on and catches up
+                        // the next time the app opens on Wi-Fi.
+                        if DownloadNetworkPolicy.isBlockedOnCellular {
+                            if mode.isKeepLibraryOffline {
+                                keepOffline.setEnabled(true, serverId: stable)
+                            }
+                            DownloadNetworkPolicy.announceBlocked()
+                            dismiss()
+                            return
+                        }
                         if mode.isKeepLibraryOffline {
                             keepOffline.setEnabled(true, serverId: stable)
                             if !plan.planned.isEmpty {

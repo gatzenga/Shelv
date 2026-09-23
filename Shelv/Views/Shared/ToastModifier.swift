@@ -3,6 +3,10 @@ import SwiftUI
 struct ShelveToast: Equatable {
     let message: String
     var isError: Bool = false
+
+    static var cellularDownloadsDisabled: ShelveToast {
+        ShelveToast(message: String(localized: "cellular_downloads_disabled"), isError: true)
+    }
 }
 
 private struct ToastViewModifier: ViewModifier {

@@ -417,6 +417,10 @@ struct PlaylistDetailView: View {
         if !isMarked && !offlineMode.isOffline {
             Button {
                 haptic()
+                guard !DownloadNetworkPolicy.isBlockedOnCellular else {
+                    currentToast = .cellularDownloadsDisabled
+                    return
+                }
                 let missing = songs.filter {
                     !DownloadUIStateHub.shared.isSongDownloaded($0.id)
                 }
@@ -436,6 +440,10 @@ struct PlaylistDetailView: View {
         if isMarked && remaining > 0 && !offlineMode.isOffline {
             Button {
                 haptic()
+                guard !DownloadNetworkPolicy.isBlockedOnCellular else {
+                    currentToast = .cellularDownloadsDisabled
+                    return
+                }
                 let missing = songs.filter {
                     !DownloadUIStateHub.shared.isSongDownloaded($0.id)
                 }
