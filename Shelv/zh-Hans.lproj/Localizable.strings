@@ -361,6 +361,7 @@
 "offline_mode" = "离线模式";
 "prevent_sleep_during_downloads" = "下载时保持屏幕常亮";
 "allow_cellular_downloads" = "允许使用蜂窝网络下载";
+"cellular_downloads_disabled" = "已关闭蜂窝网络下载";
 "max_storage" = "最大存储";
 "delete_all_downloads" = "删除全部下载";
 "delete_all_downloads_2" = "删除全部下载？";

@@ -361,6 +361,7 @@
 "offline_mode" = "Offline-Modus";
 "prevent_sleep_during_downloads" = "Bildschirm bei Downloads anlassen";
 "allow_cellular_downloads" = "Downloads über Mobilfunk";
+"cellular_downloads_disabled" = "Downloads über Mobilfunk sind deaktiviert";
 "max_storage" = "Max. Speicher";
 "delete_all_downloads" = "Alle Downloads löschen";
 "delete_all_downloads_2" = "Alle Downloads löschen?";

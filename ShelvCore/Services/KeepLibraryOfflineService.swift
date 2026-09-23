@@ -145,6 +145,7 @@ final class KeepLibraryOfflineService: ObservableObject {
     ) async {
         guard canContinueCheck(serverId: serverId) else { return }
         guard !libraryAlbums.isEmpty else { return }
+        guard !DownloadNetworkPolicy.isBlockedOnCellular else { return }
         guard checkingServerIds.insert(serverId).inserted else { return }
 
         activeServerId = serverId

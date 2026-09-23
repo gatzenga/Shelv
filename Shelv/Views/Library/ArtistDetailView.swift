@@ -1046,6 +1046,10 @@ struct ArtistDetailView: View {
             if !offlineMode.isOffline {
                 Button {
                     haptic()
+                    guard !DownloadNetworkPolicy.isBlockedOnCellular else {
+                        currentToast = .cellularDownloadsDisabled
+                        return
+                    }
                     Task {
                         await DownloadService.shared.enqueueArtist(
                             artist: artist,
@@ -1063,6 +1067,10 @@ struct ArtistDetailView: View {
             if !offlineMode.isOffline {
                 Button {
                     haptic()
+                    guard !DownloadNetworkPolicy.isBlockedOnCellular else {
+                        currentToast = .cellularDownloadsDisabled
+                        return
+                    }
                     Task {
                         await DownloadService.shared.enqueueArtist(
                             artist: artist,
