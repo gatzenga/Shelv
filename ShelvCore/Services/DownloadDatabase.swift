@@ -139,6 +139,17 @@ nonisolated struct DownloadMetadataUpdate: Sendable {
     var isEmpty: Bool { changes.isEmpty }
 }
 
+nonisolated struct DownloadIdentityRecordReplacement: Sendable {
+    let previous: DownloadRecord
+    let updated: DownloadRecord
+}
+
+private enum DownloadIdentityDatabaseError: Error {
+    case invalidReplacement
+    case destinationConflict
+    case sourceChanged
+}
+
 // MARK: - DownloadDatabase
 
 actor DownloadDatabase {
@@ -376,9 +387,13 @@ actor DownloadDatabase {
     private static let maxConsecutiveIOErrors = 3
     private static let circuitCooldown: TimeInterval = 30
 
-    private func safeWrite(_ label: String = #function, _ block: (Database) throws -> Void) {
+    @discardableResult
+    private func safeWrite(
+        _ label: String = #function,
+        _ block: (Database) throws -> Void
+    ) -> Bool {
         if let until = circuitOpenUntil, Date() < until {
-            return
+            return false
         }
         if circuitOpenUntil != nil {
             circuitOpenUntil = nil
@@ -387,7 +402,7 @@ actor DownloadDatabase {
         }
         guard let pool else {
             tripCircuit(label: label, error: "pool not initialized")
-            return
+            return false
         }
         do {
             try pool.write(block)
@@ -397,6 +412,7 @@ actor DownloadDatabase {
                 Self.applyDataProtection(at: databaseURL)
                 walProtectionApplied = true
             }
+            return true
         } catch {
             let isIOError = "\(error)".contains("disk I/O") || "\(error)".contains("error 10")
             if isIOError {
@@ -408,7 +424,7 @@ actor DownloadDatabase {
                         do {
                             try p.write(block)
                             consecutiveIOErrors = 0
-                            return
+                            return true
                         } catch {
                             // fall through
                         }
@@ -420,6 +436,7 @@ actor DownloadDatabase {
             } else {
                 DBErrorLog.logPlayLog("DownloadDatabase \(label): \(error.localizedDescription)")
             }
+            return false
         }
     }
 
@@ -455,6 +472,120 @@ actor DownloadDatabase {
 
     func upsert(_ record: DownloadRecord) {
         safeWrite { db in try record.insert(db, onConflict: .replace) }
+    }
+
+    /// Atomically rebinds the database identity of every downloaded song in one
+    /// album. No audio file is moved or deleted. The transaction also migrates
+    /// the managed-album marker so an interruption can never leave a half-rebound
+    /// album in the database.
+    @discardableResult
+    func rebindAlbumIdentity(
+        replacements: [DownloadIdentityRecordReplacement],
+        serverId: String,
+        oldAlbumId: String,
+        newAlbumId: String,
+        newAlbumName: String,
+        migrateManagedAlbum: Bool
+    ) -> Bool {
+        guard !replacements.isEmpty, !serverId.isEmpty else { return false }
+
+        return safeWrite { db in
+            for replacement in replacements {
+                let previous = replacement.previous
+                let updated = replacement.updated
+                guard previous.serverId == serverId,
+                      updated.serverId == serverId,
+                      previous.filePath == updated.filePath,
+                      previous.bytes == updated.bytes,
+                      previous.addedAt == updated.addedAt
+                else {
+                    throw DownloadIdentityDatabaseError.invalidReplacement
+                }
+
+                guard let source = try DownloadRecord
+                    .filter(
+                        Column("songId") == previous.songId
+                            && Column("serverId") == serverId
+                    )
+                    .fetchOne(db),
+                      source.filePath == previous.filePath,
+                      source.bytes == previous.bytes,
+                      source.addedAt == previous.addedAt
+                else {
+                    throw DownloadIdentityDatabaseError.sourceChanged
+                }
+
+                if previous.songId != updated.songId,
+                   let destination = try DownloadRecord
+                    .filter(
+                        Column("songId") == updated.songId
+                            && Column("serverId") == serverId
+                    )
+                    .fetchOne(db),
+                   (destination.filePath != previous.filePath
+                    || destination.bytes != previous.bytes
+                    || destination.addedAt != previous.addedAt) {
+                    throw DownloadIdentityDatabaseError.destinationConflict
+                }
+            }
+
+            for replacement in replacements {
+                try replacement.updated.insert(db, onConflict: .replace)
+            }
+
+            for replacement in replacements where replacement.previous.songId != replacement.updated.songId {
+                try db.execute(
+                    sql: """
+                    DELETE FROM downloads
+                    WHERE songId = ? AND serverId = ? AND filePath = ? AND bytes = ? AND addedAt = ?
+                    """,
+                    arguments: [
+                        replacement.previous.songId,
+                        serverId,
+                        replacement.previous.filePath,
+                        replacement.previous.bytes,
+                        replacement.previous.addedAt,
+                    ]
+                )
+                if try DownloadRecord
+                    .filter(
+                        Column("songId") == replacement.previous.songId
+                            && Column("serverId") == serverId
+                    )
+                    .fetchOne(db) != nil {
+                    throw DownloadIdentityDatabaseError.sourceChanged
+                }
+            }
+
+            if migrateManagedAlbum, oldAlbumId != newAlbumId {
+                try db.execute(
+                    sql: """
+                    INSERT INTO downloaded_albums (
+                        server_id, album_id, album_name, downloaded_at
+                    ) VALUES (?, ?, ?, ?)
+                    ON CONFLICT(server_id, album_id) DO UPDATE SET
+                        album_name = excluded.album_name
+                    """,
+                    arguments: [
+                        serverId,
+                        newAlbumId,
+                        newAlbumName,
+                        Date().timeIntervalSince1970,
+                    ]
+                )
+                try db.execute(
+                    sql: "DELETE FROM downloaded_albums WHERE server_id = ? AND album_id = ?",
+                    arguments: [serverId, oldAlbumId]
+                )
+                try db.execute(
+                    sql: """
+                    DELETE FROM download_collection_sync
+                    WHERE server_id = ? AND collection_kind = ? AND collection_id = ?
+                    """,
+                    arguments: [serverId, DownloadCollectionKind.album.rawValue, oldAlbumId]
+                )
+            }
+        }
     }
 
     func repairFilePath(
