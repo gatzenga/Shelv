@@ -173,6 +173,7 @@
 "songs_to_download" = "Songs to download";
 "estimated_size" = "Estimated size";
 "storage_limit" = "Storage limit";
+"already_downloaded" = "Already downloaded";
 "skipped_over_limit" = "Skipped (over limit)";
 "order" = "Order";
 "frequently_played_first" = "Frequently played first";
