@@ -360,6 +360,7 @@
 "disabling_downloads_will_cancel_active_downloads_and_remove_downloads" = "Aktive Downloads werden abgebrochen und alle heruntergeladenen Songs, Alben und Künstler von diesem Gerät entfernt.";
 "offline_mode" = "Offline-Modus";
 "prevent_sleep_during_downloads" = "Bildschirm bei Downloads anlassen";
+"allow_cellular_downloads" = "Downloads über Mobilfunk";
 "max_storage" = "Max. Speicher";
 "delete_all_downloads" = "Alle Downloads löschen";
 "delete_all_downloads_2" = "Alle Downloads löschen?";

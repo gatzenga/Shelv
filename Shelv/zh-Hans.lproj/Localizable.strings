@@ -360,6 +360,7 @@
 "disabling_downloads_will_cancel_active_downloads_and_remove_downloads" = "正在进行的下载将被取消，所有已下载的歌曲、专辑和艺术家都将从本设备移除。";
 "offline_mode" = "离线模式";
 "prevent_sleep_during_downloads" = "下载时保持屏幕常亮";
+"allow_cellular_downloads" = "允许使用蜂窝网络下载";
 "max_storage" = "最大存储";
 "delete_all_downloads" = "删除全部下载";
 "delete_all_downloads_2" = "删除全部下载？";

@@ -360,6 +360,7 @@
 "disabling_downloads_will_cancel_active_downloads_and_remove_downloads" = "Les téléchargements en cours seront annulés et tous les morceaux, albums et artistes téléchargés seront retirés de cet appareil.";
 "offline_mode" = "Mode hors ligne";
 "prevent_sleep_during_downloads" = "Garder l’écran allumé pendant les téléchargements";
+"allow_cellular_downloads" = "Téléchargements en données cellulaires";
 "max_storage" = "Stockage maximal";
 "delete_all_downloads" = "Supprimer tous les téléchargements";
 "delete_all_downloads_2" = "Supprimer tous les téléchargements ?";

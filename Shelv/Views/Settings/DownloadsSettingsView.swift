@@ -7,6 +7,7 @@ struct DownloadsSettingsView: View {
     @AppStorage("enableDownloads") private var enableDownloads = true
     @AppStorage("maxBulkDownloadStorageGB") private var maxBulkStorageGB = 10
     @AppStorage("preventSleepDuringDownloads") private var preventSleepDuringDownloads = false
+    @AppStorage(DownloadService.allowCellularDownloadsKey) private var allowCellularDownloads = false
     @ObservedObject var offlineMode = OfflineModeService.shared
     @ObservedObject private var keepOffline = KeepLibraryOfflineService.shared
     private let downloadStore = DownloadStore.shared
@@ -65,6 +66,16 @@ struct DownloadsSettingsView: View {
                         }
                     }
                     .tint(accentColor)
+
+                    Toggle(isOn: $allowCellularDownloads) {
+                        Label { Text(String(localized: "allow_cellular_downloads")) } icon: {
+                            Image(systemName: "antenna.radiowaves.left.and.right").foregroundStyle(accentColor)
+                        }
+                    }
+                    .tint(accentColor)
+                    .onChange(of: allowCellularDownloads) { _, _ in
+                        Task { await DownloadService.shared.cellularDownloadsSettingChanged() }
+                    }
 
                     Toggle(isOn: Binding(
                         get: { keepOffline.isEnabled(serverId: activeServerId) },

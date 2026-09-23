@@ -68,6 +68,7 @@ final class PersonalizationSettingsTests: XCTestCase {
             "enableDownloads",
             "offlineModeEnabled",
             "preventSleepDuringDownloads",
+            "allowCellularDownloads",
             "maxBulkDownloadStorageGB",
             "transcodingEnabled",
             "transcodingWifiCodec",
@@ -114,6 +115,7 @@ final class PersonalizationSettingsTests: XCTestCase {
 
         XCTAssertFalse(defaults.bool(forKey: "offlineModeEnabled"))
         XCTAssertFalse(defaults.bool(forKey: "preventSleepDuringDownloads"))
+        XCTAssertFalse(defaults.bool(forKey: "allowCellularDownloads"))
         XCTAssertFalse(defaults.bool(forKey: "transcodingEnabled"))
         XCTAssertFalse(defaults.bool(forKey: "gaplessEnabled"))
         XCTAssertFalse(defaults.bool(forKey: "replayGainEnabled"))
