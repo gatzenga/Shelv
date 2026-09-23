@@ -122,6 +122,9 @@ actor DownloadService {
     private let artworkPipeline = DownloadArtworkPipeline()
 
     private let backgroundIdentifier = "ch.vkugler.Shelv.downloads"
+    /// iOS only. Off by default so a data plan is never used for downloads
+    /// unless the user asks for it.
+    nonisolated static let allowCellularDownloadsKey = "allowCellularDownloads"
     private let maxConcurrent = 5
     private let queuedStatePublishLimit = 500
     private var effectiveMaxConcurrent: Int {
@@ -1624,7 +1627,7 @@ actor DownloadService {
         while inflightJobs.count < effectiveMaxConcurrent, let job = popNextPendingJob() {
             let jobKey = Self.key(songId: job.song.id, serverId: job.serverId)
             pendingJobKeys.remove(jobKey)
-            let task = session.downloadTask(with: job.downloadURL)
+            let task = session.downloadTask(with: downloadRequest(for: job))
             task.priority = URLSessionTask.highPriority
             if let desc = encodeJob(job) { task.taskDescription = desc }
             inflightJobs[task.taskIdentifier] = job
@@ -1634,6 +1637,42 @@ actor DownloadService {
             stateSubject.send((jobKey, .downloading(progress: initialProgress)))
             task.resume()
         }
+    }
+
+    private func downloadRequest(for job: DownloadJob) -> URLRequest {
+        var request = URLRequest(url: job.downloadURL)
+        #if os(iOS)
+        request.allowsCellularAccess = UserDefaults.standard.bool(forKey: Self.allowCellularDownloadsKey)
+        #endif
+        return request
+    }
+
+    /// A task keeps the network policy it was created with. Restart the running
+    /// ones, otherwise switching cellular on leaves them waiting for Wi-Fi and
+    /// they block the queue.
+    func cellularDownloadsSettingChanged() async {
+        guard let session, !inflightJobs.isEmpty else { return }
+        let restarting = inflightJobs
+        inflightJobs.removeAll()
+        for taskIdentifier in restarting.keys {
+            jobKeyByTask.removeValue(forKey: taskIdentifier)
+        }
+        for task in await session.allTasks where restarting[task.taskIdentifier] != nil {
+            // Without a description the cancellation callback can't rebuild the
+            // job, so it is not counted as a failed attempt.
+            task.taskDescription = nil
+            task.cancel()
+        }
+        compactPendingJobs(force: true)
+        let jobs = restarting.values.sorted { $0.song.id < $1.song.id }
+        pendingJobs.insert(contentsOf: jobs, at: 0)
+        for job in jobs {
+            let key = Self.key(songId: job.song.id, serverId: job.serverId)
+            pendingJobKeys.insert(key)
+            publishProgress(key: key, value: nil)
+            stateSubject.send((key, .queued))
+        }
+        startNextJobs()
     }
 
     func handleProgress(_ samples: [DownloadProgressSample]) {

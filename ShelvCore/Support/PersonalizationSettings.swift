@@ -350,6 +350,7 @@ nonisolated enum ShelvDefaultSettings {
         "enableDownloads": true,
         "offlineModeEnabled": false,
         "preventSleepDuringDownloads": false,
+        "allowCellularDownloads": false,
         "maxBulkDownloadStorageGB": 10,
         "transcodingEnabled": false,
         "transcodingWifiCodec": "raw",

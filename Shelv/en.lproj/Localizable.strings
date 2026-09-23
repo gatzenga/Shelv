@@ -360,6 +360,7 @@
 "disabling_downloads_will_cancel_active_downloads_and_remove_downloads" = "Active downloads will be canceled and all downloaded songs, albums and artists will be removed from this device.";
 "offline_mode" = "Offline Mode";
 "prevent_sleep_during_downloads" = "Keep Screen On During Downloads";
+"allow_cellular_downloads" = "Allow Downloads on Cellular";
 "max_storage" = "Max Storage";
 "delete_all_downloads" = "Delete All Downloads";
 "delete_all_downloads_2" = "Delete all downloads?";
