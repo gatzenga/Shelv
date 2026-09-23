@@ -163,6 +163,10 @@ struct ArtistDetailView: View {
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
+    /// Space above a shelf title, so it sits clearly apart from the year
+    /// captions of the shelf above instead of hugging them.
+    private static let sectionGap: CGFloat = 24
+
     private var showsSimilarArtists: Bool {
         searchQuery.isEmpty && !similarArtists.isEmpty
     }
@@ -506,11 +510,10 @@ struct ArtistDetailView: View {
                             isOffline: offlineMode.isOffline,
                             accentColor: accentColor
                         )
-                        .listRowInsets(
-                            index == 0
-                                ? EdgeInsets(top: 16, leading: 0, bottom: 0, trailing: 0)
-                                : EdgeInsets()
-                        )
+                        .listRowInsets(EdgeInsets(
+                            top: index == 0 ? 16 : Self.sectionGap,
+                            leading: 0, bottom: 0, trailing: 0
+                        ))
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
                     }
@@ -531,7 +534,7 @@ struct ArtistDetailView: View {
 
                         ArtistSimilarArtistsRow(artists: similarArtists)
                     }
-                    .listRowInsets(EdgeInsets())
+                    .listRowInsets(EdgeInsets(top: Self.sectionGap, leading: 0, bottom: 0, trailing: 0))
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
                 }
