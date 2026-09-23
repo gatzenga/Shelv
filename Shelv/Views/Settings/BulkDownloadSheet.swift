@@ -143,6 +143,15 @@ struct BulkDownloadSheet: View {
                             .foregroundStyle(.secondary)
                     }
                 } else {
+                    if let downloaded = plan.downloadedBytes, downloaded > 0 {
+                        HStack {
+                            Text(String(localized: "already_downloaded")).font(.subheadline)
+                            Spacer()
+                            Text(ByteCountFormatter.string(fromByteCount: downloaded, countStyle: .file))
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                     HStack {
                         Text(String(localized: "storage_limit")).font(.subheadline)
                         Spacer()
@@ -239,8 +248,8 @@ struct BulkDownloadSheet: View {
         let computed: BulkDownloadPlan
         switch mode {
         case .limited(let maxBytes):
-            computed = await DownloadService.shared.planBulkDownload(
-                serverId: stable, maxBytes: maxBytes,
+            computed = await DownloadService.shared.planLimitedBulkDownload(
+                serverId: stable, storageLimitBytes: maxBytes,
                 favorites: enableFavorites,
                 libraryAlbums: albums
             )

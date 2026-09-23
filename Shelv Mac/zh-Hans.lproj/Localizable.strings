@@ -173,6 +173,7 @@
 "songs_to_download" = "待下载歌曲";
 "estimated_size" = "预估大小";
 "storage_limit" = "存储限制";
+"already_downloaded" = "已下载";
 "skipped_over_limit" = "已跳过（超出限制）";
 "order" = "顺序";
 "frequently_played_first" = "常播曲目优先";

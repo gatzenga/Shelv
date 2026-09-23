@@ -275,6 +275,9 @@ struct BulkDownloadPlan {
     let totalBytes: Int64
     let limitBytes: Int64
     var availableBytes: Int64? = nil
+    /// What the server already has on disk. Only set for the Max Storage plan,
+    /// where it counts against the limit.
+    var downloadedBytes: Int64? = nil
     var isKeepLibraryOffline: Bool = false
     var playlistMarkers: [BulkDownloadPlaylistMarker] = []
     var albumMarkers: [BulkDownloadAlbumMarker] = []

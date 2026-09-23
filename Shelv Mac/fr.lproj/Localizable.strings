@@ -159,6 +159,7 @@
 "songs_to_download" = "Morceaux à télécharger";
 "estimated_size" = "Taille estimée";
 "storage_limit" = "Limite de stockage";
+"already_downloaded" = "Déjà téléchargé";
 "skipped_over_limit" = "Ignorés (au-delà de la limite)";
 "order" = "Ordre";
 "frequently_played_first" = "Souvent écoutés d’abord";

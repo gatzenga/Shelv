@@ -1451,6 +1451,32 @@ actor DownloadService {
         )
     }
 
+    /// Max Storage caps everything downloaded for the server, not just this run,
+    /// so running Download Everything twice never goes past the limit.
+    func planLimitedBulkDownload(
+        serverId: String,
+        storageLimitBytes: Int64,
+        favorites enabled: Bool,
+        libraryAlbums: [Album]
+    ) async -> BulkDownloadPlan {
+        let downloadedBytes = await DownloadDatabase.shared.totalBytes(serverId: serverId)
+        let plan = await planBulkDownload(
+            serverId: serverId,
+            maxBytes: max(0, storageLimitBytes - downloadedBytes),
+            favorites: enabled,
+            libraryAlbums: libraryAlbums
+        )
+        return BulkDownloadPlan(
+            planned: plan.planned,
+            skipped: plan.skipped,
+            totalBytes: plan.totalBytes,
+            limitBytes: storageLimitBytes,
+            downloadedBytes: downloadedBytes,
+            playlistMarkers: plan.playlistMarkers,
+            albumMarkers: plan.albumMarkers,
+        )
+    }
+
     func planKeepLibraryOffline(
         serverId: String,
         maxBytes: Int64,
