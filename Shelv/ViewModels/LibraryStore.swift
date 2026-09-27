@@ -751,7 +751,7 @@ class LibraryStore: ObservableObject {
             do {
                 try await LibraryDatabase.shared.removeAllFiles()
             } catch {
-                DBErrorLog.logPlayLog("LibraryStore clearCache: \(error.localizedDescription)")
+                DBErrorLog.logDatabase("LibraryStore clearCache: \(error.localizedDescription)")
             }
         }
     }

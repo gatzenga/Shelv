@@ -52,7 +52,7 @@ struct SettingsView: View {
                     NavigationLink(String(localized: "ui_customizations")) { TVUICustomizationsSettingsView() }
                     NavigationLink(String(localized: "playback")) { PlaybackSettingsView() }
                     NavigationLink(String(localized: "cache")) { CacheSettingsView() }
-                    NavigationLink(String(localized: "database")) { DatabaseSettingsView() }
+                    NavigationLink(String(localized: "external_services")) { ExternalServicesSettingsView() }
                     NavigationLink(String(localized: "icloud_sync")) { ICloudSyncSettingsView() }
                 }
 

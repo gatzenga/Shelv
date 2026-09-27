@@ -119,7 +119,7 @@ struct ShelvApp: App {
                           let currentServer = serverStore.activeServer,
                           currentServer.id == server.id
                     else { return }
-                    await PlayLogService.shared.setup()
+                    await ScrobbleOutbox.shared.setup()
                     guard !Task.isCancelled,
                           revision == serverStore.activeServerRevision
                     else { return }
@@ -190,7 +190,10 @@ struct ShelvApp: App {
                     await Task.detached(priority: .userInitiated) {
                         LibraryStore.migrateLibraryCacheIfNeeded()
                     }.value
-                    await PlayLogService.shared.setup()
+                    await ScrobbleOutbox.shared.setup()
+                    Task.detached(priority: .utility) {
+                        await LastFMService.shared.verifyOnLaunchIfNeeded()
+                    }
                     await DownloadDatabase.shared.setup()
                     await DownloadService.shared.setup()
                     if let active = serverStore.activeServer {

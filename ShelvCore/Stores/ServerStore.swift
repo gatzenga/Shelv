@@ -312,7 +312,7 @@ class ServerStore: ObservableObject {
             }
 
             if accountIdentityChanged {
-                await PlayLogService.shared.removeScrobbles(
+                await ScrobbleOutbox.shared.removeScrobbles(
                     serverConfigId: previous.id.uuidString
                 )
             }
@@ -329,14 +329,14 @@ class ServerStore: ObservableObject {
             }
             if verifiedBackfill, let updatedStableID {
                 Task {
-                    await PlayLogService.shared.migrateServerId(
+                    await ScrobbleOutbox.shared.migrateServerId(
                         from: previous.id.uuidString,
                         to: updatedStableID
                     )
                 }
             } else if stableIdRotated, let previousStableID, let updatedStableID {
                 Task {
-                    await PlayLogService.shared.migrateServerId(
+                    await ScrobbleOutbox.shared.migrateServerId(
                         from: previousStableID,
                         to: updatedStableID
                     )
@@ -417,12 +417,11 @@ class ServerStore: ObservableObject {
             && !servers.contains(where: { $0.stableId == serverStableId })
         Task.detached(priority: .utility) {
             if shouldDeleteStableData {
-                await PlayLogService.shared.resetLog(serverId: serverStableId)
                 await DownloadService.shared.deleteAllForServer(serverStableId)
             }
             // Neue Outbox-Zeilen sind an die lokale Konfiguration gebunden. Nur
             // diese löschen; dieselbe Remote-ID kann in mehreren Configs vorkommen.
-            await PlayLogService.shared.removeScrobbles(serverConfigId: serverConfigID)
+            await ScrobbleOutbox.shared.removeScrobbles(serverConfigId: serverConfigID)
             await CloudKitSyncService.shared.updatePendingCounts()
             await MainActor.run {
                 NotificationCenter.default.post(name: .downloadsLibraryChanged, object: nil)
@@ -699,27 +698,18 @@ class ServerStore: ObservableObject {
             )
         }
 
-        let retainedStableIds = Set(
-            retainedServers.map(\.stableId).filter { !$0.isEmpty }
-        )
-        let stableIds = Set(
-            removedServers.map(\.stableId).filter { !$0.isEmpty }
-        ).subtracting(retainedStableIds)
         let configIds = removedServers.map { $0.id.uuidString }
 
-        guard !stableIds.isEmpty || !configIds.isEmpty else {
+        guard !configIds.isEmpty else {
             return retainedServers.isEmpty
         }
         let allServersCleared = retainedServers.isEmpty
         Task.detached(priority: .utility) {
-            for sid in stableIds {
-                await PlayLogService.shared.resetLog(serverId: sid)
-            }
             if allServersCleared {
-                await PlayLogService.shared.removeAllScrobbles()
+                await ScrobbleOutbox.shared.removeAllScrobbles()
             } else {
                 for configID in configIds {
-                    await PlayLogService.shared.removeScrobbles(
+                    await ScrobbleOutbox.shared.removeScrobbles(
                         serverConfigId: configID
                     )
                 }

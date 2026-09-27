@@ -178,7 +178,7 @@ actor DownloadDatabase {
             return
         }
         // Recovery: DB + WAL + SHM löschen und neu versuchen
-        DBErrorLog.logPlayLog("DownloadDatabase: opening DB failed — recovering by deleting files")
+        DBErrorLog.logDatabase("DownloadDatabase: opening DB failed — recovering by deleting files")
         for suffix in ["", "-wal", "-shm"] {
             let path = url.path + suffix
             if FileManager.default.fileExists(atPath: path) {
@@ -189,7 +189,7 @@ actor DownloadDatabase {
             pool = try openAndMigrate(at: url)
             Self.applyDataProtection(at: url)
         } catch {
-            DBErrorLog.logPlayLog("DownloadDatabase setup totally failed: \(error.localizedDescription)")
+            DBErrorLog.logDatabase("DownloadDatabase setup totally failed: \(error.localizedDescription)")
         }
     }
 
@@ -402,7 +402,7 @@ actor DownloadDatabase {
             if isIOError {
                 consecutiveIOErrors += 1
                 if consecutiveIOErrors == 1 {
-                    DBErrorLog.logPlayLog("DownloadDatabase \(label): \(error.localizedDescription) — attempting reopen")
+                    DBErrorLog.logDatabase("DownloadDatabase \(label): \(error.localizedDescription) — attempting reopen")
                     reopenPool(deleteCorruptFiles: false)
                     if let p = self.pool {
                         do {
@@ -418,7 +418,7 @@ actor DownloadDatabase {
                     tripCircuit(label: label, error: error.localizedDescription)
                 }
             } else {
-                DBErrorLog.logPlayLog("DownloadDatabase \(label): \(error.localizedDescription)")
+                DBErrorLog.logDatabase("DownloadDatabase \(label): \(error.localizedDescription)")
             }
         }
     }
@@ -426,7 +426,7 @@ actor DownloadDatabase {
     private func tripCircuit(label: String, error: String) {
         circuitOpenUntil = Date().addingTimeInterval(Self.circuitCooldown)
         if !hasLoggedCircuitOpen {
-            DBErrorLog.logPlayLog("DownloadDatabase \(label): \(error) — circuit open for \(Int(Self.circuitCooldown))s, suppressing further writes")
+            DBErrorLog.logDatabase("DownloadDatabase \(label): \(error) — circuit open for \(Int(Self.circuitCooldown))s, suppressing further writes")
             hasLoggedCircuitOpen = true
         }
         pool = nil
@@ -1263,7 +1263,7 @@ actor DownloadDatabase {
                 }
             }
         } catch {
-            DBErrorLog.logPlayLog("incrementStrike: \(error.localizedDescription)")
+            DBErrorLog.logDatabase("incrementStrike: \(error.localizedDescription)")
         }
         return result
     }

@@ -43,6 +43,8 @@ nonisolated struct Song: Identifiable, Codable, Hashable, Sendable {
     let year: Int?
     let genre: String?
     let playCount: Int?
+    /// When the song was last played (OpenSubsonic), if the server reports it.
+    let played: Date?
     var starred: Date?
     let contentType: String?
     let suffix: String?
@@ -89,7 +91,7 @@ nonisolated struct Song: Identifiable, Codable, Hashable, Sendable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, title, artist, artistId, album, albumId, track, discNumber, duration, coverArt, year, genre, playCount, starred, contentType, suffix, fileSize = "size", bitRate, bitDepth, samplingRate, channelCount, bpm, comment, musicBrainzId, isrc, genres, artists, displayArtist, albumArtists, displayAlbumArtist, contributors, displayComposer, moods, explicitStatus, works, movements, groupings, replayGain
+        case id, title, artist, artistId, album, albumId, track, discNumber, duration, coverArt, year, genre, playCount, played, starred, contentType, suffix, fileSize = "size", bitRate, bitDepth, samplingRate, channelCount, bpm, comment, musicBrainzId, isrc, genres, artists, displayArtist, albumArtists, displayAlbumArtist, contributors, displayComposer, moods, explicitStatus, works, movements, groupings, replayGain
     }
 
     init(
@@ -106,6 +108,7 @@ nonisolated struct Song: Identifiable, Codable, Hashable, Sendable {
         year: Int? = nil,
         genre: String? = nil,
         playCount: Int? = nil,
+        played: Date? = nil,
         starred: Date? = nil,
         contentType: String? = nil,
         suffix: String? = nil,
@@ -145,6 +148,7 @@ nonisolated struct Song: Identifiable, Codable, Hashable, Sendable {
         self.year = year
         self.genre = genre
         self.playCount = playCount
+        self.played = played
         self.starred = starred
         self.contentType = contentType
         self.suffix = suffix
@@ -187,6 +191,7 @@ nonisolated struct Song: Identifiable, Codable, Hashable, Sendable {
         year = try c.decodeIfPresent(Int.self, forKey: .year)
         genre = try c.decodeIfPresent(String.self, forKey: .genre)
         playCount = try c.decodeIfPresent(Int.self, forKey: .playCount)
+        played = FlexibleDate.decode(c, .played)
         starred = FlexibleDate.decode(c, .starred)
         contentType = try c.decodeIfPresent(String.self, forKey: .contentType)
         suffix = try c.decodeIfPresent(String.self, forKey: .suffix)

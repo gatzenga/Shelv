@@ -90,12 +90,9 @@ struct SettingsView: View {
                             Image(systemName: "internaldrive").foregroundStyle(accentColor)
                         }
                     }
-                    NavigationLink(destination:
-                        DatabaseSettingsView()
-                            .environmentObject(serverStore)
-                    ) {
-                        Label { Text(String(localized: "database")) } icon: {
-                            Image(systemName: "cylinder").foregroundStyle(accentColor)
+                    NavigationLink(destination: ExternalServicesSettingsView()) {
+                        Label { Text(String(localized: "external_services")) } icon: {
+                            Image(systemName: "link").foregroundStyle(accentColor)
                         }
                     }
                     NavigationLink(destination: ICloudSyncSettingsView()) {

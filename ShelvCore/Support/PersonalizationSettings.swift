@@ -371,11 +371,11 @@ nonisolated enum ShelvDefaultSettings {
         "streamPreCacheEnabled": false,
         "infinityMixAheadCount": 1,
         "iCloudSyncEnabled": false,
-        "iCloudSyncPlayHistoryEnabled": true,
         "iCloudSyncLyricsServerEnabled": true,
         "iCloudSyncRadioStationsEnabled": true,
         "iCloudSyncUICustomizationsEnabled": true,
-        "mixUseDatabase": false,
+        "iCloudSyncExternalServicesEnabled": true,
+        "lastFMEnabled": false,
     ]
 
     static var registeredValues: [String: Any] {

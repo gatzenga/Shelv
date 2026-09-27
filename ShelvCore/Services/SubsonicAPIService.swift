@@ -1668,6 +1668,18 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         return Array(ordered.prefix(limit))
     }
 
+    /// Songs from recently played albums that were actually played, most
+    /// recent play first. Servers that do not report OpenSubsonic's `played`
+    /// date get every song of those albums, as before.
+    func getRecentlyPlayedSongs(albumCount: Int = 30, limit: Int = 50) async throws -> [Song] {
+        let songs = try await getRecentSongs(albumCount: albumCount, limit: .max)
+        let played = songs
+            .compactMap { song in song.played.map { (song, $0) } }
+            .sorted { $0.1 > $1.1 }
+            .map(\.0)
+        return Array((played.isEmpty ? songs : played).prefix(limit))
+    }
+
     private func fetchSongsFromAlbums(type: String, albumCount: Int) async throws -> [Song] {
         let albums = try await getAlbumList(type: type, size: albumCount)
         return try await withThrowingTaskGroup(of: [Song].self) { group in

@@ -8,6 +8,7 @@ struct CacheTab: View {
     @State private var showClearConfirm = false
     @State private var showInfo = false
     @State private var showCacheLog = false
+    @State private var showDatabaseErrors = false
     private let preCacheAheadOptions = Array(1...5)
 
     var body: some View {
@@ -62,6 +63,11 @@ struct CacheTab: View {
                 } label: {
                     Label(String(localized: "logs"), systemImage: "doc.text.magnifyingglass")
                 }
+                Button {
+                    showDatabaseErrors = true
+                } label: {
+                    Label(String(localized: "database_errors"), systemImage: "tablecells")
+                }
             }
         }
         .formStyle(.grouped)
@@ -87,6 +93,9 @@ struct CacheTab: View {
         .sheet(isPresented: $showCacheLog) {
             CacheLogView()
                 .frame(width: 600, height: 440)
+        }
+        .sheet(isPresented: $showDatabaseErrors) {
+            DatabaseErrorLogView()
         }
     }
 

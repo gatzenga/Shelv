@@ -295,14 +295,6 @@ nonisolated enum DemoContent {
 
     static var mostPlayedSongs: [Song] { mostPlayedTracks.compactMap { mostPlayedTrack($0.0, $0.1) } }
 
-    /// Play-Counts (ersetzt im Demo-Modus die DB-Abfrage `topSongs`).
-    static func playSongCounts() -> [PlaySongCount] {
-        mostPlayedTracks.compactMap { t in
-            guard let s = mostPlayedTrack(t.0, t.1) else { return nil }
-            return PlaySongCount(songId: s.id, count: t.2)
-        }
-    }
-
     // MARK: - Large-Library-Stressmodus
 
     static let largeLibraryFixtureArgument = "-shelvLargeLibraryFixture"

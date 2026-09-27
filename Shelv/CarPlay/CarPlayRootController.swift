@@ -61,7 +61,7 @@ final class CarPlayRootController: NSObject {
         Task { @MainActor in
             await DownloadDatabase.shared.setup()
             await DownloadService.shared.setup()
-            await PlayLogService.shared.setup()
+            await ScrobbleOutbox.shared.setup()
             if let server = carPlayServerStore.activeServer, !server.stableId.isEmpty {
                 await DownloadStore.shared.setActiveServer(server.stableId)
                 // Offline-Modus: Playlists aus Disk-Cache laden, da ShelvApp's

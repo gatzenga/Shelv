@@ -85,6 +85,11 @@ struct CacheSettingsView: View {
                             Image(systemName: "doc.text.magnifyingglass").foregroundStyle(accentColor)
                         }
                     }
+                    NavigationLink(destination: DatabaseErrorLogView()) {
+                        Label { Text(String(localized: "database_errors")) } icon: {
+                            Image(systemName: "tablecells").foregroundStyle(accentColor)
+                        }
+                    }
                     Button(role: .destructive) {
                         showClearCacheConfirm = true
                     } label: {

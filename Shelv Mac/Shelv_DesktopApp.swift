@@ -52,7 +52,10 @@ struct Shelv_DesktopApp: App {
                     Task.detached(priority: .utility) {
                         await StreamCacheService.shared.cleanupOldFiles()
                     }
-                    await PlayLogService.shared.setup()
+                    await ScrobbleOutbox.shared.setup()
+                    Task.detached(priority: .utility) {
+                        await LastFMService.shared.verifyOnLaunchIfNeeded()
+                    }
                     await DownloadDatabase.shared.setup()
                     await DownloadService.shared.setup()
                     if let active = serverStore.activeServer {

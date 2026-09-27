@@ -64,7 +64,7 @@ struct Shelv_TVApp: App {
                     #if DEBUG
                     AudioPlayerService.shared.ensureDemoStandby()
                     #endif
-                    await PlayLogService.shared.setup()
+                    await ScrobbleOutbox.shared.setup()
                     guard !Task.isCancelled,
                           revision == serverStore.activeServerRevision
                     else { return }
@@ -107,7 +107,10 @@ struct Shelv_TVApp: App {
                 // Einmaliges App-Setup: Tracking starten, remoteUserId-Backfill, iCloud-Sync.
                 .task {
                     await serverStore.waitUntilReady()
-                    await PlayLogService.shared.setup()
+                    await ScrobbleOutbox.shared.setup()
+                    Task.detached(priority: .utility) {
+                        await LastFMService.shared.verifyOnLaunchIfNeeded()
+                    }
                     for server in serverStore.servers where server.remoteUserId == nil {
                         guard let pw = await serverStore.loadPassword(for: server) else { continue }
                         do {

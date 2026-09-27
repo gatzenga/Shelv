@@ -8,7 +8,7 @@ private enum SettingsTab: Hashable {
     case downloads
     case lyrics
     case cache
-    case database
+    case externalServices
     case iCloud
     case info
 
@@ -21,7 +21,7 @@ private enum SettingsTab: Hashable {
         case .downloads: return "arrow.down.circle"
         case .lyrics: return "text.bubble"
         case .cache: return "internaldrive"
-        case .database: return "cylinder"
+        case .externalServices: return "link"
         case .iCloud: return "icloud"
         case .info: return "info.circle"
         }
@@ -36,7 +36,7 @@ private enum SettingsTab: Hashable {
         case .downloads: return String(localized: "downloads")
         case .lyrics: return String(localized: "lyrics")
         case .cache: return String(localized: "cache")
-        case .database: return String(localized: "database")
+        case .externalServices: return String(localized: "external_services")
         case .iCloud: return "iCloud"
         case .info: return String(localized: "info")
         }
@@ -51,7 +51,7 @@ private let settingsTabs: [SettingsTab] = [
     .downloads,
     .lyrics,
     .cache,
-    .database,
+    .externalServices,
     .iCloud,
     .info
 ]
@@ -107,8 +107,8 @@ struct SettingsView: View {
             LyricsSettingsPanel()
         case .cache:
             CacheTab()
-        case .database:
-            DatabaseTab()
+        case .externalServices:
+            ExternalServicesTab()
         case .iCloud:
             ICloudSyncTab()
         case .info:

@@ -8,12 +8,13 @@ import Foundation
 /// deletions that will never be sent. This clears them once, so an upgraded
 /// install looks like a fresh one.
 ///
-/// The play history, the mixes built from it, and every other setting are
-/// untouched: only keys that belonged to the removed feature are listed here.
+/// Only keys that belonged to a removed feature are listed here; every other
+/// setting stays untouched.
 nonisolated enum RemovedFeatureCleanup {
     private static let didRunKey = "shelv_removed_feature_cleanup_v1"
+    private static let didRunPlayHistoryKey = "shelv_removed_play_history_cleanup_v1"
 
-    /// Preference this feature owned but the play log still needs: the share of
+    /// Preference this feature owned but scrobbling still needs: the share of
     /// a track that has to be heard before it counts. Moved to its own key so
     /// nothing carries the old name, keeping whatever the listener had chosen.
     private static let legacyPlayThresholdKey = "recapThreshold"
@@ -31,8 +32,6 @@ nonisolated enum RemovedFeatureCleanup {
     static let legacyCloudZoneName = "ShelveRecapZone"
     /// Record types of the removed feature. They are not carried over.
     static let legacyCloudRecordTypes: Set<String> = ["RecapMarker", "RecapSettings"]
-    /// Table it kept in the play log database. Dropped by migration `v8`.
-    static let legacyDatabaseTable = "recap_registry"
     /// Where the play log database used to sit, relative to its container.
     static let legacyDatabaseSubpath = "shelv_recap/recap.db"
 
@@ -49,6 +48,16 @@ nonisolated enum RemovedFeatureCleanup {
         "shelv_recap_playlist_ids",
         "shelv_ck_zone_token_recap",
         "shelv_ck_pending_marker_deletions",
+    ]
+
+    /// Preferences of the local play history database. The database file itself
+    /// is removed by `ScrobbleOutbox` once its pending scrobbles are carried over,
+    /// and the plays in iCloud by `CloudKitSyncService`.
+    private static let obsoletePlayHistoryKeys = [
+        "mixUseDatabase",
+        "iCloudSyncPlayHistoryEnabled",
+        "shelv_ck_zone_token_play_history",
+        "shelv_ck_pending_play_event_deletions",
     ]
 
     /// Per-server keys, stored as `<base>.<serverId>`.
@@ -68,6 +77,13 @@ nonisolated enum RemovedFeatureCleanup {
             defaults.set(carried, forKey: playThresholdKey)
         }
         defaults.removeObject(forKey: legacyPlayThresholdKey)
+
+        if !defaults.bool(forKey: didRunPlayHistoryKey) {
+            for key in obsoletePlayHistoryKeys {
+                defaults.removeObject(forKey: key)
+            }
+            defaults.set(true, forKey: didRunPlayHistoryKey)
+        }
 
         guard !defaults.bool(forKey: didRunKey) else { return }
         for key in obsoleteKeys {

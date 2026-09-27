@@ -3,13 +3,13 @@ import SwiftUI
 struct DatabaseErrorLogView: View {
     @StateObject private var dbLog = DBErrorLog.shared
     @Environment(\.dismiss) private var dismiss
-    @State private var segment: LogTab = .playLog
+    @State private var segment: LogTab = .app
 
     enum LogTab: String, CaseIterable {
-        case playLog, lyrics
+        case app, lyrics
         var label: String {
             switch self {
-            case .playLog: return String(localized: "play_log_db")
+            case .app: return String(localized: "app_db")
             case .lyrics:  return String(localized: "lyrics_db")
             }
         }
@@ -17,7 +17,7 @@ struct DatabaseErrorLogView: View {
 
     private var entries: [String] {
         switch segment {
-        case .playLog: return dbLog.playLogEntries
+        case .app: return dbLog.appEntries
         case .lyrics:  return dbLog.lyricsEntries
         }
     }

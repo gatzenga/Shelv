@@ -19,9 +19,6 @@ final class PlayTracker {
     private var trackedSongId: String?
     private var trackedServerId: String?
     private var trackedServerConfigId: String?
-    private var trackedTitle: String?
-    private var trackedArtist: String?
-    private var trackedAlbum: String?
     private var trackedDuration: Double = 0
     private var playedSeconds: Double = 0
     private var lastTime: Double = -1
@@ -105,9 +102,6 @@ final class PlayTracker {
         trackedSongId = event.song.id
         trackedServerConfigId = event.serverConfigId
         trackedServerId = event.serverId
-        trackedTitle = event.song.title
-        trackedArtist = event.song.artist
-        trackedAlbum = event.song.album
         trackedDuration = event.song.duration.map(Double.init) ?? 0
         playedSeconds = 0
         lastTime = -1
@@ -130,29 +124,17 @@ final class PlayTracker {
         hasRecordedCurrentPlay = true
         let token = trackingToken
         let playedAt = Date().timeIntervalSince1970
-        let duration = trackedDuration
-        let title = trackedTitle
-        let artist = trackedArtist
-        let album = trackedAlbum
 
         Task { [weak self] in
             let recorded = await ScrobbleService.shared.recordPlay(
                 songId: songId,
                 serverId: serverId,
                 serverConfigId: serverConfigId,
-                playedAt: playedAt,
-                songDuration: duration,
-                songTitle: title,
-                artistName: artist,
-                albumName: album
+                playedAt: playedAt
             )
-            guard recorded else {
-                if self?.trackingToken == token {
-                    self?.hasRecordedCurrentPlay = false
-                }
-                return
+            if !recorded, self?.trackingToken == token {
+                self?.hasRecordedCurrentPlay = false
             }
-            await CloudKitSyncService.shared.uploadPendingEvents()
         }
     }
 
@@ -171,9 +153,6 @@ final class PlayTracker {
         trackedSongId = nil
         trackedServerId = nil
         trackedServerConfigId = nil
-        trackedTitle = nil
-        trackedArtist = nil
-        trackedAlbum = nil
         trackedDuration = 0
         playedSeconds = 0
         lastTime = -1

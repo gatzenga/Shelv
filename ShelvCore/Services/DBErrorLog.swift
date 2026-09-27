@@ -2,20 +2,20 @@ import Foundation
 import Combine
 
 private nonisolated enum DBLogKind: Sendable {
-    case playLog
+    case app
     case lyrics
 }
 
 private actor DBLogBuffer {
     static let shared = DBLogBuffer()
 
-    private var pendingPlayLog: [String] = []
+    private var pendingApp: [String] = []
     private var pendingLyrics: [String] = []
     private var flushTask: Task<Void, Never>?
 
     func append(_ entry: String, kind: DBLogKind) {
         switch kind {
-        case .playLog: pendingPlayLog.append(entry)
+        case .app: pendingApp.append(entry)
         case .lyrics: pendingLyrics.append(entry)
         }
         guard flushTask == nil else { return }
@@ -27,14 +27,14 @@ private actor DBLogBuffer {
     }
 
     private func flush() async {
-        let playLog = pendingPlayLog
+        let app = pendingApp
         let lyrics = pendingLyrics
-        pendingPlayLog.removeAll(keepingCapacity: true)
+        pendingApp.removeAll(keepingCapacity: true)
         pendingLyrics.removeAll(keepingCapacity: true)
         flushTask = nil
-        guard !playLog.isEmpty || !lyrics.isEmpty else { return }
+        guard !app.isEmpty || !lyrics.isEmpty else { return }
         await MainActor.run {
-            DBErrorLog.shared.apply(playLog: playLog, lyrics: lyrics)
+            DBErrorLog.shared.apply(app: app, lyrics: lyrics)
         }
     }
 }
@@ -43,17 +43,17 @@ private actor DBLogBuffer {
 final class DBErrorLog: ObservableObject {
     static let shared = DBErrorLog()
 
-    @Published var playLogEntries: [String] = []
+    @Published var appEntries: [String] = []
     @Published var lyricsEntries: [String] = []
 
     nonisolated init() {}
 
-    nonisolated static func logPlayLog(_ message: String) {
+    nonisolated static func logDatabase(_ message: String) {
         let stamp = Self.stamp(message)
         Task(priority: .utility) {
-            await DBLogBuffer.shared.append(stamp, kind: .playLog)
+            await DBLogBuffer.shared.append(stamp, kind: .app)
         }
-        print("[DB:play_log] \(message)")
+        print("[DB:app] \(message)")
     }
 
     nonisolated static func logLyrics(_ message: String) {
@@ -64,9 +64,9 @@ final class DBErrorLog: ObservableObject {
         print("[DB:lyrics] \(message)")
     }
 
-    fileprivate func apply(playLog: [String], lyrics: [String]) {
-        if !playLog.isEmpty {
-            playLogEntries = Array((playLog.reversed() + playLogEntries).prefix(200))
+    fileprivate func apply(app: [String], lyrics: [String]) {
+        if !app.isEmpty {
+            appEntries = Array((app.reversed() + appEntries).prefix(200))
         }
         if !lyrics.isEmpty {
             lyricsEntries = Array((lyrics.reversed() + lyricsEntries).prefix(200))

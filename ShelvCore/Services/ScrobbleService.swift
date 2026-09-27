@@ -19,7 +19,7 @@ actor ScrobbleService {
                 await Self.canContactServer()
             },
             loadBatch: { afterId, limit in
-                let records = await PlayLogService.shared.pendingScrobbles(
+                let records = await ScrobbleOutbox.shared.pendingScrobbles(
                     afterId: afterId,
                     limit: limit
                 )
@@ -55,16 +55,16 @@ actor ScrobbleService {
                 )
             },
             markDelivered: { id in
-                await PlayLogService.shared.markScrobbleDone(id: id)
+                await ScrobbleOutbox.shared.markScrobbleDone(id: id)
             },
             markFailed: { id in
-                await PlayLogService.shared.incrementScrobbleRetry(id: id)
+                await ScrobbleOutbox.shared.incrementScrobbleRetry(id: id)
             }
         )
     }
 
     func setup() async {
-        await PlayLogService.shared.setup()
+        await ScrobbleOutbox.shared.setup()
         await flushPendingScrobbles()
     }
 
@@ -99,37 +99,29 @@ actor ScrobbleService {
         }
     }
 
-    /// Persistiert die Outbox immer vor dem Netzversuch; iOS/macOS gemeinsam mit
-    /// dem PlayLog atomar, tvOS outbox-first im dauerhaften Journal.
+    /// The outbox is always persisted before the network attempt, so a play
+    /// made offline or during a crash still reaches the server later.
     @discardableResult
     func recordPlay(
         songId: String,
         serverId: String,
         serverConfigId: String,
-        playedAt: Double,
-        songDuration: Double,
-        songTitle: String? = nil,
-        artistName: String? = nil,
-        albumName: String? = nil
+        playedAt: Double
     ) async -> Bool {
-        await PlayLogService.shared.setup()
-        let uuid = await PlayLogService.shared.recordPlayAndQueueScrobble(
+        await ScrobbleOutbox.shared.setup()
+        let queued = await ScrobbleOutbox.shared.enqueue(
             songId: songId,
             serverId: serverId,
             serverConfigId: serverConfigId,
-            playedAt: playedAt,
-            songDuration: songDuration,
-            songTitle: songTitle,
-            artistName: artistName,
-            albumName: albumName
+            playedAt: playedAt
         )
-        guard uuid != nil else { return false }
+        guard queued else { return false }
         await flushPendingScrobbles()
         return true
     }
 
     func flushPendingScrobbles() async {
-        await PlayLogService.shared.setup()
+        await ScrobbleOutbox.shared.setup()
         await delivery.flush()
     }
 

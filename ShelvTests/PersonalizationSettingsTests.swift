@@ -89,11 +89,11 @@ final class PersonalizationSettingsTests: XCTestCase {
             "streamPreCacheEnabled",
             "infinityMixAheadCount",
             "iCloudSyncEnabled",
-            "iCloudSyncPlayHistoryEnabled",
             "iCloudSyncLyricsServerEnabled",
             "iCloudSyncRadioStationsEnabled",
             "iCloudSyncUICustomizationsEnabled",
-            "mixUseDatabase",
+            "iCloudSyncExternalServicesEnabled",
+            "lastFMEnabled",
         ]
 
         XCTAssertEqual(Set(ShelvDefaultSettings.registeredValues.keys), expectedKeys)
@@ -108,10 +108,10 @@ final class PersonalizationSettingsTests: XCTestCase {
         XCTAssertTrue(defaults.bool(forKey: "autoFetchLyrics"))
         XCTAssertTrue(defaults.bool(forKey: "includeNavidromeLyrics"))
         XCTAssertTrue(defaults.bool(forKey: "lrcLibOnlineFallbackEnabled"))
-        XCTAssertTrue(defaults.bool(forKey: "iCloudSyncPlayHistoryEnabled"))
         XCTAssertTrue(defaults.bool(forKey: "iCloudSyncLyricsServerEnabled"))
         XCTAssertTrue(defaults.bool(forKey: "iCloudSyncRadioStationsEnabled"))
         XCTAssertTrue(defaults.bool(forKey: "iCloudSyncUICustomizationsEnabled"))
+        XCTAssertTrue(defaults.bool(forKey: "iCloudSyncExternalServicesEnabled"))
 
         XCTAssertFalse(defaults.bool(forKey: "offlineModeEnabled"))
         XCTAssertFalse(defaults.bool(forKey: "preventSleepDuringDownloads"))
@@ -122,7 +122,7 @@ final class PersonalizationSettingsTests: XCTestCase {
         XCTAssertFalse(defaults.bool(forKey: "useCustomLrcLibServer"))
         XCTAssertFalse(defaults.bool(forKey: "streamPreCacheEnabled"))
         XCTAssertFalse(defaults.bool(forKey: "iCloudSyncEnabled"))
-        XCTAssertFalse(defaults.bool(forKey: "mixUseDatabase"))
+        XCTAssertFalse(defaults.bool(forKey: "lastFMEnabled"))
 
         XCTAssertEqual(defaults.integer(forKey: "playCountThreshold"), 30)
         XCTAssertEqual(defaults.integer(forKey: "maxBulkDownloadStorageGB"), 10)

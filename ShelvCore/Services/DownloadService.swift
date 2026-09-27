@@ -1105,7 +1105,7 @@ actor DownloadService {
                          albumArtistOverride: albumArtist,
                          albumCoverArtIdOverride: detail.coverArt)
         } catch {
-            DBErrorLog.logPlayLog("DownloadService.enqueueAlbum: \(error.localizedDescription)")
+            DBErrorLog.logDatabase("DownloadService.enqueueAlbum: \(error.localizedDescription)")
         }
     }
 
@@ -1122,7 +1122,7 @@ actor DownloadService {
                 await enqueueAlbum(album: album, serverId: serverId)
             }
         } catch {
-            DBErrorLog.logPlayLog("DownloadService.enqueueArtist: \(error.localizedDescription)")
+            DBErrorLog.logDatabase("DownloadService.enqueueArtist: \(error.localizedDescription)")
         }
     }
 
@@ -1782,7 +1782,7 @@ actor DownloadService {
                 fallbackFileExtension: job.fileExtension
             )
         } catch {
-            DBErrorLog.logPlayLog("DownloadService validation failed for \(job.title): \(error.localizedDescription)")
+            DBErrorLog.logDatabase("DownloadService validation failed for \(job.title): \(error.localizedDescription)")
             try? FileManager.default.removeItem(at: tempURL)
             await retryOrFail(job: job, error: error)
             return
@@ -1807,7 +1807,7 @@ actor DownloadService {
             }
             try FileManager.default.moveItem(at: tempURL, to: finalURL)
         } catch {
-            DBErrorLog.logPlayLog("DownloadService move failed: \(error.localizedDescription)")
+            DBErrorLog.logDatabase("DownloadService move failed: \(error.localizedDescription)")
             try? FileManager.default.removeItem(at: tempURL)
             await retryOrFail(job: job, error: error)
             return
@@ -2004,7 +2004,7 @@ actor DownloadService {
 
     private func pauseKeepOfflineForStorageFailure(job: DownloadJob, error: Error) async {
         let key = Self.key(songId: job.song.id, serverId: job.serverId)
-        DBErrorLog.logPlayLog("DownloadService paused Keep Library Offline because storage is low while downloading \(job.title): \(error.localizedDescription)")
+        DBErrorLog.logDatabase("DownloadService paused Keep Library Offline because storage is low while downloading \(job.title): \(error.localizedDescription)")
         publishProgress(key: key, value: nil)
         stateSubject.send((key, .failed(message: error.localizedDescription)))
         await MainActor.run {

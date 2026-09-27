@@ -49,6 +49,11 @@ struct CacheSettingsView: View {
                 } label: {
                     Text(String(localized: "logs"))
                 }
+                NavigationLink {
+                    DatabaseErrorLogView()
+                } label: {
+                    Text(String(localized: "database_errors"))
+                }
             }
 
             Section(String(localized: "cover_cache")) {

@@ -338,7 +338,6 @@ final class ShelvSystemIntentPlaybackService: @unchecked Sendable {
             throw ShortcutPlaybackError.serverChanged
         }
         await DownloadDatabase.shared.setup()
-        await PlayLogService.shared.setup()
         let storageServerID = server.stableId.isEmpty ? server.id.uuidString : server.stableId
         let downloads = await LocalDownloadCatalog.load(serverId: storageServerID)
         try validateFlight(flightID, serverConfigID: server.id.uuidString)
@@ -543,10 +542,7 @@ final class ShelvSystemIntentPlaybackService: @unchecked Sendable {
         flightID: UInt64
     ) async throws {
         try await requireNetwork()
-        let songs = try await SmartMixPlaybackService.songs(
-            for: mix,
-            storageServerID: context.storageServerID
-        )
+        let songs = try await SmartMixPlaybackService.songs(for: mix)
         try validateFlight(flightID, serverConfigID: context.server.id.uuidString)
         try await apply(songs: songs, order: .shuffled, placement: .replace, repeats: false)
     }
