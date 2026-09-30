@@ -825,7 +825,7 @@ class ArtistDetailViewModel: ObservableObject {
             async let artistDetail = api.getArtist(id: artistId)
             async let artistInfo = api.getArtistInfo(
                 id: artistId,
-                similarArtistCount: ArtistPageLayout.similarArtistCount
+                similarArtistCount: ArtistPageLayout.similarArtistRequestCount
             )
             // Everything is awaited into locals first and only then written to
             // state in one go. Assigning between two awaits lets SwiftUI render in
@@ -849,7 +849,7 @@ class ArtistDetailViewModel: ObservableObject {
             biography = info?.biography?.strippingHTML
             // Servers can list a track/featured artist with no album of their
             // own here; tapping through would land on an empty artist page.
-            similarArtists = (info?.similarArtist ?? []).filter { ($0.albumCount ?? 0) > 0 }
+            similarArtists = ArtistPageLayout.shownSimilarArtists(from: info?.similarArtist)
             musicBrainzId = info?.musicBrainzId
             lastFmURLString = info?.lastFmUrl
         } catch {

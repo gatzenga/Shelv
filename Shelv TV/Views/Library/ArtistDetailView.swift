@@ -138,7 +138,7 @@ struct ArtistDetailView: View {
             topSongs = loadedTopSongs
             // Servers can list a track/featured artist with no album of their
             // own here; tapping through would land on an empty artist page.
-            similarArtists = (info?.similarArtist ?? []).filter { ($0.albumCount ?? 0) > 0 }
+            similarArtists = ArtistPageLayout.shownSimilarArtists(from: info?.similarArtist)
             isLoading = false
         }
     }
@@ -147,7 +147,7 @@ struct ArtistDetailView: View {
         guard !offlineMode.isOffline else { return nil }
         return try? await SubsonicAPIService.shared.getArtistInfo(
             id: artist.id,
-            similarArtistCount: ArtistPageLayout.similarArtistCount
+            similarArtistCount: ArtistPageLayout.similarArtistRequestCount
         )
     }
 
