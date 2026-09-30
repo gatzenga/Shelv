@@ -400,7 +400,10 @@ struct ArtistDetailView: View {
 
             if showsTopSongs {
                 Section {
-                    VStack(alignment: .leading, spacing: 12) {
+                    // The 6 pt between title and grid plus the 6 pt the first row sits
+                    // below the top of its grid cell add up to the 12 pt between a shelf
+                    // title and its covers.
+                    VStack(alignment: .leading, spacing: 6) {
                         HStack {
                             Text(String(localized: "top_songs"))
                                 .font(.title3).bold()
@@ -419,6 +422,9 @@ struct ArtistDetailView: View {
                                     .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
+                            // The button keeps its 44 pt touch area but adds no height, so
+                            // the title spaces like the other shelf titles.
+                            .padding(.vertical, -10)
                         }
                         .padding(.horizontal)
                         .contentShape(Rectangle())
@@ -463,7 +469,7 @@ struct ArtistDetailView: View {
                         }
                         .scrollIndicators(.hidden)
                     }
-                    .listRowInsets(EdgeInsets())
+                    .listRowInsets(EdgeInsets(top: Self.sectionGap, leading: 0, bottom: 0, trailing: 0))
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
                 }
