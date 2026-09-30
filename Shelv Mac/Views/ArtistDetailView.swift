@@ -15,7 +15,6 @@ struct ArtistDetailView: View {
     @AppStorage("enableDownloads") private var enableDownloads = true
     @AppStorage("artistDetailAlbumSort") private var sortRaw: String = LibrarySortOption.recentlyAdded.rawValue
     @AppStorage("artistDetailAlbumDirection") private var directionRaw: String = SortDirection.descending.rawValue
-    @AppStorage("artistDetailAlbumIsGrid") private var isGrid: Bool = true
 
     private var showFavoriteActions: Bool {
         personalizationVisibility.showFavoriteActions
@@ -83,6 +82,35 @@ struct ArtistDetailView: View {
             let albums = ArtistDiscography.filter(displayAlbums, to: group)
             return albums.isEmpty ? nil : (group, albums)
         }
+    }
+
+    /// Sort menu for the releases shown on the shelves below it.
+    private var albumSortControls: some View {
+        HStack(spacing: 8) {
+            Picker(String(localized: "sort"), selection: $sortRaw) {
+                ForEach(LibrarySortOption.allCases.filter {
+                    $0 != .artist && (!offlineMode.isOffline || !$0.requiresServer)
+                }, id: \.self) { opt in
+                    Text(opt.label).tag(opt.rawValue)
+                }
+            }
+            .pickerStyle(.menu)
+            .frame(width: 180)
+            if sortOption != .name {
+                Button {
+                    directionRaw = direction == .ascending
+                        ? SortDirection.descending.rawValue
+                        : SortDirection.ascending.rawValue
+                } label: {
+                    Image(systemName: direction == .ascending ? "arrow.up" : "arrow.down")
+                        .font(.title3)
+                }
+                .buttonStyle(.borderless)
+                .help(direction == .ascending ? String(localized: "ascending") : String(localized: "descending"))
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 24)
     }
 
     private var latestRelease: Album? {
@@ -206,42 +234,10 @@ struct ArtistDetailView: View {
                                 }
                                 .padding(.horizontal, 20)
 
-                                if isGrid, let latestRelease {
+                                if let latestRelease {
                                     // The card pads itself (24pt), so none here.
                                     ArtistLatestReleaseCard(album: latestRelease, accentColor: themeColor)
                                 }
-
-                                HStack(spacing: 8) {
-                                    Picker(String(localized: "sort"), selection: $sortRaw) {
-                                        ForEach(LibrarySortOption.allCases.filter {
-                                            $0 != .artist && (!offlineMode.isOffline || !$0.requiresServer)
-                                        }, id: \.self) { opt in
-                                            Text(opt.label).tag(opt.rawValue)
-                                        }
-                                    }
-                                    .pickerStyle(.menu)
-                                    .frame(width: 180)
-                                    if sortOption != .name {
-                                        Button {
-                                            directionRaw = direction == .ascending
-                                                ? SortDirection.descending.rawValue
-                                                : SortDirection.ascending.rawValue
-                                        } label: {
-                                            Image(systemName: direction == .ascending ? "arrow.up" : "arrow.down")
-                                                .font(.title3)
-                                        }
-                                        .buttonStyle(.borderless)
-                                        .help(direction == .ascending ? String(localized: "ascending") : String(localized: "descending"))
-                                    }
-                                    Spacer()
-                                    Button { isGrid.toggle() } label: {
-                                        Image(systemName: isGrid ? "list.bullet" : "square.grid.2x2")
-                                            .font(.title3)
-                                    }
-                                    .buttonStyle(.borderless)
-                                    .help(isGrid ? String(localized: "list_view") : String(localized: "grid_view"))
-                                }
-                                .padding(.horizontal, 20)
                             }
 
                             if vm.isShowingDownloadsOnly, !offlineMode.isOffline {
@@ -255,27 +251,15 @@ struct ArtistDetailView: View {
                                 .padding(.horizontal, 20)
                             }
 
-                            if isGrid && searchQuery.isEmpty {
+                            if searchQuery.isEmpty {
                                 VStack(alignment: .leading, spacing: 24) {
-                                    ForEach(shelves, id: \.group.rawValue) { shelf in
+                                    ForEach(Array(shelves.enumerated()), id: \.element.group.rawValue) { index, shelf in
+                                        // One sort menu for every shelf, under the title of the first.
                                         ArtistReleaseShelf(
                                             title: shelf.group.shelfTitle,
                                             albums: shelf.albums
-                                        )
-                                    }
-                                }
-                                .padding(.bottom, 8)
-                            } else if searchQuery.isEmpty {
-                                LazyVStack(spacing: 0) {
-                                    ForEach(displayAlbums) { album in
-                                        NavigationLink(value: album) {
-                                            AlbumListRow(album: album)
-                                                .equatable()
-                                        }
-                                        .buttonStyle(.plain)
-                                        .albumContextMenu(album)
-                                        if album.id != displayAlbums.last?.id {
-                                            Divider().padding(.leading, 92)
+                                        ) {
+                                            if index == 0 { albumSortControls }
                                         }
                                     }
                                 }
@@ -411,24 +395,16 @@ struct ArtistDetailView: View {
                 HStack(alignment: .top, spacing: 16) {
                     ForEach(vm.similarArtists) { artist in
                         NavigationLink(value: artist) {
-                            VStack(spacing: 8) {
-                                CoverArtView(
-                                    coverArtID: artist.coverArt,
-                                    requestSize: 200,
-                                    size: 104,
-                                    isCircle: true
-                                )
-                                Text(artist.name)
-                                    .font(.callout)
-                                    .lineLimit(2)
-                                    .multilineTextAlignment(.center)
-                                    .frame(width: 104)
-                            }
+                            SimilarArtistItem(artist: artist)
                         }
                         .buttonStyle(.plain)
+                        .artistContextMenu(artist)
                     }
                 }
                 .padding(.horizontal, 20)
+                // Room for the hover scale-up, which a ScrollView would otherwise
+                // clip at the top, same as on the release shelves.
+                .padding(.top, 8)
             }
             .scrollIndicators(.hidden)
         }

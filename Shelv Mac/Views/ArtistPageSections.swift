@@ -29,15 +29,21 @@ struct ArtistAlbumGroup: Hashable {
 /// than one long grid with a filter on top of it. The title opens the full,
 /// sortable list, with the same grid/list and sort options as the Library's
 /// own Albums screen.
-struct ArtistReleaseShelf: View {
-    /// `nil` drops the header row, and with it the link to the full list. A
-    /// shelf the page has already titled holds every release the artist has,
-    /// and the sort and grid/list controls right above it do what that list
-    /// would have offered.
+struct ArtistReleaseShelf<Accessory: View>: View {
+    /// `nil` drops the header row, and with it the link to the full list.
     let title: String?
     let albums: [Album]
+    /// Shown between the title and the covers, for controls that belong to the
+    /// releases below, such as the sort menu.
+    let accessory: Accessory
 
     private let itemWidth: CGFloat = 170
+
+    init(title: String?, albums: [Album], @ViewBuilder accessory: () -> Accessory) {
+        self.title = title
+        self.albums = albums
+        self.accessory = accessory()
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -55,6 +61,8 @@ struct ArtistReleaseShelf: View {
                 .buttonStyle(.plain)
                 .padding(.horizontal, 24)
             }
+
+            accessory
 
             ScrollView(.horizontal) {
                 LazyHStack(alignment: .top, spacing: 16) {
@@ -76,6 +84,12 @@ struct ArtistReleaseShelf: View {
             }
             .scrollIndicators(.hidden)
         }
+    }
+}
+
+extension ArtistReleaseShelf where Accessory == EmptyView {
+    init(title: String?, albums: [Album]) {
+        self.init(title: title, albums: albums) { EmptyView() }
     }
 }
 
@@ -243,5 +257,32 @@ struct ArtistLinksRow: View {
             .background(.secondary.opacity(0.12), in: Capsule())
         }
         .buttonStyle(.plain)
+    }
+}
+
+/// An entry of the "fans also like" row, with the same hover lift as the
+/// artists grid.
+struct SimilarArtistItem: View {
+    let artist: Artist
+    @State private var isHovered = false
+
+    var body: some View {
+        VStack(spacing: 8) {
+            CoverArtView(
+                coverArtID: artist.coverArt,
+                requestSize: 200,
+                size: 104,
+                isCircle: true
+            )
+            .shadow(color: .black.opacity(isHovered ? 0.3 : 0.12), radius: isHovered ? 10 : 4)
+            .scaleEffect(isHovered ? 1.05 : 1.0)
+            Text(artist.name)
+                .font(.callout)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+                .frame(width: 104)
+        }
+        .onHover { isHovered = $0 }
+        .animation(.easeInOut(duration: 0.15), value: isHovered)
     }
 }
