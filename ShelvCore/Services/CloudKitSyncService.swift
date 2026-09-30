@@ -1210,6 +1210,8 @@ actor CloudKitSyncService {
             let rid = CKRecord.ID(recordName: Self.externalServicesRecordName, zoneID: zoneID)
             let rec = CKRecord(recordType: "ExternalServicesSettings", recordID: rid)
             rec["lastFMEnabled"] = snapshot.isEnabled ? 1 : 0
+            rec["lastFMMixesEnabled"] = snapshot.mixesEnabled ? 1 : 0
+            rec["lastFMTopSongsEnabled"] = snapshot.topSongsEnabled ? 1 : 0
             rec["lastFMUsername"] = snapshot.username
             // Keys and the session grant access to the account, so they only
             // travel end-to-end encrypted.
@@ -1235,6 +1237,10 @@ actor CloudKitSyncService {
 
         let snapshot = LastFMCloudSnapshot(
             isEnabled: (record["lastFMEnabled"] as? Int64 ?? 0) == 1,
+            // Records written before these options existed carry neither,
+            // which means both were on.
+            mixesEnabled: (record["lastFMMixesEnabled"] as? Int64).map { $0 == 1 } ?? true,
+            topSongsEnabled: (record["lastFMTopSongsEnabled"] as? Int64).map { $0 == 1 } ?? true,
             username: record["lastFMUsername"] as? String ?? "",
             apiKey: record.encryptedValues["lastFMAPIKey"] as? String ?? "",
             sharedSecret: record.encryptedValues["lastFMSharedSecret"] as? String ?? "",

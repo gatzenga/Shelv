@@ -43,8 +43,14 @@ struct ExternalServicesTab: View {
 
             if lastFMEnabled {
                 Section {
-                    Toggle(String(localized: "lastfm_top_songs"), isOn: $topSongsEnabled)
-                    Toggle(String(localized: "lastfm_mixes"), isOn: $mixesEnabled)
+                    Toggle(String(localized: "lastfm_top_songs"), isOn: Binding(
+                        get: { topSongsEnabled },
+                        set: { enabled in Task { await LastFMService.shared.setTopSongsEnabled(enabled) } }
+                    ))
+                    Toggle(String(localized: "lastfm_mixes"), isOn: Binding(
+                        get: { mixesEnabled },
+                        set: { enabled in Task { await LastFMService.shared.setMixesEnabled(enabled) } }
+                    ))
                 } header: {
                     Text(String(localized: "lastfm_use_for"))
                 } footer: {

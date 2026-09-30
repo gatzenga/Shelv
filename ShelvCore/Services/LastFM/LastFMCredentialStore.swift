@@ -10,6 +10,8 @@ nonisolated enum ExternalServicesSync {
 /// Everything another device needs to use the same Last.fm connection.
 nonisolated struct LastFMCloudSnapshot: Equatable, Sendable {
     var isEnabled: Bool
+    var mixesEnabled: Bool = true
+    var topSongsEnabled: Bool = true
     var username: String
     var apiKey: String
     var sharedSecret: String
@@ -71,6 +73,8 @@ nonisolated enum LastFMCredentialStore {
     static func snapshot() -> LastFMCloudSnapshot {
         LastFMCloudSnapshot(
             isEnabled: isEnabled,
+            mixesEnabled: mixesEnabled,
+            topSongsEnabled: topSongsEnabled,
             username: username,
             apiKey: read(.apiKey),
             sharedSecret: read(.sharedSecret),
@@ -87,6 +91,8 @@ nonisolated enum LastFMCredentialStore {
             && write(snapshot.sessionKey, for: .sessionKey)
         guard stored else { return false }
         isEnabled = snapshot.isEnabled
+        mixesEnabled = snapshot.mixesEnabled
+        topSongsEnabled = snapshot.topSongsEnabled
         username = snapshot.username
         return true
     }

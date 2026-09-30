@@ -80,6 +80,20 @@ actor LastFMService {
         }
     }
 
+    func setMixesEnabled(_ enabled: Bool) async {
+        guard LastFMCredentialStore.mixesEnabled != enabled else { return }
+        LastFMCredentialStore.mixesEnabled = enabled
+        ExternalServicesLog.info(enabled ? "Mixes from Last.fm turned on" : "Mixes from Last.fm turned off")
+        await CloudKitSyncService.shared.recordExternalServicesChange()
+    }
+
+    func setTopSongsEnabled(_ enabled: Bool) async {
+        guard LastFMCredentialStore.topSongsEnabled != enabled else { return }
+        LastFMCredentialStore.topSongsEnabled = enabled
+        ExternalServicesLog.info(enabled ? "Top Songs from Last.fm turned on" : "Top Songs from Last.fm turned off")
+        await CloudKitSyncService.shared.recordExternalServicesChange()
+    }
+
     /// Stores new API credentials. A session belongs to the key it was granted
     /// for, so changing the key or secret also ends the current connection.
     func saveCredentials(apiKey: String, sharedSecret: String) async {

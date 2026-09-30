@@ -48,12 +48,18 @@ struct ExternalServicesSettingsView: View {
 
             if lastFMEnabled {
                 Section {
-                    Toggle(isOn: $topSongsEnabled) {
+                    Toggle(isOn: Binding(
+                        get: { topSongsEnabled },
+                        set: { enabled in Task { await LastFMService.shared.setTopSongsEnabled(enabled) } }
+                    )) {
                         Label { Text(String(localized: "lastfm_top_songs")) } icon: {
                             Image(systemName: "music.mic").foregroundStyle(accentColor)
                         }
                     }
-                    Toggle(isOn: $mixesEnabled) {
+                    Toggle(isOn: Binding(
+                        get: { mixesEnabled },
+                        set: { enabled in Task { await LastFMService.shared.setMixesEnabled(enabled) } }
+                    )) {
                         Label { Text(String(localized: "lastfm_mixes")) } icon: {
                             Image(systemName: "shuffle").foregroundStyle(accentColor)
                         }
