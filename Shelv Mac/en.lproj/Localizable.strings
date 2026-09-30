@@ -726,3 +726,7 @@
 "lastfm_error_not_authorized" = "Access was not granted";
 "lastfm_error_unreachable" = "Last.fm is not reachable";
 "external_services_log" = "External Services Log";
+"refresh_metadata" = "Refresh Metadata";
+"refreshing_metadata_format" = "Refreshing metadata… %d / %d";
+"metadata_refresh_complete" = "Metadata refresh complete";
+"metadata_refresh_failed_format" = "%d of %d artists could not be refreshed";

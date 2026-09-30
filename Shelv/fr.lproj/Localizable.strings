@@ -283,7 +283,6 @@
 "last_sync_2" = "Dernière synchronisation : ";
 "never_synced" = "Jamais synchronisé";
 "scanning_library" = "Analyse de la bibliothèque…";
-"start_full_scan" = "Lancer l’analyse complète";
 "tracks" = "Morceaux";
 "api_version" = "Version de l’API";
 "scan_timed_out_after_2_minutes" = "L’analyse a dépassé le délai de 2 minutes.";
@@ -733,3 +732,9 @@
 "player" = "Lecteur";
 "stop" = "Arrêter";
 "player_buttons" = "Boutons";
+"full_sync" = "Synchronisation complète";
+"refresh_metadata" = "Actualiser les métadonnées";
+"refreshing_metadata_format" = "Actualisation des métadonnées… %d / %d";
+"metadata_refresh_complete" = "Actualisation des métadonnées terminée";
+"metadata_refresh_failed_format" = "%d artistes sur %d n’ont pas pu être actualisés";
+"sync_complete" = "Synchronisation terminée";

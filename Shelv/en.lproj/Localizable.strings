@@ -283,7 +283,6 @@
 "last_sync_2" = "Last sync: ";
 "never_synced" = "Never synced";
 "scanning_library" = "Scanning library…";
-"start_full_scan" = "Start Full Scan";
 "tracks" = "Tracks";
 "api_version" = "API Version";
 "scan_timed_out_after_2_minutes" = "Scan timed out after 2 minutes.";
@@ -733,3 +732,9 @@
 "player" = "Player";
 "stop" = "Stop";
 "player_buttons" = "Buttons";
+"full_sync" = "Full Sync";
+"refresh_metadata" = "Refresh Metadata";
+"refreshing_metadata_format" = "Refreshing metadata… %d / %d";
+"metadata_refresh_complete" = "Metadata refresh complete";
+"metadata_refresh_failed_format" = "%d of %d artists could not be refreshed";
+"sync_complete" = "Sync complete";

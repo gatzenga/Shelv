@@ -726,3 +726,7 @@
 "lastfm_error_not_authorized" = "未授予访问权限";
 "lastfm_error_unreachable" = "无法连接 Last.fm";
 "external_services_log" = "外部服务日志";
+"refresh_metadata" = "刷新元数据";
+"refreshing_metadata_format" = "正在刷新元数据… %d / %d";
+"metadata_refresh_complete" = "元数据刷新完成";
+"metadata_refresh_failed_format" = "%d / %d 位艺人刷新失败";

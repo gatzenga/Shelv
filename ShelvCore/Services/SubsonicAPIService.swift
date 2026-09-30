@@ -2019,6 +2019,82 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         return try decoder.decode(AuthResponse.self, from: data).id
     }
 
+    /// Asks Navidrome to fetch biography, similar artists and the rest of the
+    /// external info again, for every artist on the server. The same call the web
+    /// interface's "Refresh Metadata" makes, so it needs an admin account.
+    ///
+    /// Navidrome answers each request at once and does the lookups in the
+    /// background, so the artists are sent in small steps with a short pause to
+    /// keep a home server from being hit by hundreds of lookups in the same second.
+    /// - Returns: how many artists were sent and how many of those failed.
+    func refreshAllArtistMetadata(
+        server: SubsonicServer,
+        password: String,
+        progress: (@Sendable (Int, Int) async -> Void)? = nil
+    ) async throws -> (refreshed: Int, failed: Int) {
+        let body = try await fetchDecoded(
+            Envelope<ArtistsBody>.self,
+            for: server,
+            password: password,
+            path: "getArtists"
+        ).response
+        try check(status: body.status, error: body.error)
+        let ids = (body.artists?.index ?? []).flatMap { $0.artist ?? [] }.map(\.id)
+        guard !ids.isEmpty else { return (0, 0) }
+
+        let token = try await navidromeToken(server: server, password: password)
+        var base = server.activeBaseURL
+        if base.hasSuffix("/") { base.removeLast() }
+
+        let batchSize = 3
+        var done = 0
+        var failed = 0
+        for start in stride(from: 0, to: ids.count, by: batchSize) {
+            try Task.checkCancellation()
+            let batch = Array(ids[start..<min(start + batchSize, ids.count)])
+            let results = await withTaskGroup(of: Bool.self) { group in
+                for id in batch {
+                    group.addTask { await self.postArtistMetadataRefresh(base: base, artistId: id, token: token) }
+                }
+                var all: [Bool] = []
+                for await ok in group { all.append(ok) }
+                return all
+            }
+            done += batch.count
+            failed += results.filter { !$0 }.count
+            await progress?(done, ids.count)
+            try await Task.sleep(nanoseconds: 300_000_000)
+        }
+        return (done - failed, failed)
+    }
+
+    private func postArtistMetadataRefresh(base: String, artistId: String, token: String) async -> Bool {
+        guard let url = URL(string: "\(base)/api/metadata/ar/\(artistId)/refresh") else { return false }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "X-ND-Authorization")
+        guard let (_, response) = try? await session.data(for: request),
+              let http = response as? HTTPURLResponse
+        else { return false }
+        return (200...299).contains(http.statusCode)
+    }
+
+    private func navidromeToken(server: SubsonicServer, password: String) async throws -> String {
+        var base = server.activeBaseURL
+        if base.hasSuffix("/") { base.removeLast() }
+        guard let url = URL(string: "\(base)/auth/login") else { throw SubsonicAPIError.invalidURL }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(["username": server.username, "password": password])
+        let (data, response) = try await session.data(for: request)
+        if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+            throw SubsonicAPIError.httpError(http.statusCode)
+        }
+        struct AuthResponse: Decodable { let token: String }
+        return try decoder.decode(AuthResponse.self, from: data).token
+    }
+
     func streamURL(for songId: String, timeOffset: Int = 0) -> URL? {
         var extras = [URLQueryItem(name: "id", value: songId)]
         if let fmt = TranscodingPolicy.currentStreamFormat() {

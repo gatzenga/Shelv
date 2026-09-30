@@ -10,6 +10,9 @@ struct ServerDetailView: View {
 
     @State private var isScanning = false
     @State private var scanDone = false
+    @State private var isRefreshingMetadata = false
+    @State private var metadataProgress: (done: Int, total: Int)?
+    @State private var metadataDone = false
     @State private var serverInfo: ServerInfo? = nil
     @State private var errorMessage: String? = nil
     @State private var loadedPassword: String? = nil
@@ -64,21 +67,54 @@ struct ServerDetailView: View {
                         }
                     }
 
-                    if isScanning {
-                        Text(String(localized: "scanning_library"))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
                     Button {
                         Task { await runFullScan() }
                     } label: {
-                        Text(String(localized: "start_full_scan"))
+                        Text(String(localized: "full_sync"))
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(accentColor)
-                    .disabled(isScanning || resolvedPassword == nil)
+                    .disabled(isScanning || isRefreshingMetadata || resolvedPassword == nil)
+
+                    if isScanning {
+                        Text(String(localized: "scanning_library"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else if scanDone {
+                        Label(String(localized: "sync_complete"), systemImage: "checkmark.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.green)
+                    }
+
+                    if server.isAdmin {
+                        Button {
+                            Task { await runMetadataRefresh() }
+                        } label: {
+                            HStack {
+                                if isRefreshingMetadata { ProgressView() }
+                                Text(String(localized: "refresh_metadata"))
+                            }
+                            .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(accentColor)
+                        .disabled(isScanning || isRefreshingMetadata || resolvedPassword == nil)
+
+                        if let metadataProgress {
+                            Text(String(
+                                format: String(localized: "refreshing_metadata_format"),
+                                metadataProgress.done,
+                                metadataProgress.total
+                            ))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        } else if metadataDone {
+                            Label(String(localized: "metadata_refresh_complete"), systemImage: "checkmark.circle.fill")
+                                .font(.caption)
+                                .foregroundStyle(.green)
+                        }
+                    }
                 }
                 .padding(.vertical, 4)
                 .animation(.easeInOut, value: scanDone)
@@ -152,6 +188,34 @@ struct ServerDetailView: View {
         serverInfo = try? await infoTask
         if let status = try? await statusTask, status.count > 0 {
             UserDefaults.standard.set(status.count, forKey: songCountKey)
+        }
+    }
+
+    private func runMetadataRefresh() async {
+        guard let password = resolvedPassword else { return }
+        isRefreshingMetadata = true
+        metadataDone = false
+        metadataProgress = nil
+        errorMessage = nil
+        defer {
+            isRefreshingMetadata = false
+            metadataProgress = nil
+        }
+        do {
+            let result = try await api.refreshAllArtistMetadata(server: server, password: password) { done, total in
+                await MainActor.run { metadataProgress = (done, total) }
+            }
+            if result.failed > 0 {
+                errorMessage = String(
+                    format: String(localized: "metadata_refresh_failed_format"),
+                    result.failed,
+                    result.refreshed + result.failed
+                )
+            } else {
+                metadataDone = true
+            }
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 

@@ -283,7 +283,6 @@
 "last_sync_2" = "上次同步：";
 "never_synced" = "从未同步";
 "scanning_library" = "正在扫描音乐库…";
-"start_full_scan" = "开始完整扫描";
 "tracks" = "曲目";
 "api_version" = "API 版本";
 "scan_timed_out_after_2_minutes" = "扫描超时（2 分钟后）。";
@@ -733,3 +732,9 @@
 "player" = "播放器";
 "stop" = "停止";
 "player_buttons" = "按钮";
+"full_sync" = "完整同步";
+"refresh_metadata" = "刷新元数据";
+"refreshing_metadata_format" = "正在刷新元数据… %d / %d";
+"metadata_refresh_complete" = "元数据刷新完成";
+"metadata_refresh_failed_format" = "%d / %d 位艺人刷新失败";
+"sync_complete" = "同步完成";

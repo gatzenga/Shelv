@@ -11,6 +11,9 @@ struct ServerManagementView: View {
     @State private var isLoadingInfo = true
     @State private var isScanning = false
     @State private var scanDone = false
+    @State private var isRefreshingMetadata = false
+    @State private var metadataProgress: (done: Int, total: Int)?
+    @State private var metadataDone = false
     @State private var lastSyncDate: Date? = {
         let ts = UserDefaults.standard.double(forKey: "shelv_lastSync")
         return ts > 0 ? Date(timeIntervalSince1970: ts) : nil
@@ -79,6 +82,13 @@ struct ServerManagementView: View {
                     }
                 }
 
+                Button {
+                    Task { await runFullSync() }
+                } label: {
+                    Label(String(localized: "full_sync"), systemImage: "arrow.triangle.2.circlepath")
+                }
+                .disabled(isScanning || isRefreshingMetadata || !appState.isLoggedIn)
+
                 if isScanning {
                     HStack(spacing: 8) {
                         ProgressView().controlSize(.small)
@@ -90,18 +100,35 @@ struct ServerManagementView: View {
                         .foregroundStyle(.green)
                 }
 
+                if serverStore.activeServer?.isAdmin == true {
+                    Button {
+                        Task { await runMetadataRefresh() }
+                    } label: {
+                        Label(String(localized: "refresh_metadata"), systemImage: "arrow.clockwise")
+                    }
+                    .disabled(isScanning || isRefreshingMetadata || !appState.isLoggedIn)
+
+                    if let progress = metadataProgress {
+                        HStack(spacing: 8) {
+                            ProgressView().controlSize(.small)
+                            Text(String(
+                                format: String(localized: "refreshing_metadata_format"),
+                                progress.done,
+                                progress.total
+                            ))
+                            .foregroundStyle(.secondary)
+                        }
+                    } else if metadataDone {
+                        Label(String(localized: "metadata_refresh_complete"), systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                    }
+                }
+
                 if let err = errorMessage {
                     Label(err, systemImage: "exclamationmark.triangle.fill")
                         .foregroundStyle(.red)
                         .font(.caption)
                 }
-
-                Button {
-                    Task { await runFullSync() }
-                } label: {
-                    Label(String(localized: "full_sync"), systemImage: "arrow.triangle.2.circlepath")
-                }
-                .disabled(isScanning || !appState.isLoggedIn)
             }
         }
         .formStyle(.grouped)
@@ -146,6 +173,41 @@ struct ServerManagementView: View {
             offset += pageSize
         }
         return total
+    }
+
+    // MARK: - Refresh Metadata
+
+    private func runMetadataRefresh() async {
+        guard let server = serverStore.activeServer,
+              let password = await serverStore.loadPassword(for: server)
+        else { return }
+        isRefreshingMetadata = true
+        metadataDone = false
+        metadataProgress = nil
+        errorMessage = nil
+        defer {
+            isRefreshingMetadata = false
+            metadataProgress = nil
+        }
+        do {
+            let result = try await SubsonicAPIService.shared.refreshAllArtistMetadata(
+                server: server,
+                password: password
+            ) { done, total in
+                await MainActor.run { metadataProgress = (done, total) }
+            }
+            if result.failed > 0 {
+                errorMessage = String(
+                    format: String(localized: "metadata_refresh_failed_format"),
+                    result.failed,
+                    result.refreshed + result.failed
+                )
+            } else {
+                metadataDone = true
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     // MARK: - Full Sync

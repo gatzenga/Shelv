@@ -283,7 +283,6 @@
 "last_sync_2" = "Letzter Sync: ";
 "never_synced" = "Noch nie synchronisiert";
 "scanning_library" = "Bibliothek wird gescannt…";
-"start_full_scan" = "Vollständig scannen";
 "tracks" = "Titel";
 "api_version" = "API-Version";
 "scan_timed_out_after_2_minutes" = "Scan nach 2 Minuten abgebrochen.";
@@ -733,3 +732,9 @@
 "player" = "Player";
 "stop" = "Stopp";
 "player_buttons" = "Buttons";
+"full_sync" = "Vollständig synchronisieren";
+"refresh_metadata" = "Metadaten aktualisieren";
+"refreshing_metadata_format" = "Metadaten werden aktualisiert… %d / %d";
+"metadata_refresh_complete" = "Metadaten-Aktualisierung abgeschlossen";
+"metadata_refresh_failed_format" = "%d von %d Künstlern konnten nicht aktualisiert werden";
+"sync_complete" = "Synchronisation abgeschlossen";
