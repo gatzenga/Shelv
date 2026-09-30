@@ -1945,28 +1945,41 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
         return ScanStatus(scanning: body.scanStatus?.scanning ?? false, count: body.scanStatus?.count ?? 0)
     }
 
-    /// Frequently-Played-Fallback: Top-Alben nach Play-Count, adaptiver Threshold.
-    func frequentMixFallbackSongs() async throws -> [Song] {
-        let allFrequent = try await getAlbumList(type: "frequent", size: 500)
-        let sorted = allFrequent.sorted { ($0.playCount ?? 0) > ($1.playCount ?? 0) }
-        let maxPC = sorted.first?.playCount ?? 0
-        let threshold = max(maxPC / 50, 1)
-        var filtered = sorted.filter { ($0.playCount ?? 0) >= threshold }
-        if filtered.count < 30 { filtered = Array(sorted.prefix(30)) }
-        if filtered.count > 80 { filtered = Array(sorted.prefix(80)) }
-        let songs = try await withThrowingTaskGroup(of: [Song].self) { group in
-            for album in filtered {
-                group.addTask { (try? await self.getAlbum(id: album.id))?.song ?? [] }
+    /// Most played songs from the server's own play counts.
+    ///
+    /// Goes through the most played albums in order and keeps the best songs,
+    /// until no remaining album can hold a song that beats the current last
+    /// place (see `FrequentSongsCollector`). The result is exact, and only as
+    /// many albums are loaded as that takes.
+    func frequentMixFallbackSongs(limit: Int = 50) async throws -> [Song] {
+        let albums = try await getAlbumList(type: "frequent", size: 500)
+            .sorted { ($0.playCount ?? 0) > ($1.playCount ?? 0) }
+        var collector = FrequentSongsCollector(limit: limit)
+        // For servers that report no play counts on songs: the first albums'
+        // songs, as this mix always used to return.
+        var firstLoaded: [Song] = []
+        let batchSize = 8
+        var index = 0
+        while index < albums.count {
+            let batch = albums[index..<min(index + batchSize, albums.count)]
+                .filter { collector.isWorthLoading(albumPlayCount: $0.playCount) }
+            // Sorted by play count, so once the first one of a batch is not
+            // worth loading, nothing after it is either.
+            guard !batch.isEmpty else { break }
+            index += batchSize
+
+            let loaded = await withTaskGroup(of: [Song].self) { group in
+                for album in batch {
+                    group.addTask { (try? await self.getAlbum(id: album.id))?.song ?? [] }
+                }
+                var all: [Song] = []
+                for await songs in group { all.append(contentsOf: songs) }
+                return all
             }
-            var all: [Song] = []
-            for try await albumSongs in group { all.append(contentsOf: albumSongs) }
-            return all
+            if firstLoaded.isEmpty { firstLoaded = loaded }
+            collector.add(loaded)
         }
-        // Tracks that were never played only pad the list when an album is
-        // mostly unplayed, which is not what a most-played mix should contain.
-        let played = songs.filter { ($0.playCount ?? 0) > 0 }
-        let pool = played.isEmpty ? songs : played
-        return Array(pool.sorted { ($0.playCount ?? 0) > ($1.playCount ?? 0) }.prefix(50))
+        return collector.top.isEmpty ? Array(firstLoaded.prefix(limit)) : collector.top
     }
 
     /// Validates credentials through the standard Subsonic API. Navidrome's

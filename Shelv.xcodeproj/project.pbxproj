@@ -40,8 +40,7 @@
 		BC1001302FFE000000000001 /* ShelvCore/Services/DBErrorLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001312FFE000000000001 /* ShelvCore/Services/DBErrorLog.swift */; };
 		BC1001322FFE000000000001 /* ShelvCore/Services/DownloadPayloadValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001332FFE000000000001 /* ShelvCore/Services/DownloadPayloadValidator.swift */; };
 		BC1001342FFE000000000001 /* ShelvCore/Services/ScrobbleOutbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001352FFE000000000001 /* ShelvCore/Services/ScrobbleOutbox.swift */; };
-		BC1001622FFE000000000001 /* ShelvCore/Services/LastFM/LastFMClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001632FFE000000000001 /* ShelvCore/Services/LastFM/LastFMClient.swift */; };
-		BC1001642FFE000000000001 /* ShelvCore/Services/LastFM/LastFMTrackMatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001652FFE000000000001 /* ShelvCore/Services/LastFM/LastFMTrackMatcher.swift */; };
+		BC1001662FFE000000000001 /* ShelvCore/Services/FrequentSongsCollector.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001672FFE000000000001 /* ShelvCore/Services/FrequentSongsCollector.swift */; };
 		BC1001382FFE000000000001 /* ShelvCore/Services/ScrobbleDeliveryCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001392FFE000000000001 /* ShelvCore/Services/ScrobbleDeliveryCoordinator.swift */; };
 		BC10013A2FFE000000000001 /* ShelvCore/Utilities/ShelvIntentSearchVocabulary.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC10013B2FFE000000000001 /* ShelvCore/Utilities/ShelvIntentSearchVocabulary.swift */; };
 		BC10013C2FFE000000000001 /* ShelvCore/Models/ShortcutPlaybackModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC10013D2FFE000000000001 /* ShelvCore/Models/ShortcutPlaybackModels.swift */; };
@@ -58,6 +57,8 @@
 		BC1001522FFE000000000001 /* ShelvCore/Stores/SearchHistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001532FFE000000000001 /* ShelvCore/Stores/SearchHistoryStore.swift */; };
 		BC1001542FFE000000000001 /* ShelvCore/Support/AlphabetIndexSelection.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001552FFE000000000001 /* ShelvCore/Support/AlphabetIndexSelection.swift */; };
 		BC1001602FFE000000000001 /* ShelvCore/Services/InfinityMixPoolBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001612FFE000000000001 /* ShelvCore/Services/InfinityMixPoolBuilder.swift */; };
+		BC1001622FFE000000000001 /* ShelvCore/Services/LastFM/LastFMClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001632FFE000000000001 /* ShelvCore/Services/LastFM/LastFMClient.swift */; };
+		BC1001642FFE000000000001 /* ShelvCore/Services/LastFM/LastFMTrackMatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC1001652FFE000000000001 /* ShelvCore/Services/LastFM/LastFMTrackMatcher.swift */; };
 		BC1867E52F91A088006D96E2 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC1867E42F91A088006D96E2 /* GRDB */; };
 		BC51161D2FDC8A850011CDE9 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = BC51161C2FDC8A850011CDE9 /* GRDB */; };
 		BC5A00012FFF000000000001 /* Shelv TV Siri Extension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = BC5A00032FFF000000000001 /* Shelv TV Siri Extension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -126,8 +127,7 @@
 		BC1001312FFE000000000001 /* ShelvCore/Services/DBErrorLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/DBErrorLog.swift; sourceTree = "<group>"; };
 		BC1001332FFE000000000001 /* ShelvCore/Services/DownloadPayloadValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/DownloadPayloadValidator.swift; sourceTree = "<group>"; };
 		BC1001352FFE000000000001 /* ShelvCore/Services/ScrobbleOutbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/ScrobbleOutbox.swift; sourceTree = "<group>"; };
-		BC1001632FFE000000000001 /* ShelvCore/Services/LastFM/LastFMClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/LastFM/LastFMClient.swift; sourceTree = "<group>"; };
-		BC1001652FFE000000000001 /* ShelvCore/Services/LastFM/LastFMTrackMatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/LastFM/LastFMTrackMatcher.swift; sourceTree = "<group>"; };
+		BC1001672FFE000000000001 /* ShelvCore/Services/FrequentSongsCollector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/FrequentSongsCollector.swift; sourceTree = "<group>"; };
 		BC1001392FFE000000000001 /* ShelvCore/Services/ScrobbleDeliveryCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/ScrobbleDeliveryCoordinator.swift; sourceTree = "<group>"; };
 		BC10013B2FFE000000000001 /* ShelvCore/Utilities/ShelvIntentSearchVocabulary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Utilities/ShelvIntentSearchVocabulary.swift; sourceTree = "<group>"; };
 		BC10013D2FFE000000000001 /* ShelvCore/Models/ShortcutPlaybackModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Models/ShortcutPlaybackModels.swift; sourceTree = "<group>"; };
@@ -144,6 +144,8 @@
 		BC1001532FFE000000000001 /* ShelvCore/Stores/SearchHistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Stores/SearchHistoryStore.swift; sourceTree = "<group>"; };
 		BC1001552FFE000000000001 /* ShelvCore/Support/AlphabetIndexSelection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Support/AlphabetIndexSelection.swift; sourceTree = "<group>"; };
 		BC1001612FFE000000000001 /* ShelvCore/Services/InfinityMixPoolBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/InfinityMixPoolBuilder.swift; sourceTree = "<group>"; };
+		BC1001632FFE000000000001 /* ShelvCore/Services/LastFM/LastFMClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/LastFM/LastFMClient.swift; sourceTree = "<group>"; };
+		BC1001652FFE000000000001 /* ShelvCore/Services/LastFM/LastFMTrackMatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShelvCore/Services/LastFM/LastFMTrackMatcher.swift; sourceTree = "<group>"; };
 		BC2000012FFE000000000001 /* ShelvAppIntentsUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ShelvAppIntentsUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC5116112FDC8A690011CDE9 /* Shelv TV.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Shelv TV.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC5A00032FFF000000000001 /* Shelv TV Siri Extension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Shelv TV Siri Extension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -297,6 +299,7 @@
 				BC1001332FFE000000000001 /* ShelvCore/Services/DownloadPayloadValidator.swift */,
 				BC1001352FFE000000000001 /* ShelvCore/Services/ScrobbleOutbox.swift */,
 				BC1001392FFE000000000001 /* ShelvCore/Services/ScrobbleDeliveryCoordinator.swift */,
+				BC1001672FFE000000000001 /* ShelvCore/Services/FrequentSongsCollector.swift */,
 				BC1001632FFE000000000001 /* ShelvCore/Services/LastFM/LastFMClient.swift */,
 				BC1001652FFE000000000001 /* ShelvCore/Services/LastFM/LastFMTrackMatcher.swift */,
 				BC10011A2FFE000000000001 /* ShelvCore/Services/URL+QueryParam.swift */,
@@ -650,6 +653,7 @@
 				BC1001322FFE000000000001 /* ShelvCore/Services/DownloadPayloadValidator.swift in Sources */,
 				BC1001342FFE000000000001 /* ShelvCore/Services/ScrobbleOutbox.swift in Sources */,
 				BC1001382FFE000000000001 /* ShelvCore/Services/ScrobbleDeliveryCoordinator.swift in Sources */,
+				BC1001662FFE000000000001 /* ShelvCore/Services/FrequentSongsCollector.swift in Sources */,
 				BC1001622FFE000000000001 /* ShelvCore/Services/LastFM/LastFMClient.swift in Sources */,
 				BC1001642FFE000000000001 /* ShelvCore/Services/LastFM/LastFMTrackMatcher.swift in Sources */,
 				BC10010A2FFE000000000001 /* ShelvCore/Services/URL+QueryParam.swift in Sources */,
