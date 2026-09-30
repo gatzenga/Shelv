@@ -399,34 +399,6 @@ struct InsightsView: View {
     private func loadTopSongs(from frequentAlbums: [Album]) async {
         songsLoading = true
         defer { songsLoading = false }
-
-        do {
-            let sorted    = frequentAlbums.sorted { ($0.playCount ?? 0) > ($1.playCount ?? 0) }
-            let maxPC     = sorted.first?.playCount ?? 0
-            let threshold = max(maxPC / 50, 1)
-
-            var filtered = sorted.filter { ($0.playCount ?? 0) >= threshold }
-            if filtered.count < 30 { filtered = Array(sorted.prefix(30)) }
-            if filtered.count > 80 { filtered = Array(sorted.prefix(80)) }
-
-            let songs = try await withThrowingTaskGroup(of: [Song].self) { group -> [Song] in
-                for album in filtered {
-                    group.addTask {
-                        try await SubsonicAPIService.shared.getAlbum(id: album.id).song ?? []
-                    }
-                }
-                var all: [Song] = []
-                for try await albumSongs in group { all.append(contentsOf: albumSongs) }
-                return all
-            }
-            topSongs = songs
-                .sorted {
-                    let a = $0.playCount ?? 0, b = $1.playCount ?? 0
-                    return a != b ? a > b : $0.id < $1.id
-                }
-                .prefix(20)
-                .map { $0 }
-        } catch {
-        }
+        topSongs = await SubsonicAPIService.shared.mostPlayedSongs(from: frequentAlbums, limit: 20)
     }
 }

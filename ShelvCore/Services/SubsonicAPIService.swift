@@ -1953,7 +1953,13 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
     /// many albums are loaded as that takes.
     func frequentMixFallbackSongs(limit: Int = 50) async throws -> [Song] {
         let albums = try await getAlbumList(type: "frequent", size: 500)
-            .sorted { ($0.playCount ?? 0) > ($1.playCount ?? 0) }
+        return await mostPlayedSongs(from: albums, limit: limit)
+    }
+
+    /// The same ranking for a list of most played albums that is already at hand,
+    /// such as the one the Insights screens load for their top albums and artists.
+    func mostPlayedSongs(from frequentAlbums: [Album], limit: Int) async -> [Song] {
+        let albums = frequentAlbums.sorted { ($0.playCount ?? 0) > ($1.playCount ?? 0) }
         var collector = FrequentSongsCollector(limit: limit)
         // For servers that report no play counts on songs: the first albums'
         // songs, as this mix always used to return.

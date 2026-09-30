@@ -201,21 +201,7 @@ struct InsightsView: View {
     }
 
     private func loadTopSongs(from frequent: [Album]) async {
-        let sorted = frequent.sorted { ($0.playCount ?? 0) > ($1.playCount ?? 0) }
-        var pool = Array(sorted.prefix(80))
-        if pool.isEmpty { pool = sorted }
-
-        let songs = await withTaskGroup(of: [Song].self) { group in
-            for album in pool {
-                group.addTask { (try? await self.api.getAlbum(id: album.id))?.song ?? [] }
-            }
-            var all: [Song] = []
-            for await s in group { all += s }
-            return all
-        }
-        topSongs = songs
-            .sorted { ($0.playCount ?? 0) > ($1.playCount ?? 0) }
-            .prefix(20).map { $0 }
+        topSongs = await api.mostPlayedSongs(from: frequent, limit: 20)
         InsightsCache.songs = topSongs
     }
 }
