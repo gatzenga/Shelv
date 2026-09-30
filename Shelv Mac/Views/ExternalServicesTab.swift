@@ -3,6 +3,8 @@ import SwiftUI
 
 struct ExternalServicesTab: View {
     @AppStorage(LastFMCredentialStore.enabledKey) private var lastFMEnabled = false
+    @AppStorage(LastFMCredentialStore.topSongsEnabledKey) private var topSongsEnabled = false
+    @AppStorage(LastFMCredentialStore.mixesEnabledKey) private var mixesEnabled = true
     @ObservedObject private var status = LastFMService.shared.status
     @Environment(\.webAuthenticationSession) private var webAuthenticationSession
     @Environment(\.openURL) private var openURL
@@ -14,7 +16,6 @@ struct ExternalServicesTab: View {
     @State private var hasSession = false
     @State private var isAuthorizing = false
     @State private var showLog = false
-    @State private var showAbout = false
 
     private var credentialsEdited: Bool {
         apiKey.trimmingCharacters(in: .whitespacesAndNewlines) != savedAPIKey
@@ -34,14 +35,6 @@ struct ExternalServicesTab: View {
                     get: { lastFMEnabled },
                     set: { enabled in Task { await LastFMService.shared.setEnabled(enabled) } }
                 ))
-                HStack {
-                    Button { showAbout = true } label: {
-                        Label(String(localized: "about"), systemImage: "info.circle")
-                    }
-                    Button { showLog = true } label: {
-                        Label(String(localized: "logs"), systemImage: "doc.text")
-                    }
-                }
             } footer: {
                 Text(String(localized: "lastfm_footer"))
                     .font(.caption)
@@ -49,6 +42,17 @@ struct ExternalServicesTab: View {
             }
 
             if lastFMEnabled {
+                Section {
+                    Toggle(String(localized: "lastfm_top_songs"), isOn: $topSongsEnabled)
+                    Toggle(String(localized: "lastfm_mixes"), isOn: $mixesEnabled)
+                } header: {
+                    Text(String(localized: "lastfm_use_for"))
+                } footer: {
+                    Text(String(localized: "lastfm_use_for_footer"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 Section(String(localized: "lastfm_api_account")) {
                     TextField(String(localized: "lastfm_api_key"), text: $apiKey)
                         .autocorrectionDisabled()
@@ -93,15 +97,18 @@ struct ExternalServicesTab: View {
                         .disabled(!canConnect)
                     }
                 }
+
+                Section {
+                    Button { showLog = true } label: {
+                        Label(String(localized: "logs"), systemImage: "doc.text")
+                    }
+                }
             }
         }
         .formStyle(.grouped)
         .padding()
         .sheet(isPresented: $showLog) {
             ExternalServicesLogView()
-        }
-        .sheet(isPresented: $showAbout) {
-            ExternalServicesAboutView()
         }
         .task { loadCredentials() }
         .onChange(of: status.state) { _, _ in loadCredentials(keepEdits: true) }
@@ -145,32 +152,6 @@ struct ExternalServicesTab: View {
         )
         await LastFMService.shared.completeAuthorization(token: request.token)
         loadCredentials()
-    }
-}
-
-private struct ExternalServicesAboutView: View {
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(String(localized: "external_services"))
-                .font(.headline)
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text(String(localized: "external_services_about_1"))
-                    Text(String(localized: "external_services_about_2"))
-                    Text(String(localized: "external_services_about_3"))
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            HStack {
-                Spacer()
-                Button(String(localized: "done")) { dismiss() }
-                    .keyboardShortcut(.defaultAction)
-            }
-        }
-        .padding(24)
-        .frame(width: 460, height: 400)
     }
 }
 

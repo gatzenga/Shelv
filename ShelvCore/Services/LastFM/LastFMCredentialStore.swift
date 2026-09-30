@@ -21,6 +21,8 @@ nonisolated struct LastFMCloudSnapshot: Equatable, Sendable {
 nonisolated enum LastFMCredentialStore {
     static let enabledKey = "lastFMEnabled"
     static let usernameKey = "lastFMUsername"
+    static let mixesEnabledKey = "lastFMMixesEnabled"
+    static let topSongsEnabledKey = "lastFMTopSongsEnabled"
 
     nonisolated enum Item: String, CaseIterable {
         case apiKey = "api_key"
@@ -33,6 +35,25 @@ nonisolated enum LastFMCredentialStore {
     static var isEnabled: Bool {
         get { UserDefaults.standard.bool(forKey: enabledKey) }
         set { UserDefaults.standard.set(newValue, forKey: enabledKey) }
+    }
+
+    /// Whether the smart mixes read from Last.fm. On by default, which is what
+    /// the single Last.fm toggle did before the two were split.
+    static var mixesEnabled: Bool {
+        get { UserDefaults.standard.object(forKey: mixesEnabledKey) as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: mixesEnabledKey) }
+    }
+
+    /// Whether the artist page shows Last.fm's popular tracks instead of the
+    /// songs played most on the server.
+    static var topSongsEnabled: Bool {
+        get { UserDefaults.standard.bool(forKey: topSongsEnabledKey) }
+        set { UserDefaults.standard.set(newValue, forKey: topSongsEnabledKey) }
+    }
+
+    /// The artist page asks Last.fm directly, which only needs the API key.
+    static var usesLastFMTopSongs: Bool {
+        isEnabled && topSongsEnabled && !read(.apiKey).isEmpty && !read(.sharedSecret).isEmpty
     }
 
     static var username: String {

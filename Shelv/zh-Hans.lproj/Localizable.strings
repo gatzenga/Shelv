@@ -708,7 +708,11 @@
 "external_services" = "外部服务";
 "app_db" = "应用";
 "connection" = "连接";
-"lastfm_footer" = "“常播曲目”和“最近播放”来自你的 Last.fm 记录，也包括其他播放器的播放。";
+"lastfm_footer" = "连接你自己的 Last.fm 账户。Shelv 只读取 Last.fm，从不 Scrobble。";
+"lastfm_top_songs" = "热门歌曲";
+"lastfm_mixes" = "混音";
+"lastfm_use_for" = "使用 Last.fm 的功能";
+"lastfm_use_for_footer" = "“热门歌曲”显示 Last.fm 认为某位艺人最受欢迎且在你资料库中的曲目。“混音”根据你的 Last.fm 记录生成“常播曲目”和“最近播放”，也包括其他播放器的播放。关闭这些选项后，两者都使用服务器上的播放次数。";
 "lastfm_api_account" = "API 账户";
 "lastfm_api_key" = "API 密钥";
 "lastfm_shared_secret" = "共享密钥";
@@ -726,6 +730,3 @@
 "lastfm_error_not_authorized" = "未授予访问权限";
 "lastfm_error_unreachable" = "无法连接 Last.fm";
 "external_services_log" = "外部服务日志";
-"external_services_about_1" = "Shelv 可以读取你在 Last.fm 上的收听记录。“常播曲目”会使用你的热门曲目，“最近播放”会使用你最近的 Scrobble 记录，也包括其他播放器和设备上的播放。“最新曲目”和“随机播放全部”不受影响。";
-"external_services_about_2" = "歌曲按艺人和标题与你的资料库匹配。不在资料库中的曲目（例如来自 Spotify）会被跳过，Shelv 会继续读取，直到混音列表填满。如果匹配的歌曲少于 10 首，或无法连接 Last.fm，混音列表将像以前一样来自 Navidrome。";
-"external_services_about_3" = "你需要自己的 Last.fm API 账户。输入 API 密钥和共享密钥，然后在 last.fm 上授权 Shelv 一次。Shelv 只读取 Last.fm，从不 Scrobble。开启外部服务的 iCloud 同步后，你的其他设备会自动连接。";

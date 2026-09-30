@@ -18,9 +18,9 @@ nonisolated enum SmartMixPlaybackService {
         }
     }
 
-    /// Last.fm when connected, because it also knows plays from other
-    /// players. Otherwise, or when too few scrobbles match the library, the
-    /// server's own play counts.
+    /// Last.fm when the Mixes option is on and connected, because it also knows
+    /// plays from other players. Otherwise, or when too few scrobbles match the
+    /// library, the server's own play counts.
     private static func frequentSongs(api: SubsonicAPIService) async throws -> [Song] {
         if let songs = await LastFMService.shared.topSongs() {
             return songs
@@ -45,7 +45,7 @@ nonisolated enum SmartMixPlaybackService {
         _ label: String,
         _ load: () async throws -> [Song]
     ) async throws -> [Song] {
-        guard LastFMCredentialStore.isEnabled else { return try await load() }
+        guard LastFMCredentialStore.isEnabled, LastFMCredentialStore.mixesEnabled else { return try await load() }
         do {
             let songs = try await load()
             ExternalServicesLog.success("\(label): \(songs.count) songs from Navidrome")

@@ -1,25 +1,51 @@
 import XCTest
 
 final class ArtistTopSongsRankingTests: XCTestCase {
-    func testServerRankingKeepsServerOrderAndDropsRepeatedTitles() {
+    func testLastFMRankingKeepsLastFMOrderAndSkipsTracksNotInTheLibrary() {
         let songs = [
-            Song(id: "1", title: "Yellow", playCount: 2),
-            Song(id: "2", title: "Sparks", playCount: 99),
-            // Same track from a compilation: the server returns both.
-            Song(id: "3", title: "yellow ", playCount: 1),
-            Song(id: "4", title: "Trouble")
+            Song(id: "1", title: "Airplanes", artist: "B.o.B", playCount: 9),
+            Song(id: "2", title: "Magic", artist: "B.o.B", playCount: 1)
+        ]
+        let tracks = [
+            LastFMTrack(title: "Nothing on You", artist: "B.o.B", album: nil),
+            LastFMTrack(title: "Magic", artist: "B.o.B", album: nil),
+            LastFMTrack(title: "Airplanes", artist: "B.o.B", album: nil)
         ]
 
-        let ranked = ArtistTopSongsRanking.rankServerSongs(songs)
+        let ranked = ArtistTopSongsRanking.rankLastFMTracks(tracks, in: songs)
 
-        XCTAssertEqual(ranked.map { $0.id }, ["1", "2", "4"])
+        XCTAssertEqual(ranked.map { $0.id }, ["2", "1"])
     }
 
-    func testServerRankingHonoursTheLimit() {
-        let songs = (1...12).map { Song(id: "\($0)", title: "Track \($0)") }
+    func testLastFMRankingUsesTheMostPlayedCopyAndDropsRepeatedTitles() {
+        let songs = [
+            Song(id: "single", title: "Peace", artist: "Depeche Mode", playCount: 3),
+            Song(id: "album", title: "Peace", artist: "Depeche Mode", playCount: 12)
+        ]
+        let tracks = [
+            LastFMTrack(title: "Peace", artist: "Depeche Mode", album: nil),
+            LastFMTrack(title: "PEACE", artist: "Depeche Mode", album: nil)
+        ]
 
-        XCTAssertEqual(ArtistTopSongsRanking.rankServerSongs(songs, limit: 5).count, 5)
-        XCTAssertEqual(ArtistTopSongsRanking.rankServerSongs(songs).count, ArtistTopSongsRanking.limit)
+        XCTAssertEqual(ArtistTopSongsRanking.rankLastFMTracks(tracks, in: songs).map { $0.id }, ["album"])
+    }
+
+    func testLastFMRankingHonoursTheLimit() {
+        let songs = (1...12).map { Song(id: "\($0)", title: "Track \($0)", artist: "Band") }
+        let tracks = (1...12).map { LastFMTrack(title: "Track \($0)", artist: "Band", album: nil) }
+
+        XCTAssertEqual(ArtistTopSongsRanking.rankLastFMTracks(tracks, in: songs, limit: 5).count, 5)
+        XCTAssertEqual(ArtistTopSongsRanking.rankLastFMTracks(tracks, in: songs).count, ArtistTopSongsRanking.limit)
+    }
+
+    func testLastFMScansAllAlbumsUpToItsCapRegardlessOfPlayCount() {
+        let albums = (1...60).map { (index: Int) in
+            Album(id: "\(index)", name: "Album \(index)", playCount: index == 60 ? nil : index)
+        }
+
+        let scanned = ArtistTopSongsRanking.lastFMAlbums(from: albums)
+
+        XCTAssertEqual(scanned.count, ArtistTopSongsRanking.lastFMAlbumLimit)
     }
 
     func testPlayCountFallbackOrdersByPlayCountAndIgnoresUnplayedTracks() {

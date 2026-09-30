@@ -4,6 +4,8 @@ import SwiftUI
 struct ExternalServicesSettingsView: View {
     @AppStorage("themeColor") private var themeColorName = "violet"
     @AppStorage(LastFMCredentialStore.enabledKey) private var lastFMEnabled = false
+    @AppStorage(LastFMCredentialStore.topSongsEnabledKey) private var topSongsEnabled = false
+    @AppStorage(LastFMCredentialStore.mixesEnabledKey) private var mixesEnabled = true
     @ObservedObject private var status = LastFMService.shared.status
     @Environment(\.webAuthenticationSession) private var webAuthenticationSession
     @Environment(\.openURL) private var openURL
@@ -14,7 +16,6 @@ struct ExternalServicesSettingsView: View {
     @State private var savedSharedSecret = ""
     @State private var hasSession = false
     @State private var isAuthorizing = false
-    @State private var showAbout = false
 
     private var accentColor: Color { AppTheme.color(for: themeColorName) }
 
@@ -41,26 +42,29 @@ struct ExternalServicesSettingsView: View {
                     }
                 }
                 .tint(accentColor)
-
-                Button {
-                    showAbout = true
-                } label: {
-                    Label {
-                        Text(String(localized: "about")).foregroundStyle(.primary)
-                    } icon: {
-                        Image(systemName: "info.circle").foregroundStyle(accentColor)
-                    }
-                }
-                NavigationLink(destination: ExternalServicesLogView()) {
-                    Label { Text(String(localized: "logs")) } icon: {
-                        Image(systemName: "doc.text").foregroundStyle(accentColor)
-                    }
-                }
             } footer: {
                 Text(String(localized: "lastfm_footer"))
             }
 
             if lastFMEnabled {
+                Section {
+                    Toggle(isOn: $topSongsEnabled) {
+                        Label { Text(String(localized: "lastfm_top_songs")) } icon: {
+                            Image(systemName: "music.mic").foregroundStyle(accentColor)
+                        }
+                    }
+                    Toggle(isOn: $mixesEnabled) {
+                        Label { Text(String(localized: "lastfm_mixes")) } icon: {
+                            Image(systemName: "shuffle").foregroundStyle(accentColor)
+                        }
+                    }
+                } header: {
+                    Text(String(localized: "lastfm_use_for"))
+                } footer: {
+                    Text(String(localized: "lastfm_use_for_footer"))
+                }
+                .tint(accentColor)
+
                 Section {
                     TextField(String(localized: "lastfm_api_key"), text: $apiKey)
                         .textInputAutocapitalization(.never)
@@ -122,6 +126,14 @@ struct ExternalServicesSettingsView: View {
                 } header: {
                     Text(String(localized: "connection"))
                 }
+
+                Section {
+                    NavigationLink(destination: ExternalServicesLogView()) {
+                        Label { Text(String(localized: "logs")) } icon: {
+                            Image(systemName: "doc.text").foregroundStyle(accentColor)
+                        }
+                    }
+                }
             }
 
             PlayerBottomSpacer()
@@ -133,28 +145,6 @@ struct ExternalServicesSettingsView: View {
         .scrollIndicators(.hidden)
         .navigationTitle(String(localized: "external_services"))
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(isPresented: $showAbout) {
-            NavigationStack {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text(String(localized: "external_services_about_1"))
-                        Text(String(localized: "external_services_about_2"))
-                        Text(String(localized: "external_services_about_3"))
-                    }
-                    .font(.body)
-                    .padding()
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .navigationTitle(String(localized: "external_services"))
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button(String(localized: "done")) { showAbout = false }
-                    }
-                }
-            }
-            .presentationDetents([.medium, .large])
-        }
         .task { loadCredentials() }
         .onChange(of: status.state) { _, _ in loadCredentials(keepEdits: true) }
     }

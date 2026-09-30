@@ -106,12 +106,11 @@ struct ArtistDetailView: View {
         .navigationDestination(item: $navAlbum) { AlbumDetailView(album: $0) }
         .addToPlaylistDialog(isPresented: $showAddToPlaylist, songIds: songs.map(\.id))
         .task(id: musicLibraries.revision) {
-            // All four run at once and the page is only revealed once they are in,
+            // All three run at once and the page is only revealed once they are in,
             // so Top Songs and Similar Artists are part of the first render rather
             // than popping in one after the other.
             async let detailResult = LibraryStore.shared.artistDetail(artist)
             async let songsResult = LibraryStore.shared.artistSongs(artist)
-            async let topSongsResult = serverTopSongs()
             async let infoResult = artistInfo()
 
             // Awaited into locals first and only then written to state in one go.
@@ -119,12 +118,12 @@ struct ArtistDetailView: View {
             // what made the sections appear one after another.
             let loadedDetail = await detailResult
             let loadedSongs = await songsResult
-            var loadedTopSongs = await topSongsResult
             let info = await infoResult
 
-            // The fallback ranking is part of the same wait: letting it run after
-            // the page is up is exactly what made the shelf appear on its own.
-            if !offlineMode.isOffline, loadedTopSongs.isEmpty {
+            // The ranking is part of the same wait: letting it run after the page
+            // is up is exactly what made the shelf appear on its own.
+            var loadedTopSongs: [Song] = []
+            if !offlineMode.isOffline {
                 loadedTopSongs = await ArtistTopSongsService.topSongs(
                     artistName: artist.name,
                     albums: loadedDetail?.album ?? [],
@@ -142,11 +141,6 @@ struct ArtistDetailView: View {
             similarArtists = (info?.similarArtist ?? []).filter { ($0.albumCount ?? 0) > 0 }
             isLoading = false
         }
-    }
-
-    private func serverTopSongs() async -> [Song] {
-        guard !offlineMode.isOffline else { return [] }
-        return await ArtistTopSongsService.serverRanked(artistName: artist.name, limit: 8)
     }
 
     private func artistInfo() async -> ArtistInfo? {

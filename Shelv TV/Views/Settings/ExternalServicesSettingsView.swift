@@ -3,6 +3,8 @@ import SwiftUI
 
 struct ExternalServicesSettingsView: View {
     @AppStorage(LastFMCredentialStore.enabledKey) private var lastFMEnabled = false
+    @AppStorage(LastFMCredentialStore.topSongsEnabledKey) private var topSongsEnabled = false
+    @AppStorage(LastFMCredentialStore.mixesEnabledKey) private var mixesEnabled = true
     @ObservedObject private var status = LastFMService.shared.status
 
     @State private var apiKey = ""
@@ -26,29 +28,20 @@ struct ExternalServicesSettingsView: View {
                     get: { lastFMEnabled },
                     set: { enabled in Task { await LastFMService.shared.setEnabled(enabled) } }
                 ))
-                NavigationLink(String(localized: "about")) {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 30) {
-                            Text(String(localized: "external_services_about_1"))
-                            Text(String(localized: "external_services_about_2"))
-                            Text(String(localized: "external_services_about_3"))
-                        }
-                        .font(.title3)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(60)
-                        .focusable()
-                    }
-                    .navigationTitle(String(localized: "external_services"))
-                    .toolbar(.hidden, for: .tabBar)
-                }
-                NavigationLink(String(localized: "logs")) {
-                    ExternalServicesLogView()
-                }
             } footer: {
                 Text(String(localized: "lastfm_footer"))
             }
 
             if lastFMEnabled {
+                Section {
+                    Toggle(String(localized: "lastfm_top_songs"), isOn: $topSongsEnabled)
+                    Toggle(String(localized: "lastfm_mixes"), isOn: $mixesEnabled)
+                } header: {
+                    Text(String(localized: "lastfm_use_for"))
+                } footer: {
+                    Text(String(localized: "lastfm_use_for_footer"))
+                }
+
                 // Read only: typing keys with the remote is impractical, they
                 // arrive through iCloud from another device instead.
                 Section {
@@ -89,6 +82,12 @@ struct ExternalServicesSettingsView: View {
                             Task { await prepareAuthorization() }
                         }
                         .disabled(!canConnect)
+                    }
+                }
+
+                Section {
+                    NavigationLink(String(localized: "logs")) {
+                        ExternalServicesLogView()
                     }
                 }
             }

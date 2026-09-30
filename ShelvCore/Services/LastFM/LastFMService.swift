@@ -52,11 +52,17 @@ actor LastFMService {
 
     private var didVerifyOnLaunch = false
     private var matchCache: [String: CachedMatch] = [:]
+    private var artistTracksCache: [String: CachedArtistTracks] = [:]
     private let matchCacheLifetime: TimeInterval = 30 * 60
     private let minimumMixSize = 10
 
     private struct CachedMatch {
         let song: Song?
+        let storedAt: Date
+    }
+
+    private struct CachedArtistTracks {
+        let tracks: [LastFMTrack]
         let storedAt: Date
     }
 
@@ -88,6 +94,7 @@ actor LastFMService {
         updated.username = ""
         LastFMCredentialStore.apply(updated)
         matchCache.removeAll()
+        artistTracksCache.removeAll()
         ExternalServicesLog.info("API key and secret saved")
         await CloudKitSyncService.shared.recordExternalServicesChange()
         await publish(Self.idleState(for: updated))
@@ -187,6 +194,34 @@ actor LastFMService {
         await verifyConnection()
     }
 
+    // MARK: - Artist top songs
+
+    /// Last.fm's most popular tracks of an artist, as Last.fm names them, so the
+    /// caller can match them against the artist's own songs. `nil` means Last.fm
+    /// is off or could not answer and the server's play counts should be used.
+    func artistTopTracks(artistName: String, limit: Int = 100) async -> [LastFMTrack]? {
+        let snapshot = LastFMCredentialStore.snapshot()
+        guard snapshot.isEnabled, LastFMCredentialStore.topSongsEnabled,
+              let client = Self.client(snapshot)
+        else { return nil }
+
+        let key = artistName.lowercased()
+        if let cached = artistTracksCache[key],
+           Date().timeIntervalSince(cached.storedAt) < matchCacheLifetime {
+            return cached.tracks
+        }
+
+        do {
+            let tracks = try await client.artistTopTracks(artist: artistName, limit: limit)
+            artistTracksCache[key] = CachedArtistTracks(tracks: tracks, storedAt: Date())
+            return tracks
+        } catch {
+            ExternalServicesLog.failure("Top Songs: Last.fm request for \(artistName) failed (\(LastFMConnectionState.failed(Self.problem(for: error)).displayText)), using play counts")
+            await handleDataError(error)
+            return nil
+        }
+    }
+
     // MARK: - Mixes
 
     /// Songs from the listener's recent Last.fm history that exist in the
@@ -216,7 +251,7 @@ actor LastFMService {
         fetchPage: @Sendable (LastFMClient, LastFMCloudSnapshot, Int) async throws -> (tracks: [LastFMTrack], totalPages: Int)
     ) async -> [Song]? {
         let snapshot = LastFMCredentialStore.snapshot()
-        guard snapshot.isEnabled else { return nil }
+        guard snapshot.isEnabled, LastFMCredentialStore.mixesEnabled else { return nil }
         guard !snapshot.sessionKey.isEmpty,
               !snapshot.username.isEmpty,
               let client = Self.client(snapshot)

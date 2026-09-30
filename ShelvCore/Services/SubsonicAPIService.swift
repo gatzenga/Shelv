@@ -1962,7 +1962,11 @@ nonisolated class SubsonicAPIService: ObservableObject, @unchecked Sendable {
             for try await albumSongs in group { all.append(contentsOf: albumSongs) }
             return all
         }
-        return Array(songs.sorted { ($0.playCount ?? 0) > ($1.playCount ?? 0) }.prefix(50))
+        // Tracks that were never played only pad the list when an album is
+        // mostly unplayed, which is not what a most-played mix should contain.
+        let played = songs.filter { ($0.playCount ?? 0) > 0 }
+        let pool = played.isEmpty ? songs : played
+        return Array(pool.sorted { ($0.playCount ?? 0) > ($1.playCount ?? 0) }.prefix(50))
     }
 
     /// Validates credentials through the standard Subsonic API. Navidrome's

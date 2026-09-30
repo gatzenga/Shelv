@@ -708,7 +708,11 @@
 "external_services" = "External Services";
 "app_db" = "App";
 "connection" = "Connection";
-"lastfm_footer" = "Frequently and Recently Played come from your Last.fm history, including plays from other players.";
+"lastfm_footer" = "Connect your own Last.fm account. Shelv only reads from Last.fm and never scrobbles.";
+"lastfm_top_songs" = "Top Songs";
+"lastfm_mixes" = "Mixes";
+"lastfm_use_for" = "Use Last.fm for";
+"lastfm_use_for_footer" = "Top Songs shows the tracks Last.fm lists as most popular for an artist that are in your library. Mixes builds Frequently Played and Recently Played from your Last.fm history, including plays from other players. Without these options, both use the play counts of your server.";
 "lastfm_api_account" = "API Account";
 "lastfm_api_key" = "API Key";
 "lastfm_shared_secret" = "Shared Secret";
@@ -726,6 +730,3 @@
 "lastfm_error_not_authorized" = "Access was not granted";
 "lastfm_error_unreachable" = "Last.fm is not reachable";
 "external_services_log" = "External Services Log";
-"external_services_about_1" = "Shelv can read your listening history from Last.fm. Frequently Played then uses your top tracks and Recently Played your latest scrobbles, including plays from other players and devices. Newest Tracks and Shuffle All are not affected.";
-"external_services_about_2" = "Songs are matched to your library by artist and title. Tracks that are not in your library, for example from Spotify, are skipped and Shelv reads on until the mix is full. If fewer than 10 songs match or Last.fm cannot be reached, the mix comes from Navidrome as before.";
-"external_services_about_3" = "You need your own Last.fm API account. Enter its API key and shared secret, then approve Shelv once on last.fm. Shelv only reads from Last.fm and never scrobbles. With iCloud sync for External Services turned on, your other devices connect automatically.";

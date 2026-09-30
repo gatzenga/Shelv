@@ -708,7 +708,11 @@
 "external_services" = "Services externes";
 "app_db" = "App";
 "connection" = "Connexion";
-"lastfm_footer" = "Souvent écoutés et Écoutés récemment s’appuient sur votre historique Last.fm, y compris les écoutes depuis d’autres lecteurs.";
+"lastfm_footer" = "Connectez votre propre compte Last.fm. Shelv lit uniquement Last.fm et ne scrobble jamais.";
+"lastfm_top_songs" = "Titres populaires";
+"lastfm_mixes" = "Mix";
+"lastfm_use_for" = "Utiliser Last.fm pour";
+"lastfm_use_for_footer" = "Titres populaires affiche les morceaux que Last.fm classe comme les plus populaires d’un artiste et qui sont dans votre bibliothèque. Mix compose Souvent écoutés et Écoutés récemment à partir de votre historique Last.fm, y compris les écoutes depuis d’autres lecteurs. Sans ces options, les deux utilisent le nombre d’écoutes de votre serveur.";
 "lastfm_api_account" = "Compte API";
 "lastfm_api_key" = "Clé API";
 "lastfm_shared_secret" = "Secret partagé";
@@ -726,6 +730,3 @@
 "lastfm_error_not_authorized" = "L’accès n’a pas été accordé";
 "lastfm_error_unreachable" = "Last.fm est injoignable";
 "external_services_log" = "Journal des services externes";
-"external_services_about_1" = "Shelv peut lire votre historique d’écoute sur Last.fm. Souvent écoutés utilise alors vos titres les plus écoutés et Écoutés récemment vos derniers scrobbles, y compris les écoutes depuis d’autres lecteurs et appareils. Nouveautés et Tout en aléatoire ne sont pas concernés.";
-"external_services_about_2" = "Les morceaux sont associés à votre bibliothèque par artiste et titre. Les titres absents de votre bibliothèque, par exemple depuis Spotify, sont ignorés et Shelv continue jusqu’à ce que le mix soit complet. Si moins de 10 morceaux correspondent ou si Last.fm est injoignable, le mix vient de Navidrome comme avant.";
-"external_services_about_3" = "Il vous faut votre propre compte API Last.fm. Saisissez sa clé API et son secret partagé, puis autorisez Shelv une fois sur last.fm. Shelv lit uniquement Last.fm et ne scrobble jamais. Avec la synchronisation iCloud des services externes activée, vos autres appareils se connectent automatiquement.";

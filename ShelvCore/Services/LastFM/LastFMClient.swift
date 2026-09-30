@@ -113,6 +113,18 @@ nonisolated struct LastFMClient: Sendable {
         return (tracks, Int(response.toptracks.attributes?.totalPages ?? "") ?? 1)
     }
 
+    /// The tracks Last.fm lists as most popular for an artist, listeners
+    /// worldwide rather than the signed-in one. Needs no session.
+    func artistTopTracks(artist: String, limit: Int = 100) async throws -> [LastFMTrack] {
+        let response: TopTracksResponse = try await call("artist.getTopTracks", [
+            "artist": artist,
+            "autocorrect": "1",
+            "limit": String(limit),
+        ])
+        return response.toptracks.track.items
+            .map { LastFMTrack(title: $0.name, artist: $0.artist.name, album: nil) }
+    }
+
     // MARK: - Transport
 
     private func call<Response: Decodable>(

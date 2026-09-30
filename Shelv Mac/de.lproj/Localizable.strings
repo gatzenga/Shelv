@@ -704,7 +704,11 @@
 "external_services" = "Externe Dienste";
 "app_db" = "App";
 "connection" = "Verbindung";
-"lastfm_footer" = "Häufig und Kürzlich gespielt kommen aus deinem Last.fm-Verlauf, inklusive Plays aus anderen Playern.";
+"lastfm_footer" = "Verbinde dein eigenes Last.fm-Konto. Shelv liest nur von Last.fm und scrobbelt nie.";
+"lastfm_top_songs" = "Top-Titel";
+"lastfm_mixes" = "Mixe";
+"lastfm_use_for" = "Last.fm verwenden für";
+"lastfm_use_for_footer" = "Top-Titel zeigt die Titel, die Last.fm für einen Künstler als beliebteste führt und die in deiner Library sind. Mixe bilden Häufig gespielt und Kürzlich gespielt aus deinem Last.fm-Verlauf, auch mit Plays aus anderen Playern. Ohne diese Optionen nutzen beide die Play-Counts deines Servers.";
 "lastfm_api_account" = "API-Konto";
 "lastfm_api_key" = "API-Key";
 "lastfm_shared_secret" = "Shared Secret";
@@ -722,6 +726,3 @@
 "lastfm_error_not_authorized" = "Zugriff wurde nicht erteilt";
 "lastfm_error_unreachable" = "Last.fm nicht erreichbar";
 "external_services_log" = "Log externe Dienste";
-"external_services_about_1" = "Shelv kann deinen Hörverlauf von Last.fm lesen. Häufig gespielt nutzt dann deine Top-Tracks und Kürzlich gespielt deine letzten Scrobbles, auch mit Plays aus anderen Playern und von anderen Geräten. Neueste Titel und Alles mischen bleiben unverändert.";
-"external_services_about_2" = "Die Songs werden über Künstler und Titel deiner Library zugeordnet. Tracks, die nicht in deiner Library sind, zum Beispiel von Spotify, werden übersprungen, und Shelv liest weiter, bis der Mix voll ist. Passen weniger als 10 Songs oder ist Last.fm nicht erreichbar, kommt der Mix wie bisher von Navidrome.";
-"external_services_about_3" = "Du brauchst ein eigenes Last.fm-API-Konto. Gib API-Key und Shared Secret ein und gib Shelv danach einmal auf last.fm frei. Shelv liest nur von Last.fm und scrobbelt nie. Ist der iCloud-Sync für externe Dienste an, verbinden sich deine anderen Geräte automatisch.";
