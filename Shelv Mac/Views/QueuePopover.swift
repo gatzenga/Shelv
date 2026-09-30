@@ -169,37 +169,23 @@ struct QueuePopover: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List {
-                    if isShuffled {
-                        queueSection(String(localized: "play_next"), entries: playNextEntries,
-                            onTap:   { player.jumpToPlayNext(at: $0.index) },
-                            onDelete: { player.removeFromPlayNextQueue(at: $0.index) },
-                            onMove:  { player.moveInPlayNextQueue(from: $0, to: $1) })
-
-                        queueSection(String(localized: "shuffled_queue"), entries: albumEntries,
-                            onTap:   { player.jumpToQueueTrack(at: $0.index) },
-                            onDelete: { player.removeFromPlayQueue(at: $0.index) },
-                            onMove:  { player.moveInQueue(from: $0, to: $1) })
-                    } else {
-                        queueSection(String(localized: "play_next"), entries: playNextEntries,
-                            onTap:   { player.jumpToPlayNext(at: $0.index) },
-                            onDelete: { player.removeFromPlayNextQueue(at: $0.index) },
-                            onMove:  { player.moveInPlayNextQueue(from: $0, to: $1) })
-
-                        queueSection(String(localized: "up_next"), entries: albumEntries,
-                            onTap:   { player.jumpToQueueTrack(at: $0.index) },
-                            onDelete: { player.removeFromPlayQueue(at: $0.index) },
-                            onMove:  { player.moveInQueue(from: $0, to: $1) })
-
-                        queueSection(String(localized: "your_queue"), entries: userQueueEntries,
-                            onTap:   { player.jumpToUserQueue(at: $0.index) },
-                            onDelete: { player.removeFromUserQueue(at: $0.index) },
-                            onMove:  { player.moveInUserQueue(from: $0, to: $1) })
+                // Outside edit mode the rows sit in a plain scroll view, like the song
+                // lists of an album, so the hover highlight runs edge to edge. A List
+                // insets its rows on macOS, but it is needed to drag rows around.
+                if isEditing {
+                    List {
+                        queueSections(plain: false)
+                    }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
+                    .tint(themeColor)
+                } else {
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 0) {
+                            queueSections(plain: true)
+                        }
                     }
                 }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
-                .tint(themeColor)
             }
         }
         .alert(String(localized: "clear_queue"), isPresented: $showClearConfirm) {
@@ -218,14 +204,57 @@ struct QueuePopover: View {
     }
 
     @ViewBuilder
+    private func queueSections(plain: Bool) -> some View {
+        if isShuffled {
+            queueSection(String(localized: "play_next"), entries: playNextEntries, plain: plain,
+                onTap:   { player.jumpToPlayNext(at: $0.index) },
+                onDelete: { player.removeFromPlayNextQueue(at: $0.index) },
+                onMove:  { player.moveInPlayNextQueue(from: $0, to: $1) })
+
+            queueSection(String(localized: "shuffled_queue"), entries: albumEntries, plain: plain,
+                onTap:   { player.jumpToQueueTrack(at: $0.index) },
+                onDelete: { player.removeFromPlayQueue(at: $0.index) },
+                onMove:  { player.moveInQueue(from: $0, to: $1) })
+        } else {
+            queueSection(String(localized: "play_next"), entries: playNextEntries, plain: plain,
+                onTap:   { player.jumpToPlayNext(at: $0.index) },
+                onDelete: { player.removeFromPlayNextQueue(at: $0.index) },
+                onMove:  { player.moveInPlayNextQueue(from: $0, to: $1) })
+
+            queueSection(String(localized: "up_next"), entries: albumEntries, plain: plain,
+                onTap:   { player.jumpToQueueTrack(at: $0.index) },
+                onDelete: { player.removeFromPlayQueue(at: $0.index) },
+                onMove:  { player.moveInQueue(from: $0, to: $1) })
+
+            queueSection(String(localized: "your_queue"), entries: userQueueEntries, plain: plain,
+                onTap:   { player.jumpToUserQueue(at: $0.index) },
+                onDelete: { player.removeFromUserQueue(at: $0.index) },
+                onMove:  { player.moveInUserQueue(from: $0, to: $1) })
+        }
+    }
+
+    @ViewBuilder
     private func queueSection(
         _ title: String,
         entries: [QueueEntry],
+        plain: Bool,
         onTap: @escaping (QueueEntry) -> Void,
         onDelete: @escaping (QueueEntry) -> Void,
         onMove: @escaping (IndexSet, Int) -> Void
     ) -> some View {
-        if !entries.isEmpty {
+        if !entries.isEmpty, plain {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 14)
+                .padding(.top, 12)
+                .padding(.bottom, 6)
+            ForEach(entries) { entry in
+                QueueSongRow(song: entry.song, isEditing: false, onDelete: { onDelete(entry) })
+                    .contentShape(Rectangle())
+                    .onTapGesture { onTap(entry) }
+            }
+        } else if !entries.isEmpty {
             Section(title) {
                 ForEach(entries) { entry in
                     Group {
