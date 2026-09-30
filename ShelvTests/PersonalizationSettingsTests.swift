@@ -170,6 +170,7 @@ final class PersonalizationSettingsTests: XCTestCase {
             PersonalizationPreferenceKey.albumGenreFilter,
             PersonalizationPreferenceKey.miniPlayerStyle,
             PersonalizationPreferenceKey.discoverySectionOrder,
+            PersonalizationPreferenceKey.playerButtonOrder,
         ]
         for mix in PersonalizationSmartMix.allCases {
             expected.insert(mix.storageKey)
@@ -301,6 +302,36 @@ final class PersonalizationSettingsTests: XCTestCase {
         XCTAssertEqual(
             PersonalizationSettings.discoverySectionOrder(from: stored),
             [.randomAlbums, .recentlyAdded, .smartMixes, .recentlyPlayed, .frequentlyPlayed]
+        )
+    }
+
+    func testPlayerButtonOrderKeepsStoredOrderDropsUnknownAndAppendsMissing() {
+        XCTAssertEqual(
+            PersonalizationSettings.playerButtonOrder(from: "stop,legacy,lyrics,stop"),
+            [.stop, .lyrics, .menu, .queue, .favorite]
+        )
+        XCTAssertEqual(
+            PersonalizationSettings.playerButtonOrder(from: nil),
+            [.menu, .lyrics, .queue, .favorite, .stop]
+        )
+    }
+
+    func testPlayerButtonOrderSyncsThroughCloudSnapshot() {
+        PersonalizationSettings.registerDefaults(in: defaults)
+        PersonalizationSettings.setPlayerButtonOrder([.favorite, .menu], in: defaults)
+        let snapshot = PersonalizationSettings.cloudUICustomizationSnapshot(in: defaults)
+
+        let targetSuiteName = "PersonalizationSettingsTests.player.\(UUID().uuidString)"
+        let target = UserDefaults(suiteName: targetSuiteName)!
+        defer { target.removePersistentDomain(forName: targetSuiteName) }
+        PersonalizationSettings.registerDefaults(in: target)
+        PersonalizationSettings.applyCloudUICustomizationSnapshot(snapshot, in: target)
+
+        XCTAssertEqual(
+            PersonalizationSettings.playerButtonOrder(
+                from: target.string(forKey: PersonalizationPreferenceKey.playerButtonOrder)
+            ),
+            [.favorite, .menu, .lyrics, .queue, .stop]
         )
     }
 

@@ -19,6 +19,7 @@ nonisolated enum PersonalizationPreferenceKey {
     static let showSmartMixRecent = "ui.discover.smartMix.recent"
     static let showSmartMixRandom = "ui.discover.smartMix.random"
     static let discoverySectionOrder = "ui.discover.sectionOrder"
+    static let playerButtonOrder = "ui.player.buttonOrder"
 
     static let swipeLeftPrimary = "ui.swipe.leftPrimary"
     static let swipeLeftSecondary = "ui.swipe.leftSecondary"
@@ -141,6 +142,38 @@ nonisolated enum PersonalizationSmartMix: String, CaseIterable, Identifiable, Ha
     }
 
     var playbackKey: String { rawValue }
+}
+
+/// Buttons in the player's bottom row, in their default order. Whether a
+/// button shows at all stays with its own setting; this only orders them.
+nonisolated enum PersonalizationPlayerButton: String, CaseIterable, Identifiable, Hashable {
+    case menu
+    case lyrics
+    case queue
+    case favorite
+    case stop
+
+    var id: String { rawValue }
+
+    var titleKey: String {
+        switch self {
+        case .menu: return "actions"
+        case .lyrics: return "lyrics"
+        case .queue: return "queue"
+        case .favorite: return "favorites"
+        case .stop: return "stop"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .menu: return "ellipsis"
+        case .lyrics: return "quote.bubble"
+        case .queue: return "list.bullet"
+        case .favorite: return "heart"
+        case .stop: return "stop.fill"
+        }
+    }
 }
 
 nonisolated enum PersonalizationDiscoverySection: String, CaseIterable, Identifiable, Hashable {
@@ -396,6 +429,9 @@ nonisolated enum PersonalizationSettings {
     static let defaultDiscoverySectionOrderRaw = PersonalizationDiscoverySection.allCases
         .map(\.rawValue)
         .joined(separator: ",")
+    static let defaultPlayerButtonOrderRaw = PersonalizationPlayerButton.allCases
+        .map(\.rawValue)
+        .joined(separator: ",")
 
     static let defaultValues: [String: Any] = {
         var values: [String: Any] = [
@@ -410,6 +446,7 @@ nonisolated enum PersonalizationSettings {
             PersonalizationPreferenceKey.showDiscoverAirPlay: false,
             PersonalizationPreferenceKey.miniPlayerStyle: PersonalizationMiniPlayerStyle.shelv.rawValue,
             PersonalizationPreferenceKey.discoverySectionOrder: defaultDiscoverySectionOrderRaw,
+            PersonalizationPreferenceKey.playerButtonOrder: defaultPlayerButtonOrderRaw,
         ]
         for mix in PersonalizationSmartMix.allCases {
             values[mix.storageKey] = true
@@ -443,6 +480,7 @@ nonisolated enum PersonalizationSettings {
             PersonalizationPreferenceKey.albumGenreFilter,
             PersonalizationPreferenceKey.miniPlayerStyle,
             PersonalizationPreferenceKey.discoverySectionOrder,
+            PersonalizationPreferenceKey.playerButtonOrder,
         ]
         for slot in PersonalizationSwipeSlot.allCases {
             keys.insert(slot.storageKey)
@@ -494,6 +532,8 @@ nonisolated enum PersonalizationSettings {
             switch key {
             case PersonalizationPreferenceKey.discoverySectionOrder:
                 setDiscoverySectionOrder(discoverySectionOrder(from: rawValue), in: defaults)
+            case PersonalizationPreferenceKey.playerButtonOrder:
+                setPlayerButtonOrder(playerButtonOrder(from: rawValue), in: defaults)
             case PersonalizationPreferenceKey.miniPlayerStyle:
                 let style = PersonalizationMiniPlayerStyle(rawValue: rawValue) ?? .shelv
                 defaults.set(style.rawValue, forKey: key)
@@ -514,6 +554,10 @@ nonisolated enum PersonalizationSettings {
         case PersonalizationPreferenceKey.discoverySectionOrder:
             return rawDiscoverySectionOrder(
                 discoverySectionOrder(from: defaults.string(forKey: PersonalizationPreferenceKey.discoverySectionOrder))
+            )
+        case PersonalizationPreferenceKey.playerButtonOrder:
+            return rawPlayerButtonOrder(
+                playerButtonOrder(from: defaults.string(forKey: PersonalizationPreferenceKey.playerButtonOrder))
             )
         case PersonalizationPreferenceKey.miniPlayerStyle:
             let rawValue = defaults.string(forKey: PersonalizationPreferenceKey.miniPlayerStyle) ?? ""
@@ -900,6 +944,27 @@ nonisolated enum PersonalizationSettings {
 
     static func setDiscoverySectionOrder(_ sections: [PersonalizationDiscoverySection], in defaults: UserDefaults = .standard) {
         defaults.set(rawDiscoverySectionOrder(sections), forKey: PersonalizationPreferenceKey.discoverySectionOrder)
+    }
+
+    static func playerButtonOrder(from rawValue: String?) -> [PersonalizationPlayerButton] {
+        let stored = rawValue?
+            .split(separator: ",")
+            .compactMap { PersonalizationPlayerButton(rawValue: String($0)) } ?? []
+        var result: [PersonalizationPlayerButton] = []
+        for button in stored + PersonalizationPlayerButton.allCases where !result.contains(button) {
+            result.append(button)
+        }
+        return result
+    }
+
+    static func rawPlayerButtonOrder(_ buttons: [PersonalizationPlayerButton]) -> String {
+        playerButtonOrder(from: buttons.map(\.rawValue).joined(separator: ","))
+            .map(\.rawValue)
+            .joined(separator: ",")
+    }
+
+    static func setPlayerButtonOrder(_ buttons: [PersonalizationPlayerButton], in defaults: UserDefaults = .standard) {
+        defaults.set(rawPlayerButtonOrder(buttons), forKey: PersonalizationPreferenceKey.playerButtonOrder)
     }
 
     private static func normalizedDiscoverySectionOrder(_ sections: [PersonalizationDiscoverySection]) -> [PersonalizationDiscoverySection] {

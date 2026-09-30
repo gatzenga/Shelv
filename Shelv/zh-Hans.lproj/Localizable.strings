@@ -730,3 +730,6 @@
 "lastfm_error_not_authorized" = "未授予访问权限";
 "lastfm_error_unreachable" = "无法连接 Last.fm";
 "external_services_log" = "外部服务日志";
+"player" = "播放器";
+"stop" = "停止";
+"player_buttons" = "按钮";

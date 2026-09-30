@@ -387,6 +387,14 @@ private struct UICustomizationsSettingsView: View {
                 }
 
                 NavigationLink {
+                    UIPlayerSettingsView()
+                } label: {
+                    Label { Text(String(localized: "player")) } icon: {
+                        Image(systemName: "play.circle").foregroundStyle(accentColor)
+                    }
+                }
+
+                NavigationLink {
                     UIPlaylistsSettingsView()
                 } label: {
                     Label { Text(String(localized: "playlists")) } icon: {
@@ -589,6 +597,53 @@ private struct DiscoverySectionOrderRow: View {
         Label { Text(localized(section.titleKey)) } icon: {
             Image(systemName: section.systemImage).foregroundStyle(accentColor)
         }
+    }
+}
+
+private struct UIPlayerSettingsView: View {
+    @AppStorage("themeColor") private var themeColorName = "violet"
+    @AppStorage(PersonalizationPreferenceKey.playerButtonOrder) private var buttonOrderRaw = PersonalizationSettings.defaultPlayerButtonOrderRaw
+    @State private var editMode = EditMode.inactive
+
+    private var accentColor: Color { AppTheme.color(for: themeColorName) }
+    private var buttonOrder: [PersonalizationPlayerButton] {
+        PersonalizationSettings.playerButtonOrder(from: buttonOrderRaw)
+    }
+
+    var body: some View {
+        List {
+            Section(String(localized: "player_buttons")) {
+                ForEach(buttonOrder) { button in
+                    Label { Text(localized(button.titleKey)) } icon: {
+                        Image(systemName: button.systemImage).foregroundStyle(accentColor)
+                    }
+                }
+                .onMove(perform: moveButtons)
+            }
+
+            PlayerBottomSpacer()
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+        }
+        .tint(accentColor)
+        .listStyle(.insetGrouped)
+        .scrollIndicators(.hidden)
+        .navigationTitle(String(localized: "player"))
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            EditButton()
+        }
+        .environment(\.editMode, $editMode)
+        .onAppear {
+            let normalized = PersonalizationSettings.rawPlayerButtonOrder(buttonOrder)
+            if normalized != buttonOrderRaw { buttonOrderRaw = normalized }
+        }
+    }
+
+    private func moveButtons(from source: IndexSet, to destination: Int) {
+        var updated = buttonOrder
+        updated.move(fromOffsets: source, toOffset: destination)
+        buttonOrderRaw = PersonalizationSettings.rawPlayerButtonOrder(updated)
     }
 }
 

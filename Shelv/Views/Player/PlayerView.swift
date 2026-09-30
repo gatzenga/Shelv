@@ -93,6 +93,7 @@ struct PlayerView: View {
     @AppStorage(PersonalizationPreferenceKey.miniPlayerStyle) private var interfaceStyleRaw = PersonalizationMiniPlayerStyle.shelv.rawValue
 
     @AppStorage(PersonalizationPreferenceKey.showFavoriteActions) private var showFavoriteActions = true
+    @AppStorage(PersonalizationPreferenceKey.playerButtonOrder) private var playerButtonOrderRaw = PersonalizationSettings.defaultPlayerButtonOrderRaw
     @AppStorage("radioSortDirection") private var radioSortDirectionRaw = SortDirection.ascending.rawValue
 
     @State private var currentToast: ShelveToast?
@@ -369,47 +370,6 @@ struct PlayerView: View {
 
                     // Sekundäre Buttons — Amperfy-Stil: grauer Kreis, .primary Icon
                     HStack {
-                        if !player.isRadioPlayback, let song = player.currentSong {
-                            PlayerSongActionsMenu(
-                                song: song,
-                                size: ctrl,
-                                isPad: isPad,
-                                colorScheme: colorScheme,
-                                toast: $currentToast
-                            )
-                            Spacer()
-                        }
-
-                        if !player.isRadioPlayback {
-                            Button { showLyricsSheet = true } label: {
-                                playerSecondaryButton(icon: "quote.bubble", color: .primary, size: ctrl, isPad: isPad)
-                            }
-                            .buttonStyle(.plain)
-
-                            Spacer()
-
-                            Button { showQueue = true } label: {
-                                playerSecondaryButton(icon: "list.bullet", color: .primary, size: ctrl, isPad: isPad)
-                            }
-                            .buttonStyle(.plain)
-
-                            if showFavoriteActions && !offlineMode.isOffline, let song = player.currentSong {
-                                Spacer()
-                                Button {
-                                    Task { await libraryStore.toggleStarSong(song) }
-                                } label: {
-                                    playerSecondaryButton(
-                                        icon: libraryStore.isSongStarred(song) ? "heart.fill" : "heart",
-                                        color: libraryStore.isSongStarred(song) ? Color.pink : Color.primary,
-                                        size: ctrl, isPad: isPad
-                                    )
-                                }
-                                .buttonStyle(.plain)
-                            }
-
-                            Spacer()
-                        }
-
                         if player.isRadioPlayback {
                             Button { showSleepTimer = true } label: {
                                 sleepTimerButton(size: ctrl, isPad: isPad)
@@ -417,12 +377,18 @@ struct PlayerView: View {
                             .buttonStyle(.plain)
 
                             Spacer()
-                        }
 
-                        Button { player.stop(); dismiss() } label: {
-                            playerSecondaryButton(icon: "stop.fill", color: .primary, size: ctrl, isPad: isPad)
+                            Button { player.stop(); dismiss() } label: {
+                                playerSecondaryButton(icon: "stop.fill", color: .primary, size: ctrl, isPad: isPad)
+                            }
+                            .buttonStyle(.plain)
+                        } else {
+                            let buttons = visiblePlayerButtons
+                            ForEach(Array(buttons.enumerated()), id: \.element) { index, button in
+                                if index > 0 { Spacer() }
+                                playerRowButton(button, size: ctrl, isPad: isPad)
+                            }
                         }
-                        .buttonStyle(.plain)
                     }
                     .padding(.horizontal, isPad ? 44 : 36)
                     .padding(.bottom, vPad(h, large: 32, small: 40))
@@ -688,6 +654,64 @@ struct PlayerView: View {
             Image(systemName: "music.note.house")
                 .font(.system(size: 80))
                 .foregroundStyle(.gray.opacity(0.5))
+        }
+    }
+
+    /// Buttons of the song player's bottom row, in the listener's order.
+    /// A button whose own setting hides it keeps its slot but is left out here.
+    private var visiblePlayerButtons: [PersonalizationPlayerButton] {
+        PersonalizationSettings.playerButtonOrder(from: playerButtonOrderRaw).filter { button in
+            switch button {
+            case .menu, .favorite:
+                guard player.currentSong != nil else { return false }
+                return button == .menu || (showFavoriteActions && !offlineMode.isOffline)
+            case .lyrics, .queue, .stop:
+                return true
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func playerRowButton(_ button: PersonalizationPlayerButton, size: CGFloat, isPad: Bool) -> some View {
+        switch button {
+        case .menu:
+            if let song = player.currentSong {
+                PlayerSongActionsMenu(
+                    song: song,
+                    size: size,
+                    isPad: isPad,
+                    colorScheme: colorScheme,
+                    toast: $currentToast
+                )
+            }
+        case .lyrics:
+            Button { showLyricsSheet = true } label: {
+                playerSecondaryButton(icon: "quote.bubble", color: .primary, size: size, isPad: isPad)
+            }
+            .buttonStyle(.plain)
+        case .queue:
+            Button { showQueue = true } label: {
+                playerSecondaryButton(icon: "list.bullet", color: .primary, size: size, isPad: isPad)
+            }
+            .buttonStyle(.plain)
+        case .favorite:
+            if let song = player.currentSong {
+                Button {
+                    Task { await libraryStore.toggleStarSong(song) }
+                } label: {
+                    playerSecondaryButton(
+                        icon: libraryStore.isSongStarred(song) ? "heart.fill" : "heart",
+                        color: libraryStore.isSongStarred(song) ? Color.pink : Color.primary,
+                        size: size, isPad: isPad
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        case .stop:
+            Button { player.stop(); dismiss() } label: {
+                playerSecondaryButton(icon: "stop.fill", color: .primary, size: size, isPad: isPad)
+            }
+            .buttonStyle(.plain)
         }
     }
 

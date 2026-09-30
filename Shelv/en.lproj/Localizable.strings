@@ -730,3 +730,6 @@
 "lastfm_error_not_authorized" = "Access was not granted";
 "lastfm_error_unreachable" = "Last.fm is not reachable";
 "external_services_log" = "External Services Log";
+"player" = "Player";
+"stop" = "Stop";
+"player_buttons" = "Buttons";
