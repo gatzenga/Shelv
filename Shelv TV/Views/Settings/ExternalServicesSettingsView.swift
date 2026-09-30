@@ -3,7 +3,7 @@ import SwiftUI
 
 struct ExternalServicesSettingsView: View {
     @AppStorage(LastFMCredentialStore.enabledKey) private var lastFMEnabled = false
-    @AppStorage(LastFMCredentialStore.topSongsEnabledKey) private var topSongsEnabled = false
+    @AppStorage(LastFMCredentialStore.topSongsEnabledKey) private var topSongsEnabled = true
     @AppStorage(LastFMCredentialStore.mixesEnabledKey) private var mixesEnabled = true
     @ObservedObject private var status = LastFMService.shared.status
 

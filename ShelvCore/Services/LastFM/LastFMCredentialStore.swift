@@ -45,9 +45,10 @@ nonisolated enum LastFMCredentialStore {
     }
 
     /// Whether the artist page shows Last.fm's popular tracks instead of the
-    /// songs played most on the server.
+    /// songs played most on the server. On by default like the mixes, and only
+    /// in effect while Last.fm itself is turned on.
     static var topSongsEnabled: Bool {
-        get { UserDefaults.standard.bool(forKey: topSongsEnabledKey) }
+        get { UserDefaults.standard.object(forKey: topSongsEnabledKey) as? Bool ?? true }
         set { UserDefaults.standard.set(newValue, forKey: topSongsEnabledKey) }
     }
 
