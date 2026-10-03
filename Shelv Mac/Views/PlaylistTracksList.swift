@@ -102,7 +102,7 @@ struct PlaylistTrackRow: View {
         }
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
-        .gesture(TapGesture(count: 2).onEnded { onPlay() })
+        .onTapGesture { onPlay() }
         .contextMenu {
             Button(String(localized: "play")) { onPlay() }
             if showInstantMixActions && !offlineMode.isOffline {

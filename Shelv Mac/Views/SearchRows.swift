@@ -160,7 +160,7 @@ struct SearchSongRow: View {
         .background { if showsHoverHighlight && isHovered { Color.primary.opacity(0.07) } }
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
-        .onTapGesture(count: 2) { onPlay() }
+        .onTapGesture { onPlay() }
         .contextMenu {
             Button(String(localized: "play")) { onPlay() }
             if showInstantMixActions && !offlineMode.isOffline {
@@ -302,7 +302,7 @@ struct LyricsSearchRow: View {
         .background { if isHovered { Color.primary.opacity(0.07) } }
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
-        .onTapGesture(count: 2) { onPlay() }
+        .onTapGesture { onPlay() }
         .contextMenu {
             Button(String(localized: "play")) { onPlay() }
             if showInstantMixActions && !offlineMode.isOffline, let onInstantMix {

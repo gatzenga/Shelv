@@ -193,9 +193,8 @@ struct AlbumDetailView: View {
                     if let artist = vm.album?.artist {
                         if let artistId = vm.album?.artistId {
                             Button {
-                                appState.selectedPlaylist = nil
-                                appState.selectedSidebar = .artists
-                                appState.navigationPath = NavigationPath()
+                                // Pushed onto the current stack, so back returns to this
+                                // album and then to wherever it was opened from.
                                 appState.navigationPath.append(Artist(id: artistId, name: artist, albumCount: nil, coverArt: nil, starred: nil))
                             } label: {
                                 Text(artist)
@@ -579,7 +578,7 @@ struct TrackRow: View {
         .contentShape(Rectangle())
         .focusable(false)
         .onHover { isHovered = $0 }
-        .gesture(TapGesture(count: 2).onEnded { onPlay() })
+        .onTapGesture { onPlay() }
         .contextMenu {
             Button(String(localized: "play")) { onPlay() }
             if showInstantMixActions && !offlineMode.isOffline {
