@@ -244,6 +244,10 @@ struct AlbumDetailView: View {
         .onReceive(
             DownloadUIStateHub.shared.albumDownloadedCountPublisher(albumID: album.id)
         ) { downloadedCount in
+            // The publisher repeats its current value whenever it is subscribed again,
+            // which happens on every redraw. Only a real change may touch the page's
+            // data, otherwise rebuilding it could trigger the next redraw, and so on.
+            guard downloadedCount != downloadedAlbumSongCount else { return }
             downloadedAlbumSongCount = downloadedCount
             if offlineMode.isOffline {
                 populateFromLocal()
@@ -519,6 +523,9 @@ struct AlbumDetailView: View {
     private func populateFromLocal() {
         guard let local = downloadStore.albums.first(where: { $0.albumId == album.id }) else { return }
         let songs = local.songs.map { $0.asSong() }
+        // Nothing to do when the page already shows exactly these songs: assigning a
+        // new value would redraw it for no reason.
+        if let shown = detail?.song, shown.map(\.id) == songs.map(\.id), detail?.id == local.albumId { return }
         detail = AlbumDetail(
             id: local.albumId,
             name: local.title,
