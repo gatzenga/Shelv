@@ -147,13 +147,30 @@ enum CarPlayNavigation {
         }
     }
 
-    static func configureAlbumDetail(_ template: CPListTemplate, album: Album, songs: [Song], ic: CPInterfaceController) {
+    /// The songs of an album with several discs, ordered by disc and then track.
+    /// Single-disc albums keep the order the server gave.
+    static func songsInDiscOrder(_ songs: [Song]) -> [Song] {
+        guard Set(songs.map { $0.discNumber ?? 1 }).count >= 2 else { return songs }
+        return songs.enumerated().sorted { lhs, rhs in
+            let (l, r) = (lhs.element, rhs.element)
+            let (ld, rd) = (l.discNumber ?? 1, r.discNumber ?? 1)
+            if ld != rd { return ld < rd }
+            let (lt, rt) = (l.track ?? 0, r.track ?? 0)
+            return lt != rt ? lt < rt : lhs.offset < rhs.offset
+        }.map(\.element)
+    }
+
+    static func configureAlbumDetail(_ template: CPListTemplate, album: Album, songs serverSongs: [Song], ic: CPInterfaceController) {
+        // Multi-disc albums are laid out by disc, so playing a row continues in the
+        // order the rows appear in.
+        let songs = songsInDiscOrder(serverSongs)
+
         func rebuildActionsAsync() {
             Task { @MainActor [weak template] in
                 guard let t = template else { return }
                 let snap = t.sections
                 guard snap.count >= 2 else { return }
-                t.updateSections([makeActionsSection(), snap[1]])
+                t.updateSections([makeActionsSection()] + Array(snap.dropFirst()))
             }
         }
 
@@ -215,9 +232,9 @@ enum CarPlayNavigation {
             return CPListSection(items: items, header: album.name, sectionIndexTitle: nil)
         }
 
-        func makeSongsSection() -> CPListSection {
-            let items = songs.enumerated().map { idx, song in
-                songListItem(song, index: idx) { [weak template] _, c in
+        func makeSongsSections() -> [CPListSection] {
+            func item(_ idx: Int) -> CPListItem {
+                songListItem(songs[idx], index: idx) { [weak template] _, c in
                     c()
                     AudioPlayerService.shared.play(songs: songs, startIndex: idx)
                     presentNowPlaying(on: ic)
@@ -225,13 +242,26 @@ enum CarPlayNavigation {
                         guard let t = template else { return }
                         let snap = t.sections
                         guard snap.count >= 2 else { return }
-                        t.updateSections([snap[0], makeSongsSection()])
+                        t.updateSections([snap[0]] + makeSongsSections())
                     }
                 }
             }
-            return CPListSection(items: items, header: String(localized: "songs"), sectionIndexTitle: nil)
+
+            // One section per disc, headed "Disc N", only when the album has several.
+            // A section header costs a single line and needs no extra row.
+            let discs = songs.map { $0.discNumber ?? 1 }
+            guard Set(discs).count >= 2 else {
+                return [CPListSection(items: songs.indices.map(item), header: String(localized: "songs"), sectionIndexTitle: nil)]
+            }
+            return Array(Set(discs)).sorted().map { disc in
+                CPListSection(
+                    items: songs.indices.filter { discs[$0] == disc }.map(item),
+                    header: "Disc \(disc)",
+                    sectionIndexTitle: nil
+                )
+            }
         }
-        template.updateSections([makeActionsSection(), makeSongsSection()])
+        template.updateSections([makeActionsSection()] + makeSongsSections())
 
         let tasks = [
             Task { @MainActor [weak template] in
@@ -252,7 +282,7 @@ enum CarPlayNavigation {
                     guard let t = template else { return }
                     let snap = t.sections
                     guard snap.count >= 2 else { return }
-                    t.updateSections([makeActionsSection(), snap[1]])
+                    t.updateSections([makeActionsSection()] + Array(snap.dropFirst()))
                 }
             },
             Task { @MainActor [weak template] in
@@ -260,7 +290,7 @@ enum CarPlayNavigation {
                     guard let t = template else { return }
                     let snap = t.sections
                     guard snap.count >= 2 else { return }
-                    t.updateSections([makeActionsSection(), snap[1]])
+                    t.updateSections([makeActionsSection()] + Array(snap.dropFirst()))
                 }
             },
             Task { @MainActor [weak template] in
@@ -268,7 +298,7 @@ enum CarPlayNavigation {
                     guard let t = template else { return }
                     let snap = t.sections
                     guard snap.count >= 2 else { return }
-                    t.updateSections([makeActionsSection(), snap[1]])
+                    t.updateSections([makeActionsSection()] + Array(snap.dropFirst()))
                 }
             }
         ]
