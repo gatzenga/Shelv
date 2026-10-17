@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Tab-Gerüst der tvOS-App: Now Playing · Discover · Library · Playlists · Radio · Suche · Settings.
 /// Nutzt die neue `Tab`-API (tvOS 18+) mit value-basierter Selection — die Legacy-
@@ -76,11 +77,14 @@ struct MainTabView: View {
 
     var body: some View {
         tabView
-            .simultaneousGesture(TapGesture().onEnded {
+            // Focus moves count as activity. A root TapGesture used to do this for the select
+            // press too, but its recognizer can swallow select presses meant for the system
+            // keyboard, which then ignores every key.
+            .onReceive(NotificationCenter.default.publisher(for: UIFocusSystem.didUpdateNotification)) { _ in
                 if !showIdleNowPlaying {
                     registerUserActivity()
                 }
-            })
+            }
             .onPlayPauseCommand {
                 if !showIdleNowPlaying {
                     registerUserActivity()
