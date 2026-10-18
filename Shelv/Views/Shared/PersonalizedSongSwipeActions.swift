@@ -175,8 +175,12 @@ struct PersonalizedSongSwipeActionsModifier: ViewModifier {
 
     @ViewBuilder
     func body(content: Content) -> some View {
+        // Fixed on purpose. Left to itself, the list starts the separator where the row's
+        // first text or image does, so it moved whenever the rank number became the
+        // "now playing" waveform and stopped short of the cover.
+        let aligned = content.alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
         if isEnabled {
-            content
+            aligned
                 .contextMenu {
                     SongActionsMenuContent(
                         song: song,
@@ -209,7 +213,7 @@ struct PersonalizedSongSwipeActionsModifier: ViewModifier {
                     swipeButton(for: .rightTertiary)
                 }
         } else {
-            content
+            aligned
         }
     }
 
