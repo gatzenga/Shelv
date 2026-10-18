@@ -127,7 +127,7 @@ struct ArtistDetailView: View {
                 loadedTopSongs = await ArtistTopSongsService.topSongs(
                     artistName: artist.name,
                     albums: loadedDetail?.album ?? [],
-                    limit: 8
+                    limit: ArtistTopSongsRanking.limit
                 ) { albumID in
                     (try? await SubsonicAPIService.shared.getAlbum(id: albumID).song) ?? []
                 }
@@ -156,7 +156,7 @@ struct ArtistDetailView: View {
     private static let topSongsColumnSpacing: CGFloat = 40
     private static let topSongsGridRows = Array(
         repeating: GridItem(.fixed(topSongsRowHeight), spacing: topSongsRowSpacing),
-        count: 4
+        count: 5
     )
 
     /// Actions for the Top Songs shelf as a whole, the same set the iPhone and
@@ -177,7 +177,7 @@ struct ArtistDetailView: View {
         }
     }
 
-    /// Same ranking as iOS/macOS: two columns of four, spanning the screen's
+    /// Same ranking as iOS/macOS: two columns of five, spanning the screen's
     /// full, fixed 16:9 width instead of a fixed card width, since a TV
     /// screen doesn't resize, so there's no case where this needs to scroll.
     private var topSongsSection: some View {
@@ -205,7 +205,7 @@ struct ArtistDetailView: View {
                             number: index,
                             showArtwork: true,
                             rank: index + 1,
-                            rankColumnWidth: 26,
+                            rankColumnWidth: 34,
                             rankColumnAlignment: .leading
                         ) {
                             player.play(songs: topSongs, startIndex: index)
@@ -214,7 +214,7 @@ struct ArtistDetailView: View {
                     }
                 }
             }
-            .frame(height: 4 * Self.topSongsRowHeight + 3 * Self.topSongsRowSpacing)
+            .frame(height: 5 * Self.topSongsRowHeight + 4 * Self.topSongsRowSpacing)
         }
         .focusSection()
     }

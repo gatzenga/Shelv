@@ -13,6 +13,7 @@ struct AlbumDetailView: View {
 
     @State private var songs: [Song] = []
     @State private var showAddToPlaylist = false
+    @FocusState private var focusedSongID: String?
 
     private var discNumbers: [Int] { Array(Set(songs.map { $0.discNumber ?? 1 })).sorted() }
     private var hasMultipleDiscs: Bool { discNumbers.count > 1 }
@@ -32,6 +33,12 @@ struct AlbumDetailView: View {
         .addToPlaylistDialog(isPresented: $showAddToPlaylist, songIds: songs.map(\.id))
         .task {
             songs = await LibraryStore.shared.albumSongs(album)
+            // The tracks arrive after the page is up, so focus has already settled on the
+            // artist link. Move it to the first track once the rows exist.
+            guard !songs.isEmpty else { return }
+            try? await Task.sleep(for: .milliseconds(150))
+            guard !Task.isCancelled else { return }
+            focusedSongID = firstDisplayedSongID
         }
     }
 
@@ -184,5 +191,12 @@ struct AlbumDetailView: View {
         return DetailSongRow(song: song, number: (song.track.map { $0 - 1 }) ?? idx) {
             player.play(songs: songs, startIndex: idx)
         }
+        .focused($focusedSongID, equals: song.id)
+    }
+
+    /// The track shown at the top of the list, which is the first of the first disc.
+    private var firstDisplayedSongID: String? {
+        guard let firstDisc = discNumbers.first else { return nil }
+        return songs.first { ($0.discNumber ?? 1) == firstDisc }?.id
     }
 }
