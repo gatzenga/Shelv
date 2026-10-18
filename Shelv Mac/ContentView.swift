@@ -131,6 +131,10 @@ struct MainWindowView: View {
                                     FavoritesView(scope: scope)
                                         .environmentObject(libraryStore)
                                 }
+                                .navigationDestination(for: ArtistTopSongsGroup.self) { group in
+                                    ArtistTopSongsListView(title: group.title, songs: group.songs)
+                                        .environmentObject(libraryStore)
+                                }
                                 .navigationDestination(for: ArtistAlbumGroup.self) { group in
                                     ArtistAllAlbumsView(title: group.title, albums: group.albums, keepsOrder: group.keepsOrder, listType: group.listType)
                                         .environmentObject(libraryStore)

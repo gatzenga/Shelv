@@ -34,6 +34,8 @@ struct ArtistDetailView: View {
     @State private var searchQuery = ""
     @State private var artistSongs: [Song]?
     @State private var topSongs: [Song] = []
+    /// The full ranked list behind the Top Songs title; `topSongs` is its first few for the shelf.
+    @State private var allTopSongs: [Song] = []
     @State private var similarArtists: [Artist] = []
     @State private var musicBrainzId: String?
     @State private var lastFmURLString: String?
@@ -405,10 +407,22 @@ struct ArtistDetailView: View {
                     // title and its covers.
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
-                            Text(String(localized: "top_songs"))
-                                .font(.title3).bold()
-                                .textCase(nil)
-                                .foregroundStyle(.white)
+                            NavigationLink(destination: ArtistTopSongsListView(
+                                title: String(localized: "top_songs"),
+                                songs: allTopSongs
+                            )) {
+                                HStack(spacing: 4) {
+                                    Text(String(localized: "top_songs"))
+                                        .font(.title3).bold()
+                                        .textCase(nil)
+                                        .foregroundStyle(.white)
+                                    Image(systemName: "chevron.right")
+                                        .font(.subheadline.bold())
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .navigationLinkIndicatorVisibility(.hidden)
 
                             Spacer()
 
@@ -929,6 +943,7 @@ struct ArtistDetailView: View {
         guard !offlineMode.isOffline else {
             populateFromLocal()
             topSongs = []
+            allTopSongs = []
             similarArtists = []
             isLoading = false
             return
@@ -954,7 +969,7 @@ struct ArtistDetailView: View {
             let loadedTopSongs = await ArtistTopSongsService.topSongs(
                 artistName: artist.name,
                 albums: loadedDetail.album ?? [],
-                limit: Self.topSongsCarouselLimit
+                limit: ArtistTopSongsRanking.fullListLimit
             ) { albumID in
                 (try? await SubsonicAPIService.shared.getAlbum(id: albumID).song) ?? []
             }
@@ -962,7 +977,8 @@ struct ArtistDetailView: View {
 
             detail = loadedDetail
             isShowingDownloadsOnly = false
-            topSongs = loadedTopSongs
+            allTopSongs = loadedTopSongs
+            topSongs = Array(loadedTopSongs.prefix(Self.topSongsCarouselLimit))
             if let info {
                 applyInfo(info)
             } else {

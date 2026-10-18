@@ -29,6 +29,58 @@ struct ArtistAlbumGroup: Hashable {
     var listType: AlbumListType? = nil
 }
 
+/// Identifies the full Top Songs list behind the shelf title.
+struct ArtistTopSongsGroup: Hashable {
+    let title: String
+    let songs: [Song]
+}
+
+/// The full ranked list behind the Top Songs title: numbered, with covers, and the same
+/// right-click menu as any other song row.
+struct ArtistTopSongsListView: View {
+    let title: String
+    let songs: [Song]
+
+    @EnvironmentObject var appState: AppState
+    @ObservedObject private var libraryStore = LibraryViewModel.shared
+    @ObservedObject private var player = AudioPlayerService.shared
+    @ObservedObject private var personalizationVisibility = MacPersonalizationVisibilityStore.shared
+
+    var body: some View {
+        ScrollView {
+            // A plain VStack on purpose: 20 rows are cheap, and a lazy stack re-estimates the
+            // heights of rows it has not laid out yet, which made the list jump after a click.
+            VStack(spacing: 0) {
+                ForEach(Array(songs.enumerated()), id: \.element.id) { index, song in
+                    SearchSongRow(
+                        song: song,
+                        rank: index + 1,
+                        isPlaying: player.currentSong?.id == song.id,
+                        showFavorite: personalizationVisibility.showFavoriteActions,
+                        showPlaylist: personalizationVisibility.showPlaylistActions,
+                        isStarred: libraryStore.isSongStarred(song),
+                        leadingInset: 20,
+                        showsPlayButton: false,
+                        isListStyle: true
+                    ) {
+                        appState.player.play(songs: songs, startIndex: index)
+                    } onPlayNext: {
+                        appState.player.addPlayNext(song)
+                    } onAddToQueue: {
+                        appState.player.addToQueue(song)
+                    } onFavorite: {
+                        Task { await libraryStore.toggleStarSong(song) }
+                    } onAddToPlaylist: {
+                        NotificationCenter.default.post(name: .addSongsToPlaylist, object: [song.id])
+                    }
+                }
+            }
+            .padding(.vertical, 8)
+        }
+        .navigationTitle(title)
+    }
+}
+
 /// A horizontal shelf of releases. Splitting albums from singles reads better
 /// than one long grid with a filter on top of it. The title opens the full,
 /// sortable list, with the same grid/list and sort options as the Library's

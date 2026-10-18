@@ -100,4 +100,9 @@ final class ArtistTopSongsRankingTests: XCTestCase {
 
         XCTAssertEqual(ArtistTopSongsRanking.fallbackAlbums(from: albums).first?.id, "played")
     }
+
+    func testFullListIsTwentyAndLongerThanTheShelf() {
+        XCTAssertEqual(ArtistTopSongsRanking.fullListLimit, 20)
+        XCTAssertGreaterThan(ArtistTopSongsRanking.fullListLimit, ArtistTopSongsRanking.limit)
+    }
 }

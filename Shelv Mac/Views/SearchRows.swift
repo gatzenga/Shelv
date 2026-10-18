@@ -99,6 +99,15 @@ struct SearchSongRow: View {
     /// Off where the row already has its own visible play button (e.g. the
     /// Top Songs shelf): the hover fill on top of that reads as clutter.
     var showsHoverHighlight: Bool = true
+    /// Space before the row's content that the hover fill still covers, so a list can run
+    /// the highlight edge to edge while its content keeps an inset.
+    var leadingInset: CGFloat = 0
+    /// Off where the hover fill already shows which row is under the pointer, which is all
+    /// the button is for (the Top Songs list).
+    var showsPlayButton: Bool = true
+    /// Sizes and spacing of the album track list (body title, callout duration, roomier
+    /// rows), for full-page song lists. The default is the compact row of shelves and search.
+    var isListStyle: Bool = false
     let onPlay: () -> Void
     var onPlayNext: (() -> Void)? = nil
     var onAddToQueue: (() -> Void)? = nil
@@ -127,9 +136,9 @@ struct SearchSongRow: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                .font(.subheadline)
+                .font(isListStyle ? .callout : .subheadline)
                 .monospacedDigit()
-                .frame(width: 20, alignment: .leading)
+                .frame(width: isListStyle ? 36 : 24, alignment: isListStyle ? .trailing : .center)
             }
             CoverArtView(
                 coverArtID: song.coverArt,
@@ -139,7 +148,7 @@ struct SearchSongRow: View {
             )
                 .padding(.leading, rank == nil ? 20 : 0)
             VStack(alignment: .leading) {
-                Text(song.title).font(.callout.bold())
+                Text(song.title).font(isListStyle ? .body : .callout.bold())
                 if let artist = song.artist { Text(artist).font(.caption).foregroundStyle(.secondary) }
             }
             Spacer()
@@ -147,16 +156,24 @@ struct SearchSongRow: View {
                 SongFavoriteBadge(songId: song.id)
                 DownloadStatusIcon(songId: song.id)
             }
-            Text(song.durationString).font(.caption).foregroundStyle(.tertiary).monospacedDigit()
-            Button { onPlay() } label: {
-                Image(systemName: "play.circle")
-                    .font(.title2)
-                    .foregroundStyle(themeColor)
+            Text(song.durationString)
+                .font(isListStyle ? .callout : .caption)
+                .foregroundStyle(isListStyle ? .secondary : .tertiary)
+                .monospacedDigit()
+                .padding(.trailing, showsPlayButton ? 0 : (isListStyle ? 24 : 20))
+            if showsPlayButton {
+                Button { onPlay() } label: {
+                    Image(systemName: "play.circle")
+                        .font(.title2)
+                        .foregroundStyle(themeColor)
+                }
+                .buttonStyle(.plain)
+                .padding(.trailing, 20)
             }
-            .buttonStyle(.plain)
-            .padding(.trailing, 20)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, isListStyle ? 0 : 4)
+        .frame(height: isListStyle ? 68 : nil)
+        .padding(.leading, leadingInset)
         .background { if showsHoverHighlight && isHovered { Color.primary.opacity(0.07) } }
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }

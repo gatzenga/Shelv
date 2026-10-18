@@ -411,14 +411,15 @@ struct ArtistDetailView: View {
         .padding(.bottom, 8)
     }
 
-    /// Two columns of four, side by side when the window is wide enough,
+    /// Two columns of five, side by side when the window is wide enough,
     /// one scroll apart when it isn't, same shelf as the artist page's
     /// album/singles rows, just for songs instead of covers.
+    static let topSongsShelfLimit = 10
     private static let topSongsGridRows = Array(
         repeating: GridItem(.fixed(60), spacing: 4),
-        count: 4
+        count: 5
     )
-    private static let topSongsStep = 4
+    private static let topSongsStep = 5
     private static let topSongsMinCellWidth: CGFloat = 280
     private static let topSongsMaxCellWidth: CGFloat = 460
 
@@ -458,8 +459,19 @@ struct ArtistDetailView: View {
 
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .center) {
-                    Text(String(localized: "top_songs"))
-                        .font(.title2).bold()
+                    NavigationLink(value: ArtistTopSongsGroup(
+                        title: String(localized: "top_songs"),
+                        songs: vm.allTopSongs
+                    )) {
+                        HStack(spacing: 6) {
+                            Text(String(localized: "top_songs"))
+                                .font(.title2).bold()
+                            Image(systemName: "chevron.right")
+                                .font(.headline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .buttonStyle(.plain)
                     Spacer()
                     // Only worth showing once there's actually something to
                     // scroll to: a wide enough window shows every column.
@@ -531,7 +543,7 @@ struct ArtistDetailView: View {
                 }
             }
         }
-        .frame(height: 300)
+        .frame(height: 360)
         .padding(.bottom, 8)
     }
 
@@ -774,6 +786,8 @@ class ArtistDetailViewModel: ObservableObject {
     @Published var albums: [Album] = []
     @Published var biography: String?
     @Published var topSongs: [Song] = []
+    /// The full ranked list behind the Top Songs title; `topSongs` is its first few for the shelf.
+    @Published var allTopSongs: [Song] = []
     @Published var similarArtists: [Artist] = []
     @Published var musicBrainzId: String?
     @Published var lastFmURLString: String?
@@ -816,7 +830,7 @@ class ArtistDetailViewModel: ObservableObject {
             let loadedTopSongs = await ArtistTopSongsService.topSongs(
                 artistName: artistName,
                 albums: detail.album ?? [],
-                limit: 8
+                limit: ArtistTopSongsRanking.fullListLimit
             ) { albumID in
                 (try? await SubsonicAPIService.shared.getAlbum(id: albumID).song) ?? []
             }
@@ -825,7 +839,8 @@ class ArtistDetailViewModel: ObservableObject {
             artist = detail
             isShowingDownloadsOnly = false
             albums = (detail.album ?? []).sorted { ($0.year ?? 0) > ($1.year ?? 0) }
-            topSongs = loadedTopSongs
+            allTopSongs = loadedTopSongs
+            topSongs = Array(loadedTopSongs.prefix(ArtistDetailView.topSongsShelfLimit))
             if let info {
                 applyInfo(info)
             } else {

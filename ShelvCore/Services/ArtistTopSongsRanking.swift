@@ -5,6 +5,8 @@ import Foundation
 nonisolated enum ArtistTopSongsRanking {
     /// Songs kept for the section.
     static let limit = 10
+    /// Length of the full Top Songs list behind the shelf title. The shelf shows the first few.
+    static let fullListLimit = 20
 
     /// Albums scanned by the play-count ranking, most played first. Artists
     /// with a deep back catalogue would otherwise fan out one album request
