@@ -560,6 +560,7 @@
 				Base,
 				de,
 				fr,
+				ru,
 				"zh-Hans",
 			);
 			mainGroup = BC9C592F2F8E9FB000FF4D25;

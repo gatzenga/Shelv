@@ -196,7 +196,7 @@ Pull requests are welcome. For larger changes, please open an issue first to dis
 
 ### Translations
 
-Shelv is available in English, German, and Simplified Chinese. To add a new language, create a `<language-code>.lproj/Localizable.strings` file (e.g. `fr.lproj/Localizable.strings`) modelled after `en.lproj/Localizable.strings`. Submit it as a pull request.
+Shelv is available in English, German, French, Russian, and Simplified Chinese. To add a new language, create a `<language-code>.lproj/Localizable.strings` file (e.g. `fr.lproj/Localizable.strings`) modelled after `en.lproj/Localizable.strings`. Submit it as a pull request.
 
 ## License
 
