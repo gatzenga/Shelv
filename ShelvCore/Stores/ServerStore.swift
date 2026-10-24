@@ -317,6 +317,19 @@ class ServerStore: ObservableObject {
                 )
             }
 
+            // Queue the download-scope migration before the new stable ID is
+            // published anywhere. This closes the window where Keep Library
+            // Offline could otherwise see an empty new scope and redownload it.
+            if stableIdRotated,
+               let previousStableID,
+               let updatedStableID {
+                _ = DownloadIdentityRepairService.prepareKnownServerScopeMigration(
+                    from: previousStableID,
+                    to: updatedStableID,
+                    configurationID: previous.id
+                )
+            }
+
             var updatedServers = servers
             updatedServers[idx] = updated
             servers = updatedServers
@@ -340,6 +353,8 @@ class ServerStore: ObservableObject {
                         from: previousStableID,
                         to: updatedStableID
                     )
+                    _ = await DownloadIdentityRepairService.shared
+                        .migratePendingServerScopeIfNeeded(serverId: updatedStableID)
                 }
             }
             Task { await ScrobbleService.shared.flushPendingScrobbles() }
